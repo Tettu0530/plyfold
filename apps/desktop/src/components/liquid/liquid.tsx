@@ -5,13 +5,15 @@
 //   morph   : 出発点の形のまま、行き先側の端が先に伸び、反対側が遅れてついてきて収まる（Apple のメニューに近い）
 //   tear    : 出発点にくっついたまま引き伸ばされ、限界でちぎれて、勢いで行き先の形まで飛ぶ
 //   droplet : 丸い滴に縮んで離れ、移動してから広がる
+//   pop     : 出発点と同じ形のまま横へ飛び出し、行き先の上の辺りまで移ってから、行き先の大きさに広がる（標準）
+// 測定（tools/liquid-probe）では、Apple の変形は外枠が 1 本のばねで動く。どの型も段ごとに 1 本のばねで動かす
 import { animate, motion, useMotionValue, useReducedMotion, useTransform, useVelocity, type AnimationPlaybackControls, type MotionValue } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { appleSpring, bouncy, interactive, smooth } from "../motion";
+import { appleSpring, bouncy, interactive, smooth, snappy } from "../motion";
 
-export type LiquidStyle = "morph" | "tear" | "droplet";
+export type LiquidStyle = "pop" | "morph" | "tear" | "droplet";
 
 // ---- 出発点の登録（名前 → 要素）
 const anchors = new Map<string, HTMLElement>();
@@ -78,7 +80,7 @@ const TRAIL = appleSpring({ duration: 0.45, bounce: 0.2 });
  * 分離アニメーション。`revealed` が true のあいだ本物を見せ、`layer` をどこかに描く。
  * `mounted` は本物を DOM に置いておくべきか（動いているあいだも置いて大きさを測る）
  */
-export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRadius = 8, color = "#262626", style = "morph" }: Options) {
+export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRadius = 8, color = "#262626", style = "pop" }: Options) {
   const reduced = useReducedMotion();
   const [phase, setPhase] = useState<Phase>("closed");
   const L = useMotionValue(0);
@@ -146,7 +148,29 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
       opacity.set(1);
       setPhase(opening ? "opening" : "closing");
 
-      if (style === "morph") {
+      if (style === "pop") {
+        // 出発点の形のまま、行き先の上の辺り（検索欄の位置）へ飛ぶ
+        const pillW = src.r - src.l;
+        const pillH = src.b - src.t;
+        const cx = (dst.l + dst.r) / 2;
+        const pill: Edges = { l: cx - pillW / 2, r: cx + pillW / 2, t: dst.t + 8, b: dst.t + 8 + pillH, radius: Math.min(anchorRadius, pillH / 2) };
+        if (opening) {
+          ghostOpacity.set(1);
+          ghostScale.set(1);
+          go(ghostScale, 0.85, interactive);
+          go(ghostOpacity, 0, { duration: 0.16, delay: 0.06 });
+          await moveAll(pill, snappy);
+          if (!alive()) return;
+          await moveAll(dst, bouncy);
+        } else {
+          await moveAll(pill, smooth);
+          if (!alive()) return;
+          ghostScale.set(0.85);
+          go(ghostOpacity, 1, { duration: 0.1, delay: 0.12 });
+          go(ghostScale, 1, snappy);
+          await moveAll(src, snappy);
+        }
+      } else if (style === "morph") {
         if (!opening) ghostOpacity.set(0);
         await moveEdges(to, LEAD, TRAIL);
       } else if (style === "tear") {
@@ -210,8 +234,8 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
   const vx = useVelocity(L);
   const vy = useVelocity(T);
   const stretch = useTransform<number, string>([vx, vy], ([a, b]) => {
-    if (style !== "droplet") return "none";
-    const s = 1 + Math.min(Math.hypot(a, b) / 2600, 0.5);
+    if (style !== "droplet" && style !== "pop") return "none";
+    const s = 1 + Math.min(Math.hypot(a, b) / (style === "pop" ? 9000 : 2600), style === "pop" ? 0.22 : 0.5);
     const angle = (Math.atan2(b, a) * 180) / Math.PI;
     return `rotate(${angle}deg) scale(${s}, ${1 / Math.sqrt(s)}) rotate(${-angle}deg)`;
   });

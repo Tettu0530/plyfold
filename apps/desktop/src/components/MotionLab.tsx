@@ -131,9 +131,10 @@ function ThrowCard({ p }: { p: SpringParams }) {
 }
 
 const STYLES: { value: LiquidStyle; label: string; note: string }[] = [
-  { value: "morph", label: "A 変形", note: "出発点の形のまま、行き先側の端が先に伸び、反対側が遅れてついてきて収まる" },
-  { value: "tear", label: "B ちぎれ", note: "出発点にくっついたまま引き伸ばされ、限界でちぎれて、勢いで行き先の形まで飛ぶ" },
-  { value: "droplet", label: "C 水滴", note: "丸い滴に縮んで離れ、移動してから広がる" },
+  { value: "pop", label: "飛び出し", note: "出発点と同じ形のまま横へ飛び出し、行き先の上の辺りまで移ってから広がる（標準）" },
+  { value: "morph", label: "変形", note: "出発点の形のまま、行き先側の端が先に伸び、反対側が遅れてついてきて収まる" },
+  { value: "tear", label: "ちぎれ", note: "出発点にくっついたまま引き伸ばされ、限界でちぎれて、勢いで行き先の形まで飛ぶ" },
+  { value: "droplet", label: "水滴", note: "丸い滴に縮んで離れ、移動してから広がる" },
 ];
 
 /** 分離アニメーションの見本。選んだ型は検索カード（⌘K）にも使われる */
