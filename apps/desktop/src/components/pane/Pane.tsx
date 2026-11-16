@@ -54,6 +54,7 @@ function SessionPane({ index }: { index: number }) {
   const openDiff = useStore((s) => s.openDiff);
   const diffActive = useLiquidActiveAnchors().has(`diff:${id}`);
   const diffOpen = useStore((s) => s.diff?.id === id);
+  const diffVersion = useStore((s) => s.diffVersion);
 
   const status = view?.record.status;
   // ターンが終わるたびに、worktree の差分の数を取り直す
@@ -63,7 +64,7 @@ function SessionPane({ index }: { index: number }) {
       .sessionDiff(id)
       .then((d) => setDiffStat({ added: d.files.reduce((a, f) => a + f.added, 0), removed: d.files.reduce((a, f) => a + f.removed, 0) }))
       .catch(() => setDiffStat(null));
-  }, [id, status, view?.record.worktree_path]);
+  }, [id, status, view?.record.worktree_path, diffVersion]);
 
   if (!id || !view) return <EmptyPane index={index} />;
   const r = view.record;

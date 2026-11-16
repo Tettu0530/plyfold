@@ -3,6 +3,9 @@
 //! エージェントごとに作業場所を分けて、同じリポジトリを触ってもぶつからないようにする。
 //! 差分は ACP の diff に頼らず git から作る（Codex や OpenCode は diff を返さないため）。
 
+pub mod ops;
+pub use ops::WtStatus;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -16,6 +19,8 @@ pub enum WorktreeError {
     Io(#[from] std::io::Error),
     #[error("{0} は git リポジトリではありません")]
     NotARepo(PathBuf),
+    #[error("{0}")]
+    Op(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

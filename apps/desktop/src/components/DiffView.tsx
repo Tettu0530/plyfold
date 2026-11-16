@@ -1,9 +1,10 @@
-import { ChevronLeft, GitBranch } from "lucide-react";
+import { ChevronLeft, GitBranch, GitCommitHorizontal, GitMerge, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "@/lib/api";
 import { parsePatch, toSplit, type FilePatch, type PatchLine } from "@/lib/patch";
-import type { Diff } from "@/lib/types";
+import type { Diff, WtStatus } from "@/lib/types";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { ProviderLogo } from "./icons";
@@ -31,16 +32,24 @@ export function DiffView() {
   const [sel, setSel] = useState(0);
   const [mode, setMode] = useState<View>("unified");
   const id = diff?.id;
+  const [wt, setWt] = useState<WtStatus | null>(null);
+  const bumpDiff = useStore((s) => s.bumpDiff);
+
+  const reload = (sid: string) =>
+    Promise.all([api.sessionDiff(sid), api.worktreeStatus(sid)])
+      .then(([d, st]) => {
+        setData(d);
+        setWt(st);
+      })
+      .catch((e) => setError(String(e)));
 
   useEffect(() => {
     if (!id) return;
     setData(null);
+    setWt(null);
     setError(null);
     setSel(0);
-    api
-      .sessionDiff(id)
-      .then(setData)
-      .catch((e) => setError(String(e)));
+    void reload(id);
   }, [id]);
 
   useEffect(() => {
@@ -176,6 +185,124 @@ export function DiffView() {
           )}
         </main>
       </div>
+      {wt && (
+        <Actions
+          key={id}
+          id={diff.id}
+          title={r.title}
+          status={wt}
+          busy={view.record.status === "working" || view.record.status === "awaiting_permission" || view.record.status === "starting" || view.record.status === "stalled"}
+          onDone={() => {
+            bumpDiff();
+            return reload(diff.id);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 差分の画面の下の操作: コミット、取り込み、破棄 */
+function Actions({ id, title, status, busy, onDone }: { id: string; title: string; status: WtStatus; busy: boolean; onDone: () => Promise<void> }) {
+  const [composing, setComposing] = useState(false);
+  const [message, setMessage] = useState(title);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  const target = status.target ?? "元の枝";
+  const nothing = !status.dirty && status.commits === 0;
+
+  const run = async (f: () => Promise<string>) => {
+    setRunning(true);
+    setError(null);
+    setDone(null);
+    try {
+      setDone(await f());
+      setComposing(false);
+      setConfirmDiscard(false);
+      await onDone();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setRunning(false);
+    }
+  };
+  const commit = () => run(async () => `コミットしました（${await api.commitSession(id, message)}）`);
+  const merge = () => run(async () => `${await api.mergeSession(id)} に取り込みました`);
+  const discard = () =>
+    run(async () => {
+      await api.discardSessionChanges(id);
+      return "変更を破棄しました";
+    });
+
+  const summary = status.dirty
+    ? "コミットしていない変更があります"
+    : status.merged
+      ? `${target} に取り込み済み`
+      : status.commits > 0
+        ? `コミット ${status.commits} 件（${target} にはまだ取り込んでいません）`
+        : "変更はありません";
+
+  return (
+    <div className="flex shrink-0 flex-col gap-2 border-t px-4 py-3">
+      {composing ? (
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void commit();
+          }}
+        >
+          <GitCommitHorizontal className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <Input aria-label="コミットのメッセージ" value={message} onChange={(e) => setMessage(e.target.value)} autoFocus className="h-8 grow text-sm" />
+          <button type="button" onClick={() => setComposing(false)} className="h-8 rounded-lg px-3 text-muted-foreground hover:bg-accent hover:text-foreground">
+            やめる
+          </button>
+          <button type="submit" disabled={running || !message.trim()} className="h-8 rounded-lg bg-primary px-3 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40">
+            コミット
+          </button>
+        </form>
+      ) : (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">{busy ? "ターンの途中は操作できません" : summary}</span>
+          <span className="grow" />
+          {!nothing &&
+            (confirmDiscard ? (
+              <button type="button" disabled={running || busy} onClick={() => void discard()} className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-error hover:bg-error/10 disabled:opacity-40">
+                <Trash2 className="size-3.5" aria-hidden />
+                コミットも含めて破棄する
+              </button>
+            ) : (
+              <button type="button" disabled={running || busy} onClick={() => setConfirmDiscard(true)} className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-error hover:bg-error/10 disabled:opacity-40">
+                <Trash2 className="size-3.5" aria-hidden />
+                破棄…
+              </button>
+            ))}
+          {status.dirty ? (
+            <button type="button" disabled={running || busy} onClick={() => setComposing(true)} className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40">
+              <GitCommitHorizontal className="size-3.5" aria-hidden />
+              コミット…
+            </button>
+          ) : (
+            status.commits > 0 &&
+            !status.merged && (
+              <button
+                type="button"
+                disabled={running || busy || !status.target}
+                title={status.target ? undefined : "元のリポジトリの HEAD が枝を指していません"}
+                onClick={() => void merge()}
+                className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
+              >
+                <GitMerge className="size-3.5" aria-hidden />
+                {target} に取り込む
+              </button>
+            )
+          )}
+        </div>
+      )}
+      {done && !error && <p className="text-xs text-muted-foreground">{done}</p>}
+      {error && <p className="text-xs whitespace-pre-wrap text-error">{error}</p>}
     </div>
   );
 }

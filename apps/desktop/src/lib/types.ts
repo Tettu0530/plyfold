@@ -118,6 +118,13 @@ export interface FileStat {
   binary: boolean;
 }
 
+export interface WtStatus {
+  dirty: boolean;
+  commits: number;
+  target: string | null;
+  merged: boolean;
+}
+
 export interface Diff {
   files: FileStat[];
   patch: string;

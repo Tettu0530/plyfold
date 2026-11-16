@@ -517,6 +517,44 @@ impl Engine {
         let wt = worktree_of(&rec).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
         Ok(plyfold_worktree::diff(&wt)?)
     }
+
+    fn idle_worktree(&self, id: &str) -> Result<Worktree, CoreError> {
+        let rec = self.inner.store.get_session(id)?;
+        if matches!(rec.status, SessionStatus::Working | SessionStatus::AwaitingPermission | SessionStatus::Stalled | SessionStatus::Starting) {
+            return Err(CoreError::Busy(id.into()));
+        }
+        worktree_of(&rec).ok_or_else(|| CoreError::NoWorkspace(id.into()))
+    }
+
+    pub fn worktree_status(&self, id: &str) -> Result<plyfold_worktree::WtStatus, CoreError> {
+        let rec = self.inner.store.get_session(id)?;
+        let wt = worktree_of(&rec).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
+        Ok(plyfold_worktree::ops::status(&wt)?)
+    }
+
+    /// 作業ツリーの変更をすべてコミットする（ターンの途中はできない）
+    pub fn commit(&self, id: &str, message: &str) -> Result<String, CoreError> {
+        let wt = self.idle_worktree(id)?;
+        let hash = plyfold_worktree::ops::commit(&wt, message)?;
+        self.inner.notice(id, format!("コミットしました: {hash} {}", message.lines().next().unwrap_or("")));
+        Ok(hash)
+    }
+
+    /// 元のリポジトリで今チェックアウトしている枝へ取り込む
+    pub fn merge(&self, id: &str) -> Result<String, CoreError> {
+        let wt = self.idle_worktree(id)?;
+        let target = plyfold_worktree::ops::merge(&wt)?;
+        self.inner.notice(id, format!("{} を {target} に取り込みました", wt.branch));
+        Ok(target)
+    }
+
+    /// 作業ツリーを基準のコミットまで戻す
+    pub fn discard(&self, id: &str) -> Result<(), CoreError> {
+        let wt = self.idle_worktree(id)?;
+        plyfold_worktree::ops::discard(&wt)?;
+        self.inner.notice(id, format!("変更を破棄して、{} に戻しました", &wt.base[..wt.base.len().min(7)]));
+        Ok(())
+    }
 }
 
 fn worktree_of(rec: &SessionRecord) -> Option<Worktree> {

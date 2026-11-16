@@ -85,6 +85,9 @@ interface State {
   /** 差分の画面。closing のあいだは、縮む動きのために画面を残しておく */
   diff: { id: string; closing: boolean } | null;
   openDiff: (id: string) => void;
+  /** worktree を操作したら増やす（ペインの差分の数を取り直すため） */
+  diffVersion: number;
+  bumpDiff: () => void;
   closeDiff: () => void;
   /** プロファイルの画面（差分と同じく、閉じる動きのあいだは残す） */
   profilesView: { closing: boolean } | null;
@@ -160,6 +163,8 @@ export const useStore = create<State>((set, get) => ({
   searchOpen: false,
   labOpen: false,
   diff: null,
+  diffVersion: 0,
+  bumpDiff: () => set((s) => ({ diffVersion: s.diffVersion + 1 })),
   profilesView: null,
   liquidStyle: "pop",
   searchLayerActive: false,

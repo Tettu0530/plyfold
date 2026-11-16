@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-import type { Category, CheckResult, Diff, EngineEvent, EventRecord, ProfileDetail, ProfileForm, ProfileSummary, SessionInfo, SessionRecord } from "./types";
+import type { Category, CheckResult, Diff, EngineEvent, EventRecord, ProfileDetail, ProfileForm, ProfileSummary, SessionInfo, SessionRecord, WtStatus } from "./types";
 
 // Tauri のコマンド（src-tauri/src/lib.rs）の薄い包み。引数名は Rust 側の camelCase 変換に合わせる
 export const api = {
@@ -21,6 +21,10 @@ export const api = {
     invoke<void>("set_by_category", { id, category, value }),
   sessionInfo: (id: string) => invoke<SessionInfo | null>("session_info", { id }),
   sessionDiff: (id: string) => invoke<Diff>("session_diff", { id }),
+  worktreeStatus: (id: string) => invoke<WtStatus>("worktree_status", { id }),
+  commitSession: (id: string, message: string) => invoke<string>("commit_session", { id, message }),
+  mergeSession: (id: string) => invoke<string>("merge_session", { id }),
+  discardSessionChanges: (id: string) => invoke<void>("discard_session_changes", { id }),
   profileDetail: (name: string) => invoke<ProfileDetail>("profile_detail", { name }),
   saveProfile: (form: ProfileForm, original: string | null) => invoke<void>("save_profile", { form, original }),
   setProfileKey: (name: string, value: string) => invoke<void>("set_profile_key", { name, value }),

@@ -1,0 +1,167 @@
+//! 差分の画面の操作: コミット、元のリポジトリへの取り込み、破棄
+
+use serde::{Deserialize, Serialize};
+
+use crate::{Worktree, WorktreeError, git};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct WtStatus {
+    /// まだコミットしていない変更（未追跡を含む）がある
+    pub dirty: bool,
+    /// 基準のコミットから積んだコミットの数
+    pub commits: u32,
+    /// 取り込み先（元のリポジトリで今チェックアウトしている枝）。切り離した HEAD なら None
+    pub target: Option<String>,
+    /// 積んだコミットがすべて取り込み先に入っている
+    pub merged: bool,
+}
+
+fn fail(msg: impl Into<String>) -> WorktreeError {
+    WorktreeError::Op(msg.into())
+}
+
+pub fn status(wt: &Worktree) -> Result<WtStatus, WorktreeError> {
+    let dirty = !git(&wt.path, &["status", "--porcelain"])?.trim().is_empty();
+    let commits = git(&wt.path, &["rev-list", "--count", &format!("{}..HEAD", wt.base)])?.trim().parse().unwrap_or(0);
+    let target = git(&wt.repo, &["symbolic-ref", "--quiet", "--short", "HEAD"]).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let merged = commits > 0
+        && target.as_ref().is_some_and(|t| {
+            std::process::Command::new("git")
+                .args(["merge-base", "--is-ancestor", &wt.branch, t])
+                .current_dir(&wt.repo)
+                .status()
+                .is_ok_and(|s| s.success())
+        });
+    Ok(WtStatus { dirty, commits, target, merged })
+}
+
+/// 作業ツリーの変更をすべてコミットする。短いハッシュを返す
+pub fn commit(wt: &Worktree, message: &str) -> Result<String, WorktreeError> {
+    let message = message.trim();
+    if message.is_empty() {
+        return Err(fail("コミットのメッセージが空です"));
+    }
+    git(&wt.path, &["add", "-A"])?;
+    if git(&wt.path, &["diff", "--cached", "--quiet"]).is_ok() {
+        return Err(fail("コミットする変更がありません"));
+    }
+    git(&wt.path, &["commit", "-q", "-m", message])?;
+    Ok(git(&wt.path, &["rev-parse", "--short", "HEAD"])?.trim().to_string())
+}
+
+/// セッションの枝を、元のリポジトリで今チェックアウトしている枝へ取り込む。取り込み先の名前を返す。
+/// ぶつかったら取り込みをやめて、元のリポジトリを元の状態に戻す
+pub fn merge(wt: &Worktree) -> Result<String, WorktreeError> {
+    let st = status(wt)?;
+    if st.dirty {
+        return Err(fail("コミットしていない変更があります。先にコミットしてください"));
+    }
+    if st.commits == 0 {
+        return Err(fail("取り込むコミットがありません"));
+    }
+    let target = st.target.ok_or_else(|| fail("元のリポジトリの HEAD が枝を指していないので、取り込み先が決まりません"))?;
+    if st.merged {
+        return Err(fail(format!("{target} にはもう取り込んであります")));
+    }
+    let msg = format!("Merge {} (Plyfold)", wt.branch);
+    if let Err(e) = git(&wt.repo, &["merge", "--no-ff", "--no-edit", "-m", &msg, &wt.branch]) {
+        let _ = git(&wt.repo, &["merge", "--abort"]);
+        return Err(fail(format!(
+            "{target} に取り込めませんでした。変更がぶつかったか、元のリポジトリに未コミットの変更があります。元のリポジトリは取り込む前の状態に戻しました。\n{e}"
+        )));
+    }
+    Ok(target)
+}
+
+/// 基準のコミットまで戻す（コミットも未コミットの変更も、未追跡のファイルも消える。無視しているファイルは残す）
+pub fn discard(wt: &Worktree) -> Result<(), WorktreeError> {
+    git(&wt.path, &["reset", "-q", "--hard", &wt.base])?;
+    git(&wt.path, &["clean", "-fdq"])?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
+    use super::*;
+    use crate::Worktrees;
+
+    fn tmp(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("plyfold-ops-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d.canonicalize().unwrap()
+    }
+
+    fn g(dir: &Path, args: &[&str]) {
+        let ok = Command::new("git")
+            .args(["-c", "user.name=t", "-c", "user.email=t@example.invalid"])
+            .args(args)
+            .current_dir(dir)
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok, "git {args:?}");
+    }
+
+    fn setup(name: &str) -> (PathBuf, Worktree) {
+        let base = tmp(name);
+        let repo = base.join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        g(&repo, &["init", "-q", "-b", "main"]);
+        // テストの中のコミットは、このリポジトリの設定で名前を決める
+        g(&repo, &["config", "user.name", "t"]);
+        g(&repo, &["config", "user.email", "t@example.invalid"]);
+        std::fs::write(repo.join("a.txt"), "one\n").unwrap();
+        g(&repo, &["add", "-A"]);
+        g(&repo, &["commit", "-qm", "init"]);
+        let wt = Worktrees::new(base.join("wts")).create(&repo, "s1", None).unwrap();
+        (repo, wt)
+    }
+
+    #[test]
+    fn commit_then_merge() {
+        let (repo, wt) = setup("merge");
+        assert_eq!(status(&wt).unwrap(), WtStatus { dirty: false, commits: 0, target: Some("main".into()), merged: false });
+        assert!(commit(&wt, "x").is_err(), "nothing to commit");
+        std::fs::write(wt.path.join("a.txt"), "one\ntwo\n").unwrap();
+        std::fs::write(wt.path.join("new.txt"), "n\n").unwrap();
+        assert!(status(&wt).unwrap().dirty);
+        assert!(merge(&wt).is_err(), "dirty");
+        commit(&wt, "add two").unwrap();
+        let st = status(&wt).unwrap();
+        assert!(!st.dirty && st.commits == 1 && !st.merged);
+        assert_eq!(merge(&wt).unwrap(), "main");
+        assert_eq!(std::fs::read_to_string(repo.join("a.txt")).unwrap(), "one\ntwo\n");
+        assert!(repo.join("new.txt").exists());
+        assert!(status(&wt).unwrap().merged);
+        assert!(merge(&wt).is_err(), "already merged");
+    }
+
+    #[test]
+    fn conflicting_merge_is_aborted() {
+        let (repo, wt) = setup("conflict");
+        std::fs::write(wt.path.join("a.txt"), "theirs\n").unwrap();
+        commit(&wt, "theirs").unwrap();
+        std::fs::write(repo.join("a.txt"), "ours\n").unwrap();
+        g(&repo, &["commit", "-qam", "ours"]);
+        assert!(merge(&wt).is_err());
+        assert_eq!(std::fs::read_to_string(repo.join("a.txt")).unwrap(), "ours\n");
+        assert!(!repo.join(".git/MERGE_HEAD").exists());
+    }
+
+    #[test]
+    fn discard_goes_back_to_base() {
+        let (_repo, wt) = setup("discard");
+        std::fs::write(wt.path.join("a.txt"), "changed\n").unwrap();
+        commit(&wt, "c").unwrap();
+        std::fs::write(wt.path.join("b.txt"), "untracked\n").unwrap();
+        discard(&wt).unwrap();
+        assert_eq!(std::fs::read_to_string(wt.path.join("a.txt")).unwrap(), "one\n");
+        assert!(!wt.path.join("b.txt").exists());
+        let st = status(&wt).unwrap();
+        assert!(!st.dirty && st.commits == 0);
+    }
+}

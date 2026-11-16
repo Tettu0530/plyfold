@@ -299,6 +299,26 @@ fn delete_profile(state: State<'_, AppState>, name: String) -> CmdResult<()> {
 }
 
 #[tauri::command]
+fn worktree_status(state: State<'_, AppState>, id: String) -> CmdResult<plyfold_worktree::WtStatus> {
+    state.engine.worktree_status(&id).map_err(err)
+}
+
+#[tauri::command]
+fn commit_session(state: State<'_, AppState>, id: String, message: String) -> CmdResult<String> {
+    state.engine.commit(&id, &message).map_err(err)
+}
+
+#[tauri::command]
+fn merge_session(state: State<'_, AppState>, id: String) -> CmdResult<String> {
+    state.engine.merge(&id).map_err(err)
+}
+
+#[tauri::command]
+fn discard_session_changes(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    state.engine.discard(&id).map_err(err)
+}
+
+#[tauri::command]
 async fn check_profile(state: State<'_, AppState>, name: String) -> CmdResult<plyfold_core::check::CheckResult> {
     Ok(state.engine.check_profile(&name).await)
 }
@@ -355,6 +375,10 @@ pub fn run() {
             set_profile_key,
             delete_profile,
             check_profile,
+            worktree_status,
+            commit_session,
+            merge_session,
+            discard_session_changes,
         ])
         .run(tauri::generate_context!())
         .expect("Plyfold を起動できません");
