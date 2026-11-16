@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 
+import type { LiquidStyle } from "@/components/liquid/liquid";
 import { api, inTauri, onEngineEvent } from "@/lib/api";
 import type { Category, EngineEvent, ProfileSummary, SessionInfo, SessionRecord } from "@/lib/types";
 import {
@@ -36,6 +37,8 @@ interface State {
   searchOpen: boolean;
   newSessionOpen: boolean;
   labOpen: boolean;
+  /** 分離アニメーションの型（動きの調整で選ぶ） */
+  liquidStyle: LiquidStyle;
   ready: boolean;
 
   init: () => Promise<void>;
@@ -46,6 +49,7 @@ interface State {
   setSearchOpen: (open: boolean) => void;
   setNewSessionOpen: (open: boolean) => void;
   setLabOpen: (open: boolean) => void;
+  setLiquidStyle: (s: LiquidStyle) => void;
   startSession: (args: { profile: string; repo: string; title: string; worktree: boolean; prompt?: string }) => Promise<void>;
   sendPrompt: (id: string, text: string) => Promise<void>;
   cancel: (id: string) => Promise<void>;
@@ -108,6 +112,7 @@ export const useStore = create<State>((set, get) => ({
   searchOpen: false,
   newSessionOpen: false,
   labOpen: false,
+  liquidStyle: "morph",
   ready: false,
 
   init: async () => {
@@ -157,6 +162,7 @@ export const useStore = create<State>((set, get) => ({
   setSearchOpen: (searchOpen) => set({ searchOpen }),
   setNewSessionOpen: (newSessionOpen) => set({ newSessionOpen }),
   setLabOpen: (labOpen) => set({ labOpen }),
+  setLiquidStyle: (liquidStyle) => set({ liquidStyle }),
 
   startSession: async ({ prompt, ...args }) => {
     const rec = await api.startSession(args);

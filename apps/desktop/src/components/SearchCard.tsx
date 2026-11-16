@@ -29,7 +29,8 @@ export function SearchCard() {
   const [sel, setSel] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const card = useRef<HTMLDivElement>(null);
-  const { revealed, mounted, layer } = useLiquidMorph(open, { anchor: "search", target: card, radius: 14, anchorRadius: 8, color: "#262626" });
+  const liquidStyle = useStore((s) => s.liquidStyle);
+  const { revealed, mounted, layer } = useLiquidMorph(open, { anchor: "search", target: card, radius: 14, anchorRadius: 8, color: "#262626", style: liquidStyle });
 
   useEffect(() => {
     if (open) {

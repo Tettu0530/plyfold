@@ -20,6 +20,7 @@ import {
   type SpringParams,
 } from "./motion";
 import { Segmented } from "./Segmented";
+import { liquidAnchor, useLiquidMorph, type LiquidStyle } from "./liquid/liquid";
 
 /** requestAnimationFrame の間隔から、実際に描いている頻度を測る */
 function useFrameRate() {
@@ -129,6 +130,53 @@ function ThrowCard({ p }: { p: SpringParams }) {
   );
 }
 
+const STYLES: { value: LiquidStyle; label: string; note: string }[] = [
+  { value: "morph", label: "A 変形", note: "出発点の形のまま、行き先側の端が先に伸び、反対側が遅れてついてきて収まる" },
+  { value: "tear", label: "B ちぎれ", note: "出発点にくっついたまま引き伸ばされ、限界でちぎれて、勢いで行き先の形まで飛ぶ" },
+  { value: "droplet", label: "C 水滴", note: "丸い滴に縮んで離れ、移動してから広がる" },
+];
+
+/** 分離アニメーションの見本。選んだ型は検索カード（⌘K）にも使われる */
+function SeparationDemo() {
+  const style = useStore((s) => s.liquidStyle);
+  const setStyle = useStore((s) => s.setLiquidStyle);
+  const [open, setOpen] = useState(false);
+  const target = useRef<HTMLDivElement>(null);
+  const { revealed, mounted, layer } = useLiquidMorph(open, { anchor: "lab-src", target, radius: 12, anchorRadius: 8, style });
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-muted-foreground">分離の型</span>
+        <Segmented<LiquidStyle> label="分離の型" value={style} onChange={setStyle} options={STYLES.map((s) => ({ value: s.value, label: s.label }))} />
+      </div>
+      <p className="text-xs text-muted-foreground">{STYLES.find((s) => s.value === style)?.note}</p>
+      <div className="relative h-44 rounded-lg bg-background p-3">
+        <button
+          ref={liquidAnchor("lab-src")}
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="flex h-7 w-40 items-center gap-2 rounded-lg px-2 text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          {open ? "閉じる" : "開く"}
+        </button>
+        {mounted && (
+          <div
+            ref={target}
+            className={cn(
+              "absolute top-6 right-4 flex h-32 w-64 flex-col gap-2 rounded-xl border bg-muted p-3 text-xs transition-opacity duration-150",
+              revealed ? "opacity-100" : "opacity-0",
+            )}
+          >
+            <span className="font-medium text-foreground">開いた面</span>
+            <span className="text-muted-foreground">本物の中身は、広がりきってから現れます</span>
+          </div>
+        )}
+      </div>
+      {layer}
+    </div>
+  );
+}
+
 export function MotionLab() {
   const open = useStore((s) => s.labOpen);
   const setOpen = useStore((s) => s.setLabOpen);
@@ -208,6 +256,7 @@ export function MotionLab() {
                 スイッチ（CSS のばね）
               </label>
             </div>
+            <SeparationDemo />
             <ThrowCard p={p} />
             <p className="text-xs text-muted-foreground">カードを投げると、指の勢いを引き継いで四隅に吸い付きます。枠の外へ引っ張るとゴムのように伸びます。</p>
           </div>
