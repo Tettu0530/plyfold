@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { ProviderLogo, STATUS, StatusIcon } from "./icons";
 import { Keys } from "./Keys";
+import { SessionMenu } from "./SessionMenu";
 import { liquidAnchor } from "./liquid/liquid";
 import { useLiquidActiveAnchors } from "./liquid/stage";
 import { smooth, snappy } from "./motion";
@@ -28,6 +29,9 @@ export function Sidebar() {
   const active = useLiquidActiveAnchors();
   const searchOpen = useStore((s) => s.searchOpen);
   const [closed, setClosed] = useState<Record<string, boolean>>({});
+  // 名前を変えている行
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const renameSession = useStore((s) => s.renameSession);
 
   // リポジトリごとにまとめ、新しく更新されたものから
   const groups = useMemo(() => {
@@ -104,10 +108,10 @@ export function Sidebar() {
                   const st = STATUS[r.status];
                   const quiet = r.status === "idle" || r.status === "closed" || r.status === "starting";
                   return (
+                    <SessionMenu key={r.id} record={r} onRename={() => setRenaming(r.id)}>
                     <motion.a
                       layout="position"
                       transition={smooth}
-                      key={r.id}
                       ref={liquidAnchor(`session:${r.id}`)}
                       href="#"
                       whileTap={{ scale: 1.03 }}
@@ -124,7 +128,34 @@ export function Sidebar() {
                     >
                       <span className="flex min-w-0 items-center gap-2">
                         <ProviderLogo agent={r.agent} className="text-muted-foreground" />
-                        <span className="min-w-0 grow truncate">{r.title}</span>
+                        {renaming === r.id ? (
+                          <input
+                            aria-label="セッションの名前"
+                            defaultValue={r.title}
+                            autoFocus
+                            onFocus={(e) => e.currentTarget.select()}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                            onKeyDown={(e) => {
+                              e.stopPropagation();
+                              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                                const v = e.currentTarget.value;
+                                setRenaming(null);
+                                void renameSession(r.id, v);
+                              } else if (e.key === "Escape") setRenaming(null);
+                            }}
+                            onBlur={(e) => {
+                              const v = e.currentTarget.value;
+                              setRenaming(null);
+                              if (v.trim() && v !== r.title) void renameSession(r.id, v);
+                            }}
+                            className="min-w-0 grow rounded-sm bg-background px-1 outline outline-ring"
+                          />
+                        ) : (
+                          <span className="min-w-0 grow truncate">{r.title}</span>
+                        )}
                         {unread[r.id] && <span role="img" aria-label="見ていない知らせがあります" className={cn("size-1.5 shrink-0 rounded-full", unread[r.id].error ? "bg-error" : "bg-foreground")} />}
                         <span className={cn("flex shrink-0 items-center gap-1 text-xs", quiet ? "text-muted-foreground" : st.color)}>
                           <StatusIcon status={r.status} className="size-3" />
@@ -136,6 +167,7 @@ export function Sidebar() {
                         <span className="font-mono tabular">{age(r.updated_at)}</span>
                       </span>
                     </motion.a>
+                    </SessionMenu>
                   );
                 })}
             </div>

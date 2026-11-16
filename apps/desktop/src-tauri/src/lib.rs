@@ -412,6 +412,16 @@ async fn discard_session_changes(state: State<'_, AppState>, id: String) -> CmdR
     state.engine.discard(&id).map_err(err)
 }
 
+/// セッションの名前を変える
+#[tauri::command]
+fn rename_session(state: State<'_, AppState>, id: String, title: String) -> CmdResult<()> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err("名前が空です".into());
+    }
+    state.engine.store().set_title(&id, title).map_err(err)
+}
+
 #[tauri::command]
 async fn check_profile(state: State<'_, AppState>, name: String) -> CmdResult<plyfold_core::check::CheckResult> {
     Ok(state.engine.check_profile(&name).await)
@@ -419,6 +429,7 @@ async fn check_profile(state: State<'_, AppState>, name: String) -> CmdResult<pl
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let state_dir = default_state_dir();
             let config_path = state_dir.join("config.toml");
@@ -470,6 +481,7 @@ pub fn run() {
             set_profile_key,
             delete_profile,
             check_profile,
+            rename_session,
             worktree_status,
             commit_session,
             merge_session,

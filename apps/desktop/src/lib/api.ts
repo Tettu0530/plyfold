@@ -11,6 +11,7 @@ export const api = {
   startSession: (args: { profile: string; repo: string; title: string; worktree: boolean }) =>
     invoke<SessionRecord>("start_session", args),
   reopenSession: (id: string) => invoke<void>("reopen_session", { id }),
+  renameSession: (id: string, title: string) => invoke<void>("rename_session", { id, title }),
   closeSession: (id: string) => invoke<void>("close_session", { id }),
   deleteSession: (id: string, removeWorktree: boolean) => invoke<void>("delete_session", { id, removeWorktree }),
   prompt: (id: string, text: string) => invoke<void>("prompt", { id, text }),

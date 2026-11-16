@@ -5,6 +5,7 @@ import { create } from "zustand";
 import type { Look, LiquidStyle } from "@/components/liquid/liquid";
 import { liquidCloseFrom, liquidOpen } from "@/components/liquid/stage";
 import { api, inTauri, onEngineEvent } from "@/lib/api";
+import { notify } from "@/lib/notify";
 import { loadInfoCache, saveInfoCache, snapshot, type InfoCache } from "./infoCache";
 import type { AppSettings, Category, SessionStatus, EngineEvent, ProfileSummary, SessionInfo, SessionRecord } from "@/lib/types";
 import {
@@ -122,6 +123,11 @@ interface State {
   respondPermission: (id: string, optionId: string | null) => Promise<void>;
   setCategory: (id: string, category: Category, value: string) => Promise<void>;
   reopen: (id: string) => Promise<void>;
+  renameSession: (id: string, title: string) => Promise<void>;
+  /** エージェントを止める（記録と worktree は残る） */
+  stopSession: (id: string) => Promise<void>;
+  /** 記録ごと消す。removeWorktree なら worktree と枝も消す */
+  removeSession: (id: string, removeWorktree: boolean) => Promise<void>;
 }
 
 const newView = (record: SessionRecord): SessionView => ({
@@ -214,6 +220,10 @@ export const useStore = create<State>((set, get) => ({
     await onEngineEvent((e) =>
       set((s) => {
         const sessions = reduceEvent(s.sessions, e);
+        // アプリを見ていないときは、macOS の通知も出す
+        const title = s.sessions[(e as { session_id?: string }).session_id ?? ""]?.record.title ?? "セッション";
+        if (e.type === "permission_requested") notify(title, "権限確認待ちです");
+        if (e.type === "turn_ended") notify(title, e.error ? `エラーで止まりました: ${e.error}` : "ターンが終わりました");
         // 画面に出ていないセッション（またはアプリを見ていないとき）のターンの終わりは、知らせに残す
         if (e.type === "turn_ended") {
           const shown = s.panes.slice(0, s.paneCount).includes(e.session_id) && document.hasFocus();
@@ -446,6 +456,31 @@ export const useStore = create<State>((set, get) => ({
 
   reopen: async (id) => {
     await api.reopenSession(id);
+  },
+
+  renameSession: async (id, title) => {
+    const t = title.trim();
+    if (!t) return;
+    await api.renameSession(id, t);
+    set((s) => (s.sessions[id] ? { sessions: { ...s.sessions, [id]: { ...s.sessions[id], record: { ...s.sessions[id].record, title: t } } } } : s));
+  },
+
+  stopSession: async (id) => {
+    await api.closeSession(id);
+  },
+
+  removeSession: async (id, removeWorktree) => {
+    // 開いているペインからは、閉じる動きで外す
+    const pane = get().panes.slice(0, get().paneCount).indexOf(id);
+    if (pane >= 0) get().closePane(pane);
+    await api.deleteSession(id, removeWorktree);
+    set((s) => {
+      const sessions = { ...s.sessions };
+      delete sessions[id];
+      const unread = { ...s.unread };
+      delete unread[id];
+      return { sessions, unread, panes: s.panes.map((p) => (p === id ? null : p)) };
+    });
   },
 }));
 
