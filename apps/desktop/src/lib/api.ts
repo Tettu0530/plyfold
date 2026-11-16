@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-import type { Category, Diff, EngineEvent, EventRecord, ProfileSummary, SessionInfo, SessionRecord } from "./types";
+import type { Category, CheckResult, Diff, EngineEvent, EventRecord, ProfileDetail, ProfileForm, ProfileSummary, SessionInfo, SessionRecord } from "./types";
 
 // Tauri のコマンド（src-tauri/src/lib.rs）の薄い包み。引数名は Rust 側の camelCase 変換に合わせる
 export const api = {
@@ -21,6 +21,11 @@ export const api = {
     invoke<void>("set_by_category", { id, category, value }),
   sessionInfo: (id: string) => invoke<SessionInfo | null>("session_info", { id }),
   sessionDiff: (id: string) => invoke<Diff>("session_diff", { id }),
+  profileDetail: (name: string) => invoke<ProfileDetail>("profile_detail", { name }),
+  saveProfile: (form: ProfileForm, original: string | null) => invoke<void>("save_profile", { form, original }),
+  setProfileKey: (name: string, value: string) => invoke<void>("set_profile_key", { name, value }),
+  deleteProfile: (name: string) => invoke<void>("delete_profile", { name }),
+  checkProfile: (name: string) => invoke<CheckResult>("check_profile", { name }),
 };
 
 export function onEngineEvent(handler: (e: EngineEvent) => void): Promise<UnlistenFn> {

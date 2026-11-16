@@ -19,6 +19,8 @@ export function Sidebar() {
   const setSearchOpen = useStore((s) => s.setSearchOpen);
   const newDraft = useStore((s) => s.newDraft);
   const setLabOpen = useStore((s) => s.setLabOpen);
+  const openProfiles = useStore((s) => s.openProfiles);
+  const profilesOpen = useStore((s) => !!s.profilesView);
   // 実体は出発点（ボタンや行）だけの裏から出る。実体はサイドバーの地より上（55）、出発点はその上（57）
   const searchLayer = useStore((s) => s.searchLayerActive);
   const active = useLiquidActiveAnchors();
@@ -139,10 +141,21 @@ export function Sidebar() {
       </div>
 
       <div className="flex flex-col border-t p-2">
-        <button type="button" className="flex h-7 items-center gap-2 rounded-lg px-2 text-muted-foreground hover:bg-accent hover:text-foreground">
+        <motion.button
+          ref={liquidAnchor("profiles")}
+          type="button"
+          whileTap={{ scale: 1.06 }}
+          transition={snappy}
+          onClick={() => openProfiles()}
+          className={cn(
+            "relative flex h-7 items-center gap-2 rounded-lg px-2 text-muted-foreground hover:bg-accent hover:text-foreground",
+            profilesOpen && "bg-accent text-foreground",
+            active.has("profiles") && "z-[57] bg-accent text-foreground",
+          )}
+        >
           <KeyRound className="size-4" aria-hidden />
           <span className="grow text-left">プロファイル</span>
-        </button>
+        </motion.button>
         <button type="button" onClick={() => setLabOpen(true)} className="flex h-7 items-center gap-2 rounded-lg px-2 text-muted-foreground hover:bg-accent hover:text-foreground">
           <Settings className="size-4" aria-hidden />
           <span className="grow text-left">設定</span>

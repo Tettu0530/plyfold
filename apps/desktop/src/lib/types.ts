@@ -123,6 +123,39 @@ export interface Diff {
   patch: string;
 }
 
+export type AuthKind = "login" | "api" | "custom";
+
+export interface ProfileForm {
+  name: string;
+  agent: string;
+  label: string | null;
+  auth: AuthKind;
+  base_url: string | null;
+  isolate: boolean;
+}
+
+export interface ProfileDetail {
+  form: ProfileForm;
+  supported: AuthKind[];
+  key_var: string | null;
+  key_account: string | null;
+  key_set: boolean;
+  key_tail: string | null;
+  shared_with: string[];
+  config_dir_env: string | null;
+}
+
+export interface CheckResult {
+  ok: boolean;
+  first_text_ms: number | null;
+  total_ms: number;
+  reply: string;
+  reported_model: string | null;
+  configured_model: string | null;
+  error: string | null;
+  at: number;
+}
+
 export interface ProfileSummary {
   name: string;
   agent: string;

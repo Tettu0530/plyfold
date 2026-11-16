@@ -42,6 +42,7 @@ export const isDraft = (id: string | null | undefined): id is string => !!id && 
 
 /** ペインの見た目（分離アニメーションの行き先） */
 const PANE_LOOK: Look = { background: "rgba(10, 10, 10, 1)", border: "rgba(255, 255, 255, 0.1)", shadow: "0px 0px 0px rgba(0, 0, 0, 0)", blur: 0 };
+const profilesEl = () => document.querySelector<HTMLElement>("[data-profiles-view]");
 const diffEl = () => document.querySelector<HTMLElement>("[data-diff-view]");
 const paneEl = (i: number) => document.querySelector<HTMLElement>(`[data-pane-index="${i}"]`);
 const anchorOf = (id: string) => (isDraft(id) ? "new-session" : `session:${id}`);
@@ -85,6 +86,11 @@ interface State {
   diff: { id: string; closing: boolean } | null;
   openDiff: (id: string) => void;
   closeDiff: () => void;
+  /** プロファイルの画面（差分と同じく、閉じる動きのあいだは残す） */
+  profilesView: { closing: boolean } | null;
+  openProfiles: () => void;
+  closeProfiles: () => void;
+  refreshProfiles: () => Promise<void>;
   focusPane: (pane: number) => void;
   setSearchOpen: (open: boolean) => void;
   setLabOpen: (open: boolean) => void;
@@ -154,6 +160,7 @@ export const useStore = create<State>((set, get) => ({
   searchOpen: false,
   labOpen: false,
   diff: null,
+  profilesView: null,
   liquidStyle: "pop",
   searchLayerActive: false,
   liquidLag: 0.12,
@@ -214,6 +221,24 @@ export const useStore = create<State>((set, get) => ({
     if (!d || d.closing) return;
     set({ diff: { ...d, closing: true } });
     liquidCloseFrom("diff", { anchor: `diff:${d.id}`, target: diffEl, toLook: PANE_LOOK, onDone: () => set({ diff: null }) });
+  },
+
+  openProfiles: () => {
+    if (get().profilesView) return;
+    liquidOpen("profiles", { anchor: "profiles", target: profilesEl, toLook: PANE_LOOK });
+    set({ profilesView: { closing: false } });
+  },
+
+  closeProfiles: () => {
+    const v = get().profilesView;
+    if (!v || v.closing) return;
+    set({ profilesView: { closing: true } });
+    liquidCloseFrom("profiles", { anchor: "profiles", target: profilesEl, toLook: PANE_LOOK, onDone: () => set({ profilesView: null }) });
+  },
+
+  refreshProfiles: async () => {
+    if (!inTauri) return;
+    set({ profiles: await api.listProfiles() });
   },
 
   closePane: (pane) => {
