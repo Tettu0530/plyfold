@@ -9,6 +9,8 @@ import { AGENT_NAMES, ProviderLogo } from "../icons";
 import { ControlRow } from "./Composer";
 import { AttachBox, useAttachments } from "./Attachments";
 import { RepoPicker } from "./RepoPicker";
+import { liquidAnchor } from "../liquid/liquid";
+import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 import { withChoices } from "@/state/infoCache";
 import type { Category, ProfileSummary, ProfileUsage } from "@/lib/types";
 
@@ -89,6 +91,14 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const [text, setText] = useState("");
   const att = useAttachments();
   const [repoOpen, setRepoOpen] = useState(false);
+  // リポジトリの選択も、ボタンから飛び出して広がり、閉じるとボタンへ戻る（ほかのメニューと同じ分離アニメーション）
+  const repoAnchor = `${id}:repo`;
+  const repoMenu = useLiquidMenu(`menu:${repoAnchor}`, repoAnchor);
+  const repoRaised = useLiquidActiveAnchors().has(repoAnchor);
+  const toggleRepo = (o: boolean) => {
+    repoMenu.onOpenChange(o);
+    setRepoOpen(o);
+  };
   const cached = useStore((s) => (draft?.profile ? s.infoCache[draft.profile] : undefined));
   const usage = useStore((s) => s.usage);
   useEffect(() => {
@@ -159,16 +169,22 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
       </div>
       </div>
 
-      <Popover open={repoOpen} onOpenChange={setRepoOpen}>
+      <Popover open={repoOpen} onOpenChange={toggleRepo}>
       <div className="flex shrink-0 flex-col px-3 pb-3">
-      {/* リポジトリの欄は、この 1 行＋入力欄のまとまりと同じ幅で、すぐ上に開く */}
+      {/* リポジトリの欄は、この 1 行＋入力欄のまとまりの左端にそろえて、すぐ上に開く */}
       <PopoverAnchor asChild>
       <div className="flex flex-col gap-1">
         {/* 幅が足りなければ、model / effort / mode は 2 段目に回る */}
         <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 text-xs">
           <div className="flex items-center gap-0.5">
           <PopoverTrigger asChild>
-            <button type="button" aria-label="リポジトリ" title={draft.repo} className="flex h-6 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent data-[state=open]:bg-accent">
+            <button
+              ref={liquidAnchor(repoAnchor)}
+              type="button"
+              aria-label="リポジトリ"
+              title={draft.repo}
+              className={cn("relative flex h-6 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent data-[state=open]:bg-accent", repoRaised && "z-[57]")}
+            >
               <FolderOpen className="size-3 text-muted-foreground" aria-hidden />
               <span className="font-mono">{repoName(draft.repo)}</span>
             </button>
@@ -225,12 +241,20 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
       </div>
       </PopoverAnchor>
       </div>
-      <PopoverContent side="top" align="start" sideOffset={6} className="w-(--radix-popper-anchor-width) p-1.5">
+      <PopoverContent
+        ref={repoMenu.ref as React.Ref<HTMLDivElement>}
+        style={repoMenu.style}
+        side="top"
+        align="start"
+        sideOffset={6}
+        // 幅はペインいっぱいにしない（広いと実体が遠くまで飛んでから戻って見える）
+        className={cn("z-[58] w-[min(32rem,var(--radix-popper-anchor-width))] p-1.5", repoMenu.moving && "opacity-0")}
+      >
         <RepoPicker
           value={draft.repo}
           onPick={(repo) => {
             updateDraft(id, { repo });
-            setRepoOpen(false);
+            toggleRepo(false);
           }}
         />
       </PopoverContent>
