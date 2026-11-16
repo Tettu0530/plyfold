@@ -10,6 +10,7 @@ import { useStore } from "@/state/store";
 import { ProviderLogo } from "./icons";
 import { Keys } from "./Keys";
 import { useLiquidClip, useLiquidRevealed } from "./liquid/stage";
+import { Num, ROW, Unified } from "./PatchLines";
 import { Segmented } from "./Segmented";
 
 type View = "unified" | "split";
@@ -339,33 +340,6 @@ function Actions({ id, title, status, busy, onDone }: { id: string; title: strin
       )}
       {done && !error && <p className="text-xs text-muted-foreground select-text">{done}</p>}
       {error && <p className="text-xs whitespace-pre-wrap text-error">{error}</p>}
-    </div>
-  );
-}
-
-const ROW: Record<PatchLine["kind"], string> = {
-  ctx: "text-foreground/85",
-  add: "bg-working/10 text-foreground",
-  del: "bg-error/10 text-foreground",
-  hunk: "mt-2 bg-card text-muted-foreground first:mt-0",
-  note: "text-muted-foreground",
-};
-
-function Num({ n }: { n: number | null }) {
-  return <span className="inline-block w-10 shrink-0 pr-2 text-right text-muted-foreground/70 select-none">{n ?? ""}</span>;
-}
-
-function Unified({ lines }: { lines: PatchLine[] }) {
-  return (
-    <div className="min-w-max">
-      {lines.map((l, i) => (
-        <div key={i} className={cn("flex pr-4 pl-1", ROW[l.kind])}>
-          <Num n={l.old} />
-          <Num n={l.new} />
-          <span className="w-4 shrink-0 text-muted-foreground select-none">{l.kind === "add" ? "+" : l.kind === "del" ? "−" : ""}</span>
-          <span className="whitespace-pre">{l.text}</span>
-        </div>
-      ))}
     </div>
   );
 }

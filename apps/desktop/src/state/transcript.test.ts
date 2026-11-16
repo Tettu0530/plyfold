@@ -33,6 +33,48 @@ describe("transcript", () => {
     }
   });
 
+  it("reads Claude's Bash: command, description and output", () => {
+    const id = "toolu_1";
+    let t = applyUpdate(emptyTranscript(), { sessionUpdate: "tool_call", toolCallId: id, rawInput: {}, status: "pending", title: "Terminal", kind: "execute", content: [] });
+    t = applyUpdate(t, { sessionUpdate: "tool_call_update", toolCallId: id, rawInput: { command: "date" }, title: "date" });
+    t = applyUpdate(t, {
+      sessionUpdate: "tool_call_update",
+      toolCallId: id,
+      rawInput: { command: "date", description: "Show the date" },
+      content: [{ type: "content", content: { type: "text", text: "Show the date" } }],
+    });
+    t = applyUpdate(t, {
+      sessionUpdate: "tool_call_update",
+      toolCallId: id,
+      status: "completed",
+      rawOutput: "Mon Nov 16",
+      content: [{ type: "content", content: { type: "text", text: "```console\nMon Nov 16\n```" } }],
+    });
+    expect(t.items[0]).toMatchObject({ kind: "tool", title: "date", command: "date", note: "Show the date", result: "Mon Nov 16", status: "completed" });
+  });
+
+  it("collects Codex's streamed terminal output and exit code", () => {
+    const id = "exec-1";
+    let t = applyUpdate(emptyTranscript(), {
+      sessionUpdate: "tool_call",
+      toolCallId: id,
+      kind: "execute",
+      title: "cargo test",
+      status: "in_progress",
+      content: [{ type: "terminal", terminalId: id }],
+      rawInput: { command: "/bin/zsh -lc 'cargo test'", cwd: "/w" },
+    });
+    t = applyUpdate(t, { sessionUpdate: "tool_call_update", toolCallId: id, _meta: { terminal_output_delta: { data: "running\n" } } });
+    t = applyUpdate(t, { sessionUpdate: "tool_call_update", toolCallId: id, status: "completed", _meta: { terminal_output_delta: { data: "failed\n" }, terminal_exit: { exit_code: 101 } } });
+    expect(t.items[0]).toMatchObject({ command: "cargo test", stream: "running\nfailed\n", exitCode: 101 });
+  });
+
+  it("merges a repeated tool_call instead of adding a second row", () => {
+    let t = applyUpdate(emptyTranscript(), { sessionUpdate: "tool_call", toolCallId: "t1", title: "Read a", kind: "read", status: "completed" });
+    t = applyUpdate(t, { sessionUpdate: "tool_call", toolCallId: "t1", title: "Read a", kind: "read", status: "completed" });
+    expect(t.items).toHaveLength(1);
+  });
+
   it("keeps a single plan and replaces it", () => {
     let t = applyUpdate(emptyTranscript(), { sessionUpdate: "plan", entries: [{ content: "a", status: "pending" }] });
     t = applyUpdate(t, chunk("agent_message_chunk", "x"));

@@ -46,6 +46,9 @@
 - プロファイルの画面（公式 API / 既存のログイン / カスタムプロバイダー、キーは末尾 4 文字だけ見せる、接続テストで応答モデルと設定のモデルを比べる）
 - 設定の画面（作業場所、無応答の時間、エディタ、取り込んだ後の片付け、保存場所、動きの見本）
 - 検索（⌘K）、知らせ（ベルと macOS の通知）
+- 会話のツールの呼び出しは、行を押すとコマンド・説明・結果を開く（長いものは最初の行だけ、残りは押して出す）。終了コードが 0 でなければ赤で出す。ファイルの差分は行の差分（LCS、前後 3 行、`lib/lineDiff.ts`）で、見出しで畳める。描き方は差分の画面と共有（`components/PatchLines.tsx`）
+  - 取り出し方（`state/transcript.ts` の `mergeTool`）: Claude は rawInput.command / description と rawOutput、Codex は rawInput.command（`/bin/zsh -lc '…'` を外す）と `_meta.terminal_output_delta`・`terminal_exit`、OpenCode は content の文字
+  - 同じ id の tool_call が 2 度来たら重ねる（React のキーの重複の警告はこれが原因だった）
 - 起動時のクラッシュ（同期のコマンドから tokio::spawn）、開き直しの失敗（-32002 で新しいセッションへ）は直した
 
 ## 動きの規格（重要。詳しくはスキルの 4. 動き）
@@ -73,11 +76,13 @@
 - 上に乗る量 `over` を GPU のシェーダーに渡し、出発点の中に実体だけの形（影・塗り・枠線）を重ねる。重ね始めたら出発点を z-[57] から下げる
 - 全面の画面（cover）も、出発点を下げたあとは over = 1（出発点の中を塗らないままだと、実体に穴が開く）
 - ブラウザでセッションのある画面を撮るには、Vite が配っている store のモジュール（URL に `?t=` が付くことがある）を `performance.getEntriesByType("resource")` で探して import し、`useStore.setState({ sessions })` で偽のセッションを入れる（`PRE` に書く）
-- `app-frames.sh` が時間切れで止まると Chrome が残り、次の撮影がつながらなくなる。`pkill -f remote-debugging-port=9334` で消す（その文字列を含むコマンドの中で撮影まで続けて書くと、自分のシェルも消える）
+- `app-frames.sh` は時間切れ（perl の alarm）でも Chrome と node を片付ける。それでも残ったら PID を見て kill する（`pkill -f remote-debugging-port=9334` は、その文字列を含む自分のシェルも消す）
+- 仮想時間を進めた後の撮影は、ときどき返事が来ずに止まる（簡単なページでも起きる）。落ち着いた画面を 1 枚見るだけなら `LAST=1`（仮想時間を使わず、実時間で `SETTLE` ms 待って撮る）。並べる列の数は `COLS`
+- 会話のある画面: `fromHistory` に probe-runs の transcript.jsonl を EventRecord の形にして渡し、`useStore.setState({ sessions, panes, paneCount })`
 
 ## 次の候補（ユーザーに提案済み、未着手）
 
-1. 会話の表示を詳しく: ツールの呼び出しを開いて、実行したコマンドと結果を見る。ファイルの差分も会話の中に出す（最優先で提案した）
+1. （済み）会話の表示を詳しく
 2. 起動したときにペインの並べ方と選んでいたセッションを戻す
 3. 入力欄での画像や添付
 4. アプリとしての配布（.app、署名、アイコン）

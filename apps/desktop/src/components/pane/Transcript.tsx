@@ -1,17 +1,11 @@
-import { ArrowDown, ArrowUp, ChevronRight, Clock, Coins, FileText, Gauge, Info, ListChecks, Pencil, Search, SquareTerminal, Wrench } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronRight, Clock, Coins, Gauge, Info, ListChecks } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { money, seconds, tokens } from "@/lib/format";
 import type { SessionInfo, TurnStats } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import type { DiffPreview, TranscriptItem } from "@/state/transcript";
-
-const TOOL_ICONS: Record<string, typeof FileText> = {
-  read: FileText,
-  search: Search,
-  edit: Pencil,
-  execute: SquareTerminal,
-};
+import type { ToolCall, TranscriptItem } from "@/state/transcript";
+import { DiffBlock, ToolCalls } from "./ToolCall";
 
 function Stat({ icon: Icon, children, title, className }: { icon: typeof Gauge; children: React.ReactNode; title: string; className?: string }) {
   return (
@@ -46,38 +40,6 @@ export function TurnStatsRow({ stats, cost, error, stopReason }: { stats: TurnSt
   );
 }
 
-function DiffBlock({ d }: { d: DiffPreview }) {
-  const oldLines = d.oldText ? d.oldText.split("\n") : [];
-  const newLines = d.newText.split("\n");
-  // 行単位のおおまかな差分（詳しくは差分の画面で git から見る）
-  const removed = oldLines.filter((l) => !newLines.includes(l) && l !== "");
-  const added = newLines.filter((l) => !oldLines.includes(l) && l !== "");
-  const name = d.path.split("/").slice(-3).join("/");
-  return (
-    <figure className="m-0 overflow-hidden rounded-[10px] border bg-card">
-      <figcaption className="flex h-8 items-center gap-2 border-b px-3">
-        <span className="font-mono text-xs">{name}</span>
-        <span className="grow" />
-        <span className="font-mono text-xs">
-          <span className="text-working">+{added.length}</span> <span className="text-error">−{removed.length}</span>
-        </span>
-      </figcaption>
-      <div className="max-h-48 overflow-auto py-1 font-mono text-xs leading-5">
-        {removed.map((l, i) => (
-          <div key={`r${i}`} className="bg-red-400/10 px-3 whitespace-pre text-red-200">
-            -{l}
-          </div>
-        ))}
-        {added.map((l, i) => (
-          <div key={`a${i}`} className="bg-emerald-400/10 px-3 whitespace-pre text-emerald-200">
-            +{l}
-          </div>
-        ))}
-      </div>
-    </figure>
-  );
-}
-
 function Thought({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
   return (
@@ -103,7 +65,7 @@ export function Transcript({ items, info, streaming }: { items: TranscriptItem[]
   }, [items.length, items[items.length - 1]]);
 
   // 連続するツール呼び出しは 1 つの枠にまとめる
-  const blocks: (TranscriptItem | { kind: "tools"; tools: Extract<TranscriptItem, { kind: "tool" }>[] })[] = [];
+  const blocks: (TranscriptItem | { kind: "tools"; tools: ToolCall[] })[] = [];
   for (const it of items) {
     const last = blocks[blocks.length - 1];
     if (it.kind === "tool") {
@@ -137,21 +99,7 @@ export function Transcript({ items, info, streaming }: { items: TranscriptItem[]
           case "tools":
             return (
               <div key={i} className="flex flex-col gap-3">
-                <div className="rounded-[10px] border bg-card">
-                  {b.tools.map((t, j) => {
-                    const Icon = TOOL_ICONS[t.toolKind] ?? Wrench;
-                    const running = t.status === "pending" || t.status === "in_progress";
-                    return (
-                      <div key={t.id} className={cn("flex h-9 items-center gap-3 px-3", j > 0 && "border-t")}>
-                        <Icon className="size-4 text-muted-foreground" aria-hidden />
-                        <span className="min-w-0 grow truncate font-mono text-xs">{t.title}</span>
-                        <span className={cn("text-xs", running ? "text-working" : t.status === "failed" ? "text-error" : "text-muted-foreground")}>
-                          {running ? "実行中" : t.status === "failed" ? "失敗" : "完了"}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
+                <ToolCalls tools={b.tools} />
                 {b.tools.flatMap((t) => t.diffs.map((d, k) => <DiffBlock key={`${t.id}-${k}`} d={d} />))}
               </div>
             );

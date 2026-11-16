@@ -29,6 +29,18 @@ if (process.env.PRE) {
   if (r.result?.exceptionDetails) console.log("pre error", JSON.stringify(r.result.exceptionDetails).slice(0, 300));
   await new Promise((r2) => setTimeout(r2, Number(process.env.PRE_WAIT ?? 1500)));
 }
+// LAST=1: 動きが落ち着いた画面を 1 枚だけ撮る。仮想時間は使わない（止まりやすいため）
+if (process.env.LAST) {
+  const r = await send("Runtime.evaluate", { expression: action, awaitPromise: true });
+  if (r.result?.exceptionDetails) console.log("action error", JSON.stringify(r.result.exceptionDetails).slice(0, 300));
+  if (process.env.SHOW) console.log("action result", String(r.result?.result?.value).slice(0, 1500));
+  await new Promise((r2) => setTimeout(r2, Number(process.env.SETTLE ?? 1200)));
+  const shot = await send("Page.captureScreenshot", { format: "png", clip: { x: cx, y: cy, width: cw, height: chh, scale: 1 } });
+  writeFileSync(out, Buffer.from(shot.result.data, "base64"));
+  console.log("wrote", out);
+  ws.close();
+  process.exit(0);
+}
 await send("Emulation.setVirtualTimePolicy", { policy: "pause" });
 const r0 = await send("Runtime.evaluate", { expression: action, awaitPromise: false });
 if (r0.result?.exceptionDetails) console.log("action error", JSON.stringify(r0.result.exceptionDetails).slice(0, 300));
@@ -37,12 +49,22 @@ const shots = [];
 for (let i = 0; i < n; i++) {
   await send("Emulation.setVirtualTimePolicy", { policy: "advance", budget: 16.667 });
   await waitEvent("Emulation.virtualTimeBudgetExpired");
-  const s = await send("Page.captureScreenshot", { format: "png", clip: { x: cx, y: cy, width: cw, height: chh, scale: 1 } });
+  // 時間を止めたままだと、撮影に要る描画のコマが来ずに返事が止まることがある。
+  // 3 秒待って返事がなければ、仮想時間を 1ms だけ進めてコマを出させる（何度でも）
+  const pending = send("Page.captureScreenshot", { format: "png", clip: { x: cx, y: cy, width: cw, height: chh, scale: 1 } });
+  let s = null;
+  while (!s) {
+    s = await Promise.race([pending, new Promise((r) => setTimeout(() => r(null), 3000))]);
+    if (!s) {
+      await send("Emulation.setVirtualTimePolicy", { policy: "advance", budget: 1 });
+      await waitEvent("Emulation.virtualTimeBudgetExpired");
+    }
+  }
   shots.push(s.result.data);
 }
 // コマを並べた 1 枚にする
 await send("Emulation.setVirtualTimePolicy", { policy: "advance", budget: 100000 });
-const cols = 4;
+const cols = Number(process.env.COLS ?? 4);
 const html = `<body style="margin:0;background:#000;display:grid;grid-template-columns:repeat(${cols},${cw}px);gap:4px">${shots.map((d, i) => `<div style="position:relative"><img src="data:image/png;base64,${d}" style="display:block"><span style="position:absolute;left:4px;top:2px;color:#f0f;font:11px Menlo">${Math.round((i + 1) * 16.7)}ms</span></div>`).join("")}</body>`;
 await send("Page.navigate", { url: "about:blank" });
 await new Promise((r) => setTimeout(r, 300));
