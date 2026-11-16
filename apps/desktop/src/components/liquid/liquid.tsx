@@ -76,7 +76,20 @@ interface Options {
   zIndex?: number;
   /** pop の型で、大きさの変化を位置の変化より遅らせる秒数（0 なら 1 段階、大きいほど 2 段階に近い） */
   sizeLag?: number;
+  /** pop の型で、出発点と行き先の見た目。大きさの広がりに合わせて色・枠線・影・ぼかしが変わる */
+  fromLook?: Look;
+  toLook?: Look;
 }
+
+export interface Look {
+  background: string;
+  border: string;
+  shadow: string;
+  blur: number;
+}
+
+const DEFAULT_FROM: Look = { background: "rgba(38, 38, 38, 1)", border: "rgba(255, 255, 255, 0)", shadow: "0px 0px 0px rgba(0, 0, 0, 0)", blur: 0 };
+const DEFAULT_TO: Look = { background: "rgba(23, 23, 23, 0.85)", border: "rgba(255, 255, 255, 0.1)", shadow: "0px 16px 48px rgba(0, 0, 0, 0.55)", blur: 40 };
 
 const LEAD = appleSpring({ duration: 0.3, bounce: 0.3 });
 const TRAIL = appleSpring({ duration: 0.45, bounce: 0.2 });
@@ -85,7 +98,7 @@ const TRAIL = appleSpring({ duration: 0.45, bounce: 0.2 });
  * 分離アニメーション。`revealed` が true のあいだ本物を見せ、`layer` をどこかに描く。
  * `mounted` は本物を DOM に置いておくべきか（動いているあいだも置いて大きさを測る）
  */
-export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRadius = 8, color = "#262626", style = "pop", zIndex = 60, sizeLag = 0.08 }: Options) {
+export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRadius = 8, color = "#262626", style = "pop", zIndex = 60, sizeLag = 0.08, fromLook = DEFAULT_FROM, toLook = DEFAULT_TO }: Options) {
   const reduced = useReducedMotion();
   const [phase, setPhase] = useState<Phase>("closed");
   const L = useMotionValue(0);
@@ -96,6 +109,8 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
   const opacity = useMotionValue(0);
   const ghostOpacity = useMotionValue(0);
   const ghostScale = useMotionValue(1);
+  /** 見た目の進み具合（0 = 出発点、1 = 行き先） */
+  const look = useMotionValue(0);
   const [ghost, setGhost] = useState<Edges | null>(null);
   const running = useRef<AnimationPlaybackControls[]>([]);
   const run = useRef(0);
@@ -177,7 +192,9 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
           R.set(cx + w / 2);
           T.set(cy - h / 2);
           B.set(cy + h / 2);
-          rad.set(lerp(a.radius, to.radius, Math.min(1, Math.max(0, qv))));
+          const k = Math.min(1, Math.max(0, qv));
+          rad.set(lerp(a.radius, to.radius, k));
+          look.set(opening ? k : 1 - k);
         };
         const offP = p.on("change", apply);
         const offQ = q.on("change", apply);
@@ -259,7 +276,39 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
     return `rotate(${angle}deg) scale(${s}, ${1 / Math.sqrt(s)}) rotate(${-angle}deg)`;
   });
 
+  const background = useTransform(look, [0, 1], [fromLook.background, toLook.background]);
+  const borderColor = useTransform(look, [0, 1], [fromLook.border, toLook.border]);
+  const boxShadow = useTransform(look, [0, 1], [fromLook.shadow, toLook.shadow]);
+  const backdrop = useTransform(look, (v) => `blur(${lerp(fromLook.blur, toLook.blur, v)}px) saturate(${lerp(100, 150, v)}%)`);
+
   const animating = phase === "opening" || phase === "closing";
+  if (style === "pop") {
+    // 枠線と影を見せたいので goo フィルタは掛けない（裏から出るので糸も要らない）
+    const surface = animating
+      ? createPortal(
+          <motion.div
+            aria-hidden
+            className="pointer-events-none fixed top-0 left-0 border"
+            style={{
+              zIndex,
+              x,
+              y,
+              width: w,
+              height: h,
+              opacity,
+              borderRadius: rad,
+              background,
+              borderColor,
+              boxShadow,
+              backdropFilter: backdrop,
+              WebkitBackdropFilter: backdrop,
+            }}
+          />,
+          document.body,
+        )
+      : null;
+    return { revealed: phase === "open", mounted: phase !== "closed", layer: surface };
+  }
   const layer = animating
     ? createPortal(
         <div aria-hidden className="pointer-events-none fixed inset-0" style={{ zIndex, filter: `url(#${GOO_ID})` }}>
