@@ -1,5 +1,6 @@
 // セッションの会話を、エンジンのイベント（または保存した記録）から組み立てる。副作用のない関数だけ
 
+import { previewsOfPrompt, type AttachmentPreview } from "@/lib/attachments";
 import type { AcpUpdate, EventRecord, PermissionChoice, TurnStats } from "@/lib/types";
 
 export interface DiffPreview {
@@ -9,7 +10,7 @@ export interface DiffPreview {
 }
 
 export type TranscriptItem =
-  | { kind: "user"; text: string }
+  | { kind: "user"; text: string; attachments?: AttachmentPreview[] }
   | { kind: "agent"; text: string }
   | { kind: "thought"; text: string }
   | ToolCall
@@ -200,8 +201,9 @@ export function applyUpdate(t: Transcript, update: AcpUpdate): Transcript {
   }
 }
 
-export function beginTurn(t: Transcript, prompt: string): Transcript {
-  return { inTurn: true, items: [...t.items, { kind: "user", text: prompt }] };
+export function beginTurn(t: Transcript, prompt: string, attachments: AttachmentPreview[] = []): Transcript {
+  const item: TranscriptItem = attachments.length ? { kind: "user", text: prompt, attachments } : { kind: "user", text: prompt };
+  return { inTurn: true, items: [...t.items, item] };
 }
 
 export function endTurn(t: Transcript, stats: TurnStats | null, stopReason: string | null, error: string | null): Transcript {
@@ -229,9 +231,10 @@ export function fromHistory(events: EventRecord[]): Transcript {
       continue;
     }
     if (e.kind === "frame_out" && msg.method === "session/prompt") {
-      const params = msg.params as { prompt?: { text?: string }[] } | undefined;
-      const prompt = (params?.prompt ?? []).map((b) => b.text ?? "").join("");
-      t = beginTurn(t, prompt);
+      const params = msg.params as { prompt?: { type?: string; text?: string }[] } | undefined;
+      const blocks = params?.prompt ?? [];
+      const prompt = blocks.map((b) => (b.type === undefined || b.type === "text" ? (b.text ?? "") : "")).join("");
+      t = beginTurn(t, prompt, previewsOfPrompt(blocks));
     } else if (e.kind === "frame_in" && msg.method === "session/update") {
       const params = msg.params as { update?: AcpUpdate } | undefined;
       if (params?.update) t = applyUpdate(t, params.update);

@@ -4,6 +4,7 @@ import { create } from "zustand";
 
 import type { Look, LiquidStyle } from "@/components/liquid/liquid";
 import { liquidCloseFrom, liquidOpen } from "@/components/liquid/stage";
+import type { Attached } from "@/lib/attachments";
 import { api, inTauri, onEngineEvent } from "@/lib/api";
 import { notify } from "@/lib/notify";
 import { loadInfoCache, saveInfoCache, snapshot, type InfoCache } from "./infoCache";
@@ -118,7 +119,7 @@ interface State {
   newDraft: () => void;
   updateDraft: (id: string, patch: Partial<Draft>) => void;
   /** 下書きを本物のセッションとして始める（同じペインのまま入れ替わる） */
-  startDraft: (id: string, prompt: string) => Promise<void>;
+  startDraft: (id: string, prompt: string, attachments?: Attached[]) => Promise<void>;
   closePane: (pane: number) => void;
   /** 差分の画面。closing のあいだは、縮む動きのために画面を残しておく */
   diff: { id: string; closing: boolean } | null;
@@ -149,7 +150,7 @@ interface State {
   setSearchLayerActive: (v: boolean) => void;
   setLiquidLag: (v: number) => void;
   startSession: (args: { profile: string; repo: string; title: string; worktree: boolean; prompt?: string }) => Promise<void>;
-  sendPrompt: (id: string, text: string) => Promise<void>;
+  sendPrompt: (id: string, text: string, attachments?: Attached[]) => Promise<void>;
   cancel: (id: string) => Promise<void>;
   respondPermission: (id: string, optionId: string | null) => Promise<void>;
   setCategory: (id: string, category: Category, value: string) => Promise<void>;
@@ -389,7 +390,7 @@ export const useStore = create<State>((set, get) => ({
 
   updateDraft: (id, patch) => set((s) => (s.drafts[id] ? { drafts: { ...s.drafts, [id]: { ...s.drafts[id], ...patch } } } : s)),
 
-  startDraft: async (id, prompt) => {
+  startDraft: async (id, prompt, attachments = []) => {
     const d = get().drafts[id];
     if (!d?.profile || d.busy) return;
     get().updateDraft(id, { busy: true, error: null });
@@ -410,7 +411,7 @@ export const useStore = create<State>((set, get) => ({
         const sessions = s.sessions[rec.id] ? s.sessions : { ...s.sessions, [rec.id]: { ...newView(rec), historyLoaded: true } };
         return { panes, drafts, sessions };
       });
-      if (prompt.trim()) await get().sendPrompt(rec.id, prompt);
+      if (prompt.trim() || attachments.length) await get().sendPrompt(rec.id, prompt, attachments);
     } catch (e) {
       get().updateDraft(id, { busy: false, error: String(e) });
     }
@@ -429,10 +430,11 @@ export const useStore = create<State>((set, get) => ({
     if (prompt?.trim()) await get().sendPrompt(rec.id, prompt);
   },
 
-  sendPrompt: async (id, text) => {
+  sendPrompt: async (id, text, attachments = []) => {
     set((s) => {
       const v = s.sessions[id];
-      return { sessions: { ...s.sessions, [id]: { ...v, transcript: beginTurn(v.transcript, text), lastError: null } } };
+      const previews = attachments.map((a) => a.preview);
+      return { sessions: { ...s.sessions, [id]: { ...v, transcript: beginTurn(v.transcript, text, previews), lastError: null } } };
     });
     try {
       // 止まっているセッションは、送る前に開き直す
@@ -443,7 +445,7 @@ export const useStore = create<State>((set, get) => ({
         await applyChoices(id, pending);
         set((s) => (s.sessions[id] ? { sessions: { ...s.sessions, [id]: { ...s.sessions[id], pending: {} } } } : s));
       }
-      await api.prompt(id, text);
+      await api.prompt(id, text, attachments.map((a) => a.wire));
     } catch (err) {
       set((s) => {
         const v = s.sessions[id];

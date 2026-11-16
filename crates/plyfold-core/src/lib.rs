@@ -21,7 +21,9 @@ use tokio::sync::{broadcast, mpsc};
 
 pub use plyfold_store::SessionStatus as Status;
 
+pub mod attach;
 pub mod check;
+pub use attach::Attachment;
 pub mod info;
 pub use info::{Category, Choice, ConfigOption, Cost, LiveTurn, SessionInfo, TokenUsage, TurnStats};
 use info::TurnClock;
@@ -48,6 +50,8 @@ pub enum CoreError {
     NoWorkspace(String),
     #[error("このエージェントには {0:?} の設定項目がありません")]
     NoSuchOption(Category),
+    #[error("添えたものを読めません: {0}")]
+    Attachment(String),
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -398,8 +402,16 @@ impl Engine {
 
     /// ターンを始める。終わるのは待たない（終わったら TurnEnded が届く）
     pub fn prompt(&self, id: &str, text: &str) -> Result<(), CoreError> {
+        self.prompt_with(id, text, &[])
+    }
+
+    /// 画像やファイルを添えてターンを始める
+    pub fn prompt_with(&self, id: &str, text: &str, attachments: &[Attachment]) -> Result<(), CoreError> {
         let inner = self.inner.clone();
         let live = inner.live(id)?;
+        // 画像に対応していないエージェントには、画像を保存場所に書き出してリンクで渡す
+        let blocks = attach::prompt_blocks(text, attachments, live.client.supports_images(), &inner.state_dir.join("attachments"))
+            .map_err(|e| CoreError::Attachment(e.to_string()))?;
         if live.in_turn.swap(true, Ordering::SeqCst) {
             return Err(CoreError::Busy(id.into()));
         }
@@ -409,9 +421,8 @@ impl Engine {
         live.info.lock().unwrap().live = Some(LiveTurn::default());
         inner.set_status(id, SessionStatus::Working);
         let id = id.to_string();
-        let text = text.to_string();
         tokio::spawn(async move {
-            let r = live.client.prompt(&live.sid(), &text).await;
+            let r = live.client.prompt_blocks(&live.sid(), blocks).await;
             live.in_turn.store(false, Ordering::SeqCst);
             live.permissions.lock().unwrap().clear();
             match r {

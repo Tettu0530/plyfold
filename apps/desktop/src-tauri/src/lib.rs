@@ -203,8 +203,8 @@ async fn delete_session(state: State<'_, AppState>, id: String, remove_worktree:
 }
 
 #[tauri::command]
-async fn prompt(state: State<'_, AppState>, id: String, text: String) -> CmdResult<()> {
-    state.engine.prompt(&id, &text).map_err(err)
+async fn prompt(state: State<'_, AppState>, id: String, text: String, attachments: Option<Vec<plyfold_core::Attachment>>) -> CmdResult<()> {
+    state.engine.prompt_with(&id, &text, &attachments.unwrap_or_default()).map_err(err)
 }
 
 #[tauri::command]

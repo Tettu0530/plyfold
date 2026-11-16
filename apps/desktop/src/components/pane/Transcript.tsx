@@ -5,6 +5,7 @@ import { money, seconds, tokens } from "@/lib/format";
 import type { SessionInfo, TurnStats } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import type { ToolCall, TranscriptItem } from "@/state/transcript";
+import { SentAttachments } from "./Attachments";
 import { DiffBlock, ToolCalls } from "./ToolCall";
 
 function Stat({ icon: Icon, children, title, className }: { icon: typeof Gauge; children: React.ReactNode; title: string; className?: string }) {
@@ -81,8 +82,9 @@ export function Transcript({ items, info, streaming }: { items: TranscriptItem[]
         switch (b.kind) {
           case "user":
             return (
-              <div key={i} className="max-w-[78%] self-end rounded-[10px] bg-muted px-3 py-1.5 leading-relaxed whitespace-pre-wrap select-text">
-                {b.text}
+              <div key={i} className="flex max-w-[78%] flex-col items-end gap-1.5 self-end">
+                {b.attachments && <SentAttachments items={b.attachments} />}
+                {b.text && <div className="rounded-[10px] bg-muted px-3 py-1.5 leading-relaxed whitespace-pre-wrap select-text">{b.text}</div>}
               </div>
             );
           case "agent":

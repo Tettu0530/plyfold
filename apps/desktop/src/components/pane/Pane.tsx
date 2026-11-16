@@ -160,7 +160,7 @@ function SessionPane({ index }: { index: number }) {
                 ? "作業中です（終わってから送れます）"
                 : "指示を入力"
         }
-        onSend={(t) => void sendPrompt(id, t)}
+        onSend={(t, a) => void sendPrompt(id, t, a)}
         onSet={(c, v) => void setCategory(id, c, v)}
       />
     </section>

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { AttachmentWire } from "./attachments";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type { Category, CheckResult, Diff, EngineEvent, EventRecord, ProfileDetail, ProfileForm, ProfileSummary, SessionInfo, SessionRecord, SettingsView, WtStatus, AppSettings } from "./types";
@@ -14,7 +15,7 @@ export const api = {
   renameSession: (id: string, title: string) => invoke<void>("rename_session", { id, title }),
   closeSession: (id: string) => invoke<void>("close_session", { id }),
   deleteSession: (id: string, removeWorktree: boolean) => invoke<void>("delete_session", { id, removeWorktree }),
-  prompt: (id: string, text: string) => invoke<void>("prompt", { id, text }),
+  prompt: (id: string, text: string, attachments: AttachmentWire[] = []) => invoke<void>("prompt", { id, text, attachments }),
   cancel: (id: string) => invoke<void>("cancel", { id }),
   respondPermission: (id: string, permissionId: string, optionId: string | null) =>
     invoke<void>("respond_permission", { id, permissionId, optionId }),

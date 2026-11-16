@@ -84,6 +84,11 @@ impl AcpClient {
         self.init.agent_capabilities.load_session
     }
 
+    /// プロンプトに画像の塊を入れてよいか（入れられなければ、ファイルへのリンクで渡す）
+    pub fn supports_images(&self) -> bool {
+        self.init.agent_capabilities.prompt_capabilities.image
+    }
+
     pub async fn authenticate(&self, method_id: &str) -> Result<(), AcpError> {
         self.conn
             .request_raw("authenticate", serde_json::json!({ "methodId": method_id }), Some(SESSION_TIMEOUT))
@@ -136,7 +141,12 @@ impl AcpClient {
     /// `barrier` は、このターンの通知（AgentMessage）が何件目までかを表す。受け取った AgentMessage を
     /// その件数まで処理してからターンの終わりを扱えば、最後の発言を取りこぼさない
     pub async fn prompt(&self, session_id: &str, text: &str) -> Result<TurnResult, AcpError> {
-        let req = PromptRequest::new(SessionId::new(session_id), vec![ContentBlock::Text(TextContent::new(text))]);
+        self.prompt_blocks(session_id, vec![ContentBlock::Text(TextContent::new(text))]).await
+    }
+
+    /// 文字のほかに、画像やファイルへのリンクの塊も送る
+    pub async fn prompt_blocks(&self, session_id: &str, blocks: Vec<ContentBlock>) -> Result<TurnResult, AcpError> {
+        let req = PromptRequest::new(SessionId::new(session_id), blocks);
         let params = serde_json::to_value(req).expect("serialize");
         let (v, barrier) = self.conn.request_with_barrier("session/prompt", params, None).await?;
         let response = serde_json::from_value(v.clone())

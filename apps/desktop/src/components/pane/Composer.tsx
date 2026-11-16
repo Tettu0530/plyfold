@@ -14,6 +14,8 @@ import { CHIP_TRIGGER } from "./chip";
 import { smooth } from "../motion";
 import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
+import type { Attached } from "@/lib/attachments";
+import { AttachBox, useAttachments } from "./Attachments";
 
 function option(info: SessionInfo | null, c: Category): ConfigOption | undefined {
   return info?.config.find((o) => o.category === c);
@@ -201,15 +203,17 @@ export function Composer({
   info: SessionInfo | null;
   disabled: boolean;
   placeholder: string;
-  onSend: (text: string) => void;
+  onSend: (text: string, attachments: Attached[]) => void;
   onSet: (c: Category, v: string) => void;
 }) {
   const [text, setText] = useState("");
+  const att = useAttachments();
+  const canSend = !disabled && (!!text.trim() || att.items.length > 0);
   const send = () => {
-    const t = text.trim();
-    if (!t || disabled) return;
-    onSend(t);
+    if (!canSend) return;
+    onSend(text.trim(), att.items);
     setText("");
+    att.clear();
   };
   const modes = modeChoices(info);
   const mode = currentMode(info);
@@ -217,7 +221,7 @@ export function Composer({
   return (
     <div className="flex shrink-0 flex-col gap-1 px-3 pb-3">
       <ControlRow scope={scope} agent={agent} info={info} onSet={onSet} />
-      <div className="flex items-end gap-2 rounded-xl border border-input bg-card py-1.5 pr-1.5 pl-3 focus-within:border-ring">
+      <AttachBox att={att}>
         <textarea
           aria-label="指示"
           rows={2}
@@ -239,13 +243,13 @@ export function Composer({
         <button
           type="button"
           aria-label="送る"
-          disabled={disabled || !text.trim()}
+          disabled={!canSend}
           onClick={send}
           className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground hover:bg-accent disabled:opacity-40"
         >
           <ArrowUp className="size-3.5" aria-hidden />
         </button>
-      </div>
+      </AttachBox>
     </div>
   );
 }

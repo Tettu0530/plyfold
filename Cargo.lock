@@ -2819,6 +2819,7 @@ dependencies = [
 name = "plyfold-core"
 version = "0.1.0"
 dependencies = [
+ "base64 0.23.1",
  "plyfold-acp",
  "plyfold-profile",
  "plyfold-store",

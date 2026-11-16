@@ -75,6 +75,30 @@ describe("transcript", () => {
     expect(t.items).toHaveLength(1);
   });
 
+  it("shows attachments of a stored prompt", () => {
+    const frame = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "session/prompt",
+      params: {
+        prompt: [
+          { type: "text", text: "これを見て" },
+          { type: "image", data: "AAAA", mimeType: "image/png", uri: "file:///tmp/a%20b.png" },
+          { type: "resource_link", name: "notes.md", uri: "file:///tmp/notes.md" },
+        ],
+      },
+    };
+    const t = fromHistory([{ id: 1, session_id: "s", ts: 0, kind: "frame_out", payload: JSON.stringify(frame) }]);
+    expect(t.items[0]).toEqual({
+      kind: "user",
+      text: "これを見て",
+      attachments: [
+        { kind: "image", name: "a b.png", src: "data:image/png;base64,AAAA" },
+        { kind: "file", name: "notes.md" },
+      ],
+    });
+  });
+
   it("keeps a single plan and replaces it", () => {
     let t = applyUpdate(emptyTranscript(), { sessionUpdate: "plan", entries: [{ content: "a", status: "pending" }] });
     t = applyUpdate(t, chunk("agent_message_chunk", "x"));

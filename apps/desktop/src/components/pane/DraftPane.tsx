@@ -10,6 +10,7 @@ import { useStore } from "@/state/store";
 import { AGENT_NAMES, ProviderLogo } from "../icons";
 import { CHIP_TRIGGER } from "./chip";
 import { ControlRow } from "./Composer";
+import { AttachBox, useAttachments } from "./Attachments";
 import { withChoices } from "@/state/infoCache";
 import type { Category } from "@/lib/types";
 
@@ -27,6 +28,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const profiles = useStore((s) => s.profiles);
   const { updateDraft, startDraft, closePane, focusPane } = useStore.getState();
   const [text, setText] = useState("");
+  const att = useAttachments();
   const cached = useStore((s) => (draft?.profile ? s.infoCache[draft.profile] : undefined));
   if (!draft) return null;
   const sorted = [...profiles].sort((a, b) => Number(a.name === a.agent) - Number(b.name === b.agent) || a.name.localeCompare(b.name));
@@ -37,7 +39,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const mode = info ? (info.config.find((o) => o.category === "mode")?.current ?? info.current_mode) : null;
   const send = () => {
     if (draft.busy || !draft.profile) return;
-    void startDraft(id, text);
+    void startDraft(id, text, att.items);
   };
 
   return (
@@ -111,7 +113,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
 
         <ControlRow scope={id} agent={current?.agent ?? ""} info={info} onSet={choose} empty={draft.profile ? "model と effort は起動後に選べます（次からは前回の値を出します）" : undefined} />
 
-        <div className="flex items-end gap-2 rounded-xl border border-input bg-card py-1.5 pr-1.5 pl-3 focus-within:border-ring">
+        <AttachBox att={att}>
           <textarea
             aria-label="初期プロンプト"
             rows={2}
@@ -140,7 +142,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
           >
             <ArrowUp className="size-3.5" aria-hidden />
           </button>
-        </div>
+        </AttachBox>
       </div>
       </PopoverAnchor>
       </div>
