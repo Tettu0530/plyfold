@@ -120,7 +120,7 @@ export const useStore = create<State>((set, get) => ({
   labOpen: false,
   liquidStyle: "pop",
   searchLayerActive: false,
-  liquidLag: 0.08,
+  liquidLag: 0.12,
   ready: false,
 
   init: async () => {

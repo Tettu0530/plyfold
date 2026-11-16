@@ -98,7 +98,7 @@ const TRAIL = appleSpring({ duration: 0.45, bounce: 0.2 });
  * 分離アニメーション。`revealed` が true のあいだ本物を見せ、`layer` をどこかに描く。
  * `mounted` は本物を DOM に置いておくべきか（動いているあいだも置いて大きさを測る）
  */
-export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRadius = 8, color = "#262626", style = "pop", zIndex = 60, sizeLag = 0.08, fromLook = DEFAULT_FROM, toLook = DEFAULT_TO }: Options) {
+export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRadius = 8, color = "#262626", style = "pop", zIndex = 60, sizeLag = 0.12, fromLook = DEFAULT_FROM, toLook = DEFAULT_TO }: Options) {
   const reduced = useReducedMotion();
   const [phase, setPhase] = useState<Phase>("closed");
   const L = useMotionValue(0);
@@ -280,6 +280,9 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
   const borderColor = useTransform(look, [0, 1], [fromLook.border, toLook.border]);
   const boxShadow = useTransform(look, [0, 1], [fromLook.shadow, toLook.shadow]);
   const backdrop = useTransform(look, (v) => `blur(${lerp(fromLook.blur, toLook.blur, v)}px) saturate(${lerp(100, 150, v)}%)`);
+  // pop: 縁をすり抜けるときの速さで横に伸び、縦に細くなる（止まれば元の形）
+  const popScaleX = useTransform(vx, (v) => 1 + Math.min(Math.abs(v) / 9000, 0.18));
+  const popScaleY = useTransform(popScaleX, (s) => 1 / Math.sqrt(s));
 
   const animating = phase === "opening" || phase === "closing";
   if (style === "pop") {
@@ -295,6 +298,8 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
               y,
               width: w,
               height: h,
+              scaleX: popScaleX,
+              scaleY: popScaleY,
               opacity,
               borderRadius: rad,
               background,

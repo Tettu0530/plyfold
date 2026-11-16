@@ -60,17 +60,25 @@ export function Sidebar() {
           <span className="grow text-left">新しいセッション</span>
           <Keys keys={["cmd", "n"]} />
         </button>
-        <button
+        <motion.button
           ref={liquidAnchor("search")}
           type="button"
           onClick={() => setSearchOpen(true)}
           aria-haspopup="dialog"
-          className="flex h-7 items-center gap-2 rounded-lg px-2 text-muted-foreground hover:bg-accent hover:text-foreground"
+          aria-expanded={searchOpen}
+          // 出発点: 押すとぽんと膨らみ、開いているあいだは暗くせず選択中の色で残す（どこから出たかを示す）
+          animate={searchOpen ? { scale: [1, 1.06, 1] } : { scale: 1 }}
+          transition={snappy}
+          className={cn(
+            "relative flex h-7 items-center gap-2 rounded-lg px-2 text-muted-foreground hover:bg-accent hover:text-foreground",
+            layerActive && "z-20",
+            searchOpen && "bg-accent text-foreground",
+          )}
         >
           <Search className="size-4" aria-hidden />
           <span className="grow text-left">検索</span>
           <Keys keys={["cmd", "k"]} />
-        </button>
+        </motion.button>
       </div>
 
       <div className="flex min-h-0 grow flex-col overflow-y-auto px-2">
