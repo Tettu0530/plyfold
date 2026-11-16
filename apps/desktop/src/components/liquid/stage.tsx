@@ -40,6 +40,8 @@ interface Job extends LiquidJobOptions {
   nonce: number;
   /** cover のとき、いま出発点を実体の下に下げているか */
   lowered?: boolean;
+  /** 開ききって本物を見せているが、液架橋の尾がまだ戻りきっていない */
+  lingering?: boolean;
 }
 
 interface StageState {
@@ -101,7 +103,7 @@ const liveEdges = new Map<string, Edges>();
 
 /** id の分離アニメーションが動いているか */
 export function useLiquidActive(id: string): boolean {
-  return useStage((s) => !!s.jobs[id]);
+  return useStage((s) => !!s.jobs[id] && !s.jobs[id].lingering);
 }
 
 /**
@@ -196,7 +198,7 @@ function JobView({ job }: { job: Job }) {
       return job.target();
     },
   }).current as React.RefObject<HTMLElement | null>;
-  const { revealed, mounted, layer, edges } = useLiquidMorph(job.open, {
+  const { revealed, mounted, layer, edges, settling } = useLiquidMorph(job.open, {
     anchor: job.anchor,
     target: targetRef,
     radius: job.radius ?? 0,
@@ -231,8 +233,13 @@ function JobView({ job }: { job: Job }) {
     return () => clearTimeout(t);
   }, [job.cover, job.open, job.id, job.nonce]);
 
-  // 開ききったら、あるいは閉じきったら、登録を外す（開いた面はそのまま見えている）
+  // 開ききったら、あるいは閉じきったら、登録を外す（開いた面はそのまま見えている）。
+  // 開いた後も液架橋の尾が戻りきるまでは残す（そのあいだ、画面の切り抜きやクリックの止めは解く）
   useEffect(() => {
+    if (job.open && revealed && settling) {
+      useStage.setState((s) => (s.jobs[job.id]?.nonce === job.nonce && !s.jobs[job.id].lingering ? { jobs: { ...s.jobs, [job.id]: { ...s.jobs[job.id], lingering: true } } } : s));
+      return;
+    }
     if ((job.open && revealed) || (!job.open && !mounted)) {
       useStage.setState((s) => {
         if (s.jobs[job.id]?.nonce !== job.nonce) return s;
@@ -244,7 +251,7 @@ function JobView({ job }: { job: Job }) {
         return { jobs, revealed: rv };
       });
     }
-  }, [job.open, revealed, mounted, job.id, job.nonce]);
+  }, [job.open, revealed, mounted, settling, job.id, job.nonce]);
 
   return layer;
 }

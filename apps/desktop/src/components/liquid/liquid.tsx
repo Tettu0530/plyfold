@@ -8,10 +8,11 @@
 //   pop     : 出発点の裏から滑り出て、そのまま 1 本のばねで行き先の形へ（標準。出発点の面より下に描く）
 // 測定（tools/liquid-probe）では、Apple の変形は外枠が 1 本のばねで動く。どの型も段ごとに 1 本のばねで動かす
 import { animate, motion, motionValue, useMotionValue, useReducedMotion, useTransform, useVelocity, type AnimationPlaybackControls, type MotionValue } from "motion/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { appleSpring, bouncy, interactive, smooth, snappy } from "../motion";
+import { appleSpring, bouncy, interactive, smooth, snappy, springToCss } from "../motion";
+import { BridgeSim, bridgeParams, contact, neckShape, rectGap, tailShape, type Rect } from "./bridge";
 
 export type LiquidStyle = "pop" | "morph" | "tear" | "droplet";
 
@@ -60,75 +61,133 @@ function edgesOf(el: Element | null | undefined, radius: number): Edges | null {
 
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 
-// ---- 液架橋: 出発点と実体のあいだに張る液体の首（メタボールの橋）
-type Pt = { x: number; y: number };
-const at = (c: Pt, a: number, r: number): Pt => ({ x: c.x + r * Math.cos(a), y: c.y + r * Math.sin(a) });
-const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, lo > hi ? (lo + hi) / 2 : v));
+// ---- 液架橋の描画（計算は bridge.ts）。出発点と実体の「外側」だけに描き、首の足は両方の下に隠す。
+// 首は実体と同じ色で、両脇に実体と同じ枠線の色の輪郭を引く（実体の枠線の上に重ねて、継ぎ目を消す）
 
-/** 円 1（出発点）と円 2（実体）をつなぐ首の輪郭。離れすぎたら切れる（null） */
-export function bridgePath(c1: Pt, r1: number, c2: Pt, r2: number, stretch = 3.5, v = 0.5, handle = 2.4): string | null {
-  const d = dist(c1, c2);
-  const max = r1 + r2 * stretch;
-  if (r1 <= 0 || r2 <= 0 || d > max || d <= Math.abs(r1 - r2)) return null;
-  let u1 = 0;
-  let u2 = 0;
-  if (d < r1 + r2) {
-    u1 = Math.acos(clamp((r1 * r1 + d * d - r2 * r2) / (2 * r1 * d), -1, 1));
-    u2 = Math.acos(clamp((r2 * r2 + d * d - r1 * r1) / (2 * r2 * d), -1, 1));
-  }
-  const base = Math.atan2(c2.y - c1.y, c2.x - c1.x);
-  const spread = Math.acos(clamp((r1 - r2) / d, -1, 1));
-  const a1 = base + u1 + (spread - u1) * v;
-  const a2 = base - u1 - (spread - u1) * v;
-  const a3 = base + Math.PI - u2 - (Math.PI - u2 - spread) * v;
-  const a4 = base - Math.PI + u2 + (Math.PI - u2 - spread) * v;
-  const p1 = at(c1, a1, r1);
-  const p2 = at(c1, a2, r1);
-  const p3 = at(c2, a3, r2);
-  const p4 = at(c2, a4, r2);
-  // 離れるほど首が細くなる（取っ手を短くする）
-  const k = Math.min(v * handle, dist(p1, p3) / (r1 + r2)) * Math.min(1, (d * 2) / (r1 + r2));
-  const h1 = at(p1, a1 - Math.PI / 2, r1 * k);
-  const h2 = at(p2, a2 + Math.PI / 2, r1 * k);
-  const h3 = at(p3, a3 + Math.PI / 2, r2 * k);
-  const h4 = at(p4, a4 - Math.PI / 2, r2 * k);
-  const f = (p: Pt) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
-  return `M ${f(p1)} C ${f(h1)} ${f(h3)} ${f(p3)} A ${r2} ${r2} 0 ${d > r1 - r2 ? 1 : 0} 0 ${f(p4)} C ${f(h4)} ${f(h2)} ${f(p2)} Z`;
+interface BridgeProps {
+  anchor: string;
+  anchorRadius: number;
+  sim: React.RefObject<BridgeSim | null>;
+  /** 引き留める前の実体の形 */
+  raw: React.RefObject<Rect | null>;
+  /** 大きさの広がりの進み具合 */
+  grown: React.RefObject<number>;
+  edges: { L: MotionValue<number>; T: MotionValue<number>; R: MotionValue<number>; B: MotionValue<number>; rad: MotionValue<number> };
+  scaleX: MotionValue<number>;
+  scaleY: MotionValue<number>;
+  /** 引き留める量（apply がこれを読んで実体の位置をずらす） */
+  tension: MotionValue<number>;
+  fill: MotionValue<string>;
+  stroke: MotionValue<string>;
+  opacity: MotionValue<number> | number;
+  zIndex: number;
+  onDone: () => void;
 }
 
-/** 出発点と実体のあいだの液架橋を、毎フレーム描き直す */
-function Bridge({ anchor, edges, fill, opacity, zIndex }: { anchor: string; edges: { L: MotionValue<number>; T: MotionValue<number>; R: MotionValue<number>; B: MotionValue<number> }; fill: MotionValue<string>; opacity: MotionValue<number>; zIndex: number }) {
-  const path = useRef<SVGPathElement>(null);
+function Bridge({ anchor, anchorRadius, sim, raw, grown, edges, scaleX, scaleY, tension, fill, stroke, opacity, zIndex, onDone }: BridgeProps) {
+  const mask = `plyfold-bridge-${useId().replace(/:/g, "")}`;
+  const body = useRef<SVGPathElement>(null);
+  const rim = useRef<SVGPathElement>(null);
+  const holeA = useRef<SVGRectElement>(null);
+  const holeS = useRef<SVGRectElement>(null);
   useEffect(() => {
     let raf = 0;
-    const tick = () => {
+    let last = performance.now();
+    let finished = false;
+    const setRect = (el: SVGRectElement | null, r: Rect, rx: number) => {
+      if (!el) return;
+      el.setAttribute("x", String(r.l));
+      el.setAttribute("y", String(r.t));
+      el.setAttribute("width", String(Math.max(0, r.r - r.l)));
+      el.setAttribute("height", String(Math.max(0, r.b - r.t)));
+      el.setAttribute("rx", String(Math.max(0, rx)));
+    };
+    const tick = (now: number) => {
+      const dt = Math.min(1 / 30, (now - last) / 1000);
+      last = now;
+      const s = sim.current;
       const el = anchors.get(anchor);
-      const p = path.current;
-      if (el && p) {
-        const a = el.getBoundingClientRect();
-        const s = { l: edges.L.get(), t: edges.T.get(), r: edges.R.get(), b: edges.B.get() };
-        const r1 = Math.min(a.height, a.width) / 2;
-        const r2 = Math.min(Math.min(s.r - s.l, s.b - s.t) / 2, r1 * 1.6);
-        const sc = { x: (s.l + s.r) / 2, y: (s.t + s.b) / 2 };
-        // それぞれの形の中で、相手にいちばん近い円の中心
-        const c1 = { x: clamp(sc.x, a.left + r1, a.right - r1), y: clamp(sc.y, a.top + r1, a.bottom - r1) };
-        const c2 = { x: clamp(c1.x, s.l + r2, s.r - r2), y: clamp(c1.y, s.t + r2, s.b - r2) };
-        const d = bridgePath(c1, r1, c2, r2);
-        p.setAttribute("d", d ?? "");
-        p.style.fill = fill.get();
+      if (s && el) {
+        const ab = el.getBoundingClientRect();
+        const a = { l: ab.left, t: ab.top, r: ab.right, b: ab.bottom };
+        const shownNow = { l: edges.L.get(), t: edges.T.get(), r: edges.R.get(), b: edges.B.get() };
+        const fr = s.update(dt, rectGap(a, raw.current ?? shownNow), rectGap(a, shownNow), grown.current ?? 0);
+        // 張力を実体の位置へ返す（apply が走り、L/T/R/B が動く）
+        tension.set(fr.pull);
+        // 実体は速さで横に伸びているので、描かれている形で首を付ける
+        const sx = scaleX.get();
+        const sy = scaleY.get();
+        const cx = (edges.L.get() + edges.R.get()) / 2;
+        const cy = (edges.T.get() + edges.B.get()) / 2;
+        const hw = ((edges.R.get() - edges.L.get()) * sx) / 2;
+        const hh = ((edges.B.get() - edges.T.get()) * sy) / 2;
+        const surf = { l: cx - hw, r: cx + hw, t: cy - hh, b: cy + hh };
+        setRect(holeA.current, a, anchorRadius);
+        setRect(holeS.current, { l: surf.l + 1, t: surf.t + 1, r: surf.r - 1, b: surf.b - 1 }, edges.rad.get() * Math.min(sx, sy) - 1);
+        const c = contact(a, surf);
+        const fills: string[] = [];
+        const rims: string[] = [];
+        if (c && fr.half > 0) {
+          const n = neckShape(c, fr.half * Math.min(c.a.w, c.s.w));
+          fills.push(n.fill);
+          rims.push(n.outline);
+        }
+        if (c && fr.tail > 0) {
+          const k = Math.sqrt(fr.tail);
+          for (const t of [
+            tailShape(c.a, c.a.w * 0.45 * k, s.snapGap * 0.45 * fr.tail),
+            tailShape(c.s, c.s.w * 0.45 * k, s.snapGap * 0.4 * fr.tail * fr.tail),
+          ]) {
+            if (!t) continue;
+            fills.push(t.fill);
+            rims.push(t.outline);
+          }
+        }
+        body.current?.setAttribute("d", fills.join(" "));
+        rim.current?.setAttribute("d", rims.join(" "));
+        if (body.current) body.current.style.fill = fill.get();
+        if (rim.current) rim.current.style.stroke = stroke.get();
+        if (s.done && !finished) {
+          finished = true;
+          onDone();
+        }
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [anchor, edges, fill]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anchor]);
   return (
     <motion.svg aria-hidden className="pointer-events-none fixed inset-0 size-full overflow-visible" style={{ zIndex, opacity }}>
-      <path ref={path} />
+      <defs>
+        <mask id={mask} maskUnits="userSpaceOnUse" x="-10000" y="-10000" width="30000" height="30000">
+          <rect x="-10000" y="-10000" width="30000" height="30000" fill="white" />
+          <rect ref={holeA} fill="black" />
+          <rect ref={holeS} fill="black" />
+        </mask>
+      </defs>
+      <g mask={`url(#${mask})`}>
+        <path ref={body} />
+        <path ref={rim} fill="none" strokeWidth={1} />
+      </g>
     </motion.svg>
   );
 }
+
+/** 切れた瞬間に、出発点を実体の向きへ少し引っぱってから、ばねで戻す */
+function wobble(el: HTMLElement | undefined, dir: { x: number; y: number }) {
+  if (!el?.animate) return;
+  const { easing, ms } = springToCss({ duration: 0.45, bounce: 0.45 });
+  el.animate(
+    [
+      { transform: `translate(${(dir.x * 3).toFixed(1)}px, ${(dir.y * 3).toFixed(1)}px) scale(${(1 + 0.05 * Math.abs(dir.x)).toFixed(3)}, ${(1 + 0.05 * Math.abs(dir.y)).toFixed(3)})` },
+      { transform: "translate(0px, 0px) scale(1, 1)" },
+    ],
+    { duration: ms, easing, composite: "add" },
+  );
+}
+
 const motionValueOf = (v: number) => motionValue(v);
 const drop = (cx: number, cy: number, d = 30): Edges => ({ l: cx - d / 2, t: cy - d / 2, r: cx + d / 2, b: cy + d / 2, radius: d / 2 });
 
@@ -193,6 +252,12 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
   /** 見た目の進み具合（0 = 出発点、1 = 行き先） */
   const look = useMotionValue(initiallyOpen ? 1 : 0);
   const [ghost, setGhost] = useState<Edges | null>(null);
+  // 液架橋（pop の型）。bridge は動いている架橋の番号（0 なら無し）。開いた後も、尾が吸い戻されるまで残る
+  const simRef = useRef<BridgeSim | null>(null);
+  const rawRef = useRef<Rect | null>(null);
+  const grownRef = useRef(0);
+  const tension = useMotionValue(0);
+  const [bridge, setBridge] = useState(0);
   const running = useRef<AnimationPlaybackControls[]>([]);
   const run = useRef(0);
 
@@ -274,6 +339,20 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
         const bc = { x: (to.l + to.r) / 2, y: (to.t + to.b) / 2, w: to.r - to.l, h: to.b - to.t };
         const p = motionValueOf(0);
         const q = motionValueOf(0);
+        // 液架橋: つながっているあいだは張力で出発点の側へ引き留め、切れたらばねで前へ跳ねる
+        const anchorC = { x: (src.l + src.r) / 2, y: (src.t + src.b) / 2 };
+        const sim = new BridgeSim(opening, bridgeParams(src));
+        sim.onSnap = () => {
+          const raw = rawRef.current;
+          if (!raw) return;
+          const dx = (raw.l + raw.r) / 2 - anchorC.x;
+          const dy = (raw.t + raw.b) / 2 - anchorC.y;
+          const d = Math.hypot(dx, dy) || 1;
+          wobble(anchors.get(anchor), { x: dx / d, y: dy / d });
+        };
+        simRef.current = sim;
+        tension.set(0);
+        setBridge(id);
         const apply = () => {
           const pv = p.get();
           const qv = q.get();
@@ -281,10 +360,18 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
           const cy = lerp(ac.y, bc.y, pv);
           const w = Math.max(4, lerp(ac.w, bc.w, qv));
           const h = Math.max(4, lerp(ac.h, bc.h, qv));
-          L.set(cx - w / 2);
-          R.set(cx + w / 2);
-          T.set(cy - h / 2);
-          B.set(cy + h / 2);
+          rawRef.current = { l: cx - w / 2, r: cx + w / 2, t: cy - h / 2, b: cy + h / 2 };
+          grownRef.current = Math.min(1, Math.max(0, qv));
+          const pull = tension.get();
+          const dx = cx - anchorC.x;
+          const dy = cy - anchorC.y;
+          const dl = Math.hypot(dx, dy);
+          const ox = dl > 1 ? (dx / dl) * pull : 0;
+          const oy = dl > 1 ? (dy / dl) * pull : 0;
+          L.set(cx - w / 2 - ox);
+          R.set(cx + w / 2 - ox);
+          T.set(cy - h / 2 - oy);
+          B.set(cy + h / 2 - oy);
           const k = Math.min(1, Math.max(0, qv));
           // 角の丸み: 出だしで飛ぶときの丸みになり、途中はそのまま、最後の方でだけ行き先の丸みへ変える
           const travel = Math.min(1, Math.max(0, pv));
@@ -298,6 +385,7 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
         };
         const offP = p.on("change", apply);
         const offQ = q.on("change", apply);
+        const offT = tension.on("change", apply);
         const posSpring = snappy;
         const sizeSpring = appleSpring({ duration: 0.42, bounce: 0.3 });
         await Promise.all([
@@ -306,6 +394,10 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
         ]);
         offP();
         offQ();
+        offT();
+        // ここからは本物の面が同じ場所に出る。架橋は本物の形に付けたまま、尾が戻るまで続ける
+        // （途中で向きが変わったときは、新しい動きの位置を上書きしない）
+        if (alive()) set({ ...to, radius: rad.get() });
       } else if (style === "morph") {
         if (!opening) ghostOpacity.set(0);
         await moveEdges(to, LEAD, TRAIL);
@@ -342,7 +434,10 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
         // 出発点に融合して消える
         ghostOpacity.set(0);
         await go(opacity, 0, { duration: 0.12 });
-        if (alive()) setPhase("closed");
+        if (alive()) {
+          setBridge(0);
+          setPhase("closed");
+        }
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -387,11 +482,33 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
   const animating = phase === "opening" || phase === "closing";
   const edgesRef = useMemo(() => ({ L, T, R, B, rad }), [L, T, R, B, rad]);
   if (style === "pop") {
-    // 枠線と影を見せたいので goo フィルタは掛けない（裏から出るので糸も要らない）
+    // 枠線と影を見せたいので goo フィルタは掛けない。出発点とのあいだには液架橋を張る
+    const bridgeLayer =
+      bridge !== 0 && !reduced
+        ? createPortal(
+            <Bridge
+              key={bridge}
+              anchor={anchor}
+              anchorRadius={anchorRadius}
+              sim={simRef}
+              raw={rawRef}
+              grown={grownRef}
+              edges={edgesRef}
+              scaleX={popScaleX}
+              scaleY={popScaleY}
+              tension={tension}
+              fill={background}
+              stroke={borderColor}
+              opacity={animating ? opacity : 1}
+              zIndex={zIndex + 1}
+              onDone={() => setBridge((b) => (b === bridge ? 0 : b))}
+            />,
+            document.body,
+          )
+        : null;
     const surface = animating
       ? createPortal(
           <>
-          <Bridge anchor={anchor} edges={edgesRef} fill={background} opacity={opacity} zIndex={zIndex} />
           <motion.div
             aria-hidden
             className="pointer-events-none fixed top-0 left-0 border"
@@ -416,7 +533,19 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
           document.body,
         )
       : null;
-    return { revealed: phase === "open", mounted: phase !== "closed", layer: surface, edges: edgesRef };
+    return {
+      revealed: phase === "open",
+      mounted: phase !== "closed",
+      layer: (
+        <>
+          {surface}
+          {bridgeLayer}
+        </>
+      ),
+      edges: edgesRef,
+      /** 開いた後も、液架橋の尾が戻りきるまで true */
+      settling: bridge !== 0,
+    };
   }
   const layer = animating
     ? createPortal(
@@ -435,5 +564,5 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
       )
     : null;
 
-  return { revealed: phase === "open", mounted: phase !== "closed", layer, edges: edgesRef };
+  return { revealed: phase === "open", mounted: phase !== "closed", layer, edges: edgesRef, settling: false };
 }
