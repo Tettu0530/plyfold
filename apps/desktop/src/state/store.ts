@@ -6,7 +6,7 @@ import type { Look, LiquidStyle } from "@/components/liquid/liquid";
 import { liquidCloseFrom, liquidOpen } from "@/components/liquid/stage";
 import { api, inTauri, onEngineEvent } from "@/lib/api";
 import { loadInfoCache, saveInfoCache, snapshot, type InfoCache } from "./infoCache";
-import type { AppSettings, Category, EngineEvent, ProfileSummary, SessionInfo, SessionRecord } from "@/lib/types";
+import type { AppSettings, Category, SessionStatus, EngineEvent, ProfileSummary, SessionInfo, SessionRecord } from "@/lib/types";
 import {
   addNotice,
   applyUpdate,
@@ -26,6 +26,8 @@ export interface SessionView {
   /** 記録から会話を読み込んだか */
   historyLoaded: boolean;
   lastError: string | null;
+  /** エージェントが動いていないあいだに選んだ model / effort / mode（次に起動した直後に設定する） */
+  pending: Partial<Record<Category, string>>;
 }
 
 export type PaneCount = 1 | 2 | 4;
@@ -127,7 +129,25 @@ const newView = (record: SessionRecord): SessionView => ({
   permission: null,
   historyLoaded: false,
   lastError: null,
+  pending: {},
 });
+
+/** 起動した直後に、選んでおいた model / effort / mode を設定する（同じ値なら送らない） */
+async function applyChoices(id: string, choices: Partial<Record<Category, string>>) {
+  const wanted = Object.entries(choices) as [Category, string][];
+  if (wanted.length === 0) return;
+  const info = await api.sessionInfo(id);
+  for (const [cat, value] of wanted) {
+    const opt = info?.config.find((o) => o.category === cat);
+    const cur = cat === "mode" ? (opt?.current ?? info?.current_mode) : opt?.current;
+    if (cur === value) continue;
+    await api.setByCategory(id, cat, value).catch(() => {
+      // 候補が変わっていた場合などは、エージェントの既定のまま始める
+    });
+  }
+}
+
+const RUNNING: SessionStatus[] = ["idle", "working", "awaiting_permission", "stalled"];
 
 /** エンジンのイベントを状態に反映する（副作用なし） */
 export function reduceEvent(sessions: Record<string, SessionView>, e: EngineEvent): Record<string, SessionView> {
@@ -331,17 +351,7 @@ export const useStore = create<State>((set, get) => ({
       const title = prompt.trim().split("\n")[0].slice(0, 40) || "新しいセッション";
       const rec = await api.startSession({ profile: d.profile, repo: d.repo, title, worktree: d.worktree });
       // 下書きで選んだ model / effort / mode を、最初のプロンプトの前に設定する
-      const wanted = Object.entries(d.choices) as [Category, string][];
-      if (wanted.length > 0) {
-        const info = await api.sessionInfo(rec.id);
-        for (const [cat, value] of wanted) {
-          const cur = cat === "mode" ? (info?.config.find((o) => o.category === "mode")?.current ?? info?.current_mode) : info?.config.find((o) => o.category === cat)?.current;
-          if (cur === value) continue;
-          await api.setByCategory(rec.id, cat, value).catch(() => {
-            // 候補が変わっていた場合などは、エージェントの既定のまま始める
-          });
-        }
-      }
+      await applyChoices(rec.id, d.choices);
       set((s) => {
         const panes = s.panes.map((p) => (p === id ? rec.id : p));
         const drafts = { ...s.drafts };
@@ -376,7 +386,12 @@ export const useStore = create<State>((set, get) => ({
     try {
       // 止まっているセッションは、送る前に開き直す
       const status = get().sessions[id]?.record.status;
-      if (status === "closed" || status === "error") await api.reopenSession(id);
+      if (status === "closed" || status === "error") {
+        await api.reopenSession(id);
+        const pending = get().sessions[id]?.pending ?? {};
+        await applyChoices(id, pending);
+        set((s) => (s.sessions[id] ? { sessions: { ...s.sessions, [id]: { ...s.sessions[id], pending: {} } } } : s));
+      }
       await api.prompt(id, text);
     } catch (err) {
       set((s) => {
@@ -402,6 +417,12 @@ export const useStore = create<State>((set, get) => ({
   },
 
   setCategory: async (id, category, value) => {
+    const v = get().sessions[id];
+    // 動いていなければ覚えておき、次に起動した直後に設定する
+    if (v && !RUNNING.includes(v.record.status)) {
+      set((s) => ({ sessions: { ...s.sessions, [id]: { ...s.sessions[id], pending: { ...s.sessions[id].pending, [category]: value } } } }));
+      return;
+    }
     await api.setByCategory(id, category, value);
   },
 

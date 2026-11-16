@@ -8,6 +8,7 @@ import { isDraft, useStore } from "@/state/store";
 import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidRevealed } from "../liquid/stage";
 import { DraftPane } from "./DraftPane";
+import { withChoices } from "@/state/infoCache";
 import { ProviderLogo, StatusIcon } from "../icons";
 import { Keys } from "../Keys";
 import { Composer } from "./Composer";
@@ -55,6 +56,7 @@ function SessionPane({ index }: { index: number }) {
   const diffActive = useLiquidActiveAnchors().has(`diff:${id}`);
   const diffOpen = useStore((s) => s.diff?.id === id);
   const diffVersion = useStore((s) => s.diffVersion);
+  const cached = useStore((s) => (view ? s.infoCache[view.record.profile] : undefined));
 
   const status = view?.record.status;
   // ターンが終わるたびに、worktree の差分の数を取り直す
@@ -142,7 +144,11 @@ function SessionPane({ index }: { index: number }) {
 
       <Composer
         agent={r.agent}
-        info={view.info}
+        info={(() => {
+          // 動いていないあいだは、前回の値（このプロファイルで覚えているもの）に、選んでおいた値を重ねて出す
+          const base = r.status === "closed" || r.status === "error" || r.status === "starting" ? (view.info ?? cached ?? null) : view.info;
+          return base && Object.keys(view.pending).length > 0 ? withChoices(base, view.pending) : base;
+        })()}
         disabled={working}
         placeholder={
           r.status === "closed" || r.status === "error"
