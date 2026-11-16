@@ -90,4 +90,23 @@ export function ModeIcon({ mode, className }: { mode: string | null; className?:
   return <Icon aria-hidden className={cn("size-3 shrink-0", className)} />;
 }
 
+/** mode の表示名（エージェントが返す id → 日本語）。知らない mode は id のまま */
+const MODE_LABELS: Record<string, string> = {
+  // Claude Code
+  default: "デフォルト",
+  acceptEdits: "編集を許可",
+  plan: "プラン",
+  auto: "自動",
+  bypassPermissions: "権限スキップ",
+  // Codex
+  "read-only": "読み取りのみ",
+  "workspace-write": "書き込み可",
+  agent: "自動",
+  "agent-full-access": "フルアクセス",
+  // OpenCode
+  build: "ビルド",
+};
+
+export const modeLabel = (mode: string | null) => (mode ? (MODE_LABELS[mode] ?? mode) : "");
+
 export const isDangerMode = (mode: string | null) => mode === "bypassPermissions" || mode === "agent-full-access";

@@ -1,5 +1,7 @@
 //! Plyfold のデスクトップアプリ: エンジンを Tauri のコマンドとして公開し、EngineEvent を画面へ流す
 
+mod dirs;
+
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -244,6 +246,13 @@ async fn session_diff(state: State<'_, AppState>, id: String) -> CmdResult<Diff>
     state.engine.diff(&id).map_err(err)
 }
 
+/// リポジトリを選ぶ欄の補完（dirs.rs）
+#[tauri::command]
+async fn complete_dirs(input: String) -> Vec<dirs::DirCandidate> {
+    let home = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default());
+    dirs::complete(&input, &home)
+}
+
 fn expand_home(p: &str) -> String {
     match p.strip_prefix("~/") {
         Some(rest) => format!("{}/{rest}", std::env::var("HOME").unwrap_or_default()),
@@ -474,6 +483,7 @@ pub fn run() {
             list_sessions,
             session_history,
             usage_summary,
+            complete_dirs,
             start_session,
             reopen_session,
             close_session,

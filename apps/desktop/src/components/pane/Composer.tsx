@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/u
 import { money, tokens } from "@/lib/format";
 import type { Category, ConfigOption, SessionInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { isDangerMode, ModeIcon, ProviderLogo } from "../icons";
+import { isDangerMode, ModeIcon, modeLabel, ProviderLogo } from "../icons";
 import { Keys } from "../Keys";
 import { SplitFlap } from "../SplitFlap";
 import { CHIP_TRIGGER } from "./chip";
@@ -164,7 +164,7 @@ export function ControlRow({
         <button
           type="button"
           onClick={nextMode}
-          aria-label="mode を切り替え（⇧⇥）"
+          aria-label={`mode を切り替え（今は${modeLabel(mode)}、⇧⇥）`}
           className={cn(
             "flex h-6 items-center gap-1.5 rounded-md border px-1.5 hover:bg-accent",
             isDangerMode(mode) ? "border-error/40 text-error" : "border-border",
@@ -175,7 +175,7 @@ export function ControlRow({
             render={(m) => (
               <>
                 <ModeIcon mode={m || null} />
-                {m}
+                {modeLabel(m || null)}
               </>
             )}
           />

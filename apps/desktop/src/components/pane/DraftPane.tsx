@@ -1,7 +1,6 @@
 import { ArrowDown, ArrowUp, Check, Coins, FolderOpen, GitBranch, MessageSquare, Plus, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { Input } from "@/components/ui/input";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { money, repoName, tokens } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -9,6 +8,7 @@ import { useStore } from "@/state/store";
 import { AGENT_NAMES, ProviderLogo } from "../icons";
 import { ControlRow } from "./Composer";
 import { AttachBox, useAttachments } from "./Attachments";
+import { RepoPicker } from "./RepoPicker";
 import { withChoices } from "@/state/infoCache";
 import type { Category, ProfileSummary, ProfileUsage } from "@/lib/types";
 
@@ -44,9 +44,9 @@ function ProfileRow({ p, u, selected, onSelect }: { p: ProfileSummary; u: Profil
       <ProviderLogo agent={p.agent} className="size-4 shrink-0 text-muted-foreground" />
       <span className="flex min-w-0 grow flex-col">
         <span className="truncate">{profileName(p)}</span>
-        <span className="flex gap-2 text-xs text-muted-foreground">
+        <span className="flex gap-2 overflow-hidden text-xs whitespace-nowrap text-muted-foreground">
           <span>{AGENT_NAMES[p.agent] ?? p.agent}</span>
-          <span>{authLabel(p)}</span>
+          <span className="truncate">{authLabel(p)}</span>
         </span>
       </span>
       <span className="flex shrink-0 items-center gap-2.5 font-mono text-xs text-muted-foreground tabular">
@@ -56,7 +56,7 @@ function ProfileRow({ p, u, selected, onSelect }: { p: ProfileSummary; u: Profil
               {u.turns}
             </Num>
             {tok != null && (
-              <span title={`入力 ${tokens(u.input ?? 0)}、出力 ${tokens(u.output ?? 0)}`} className="flex items-center gap-[3px]">
+              <span title={`入力 ${tokens(u.input ?? 0)}、出力 ${tokens(u.output ?? 0)}`} className="hidden items-center gap-[3px] @md:flex">
                 <ArrowUp className="size-3" aria-hidden />
                 {tokens(u.input ?? 0)}
                 <ArrowDown className="ml-1 size-3" aria-hidden />
@@ -88,6 +88,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const { updateDraft, startDraft, closePane, focusPane } = useStore.getState();
   const [text, setText] = useState("");
   const att = useAttachments();
+  const [repoOpen, setRepoOpen] = useState(false);
   const cached = useStore((s) => (draft?.profile ? s.infoCache[draft.profile] : undefined));
   const usage = useStore((s) => s.usage);
   useEffect(() => {
@@ -135,12 +136,15 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
         </button>
       </div>
 
-      <div className="flex min-h-0 grow flex-col justify-end overflow-y-auto px-3 pt-4 pb-2">
+      {/* 一覧はペインの真ん中に。入りきらなければ上下に流す（my-auto なら上が切れない） */}
+      <div className="flex min-h-0 grow flex-col overflow-y-auto px-3 py-4">
+      <div className="mx-auto my-auto w-full max-w-xl">
         <div className="mb-1 flex items-center justify-between px-2.5 text-xs text-muted-foreground">
           <span id={`${id}-profiles`}>プロファイル</span>
           <span>直近 30 日</span>
         </div>
-        <div role="radiogroup" aria-labelledby={`${id}-profiles`} onKeyDown={onListKey} className="flex flex-col gap-0.5">
+        {/* 狭いときはトークンを隠す（行の幅で決める） */}
+        <div role="radiogroup" aria-labelledby={`${id}-profiles`} onKeyDown={onListKey} className="@container flex flex-col gap-0.5">
           {ordered.map((p) => (
             <ProfileRow key={p.name} p={p} u={byProfile.get(p.name)} selected={p.name === draft.profile} onSelect={() => select(p.name)} />
           ))}
@@ -153,13 +157,16 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
           </div>
         )}
       </div>
+      </div>
 
-      <Popover>
+      <Popover open={repoOpen} onOpenChange={setRepoOpen}>
       <div className="flex shrink-0 flex-col px-3 pb-3">
       {/* リポジトリの欄は、この 1 行＋入力欄のまとまりと同じ幅で、すぐ上に開く */}
       <PopoverAnchor asChild>
       <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-0.5 text-xs">
+        {/* 幅が足りなければ、model / effort / mode は 2 段目に回る */}
+        <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 text-xs">
+          <div className="flex items-center gap-0.5">
           <PopoverTrigger asChild>
             <button type="button" aria-label="リポジトリ" title={draft.repo} className="flex h-6 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent data-[state=open]:bg-accent">
               <FolderOpen className="size-3 text-muted-foreground" aria-hidden />
@@ -180,6 +187,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
             <GitBranch className="size-3" aria-hidden />
             {draft.worktree ? "worktree" : "直接"}
           </button>
+          </div>
           <span className="grow" />
           <ControlRow scope={id} agent={current?.agent ?? ""} info={info} onSet={choose} empty={draft.profile ? "model と effort は起動後に選べます" : undefined} />
         </div>
@@ -217,13 +225,13 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
       </div>
       </PopoverAnchor>
       </div>
-      <PopoverContent side="top" align="start" sideOffset={6} className="w-(--radix-popper-anchor-width) p-2">
-        <Input
-          aria-label="リポジトリのパス"
+      <PopoverContent side="top" align="start" sideOffset={6} className="w-(--radix-popper-anchor-width) p-1.5">
+        <RepoPicker
           value={draft.repo}
-          onChange={(e) => updateDraft(id, { repo: e.target.value })}
-          className="h-7 font-mono text-xs"
-          autoFocus
+          onPick={(repo) => {
+            updateDraft(id, { repo });
+            setRepoOpen(false);
+          }}
         />
       </PopoverContent>
       </Popover>

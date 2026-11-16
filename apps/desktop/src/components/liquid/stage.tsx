@@ -118,6 +118,8 @@ export function useLiquidMovingAnchors(): Set<string> {
 
 type Edges = ReturnType<typeof useLiquidMorph>["edges"];
 const liveEdges = new Map<string, Edges>();
+// 開発中の確かめ用（tools/liquid-probe の PROBE から実体の形を読む）
+if (import.meta.env.DEV) (globalThis as { __plyfoldLiveEdges?: Map<string, Edges> }).__plyfoldLiveEdges = liveEdges;
 
 /** id の分離アニメーションが動いているか */
 export function useLiquidActive(id: string): boolean {

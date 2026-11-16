@@ -199,3 +199,10 @@ export interface ProfileUsage {
   currency: string | null;
   last_used: number | null;
 }
+
+/** リポジトリを選ぶ欄の補完の候補（apps/desktop/src-tauri/src/dirs.rs） */
+export interface DirCandidate {
+  path: string;
+  name: string;
+  git: boolean;
+}

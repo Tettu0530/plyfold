@@ -61,6 +61,11 @@ for (let i = 0; i < n; i++) {
     }
   }
   shots.push(s.result.data);
+  // PROBE: コマごとに評価して出す（実体の形などを数値で見る）
+  if (process.env.PROBE) {
+    const pr = await send("Runtime.evaluate", { expression: process.env.PROBE });
+    console.log(`${Math.round((i + 1) * 16.7)}ms`, pr.result?.result?.value ?? JSON.stringify(pr.result?.exceptionDetails ?? "").slice(0, 200));
+  }
 }
 // コマを並べた 1 枚にする
 await send("Emulation.setVirtualTimePolicy", { policy: "advance", budget: 100000 });

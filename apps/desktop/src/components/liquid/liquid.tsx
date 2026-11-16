@@ -264,7 +264,17 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
         ghostOpacity.set(0);
         const a = { l: L.get(), t: T.get(), r: R.get(), b: B.get(), radius: rad.get() };
         const ac = { x: (a.l + a.r) / 2, y: (a.t + a.b) / 2, w: a.r - a.l, h: a.b - a.t };
-        const bc = { x: (to.l + to.r) / 2, y: (to.t + to.b) / 2, w: to.r - to.l, h: to.b - to.t };
+        let bc = { x: (to.l + to.r) / 2, y: (to.t + to.b) / 2, w: to.r - to.l, h: to.b - to.t };
+        // 開くときは、行き先を毎フレーム測り直して追う（メニューは出た後も数フレーム大きさが決まり続け、
+        // 最初に測った大きさのままだと、本物の枠と実体がずれる）
+        let toLive = to;
+        const track = () => {
+          if (!opening) return;
+          const b = target.current?.getBoundingClientRect();
+          if (!b || b.width <= 0) return;
+          toLive = { l: b.left, t: b.top, r: b.right, b: b.bottom, radius: to.radius };
+          bc = { x: (b.left + b.right) / 2, y: (b.top + b.bottom) / 2, w: b.width, h: b.height };
+        };
         const p = motionValueOf(0);
         const q = motionValueOf(0);
         // 液体の融合: 出発点と実体を smin で 1 つの形にする。開くときは、首でつながっているあいだ
@@ -320,6 +330,7 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
           });
         }
         const apply = () => {
+          track();
           const pv = p.get();
           const qv = q.get();
           const cx = lerp(ac.x, bc.x, pv);
@@ -362,7 +373,10 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
         offQ();
         offT();
         // ここからは本物の面が同じ場所に出る（途中で向きが変わったときは、新しい動きの位置を上書きしない）
-        if (alive()) set({ ...to, radius: rad.get() });
+        if (alive()) {
+          track();
+          set({ ...toLive, radius: rad.get() });
+        }
       } else if (style === "morph") {
         if (!opening) ghostOpacity.set(0);
         await moveEdges(to, LEAD, TRAIL);
