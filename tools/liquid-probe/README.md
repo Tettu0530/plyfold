@@ -19,12 +19,22 @@ python3 fit.py out.jsonl 0.1.0 r 0.1 1.7  # SwiftUI 側のコンテナ（0.1.0�
 - `withAnimation(.default)` の glassEffectID の変形: 右端も下端も **同じ瞬間に同じ曲線**（duration 0.50 秒、bounce 0、誤差 0.4% 以内）。
   端ごとに遅れる動きではない。液体らしさは形の合成（SDF）の描き方による
 
-## 液架橋のコマ送り（bridge-film.mjs）
+## 液体の融合のコマ送り
 
-`apps/desktop/src/components/liquid/bridge.ts` は外部に頼らないので、Node（v23.6 以降）でそのまま読める。
-pop の型と同じばね（位置 0.35 秒 / 0.3、大きさ 0.42 秒 / 0.3 を 0.12 秒遅れ）で動かし、1/30 秒ごとのコマを 1 枚の SVG にする。
+分離アニメーションの「つながり」は、Liquid Glass と同じく距離場（SDF）の滑らかな最小値（iq の 2 次の smin）で作る
+（`apps/desktop/src/components/liquid/sdf.ts`、GPU は `liquid-gl.ts`）。確かめ方は 2 つ。
 
-```sh
-node tools/liquid-probe/bridge-film.mjs "$PWD/apps/desktop/src/components/liquid/bridge.ts" row /tmp/row.svg   # row | far | chip
-qlmanage -t -s 1400 -o /tmp /tmp/row.svg   # PNG にして見る
-```
+- `sdf-film.mjs`: sdf.ts の式を CPU で 1 画素ずつ塗り、ばねを進めたコマを並べた PNG にする（ブラウザ不要）
+  ```sh
+  node tools/liquid-probe/sdf-film.mjs "$PWD/apps/desktop/src/components/liquid/sdf.ts" row /tmp/row.png zoom   # row | far | chip、zoom は 1/60 秒ごと等倍
+  ```
+- `app-frames.sh`: 本物のアプリ（dev サーバー）をヘッドレスの Chrome で開き、仮想時間を 1/60 秒ずつ進めて撮る。
+  GPU の描画（シェーダー）・重なり順・本物のボタンとの関係まで確かめられる。アプリの時計は performance.now に揃えてある
+  （requestAnimationFrame の引数は実時間で進むことがあるので使わない）
+
+調べたこと（2026-11）:
+- GlassEffectContainer の spacing: すきまが spacing の約半分以下でつながり、それより広いと縁が互いへ寄るだけ
+  （[sarunw](https://sarunw.com/posts/swiftui-glasseffectcontainer/) の実測）。2 次の smin で k = spacing とすると、真ん中の距離が
+  gap/2 − k/4 ≤ 0、つまり gap ≤ k/2 でつながるので一致する
+- [Fizzy の液体ガラス](https://github.com/fizzyedit/fizzy/pull/197): 角丸の箱の距離場を iq の 2 次の smin で 1 つにし、混ざり具合で
+  2 つの材質を混ぜる。縁は 1px の傾きで滑らかに。ふくらみは最大 k/4
