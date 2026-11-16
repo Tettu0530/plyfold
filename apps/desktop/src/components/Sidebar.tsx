@@ -18,6 +18,9 @@ export function Sidebar() {
   const setSearchOpen = useStore((s) => s.setSearchOpen);
   const setNewSessionOpen = useStore((s) => s.setNewSessionOpen);
   const setLabOpen = useStore((s) => s.setLabOpen);
+  // 検索カードの実体はサイドバーの裏から出てくる。そのあいだサイドバーを手前に出し、暗くする幕を自分の上に掛ける
+  const layerActive = useStore((s) => s.searchLayerActive);
+  const searchOpen = useStore((s) => s.searchOpen);
   const [closed, setClosed] = useState<Record<string, boolean>>({});
 
   // リポジトリごとにまとめ、新しく更新されたものから
@@ -34,7 +37,19 @@ export function Sidebar() {
   const open = new Set(panes.slice(0, paneCount).filter(Boolean));
 
   return (
-    <nav aria-label="セッション" className="flex w-60 shrink-0 flex-col border-r bg-sidebar">
+    <nav aria-label="セッション" className={cn("relative flex w-60 shrink-0 flex-col border-r bg-sidebar", layerActive && "z-[56]")}>
+      {layerActive && (
+        <motion.button
+          type="button"
+          aria-label="検索を閉じる"
+          tabIndex={-1}
+          onClick={() => setSearchOpen(false)}
+          className="absolute inset-0 z-10 cursor-default bg-black/45"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: searchOpen ? 1 : 0 }}
+          transition={smooth}
+        />
+      )}
       <div className="flex flex-col p-2">
         <button
           type="button"

@@ -39,6 +39,8 @@ interface State {
   labOpen: boolean;
   /** 分離アニメーションの型（動きの調整で選ぶ） */
   liquidStyle: LiquidStyle;
+  /** 検索カードの分離アニメーションが動いているか（サイドバーを実体より手前に出す） */
+  searchLayerActive: boolean;
   ready: boolean;
 
   init: () => Promise<void>;
@@ -50,6 +52,7 @@ interface State {
   setNewSessionOpen: (open: boolean) => void;
   setLabOpen: (open: boolean) => void;
   setLiquidStyle: (s: LiquidStyle) => void;
+  setSearchLayerActive: (v: boolean) => void;
   startSession: (args: { profile: string; repo: string; title: string; worktree: boolean; prompt?: string }) => Promise<void>;
   sendPrompt: (id: string, text: string) => Promise<void>;
   cancel: (id: string) => Promise<void>;
@@ -113,6 +116,7 @@ export const useStore = create<State>((set, get) => ({
   newSessionOpen: false,
   labOpen: false,
   liquidStyle: "pop",
+  searchLayerActive: false,
   ready: false,
 
   init: async () => {
@@ -163,6 +167,7 @@ export const useStore = create<State>((set, get) => ({
   setNewSessionOpen: (newSessionOpen) => set({ newSessionOpen }),
   setLabOpen: (labOpen) => set({ labOpen }),
   setLiquidStyle: (liquidStyle) => set({ liquidStyle }),
+  setSearchLayerActive: (searchLayerActive) => set({ searchLayerActive }),
 
   startSession: async ({ prompt, ...args }) => {
     const rec = await api.startSession(args);
