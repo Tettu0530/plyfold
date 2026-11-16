@@ -226,7 +226,7 @@ export const useStore = create<State>((set, get) => ({
 
   openDiff: (id) => {
     // 差分の画面は、ペインの差分の数（+12 −3）から飛び出して広がる
-    liquidOpen("diff", { anchor: `diff:${id}`, target: diffEl, toLook: PANE_LOOK });
+    liquidOpen("diff", { cover: true, anchor: `diff:${id}`, target: diffEl, toLook: PANE_LOOK });
     set({ diff: { id, closing: false } });
   },
 
@@ -234,12 +234,12 @@ export const useStore = create<State>((set, get) => ({
     const d = get().diff;
     if (!d || d.closing) return;
     set({ diff: { ...d, closing: true } });
-    liquidCloseFrom("diff", { anchor: `diff:${d.id}`, target: diffEl, toLook: PANE_LOOK, onDone: () => set({ diff: null }) });
+    liquidCloseFrom("diff", { cover: true, anchor: `diff:${d.id}`, target: diffEl, toLook: PANE_LOOK, onDone: () => set({ diff: null }) });
   },
 
   openProfiles: () => {
     if (get().profilesView) return;
-    liquidOpen("profiles", { anchor: "profiles", target: profilesEl, toLook: PANE_LOOK });
+    liquidOpen("profiles", { cover: true, anchor: "profiles", target: profilesEl, toLook: PANE_LOOK });
     set({ profilesView: { closing: false } });
   },
 
@@ -247,12 +247,12 @@ export const useStore = create<State>((set, get) => ({
     const v = get().profilesView;
     if (!v || v.closing) return;
     set({ profilesView: { closing: true } });
-    liquidCloseFrom("profiles", { anchor: "profiles", target: profilesEl, toLook: PANE_LOOK, onDone: () => set({ profilesView: null }) });
+    liquidCloseFrom("profiles", { cover: true, anchor: "profiles", target: profilesEl, toLook: PANE_LOOK, onDone: () => set({ profilesView: null }) });
   },
 
   openSettings: () => {
     if (get().settingsView) return;
-    liquidOpen("settings", { anchor: "settings", target: settingsEl, toLook: PANE_LOOK });
+    liquidOpen("settings", { cover: true, anchor: "settings", target: settingsEl, toLook: PANE_LOOK });
     set({ settingsView: { closing: false } });
   },
 
@@ -260,7 +260,7 @@ export const useStore = create<State>((set, get) => ({
     const v = get().settingsView;
     if (!v || v.closing) return;
     set({ settingsView: { closing: true } });
-    liquidCloseFrom("settings", { anchor: "settings", target: settingsEl, toLook: PANE_LOOK, onDone: () => set({ settingsView: null }) });
+    liquidCloseFrom("settings", { cover: true, anchor: "settings", target: settingsEl, toLook: PANE_LOOK, onDone: () => set({ settingsView: null }) });
   },
 
   saveSettings: async (patch) => {

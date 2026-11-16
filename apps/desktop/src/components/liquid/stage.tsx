@@ -23,6 +23,11 @@ export interface LiquidJobOptions {
   delay?: number;
   /** 動きが終わったとき（閉じる動きなら、行き先をここで片付ける） */
   onDone?: () => void;
+  /**
+   * 行き先が出発点を覆う大きさ（全面の画面）のとき。出発点を手前に出すのは、
+   * 開くときは出だしだけ、閉じるときは戻ってくる終わりだけにする（広がった実体の上にボタンが残らない）
+   */
+  cover?: boolean;
   fromLook?: Look;
   toLook?: Look;
 }
@@ -33,6 +38,8 @@ interface Job extends LiquidJobOptions {
   initiallyOpen: boolean;
   /** 同じ id で開き直したときに作り直すための番号 */
   nonce: number;
+  /** cover のとき、いま出発点を実体の下に下げているか */
+  lowered?: boolean;
 }
 
 interface StageState {
@@ -79,7 +86,13 @@ export function useLiquidBusy(): boolean {
 
 /** いま動いている分離アニメーションの出発点の名前（出発点を実体より手前に出すため） */
 export function useLiquidActiveAnchors(): Set<string> {
-  const key = useStage((s) => Object.values(s.jobs).map((j) => j.anchor).sort().join("\n"));
+  const key = useStage((s) =>
+    Object.values(s.jobs)
+      .filter((j) => !j.lowered)
+      .map((j) => j.anchor)
+      .sort()
+      .join("\n"),
+  );
   return new Set(key ? key.split("\n") : []);
 }
 
@@ -119,6 +132,16 @@ function JobView({ job }: { job: Job }) {
   useEffect(() => {
     useStage.setState((s) => ({ revealed: { ...s.revealed, [job.id]: revealed } }));
   }, [revealed, job.id]);
+
+  // 全面の画面: 出発点を手前に出す時間を、裏から出る出だし／裏へ戻る終わりだけにする
+  useEffect(() => {
+    if (!job.cover) return;
+    const setLowered = (lowered: boolean) =>
+      useStage.setState((s) => (s.jobs[job.id]?.nonce === job.nonce ? { jobs: { ...s.jobs, [job.id]: { ...s.jobs[job.id], lowered } } } : s));
+    setLowered(!job.open);
+    const t = setTimeout(() => setLowered(job.open), job.open ? 150 : 300);
+    return () => clearTimeout(t);
+  }, [job.cover, job.open, job.id, job.nonce]);
 
   // 開ききったら、あるいは閉じきったら、登録を外す（開いた面はそのまま見えている）
   useEffect(() => {
