@@ -23,10 +23,11 @@ export function appleSpring(p: SpringParams, velocity?: number): Transition {
   return { type: "spring", ...springConstants(p), ...(velocity !== undefined ? { velocity } : {}) };
 }
 
-// SwiftUI の既定のばね
-export const SMOOTH: SpringParams = { duration: 0.5, bounce: 0 };
-export const SNAPPY: SpringParams = { duration: 0.5, bounce: 0.15 };
-export const BOUNCY: SpringParams = { duration: 0.5, bounce: 0.3 };
+// Plyfold の標準のばね（2026-11-16 に決定: duration 0.35、bounce 0.3）。
+// SwiftUI の API の既定（0.5 秒）はシステムの部品より遅く感じたため短くしている
+export const SMOOTH: SpringParams = { duration: 0.35, bounce: 0 };
+export const SNAPPY: SpringParams = { duration: 0.35, bounce: 0.3 };
+export const BOUNCY: SpringParams = { duration: 0.35, bounce: 0.3 };
 /** 指に追従しているあいだ（SwiftUI の interactiveSpring: response 0.15、dampingFraction 0.86） */
 export const INTERACTIVE: SpringParams = { duration: 0.15, bounce: 0.14 };
 

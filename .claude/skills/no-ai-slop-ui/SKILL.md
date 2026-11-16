@@ -58,9 +58,10 @@ Plyfold は、コーディングエージェントを長時間見張る道具。
 ガラスの見た目より、**Apple と同じ動き**を優先する。実装は `apps/desktop/src/components/motion.ts`。
 
 - ばねは SwiftUI と同じ式（duration ＋ bounce → stiffness = (2π/d)²、damping = 4π(1−b)/d）。自前の値を作らず、次から選ぶ
-  - `smooth`（0.5 秒、bounce 0）: 画面やペインの移動、出現と消滅
-  - `snappy`（0.5 秒、bounce 0.15）: 切り替えの印、スイッチ、矢印の回転
-  - `bouncy`（0.5 秒、bounce 0.3）: 小さく目を引くもの（権限確認の滴、通知）
+  - `smooth`（0.35 秒、bounce 0）: 画面やペインの移動、出現と消滅、フェード
+  - `snappy`（0.35 秒、bounce 0.3）: 切り替えの印、スイッチ、矢印の回転
+  - `bouncy`（0.35 秒、bounce 0.3）: 小さく目を引くもの（権限確認の滴、通知）
+  - 標準は duration 0.35 秒、bounce 0.3（ユーザーが決定。SwiftUI の既定の 0.5 秒は遅く感じたため）
   - `interactive`（0.15 秒、bounce 0.14）: 指に追従しているあいだ
   - CSS のトランジションでは `var(--ease-snappy)` と `var(--dur-snappy)`（ばねを解いた linear() の曲線）を使う
 - **割り込める**こと。動いている途中で次の操作が来たら、止めずに今の速さを引き継いで行き先を変える

@@ -19,16 +19,16 @@ describe("Apple のばね", () => {
       return m;
     };
     expect(peak(SMOOTH)).toBeLessThanOrEqual(1.0000001);
-    expect(peak(SNAPPY)).toBeGreaterThan(1.005);
-    expect(peak(BOUNCY)).toBeGreaterThan(peak(SNAPPY));
-    expect(peak(BOUNCY)).toBeLessThan(1.2);
+    // bounce 0.3 は減衰比 0.7。行き過ぎの理論値は e^(−πζ/√(1−ζ²)) ≈ 4.6%
+    const zeta = 0.7;
+    expect(peak(SNAPPY)).toBeCloseTo(1 + Math.exp((-Math.PI * zeta) / Math.sqrt(1 - zeta * zeta)), 3);
   });
 
   it("CSS の曲線は 0 から始まり 1 で終わる", () => {
     const { easing, ms } = springToCss(SNAPPY);
     expect(easing.startsWith("linear(0.0000")).toBe(true);
     expect(easing.endsWith(", 1)")).toBe(true);
-    expect(ms).toBeGreaterThan(300);
+    expect(ms).toBeGreaterThan(200);
     expect(ms).toBeLessThan(1500);
   });
 
