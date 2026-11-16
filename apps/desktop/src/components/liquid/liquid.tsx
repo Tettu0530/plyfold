@@ -93,6 +93,9 @@ export interface Look {
 const DEFAULT_FROM: Look = { background: "rgba(38, 38, 38, 1)", border: "rgba(255, 255, 255, 0)", shadow: "0px 0px 0px rgba(0, 0, 0, 0)", blur: 0 };
 const DEFAULT_TO: Look = { background: "rgba(23, 23, 23, 0.85)", border: "rgba(255, 255, 255, 0.1)", shadow: "0px 16px 48px rgba(0, 0, 0, 0.55)", blur: 40 };
 
+/** 移動の途中に足す角の丸みの最大値（px） */
+const RADIUS_BULGE = 18;
+
 const LEAD = appleSpring({ duration: 0.3, bounce: 0.3 });
 const TRAIL = appleSpring({ duration: 0.45, bounce: 0.2 });
 
@@ -195,7 +198,10 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
           T.set(cy - h / 2);
           B.set(cy + h / 2);
           const k = Math.min(1, Math.max(0, qv));
-          rad.set(lerp(a.radius, to.radius, k));
+          // 角の丸み: 出発点 → 行き先へ徐々に変えつつ、移動の途中は丸みを足して角の丸い実体で飛ぶ
+          const travel = Math.min(1, Math.max(0, pv));
+          const bulge = RADIUS_BULGE * Math.sin(Math.PI * travel);
+          rad.set(Math.min(lerp(a.radius, to.radius, k) + bulge, Math.min(w, h) / 2));
           look.set(opening ? k : 1 - k);
         };
         const offP = p.on("change", apply);
