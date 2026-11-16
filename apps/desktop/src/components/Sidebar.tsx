@@ -24,6 +24,7 @@ export function Sidebar() {
   const profilesOpen = useStore((s) => !!s.profilesView);
   // 実体は出発点（ボタンや行）だけの裏から出る。実体はサイドバーの地より上（55）、出発点はその上（57）
   const searchLayer = useStore((s) => s.searchLayerActive);
+  const unread = useStore((s) => s.unread);
   const active = useLiquidActiveAnchors();
   const searchOpen = useStore((s) => s.searchOpen);
   const [closed, setClosed] = useState<Record<string, boolean>>({});
@@ -124,6 +125,7 @@ export function Sidebar() {
                       <span className="flex min-w-0 items-center gap-2">
                         <ProviderLogo agent={r.agent} className="text-muted-foreground" />
                         <span className="min-w-0 grow truncate">{r.title}</span>
+                        {unread[r.id] && <span role="img" aria-label="見ていない知らせがあります" className={cn("size-1.5 shrink-0 rounded-full", unread[r.id].error ? "bg-error" : "bg-foreground")} />}
                         <span className={cn("flex shrink-0 items-center gap-1 text-xs", quiet ? "text-muted-foreground" : st.color)}>
                           <StatusIcon status={r.status} className="size-3" />
                           {st.label}
