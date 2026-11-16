@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { BOUNCY, project, rubberBand, SMOOTH, SNAPPY, springConstants, springPosition, springToCss } from "./motion";
+import { project, rubberBand, SMOOTH, SNAPPY, springConstants, springPosition, springToCss } from "./motion";
 
 describe("Apple のばね", () => {
   it("SwiftUI の換算式どおり", () => {

@@ -93,7 +93,7 @@ export function Sidebar() {
                         void openInPane(r.id);
                       }}
                       className={cn(
-                        "flex flex-col gap-0.5 rounded-lg px-2 py-1.5 text-foreground no-underline hover:bg-accent",
+                        "mb-1 flex flex-col gap-1 rounded-lg p-2 text-foreground no-underline hover:bg-accent",
                         open.has(r.id) && "bg-accent",
                       )}
                     >

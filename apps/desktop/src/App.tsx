@@ -1,4 +1,4 @@
-import { Bell } from "lucide-react";
+import { Bell, Columns2, Grid2x2, Square } from "lucide-react";
 import { MotionConfig } from "motion/react";
 import { useEffect } from "react";
 
@@ -73,7 +73,11 @@ export default function App() {
               label="ペインの数"
               value={paneCount}
               onChange={setPaneCount}
-              options={[1, 2, 4].map((n) => ({ value: n as PaneCount, label: <span className="font-mono">{n}</span>, aria: `ペイン ${n} 枚` }))}
+              options={[
+                { value: 1 as PaneCount, label: <Square className="size-3.5" aria-hidden />, aria: "ペイン 1 枚" },
+                { value: 2 as PaneCount, label: <Columns2 className="size-3.5" aria-hidden />, aria: "ペイン 2 枚" },
+                { value: 4 as PaneCount, label: <Grid2x2 className="size-3.5" aria-hidden />, aria: "ペイン 4 枚" },
+              ]}
             />
             <button
               type="button"

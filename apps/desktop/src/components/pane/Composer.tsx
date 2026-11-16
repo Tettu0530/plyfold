@@ -1,9 +1,10 @@
-import { ArrowUp, ChevronsUpDown } from "lucide-react";
+import { ArrowBigUp, ArrowRightToLine, ArrowUp, ChevronsUpDown } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
-import { tokens } from "@/lib/format";
+import { money, tokens } from "@/lib/format";
 import type { Category, ConfigOption, SessionInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { isDangerMode, ModeIcon, ProviderLogo } from "../icons";
@@ -21,6 +22,68 @@ function modeChoices(info: SessionInfo | null): string[] {
   const o = option(info, "mode");
   if (o) return o.choices.map((c) => c.value);
   return info?.modes.map((m) => m.value) ?? [];
+}
+
+/** Shift と Tab のキーの形 */
+function ShiftTab() {
+  const key = "flex size-4 items-center justify-center rounded-[4px] border text-muted-foreground";
+  return (
+    <span aria-hidden className="flex gap-0.5">
+      <span className={key}>
+        <ArrowBigUp className="size-2.5" strokeWidth={2.25} />
+      </span>
+      <span className={key}>
+        <ArrowRightToLine className="size-2.5" strokeWidth={2.25} />
+      </span>
+    </span>
+  );
+}
+
+/** コンテキストの使用率。押すと内訳を出す */
+function ContextMeter({ info, pct }: { info: SessionInfo; pct: number }) {
+  const t = info.total;
+  const rows: [string, string][] = [
+    ["入力（累計）", tokens(t.input + t.cached_read + t.cached_write)],
+    ["うちキャッシュ", tokens(t.cached_read + t.cached_write)],
+    ["出力（累計）", tokens(t.output)],
+    ["費用（累計）", info.cost ? money(info.cost.amount, info.cost.currency) : "—"],
+  ];
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button type="button" aria-label="コンテキストの詳細" className="flex h-6 items-center gap-1.5 rounded-md px-1.5 font-mono text-muted-foreground tabular hover:bg-accent hover:text-foreground">
+          <span role="progressbar" aria-label="コンテキストの使用量" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} className="h-1 w-10 overflow-hidden rounded-sm bg-muted">
+            <motion.span className="block h-full bg-foreground" animate={{ width: `${pct}%` }} transition={smooth} />
+          </span>
+          {pct}%
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="end" className="flex w-60 flex-col gap-2 p-3 text-xs">
+        <div className="flex items-baseline justify-between">
+          <span className="font-medium">コンテキスト</span>
+          <span className="font-mono tabular">
+            {tokens(info.context_used ?? 0)} / {tokens(info.context_size ?? 0)}
+          </span>
+        </div>
+        <span className="block h-1.5 overflow-hidden rounded-full bg-muted">
+          <motion.span className="block h-full bg-foreground" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={smooth} />
+        </span>
+        <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 font-mono tabular">
+          {rows.map(([k, v]) => (
+            <div key={k} className="contents">
+              <dt className="font-sans text-muted-foreground">{k}</dt>
+              <dd className="text-right">{v}</dd>
+            </div>
+          ))}
+        </dl>
+        {info.reported_model && (
+          <p className="text-muted-foreground">
+            応答モデル <span className="font-mono text-foreground">{info.reported_model}</span>
+          </p>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 /** 入力欄のすぐ上: model / effort / mode と、コンテキストの使用量 */
@@ -99,21 +162,11 @@ function ControlRow({
             <ModeIcon mode={mode} />
             {mode}
           </motion.span>
-          <kbd className="font-mono text-xs text-muted-foreground">⇧⇥</kbd>
+          <ShiftTab />
         </button>
       )}
       <span className="grow" />
-      {ctxPct != null && (
-        <span
-          title={`コンテキスト ${tokens(info!.context_used!)} / ${tokens(info!.context_size!)}`}
-          className="flex items-center gap-1.5 font-mono text-muted-foreground tabular"
-        >
-          <span role="progressbar" aria-label="コンテキストの使用量" aria-valuenow={ctxPct} aria-valuemin={0} aria-valuemax={100} className="h-1 w-10 overflow-hidden rounded-sm bg-muted">
-            <motion.span className="block h-full bg-foreground" animate={{ width: `${ctxPct}%` }} transition={smooth} />
-          </span>
-          {ctxPct}%
-        </span>
-      )}
+      {ctxPct != null && info && <ContextMeter info={info} pct={ctxPct} />}
     </div>
   );
 }
