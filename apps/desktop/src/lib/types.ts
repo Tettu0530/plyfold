@@ -186,3 +186,16 @@ export interface ProfileSummary {
   keyed: boolean;
   custom_provider: boolean;
 }
+
+/** プロファイルごとの使用状況（crates/plyfold-core/src/usage.rs） */
+export interface ProfileUsage {
+  profile: string;
+  agent: string;
+  sessions: number;
+  turns: number;
+  input: number | null;
+  output: number | null;
+  cost: number | null;
+  currency: string | null;
+  last_used: number | null;
+}

@@ -25,6 +25,8 @@ pub mod attach;
 pub mod check;
 pub use attach::Attachment;
 pub mod info;
+pub mod usage;
+pub use usage::ProfileUsage;
 pub use info::{Category, Choice, ConfigOption, Cost, LiveTurn, SessionInfo, TokenUsage, TurnStats};
 use info::TurnClock;
 

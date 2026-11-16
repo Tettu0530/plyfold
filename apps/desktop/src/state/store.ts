@@ -8,7 +8,7 @@ import type { Attached } from "@/lib/attachments";
 import { api, inTauri, onEngineEvent } from "@/lib/api";
 import { notify } from "@/lib/notify";
 import { loadInfoCache, saveInfoCache, snapshot, type InfoCache } from "./infoCache";
-import type { AppSettings, Category, SessionStatus, EngineEvent, ProfileSummary, SessionInfo, SessionRecord } from "@/lib/types";
+import type { AppSettings, Category, SessionStatus, EngineEvent, ProfileSummary, ProfileUsage, SessionInfo, SessionRecord } from "@/lib/types";
 import {
   addNotice,
   applyUpdate,
@@ -117,6 +117,9 @@ interface State {
   openInPane: (id: string, pane?: number, from?: string) => Promise<void>;
   /** 新しいセッションの下書きを、空いているペインに開く */
   newDraft: () => void;
+  /** 直近 30 日の、プロファイルごとの使用状況（新しいセッションの画面に出す）。未取得なら null */
+  usage: ProfileUsage[] | null;
+  loadUsage: () => Promise<void>;
   updateDraft: (id: string, patch: Partial<Draft>) => void;
   /** 下書きを本物のセッションとして始める（同じペインのまま入れ替わる） */
   startDraft: (id: string, prompt: string, attachments?: Attached[]) => Promise<void>;
@@ -378,6 +381,16 @@ export const useStore = create<State>((set, get) => ({
       if (isDraft(id)) delete drafts[id];
       return { panes, drafts };
     });
+  },
+
+  usage: null,
+  loadUsage: async () => {
+    if (!inTauri) return;
+    try {
+      set({ usage: await api.usageSummary(30) });
+    } catch {
+      // 数えられなくても、新しいセッションは始められる
+    }
   },
 
   newDraft: () => {

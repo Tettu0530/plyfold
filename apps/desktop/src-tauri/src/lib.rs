@@ -159,6 +159,13 @@ fn list_sessions(state: State<'_, AppState>) -> CmdResult<Vec<SessionRecord>> {
 }
 
 #[tauri::command]
+async fn usage_summary(state: State<'_, AppState>, days: u32) -> CmdResult<Vec<plyfold_core::ProfileUsage>> {
+    let since = plyfold_store::now_ms() - i64::from(days) * 86_400_000;
+    let events = state.engine.store().usage_events(since).map_err(err)?;
+    Ok(plyfold_core::usage::summarize(&events, since))
+}
+
+#[tauri::command]
 fn session_history(state: State<'_, AppState>, id: String) -> CmdResult<Vec<EventRecord>> {
     let mut all = Vec::new();
     let mut after = None;
@@ -466,6 +473,7 @@ pub fn run() {
             list_profiles,
             list_sessions,
             session_history,
+            usage_summary,
             start_session,
             reopen_session,
             close_session,

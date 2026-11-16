@@ -1,27 +1,86 @@
-import { ArrowUp, ChevronsUpDown, FolderOpen, GitBranch, Plus, X } from "lucide-react";
-import { useState } from "react";
+import { ArrowDown, ArrowUp, Check, Coins, FolderOpen, GitBranch, MessageSquare, Plus, X } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
-import { repoName } from "@/lib/format";
+import { money, repoName, tokens } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { AGENT_NAMES, ProviderLogo } from "../icons";
-import { CHIP_TRIGGER } from "./chip";
 import { ControlRow } from "./Composer";
 import { AttachBox, useAttachments } from "./Attachments";
 import { withChoices } from "@/state/infoCache";
-import type { Category } from "@/lib/types";
+import type { Category, ProfileSummary, ProfileUsage } from "@/lib/types";
 
 /** 認証の種類の表記 */
 function authLabel(p: { keyed: boolean; custom_provider: boolean }) {
   return p.custom_provider ? "カスタムプロバイダー" : p.keyed ? "公式 API" : "既存のログイン";
 }
 
+const profileName = (p: ProfileSummary) => (p.name === p.agent ? "default" : p.label);
+
+function Num({ icon: Icon, title, children }: { icon: typeof Coins; title: string; children: React.ReactNode }) {
+  return (
+    <span title={title} className="flex items-center gap-[3px]">
+      <Icon className="size-3" aria-hidden />
+      {children}
+    </span>
+  );
+}
+
+/** プロファイルの 1 行: 名前と認証の種類、直近 30 日のターン数・トークン・費用 */
+function ProfileRow({ p, u, selected, onSelect }: { p: ProfileSummary; u: ProfileUsage | undefined; selected: boolean; onSelect: () => void }) {
+  const tok = u?.input != null || u?.output != null ? (u.input ?? 0) + (u.output ?? 0) : null;
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      tabIndex={selected ? 0 : -1}
+      data-profile={p.name}
+      onClick={onSelect}
+      className={cn("flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-accent", selected && "bg-accent")}
+    >
+      <ProviderLogo agent={p.agent} className="size-4 shrink-0 text-muted-foreground" />
+      <span className="flex min-w-0 grow flex-col">
+        <span className="truncate">{profileName(p)}</span>
+        <span className="flex gap-2 text-xs text-muted-foreground">
+          <span>{AGENT_NAMES[p.agent] ?? p.agent}</span>
+          <span>{authLabel(p)}</span>
+        </span>
+      </span>
+      <span className="flex shrink-0 items-center gap-2.5 font-mono text-xs text-muted-foreground tabular">
+        {u ? (
+          <>
+            <Num icon={MessageSquare} title={`ターン ${u.turns}（セッション ${u.sessions}）`}>
+              {u.turns}
+            </Num>
+            {tok != null && (
+              <span title={`入力 ${tokens(u.input ?? 0)}、出力 ${tokens(u.output ?? 0)}`} className="flex items-center gap-[3px]">
+                <ArrowUp className="size-3" aria-hidden />
+                {tokens(u.input ?? 0)}
+                <ArrowDown className="ml-1 size-3" aria-hidden />
+                {tokens(u.output ?? 0)}
+              </span>
+            )}
+            {u.cost != null && (
+              <Num icon={Coins} title="費用">
+                {money(u.cost, u.currency ?? "USD")}
+              </Num>
+            )}
+          </>
+        ) : (
+          <span title="直近 30 日は使っていません">—</span>
+        )}
+      </span>
+      <Check className={cn("size-3.5 shrink-0", selected ? "text-foreground" : "invisible")} aria-hidden />
+    </button>
+  );
+}
+
 /**
  * 新しいセッション（下書き）。既存のセッションと同じ画面で、会話は空。
- * 入力欄の上に、model / effort / mode の代わりにプロファイル・リポジトリ・worktree が並ぶ
+ * 真ん中にプロファイルの一覧（直近 30 日の使用状況つき）。入力欄の上は、左にリポジトリと worktree、右に model / effort / mode
  */
 export function DraftPane({ index, id }: { index: number; id: string }) {
   const draft = useStore((s) => s.drafts[id]);
@@ -30,6 +89,10 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const [text, setText] = useState("");
   const att = useAttachments();
   const cached = useStore((s) => (draft?.profile ? s.infoCache[draft.profile] : undefined));
+  const usage = useStore((s) => s.usage);
+  useEffect(() => {
+    void useStore.getState().loadUsage();
+  }, []);
   if (!draft) return null;
   const sorted = [...profiles].sort((a, b) => Number(a.name === a.agent) - Number(b.name === b.agent) || a.name.localeCompare(b.name));
   const current = profiles.find((p) => p.name === draft.profile);
@@ -37,6 +100,20 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const choose = (c: Category, v: string) => updateDraft(id, { choices: { ...draft!.choices, [c]: v } });
   const modes = info ? (info.config.find((o) => o.category === "mode")?.choices.map((c) => c.value) ?? info.modes.map((m) => m.value)) : [];
   const mode = info ? (info.config.find((o) => o.category === "mode")?.current ?? info.current_mode) : null;
+  const byProfile = new Map((usage ?? []).map((u) => [u.profile, u]));
+  // 最近使ったものを上に（使っていないものは、既定のプロファイルを先に名前順）
+  const ordered = [...sorted].sort((a, b) => (byProfile.get(b.name)?.last_used ?? 0) - (byProfile.get(a.name)?.last_used ?? 0));
+  const select = (name: string) => updateDraft(id, { profile: name, choices: {} });
+  const onListKey = (e: React.KeyboardEvent) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const i = ordered.findIndex((p) => p.name === draft.profile);
+    const next = ordered[(i + (e.key === "ArrowDown" ? 1 : ordered.length - 1)) % ordered.length];
+    if (next) {
+      select(next.name);
+      (e.currentTarget.querySelector(`[data-profile="${CSS.escape(next.name)}"]`) as HTMLElement | null)?.focus();
+    }
+  };
   const send = () => {
     if (draft.busy || !draft.profile) return;
     void startDraft(id, text, att.items);
@@ -58,9 +135,23 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
         </button>
       </div>
 
-      <div className="flex min-h-0 grow flex-col items-center justify-center gap-1 px-5 text-xs text-muted-foreground">
-        {draft.busy ? <p>エージェントを起動しています</p> : <p>初期プロンプトを送ると始まります</p>}
-        {draft.error && <p className="max-w-md text-center whitespace-pre-wrap text-error">{draft.error}</p>}
+      <div className="flex min-h-0 grow flex-col justify-end overflow-y-auto px-3 pt-4 pb-2">
+        <div className="mb-1 flex items-center justify-between px-2.5 text-xs text-muted-foreground">
+          <span id={`${id}-profiles`}>プロファイル</span>
+          <span>直近 30 日</span>
+        </div>
+        <div role="radiogroup" aria-labelledby={`${id}-profiles`} onKeyDown={onListKey} className="flex flex-col gap-0.5">
+          {ordered.map((p) => (
+            <ProfileRow key={p.name} p={p} u={byProfile.get(p.name)} selected={p.name === draft.profile} onSelect={() => select(p.name)} />
+          ))}
+          {profiles.length === 0 && <p className="px-2.5 py-2 text-xs text-muted-foreground">プロファイルがありません。サイドバーのプロファイルから足してください</p>}
+        </div>
+        {(draft.busy || draft.error) && (
+          <div className="mt-3 px-2.5 text-xs">
+            {draft.busy && <p className="text-muted-foreground">エージェントを起動しています</p>}
+            {draft.error && <p className="whitespace-pre-wrap text-error">{draft.error}</p>}
+          </div>
+        )}
       </div>
 
       <Popover>
@@ -69,26 +160,6 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
       <PopoverAnchor asChild>
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-0.5 text-xs">
-          <Select value={draft.profile ?? undefined} onValueChange={(v) => updateDraft(id, { profile: v, choices: {} })}>
-            <SelectTrigger aria-label="プロファイル" className={`${CHIP_TRIGGER} gap-1.5`}>
-              {current && <ProviderLogo agent={current.agent} className="size-3 text-muted-foreground" />}
-              <span>{current ? (current.name === current.agent ? "default" : current.label) : "プロファイル"}</span>
-              <ChevronsUpDown className="size-3 text-muted-foreground" aria-hidden />
-            </SelectTrigger>
-            <SelectContent>
-              {sorted.map((p) => (
-                <SelectItem key={p.name} value={p.name}>
-                  <span className="flex items-center gap-2">
-                    <ProviderLogo agent={p.agent} className="text-muted-foreground" />
-                    <span>{p.name === p.agent ? "default" : p.label}</span>
-                    <span className="text-xs text-muted-foreground">{AGENT_NAMES[p.agent] ?? p.agent}</span>
-                    <span className="text-xs text-muted-foreground">{authLabel(p)}</span>
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
           <PopoverTrigger asChild>
             <button type="button" aria-label="リポジトリ" title={draft.repo} className="flex h-6 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent data-[state=open]:bg-accent">
               <FolderOpen className="size-3 text-muted-foreground" aria-hidden />
@@ -109,9 +180,9 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
             <GitBranch className="size-3" aria-hidden />
             {draft.worktree ? "worktree" : "直接"}
           </button>
+          <span className="grow" />
+          <ControlRow scope={id} agent={current?.agent ?? ""} info={info} onSet={choose} empty={draft.profile ? "model と effort は起動後に選べます" : undefined} />
         </div>
-
-        <ControlRow scope={id} agent={current?.agent ?? ""} info={info} onSet={choose} empty={draft.profile ? "model と effort は起動後に選べます（次からは前回の値を出します）" : undefined} />
 
         <AttachBox att={att}>
           <textarea

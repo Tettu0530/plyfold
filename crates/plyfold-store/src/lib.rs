@@ -346,6 +346,45 @@ impl Store {
     }
 }
 
+/// 使用量の集計に使うイベント（セッションのプロファイルつき）
+#[derive(Debug, Clone)]
+pub struct UsageEvent {
+    pub session_id: String,
+    pub profile: String,
+    pub agent: String,
+    pub ts: i64,
+    pub kind: EventKind,
+    pub payload: String,
+}
+
+impl Store {
+    /// `since` 以降に更新されたセッションの、プロンプト・ターンの結果・使用量の更新のイベントを古い順に。
+    /// 費用は通算で届くので、差を取れるよう `since` より前のものも返す
+    pub fn usage_events(&self, since: i64) -> Result<Vec<UsageEvent>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT e.session_id, s.profile, s.agent, e.ts, e.kind, e.payload FROM events e JOIN sessions s ON s.id = e.session_id
+             WHERE s.updated_at >= ?1 AND (
+               (e.kind = 'frame_out' AND e.payload LIKE '%\"session/prompt\"%') OR
+               (e.kind = 'frame_in' AND (e.payload LIKE '%\"stopReason\"%' OR e.payload LIKE '%\"usage_update\"%')))
+             ORDER BY e.id",
+        )?;
+        let rows = stmt
+            .query_map(params![since], |r| {
+                Ok(UsageEvent {
+                    session_id: r.get(0)?,
+                    profile: r.get(1)?,
+                    agent: r.get(2)?,
+                    ts: r.get(3)?,
+                    kind: EventKind::parse(&r.get::<_, String>(4)?),
+                    payload: r.get(5)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -354,6 +393,21 @@ mod tests {
         store
             .create_session(NewSession { title: title.into(), profile: "p".into(), agent: "mock".into(), ..Default::default() })
             .unwrap()
+    }
+
+    #[test]
+    fn usage_events_keep_only_prompts_results_and_usage() {
+        let store = Store::open_in_memory().unwrap();
+        let s = new(&store, "t");
+        store.append_event(&s.id, EventKind::FrameOut, r#"{"method":"session/prompt"}"#).unwrap();
+        store.append_event(&s.id, EventKind::FrameIn, r#"{"method":"session/update","params":{"update":{"sessionUpdate":"agent_message_chunk"}}}"#).unwrap();
+        store.append_event(&s.id, EventKind::FrameIn, r#"{"params":{"update":{"sessionUpdate":"usage_update"}}}"#).unwrap();
+        store.append_event(&s.id, EventKind::FrameIn, r#"{"result":{"stopReason":"end_turn"}}"#).unwrap();
+        store.append_event(&s.id, EventKind::Note, "session/prompt").unwrap();
+        let got = store.usage_events(0).unwrap();
+        assert_eq!(got.len(), 3);
+        assert_eq!(got[0].profile, "p");
+        assert!(store.usage_events(now_ms() + 60_000).unwrap().is_empty());
     }
 
     #[test]
