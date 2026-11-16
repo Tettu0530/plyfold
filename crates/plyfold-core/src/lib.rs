@@ -21,6 +21,10 @@ use tokio::sync::{broadcast, mpsc};
 
 pub use plyfold_store::SessionStatus as Status;
 
+pub mod info;
+pub use info::{Category, Choice, ConfigOption, Cost, LiveTurn, SessionInfo, TokenUsage, TurnStats};
+use info::TurnClock;
+
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
     #[error(transparent)]
@@ -41,6 +45,8 @@ pub enum CoreError {
     UnknownPermission(String),
     #[error("セッション {0} には作業場所がありません")]
     NoWorkspace(String),
+    #[error("このエージェントには {0:?} の設定項目がありません")]
+    NoSuchOption(Category),
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -69,6 +75,8 @@ pub enum EngineEvent {
     TurnEnded { session_id: String, stop_reason: Option<String>, error: Option<String> },
     /// 人に知らせたいこと（起動の失敗、無応答、開き直しの結果など）
     Notice { session_id: String, message: String },
+    /// 設定項目と使用量（変わるたびに全体を送る。流れている途中は 0.5 秒ごと）
+    Info { session_id: String, info: Box<SessionInfo> },
 }
 
 pub struct EngineOptions {
@@ -101,6 +109,9 @@ struct Live {
     /// pump が処理し終えた AgentMessage の数（区切りと比べる）
     processed: AtomicU64,
     progress: tokio::sync::Notify,
+    info: Mutex<SessionInfo>,
+    clock: Mutex<Option<TurnClock>>,
+    last_live_emit: Mutex<Instant>,
 }
 
 impl Live {
@@ -292,6 +303,9 @@ impl Engine {
                 closing: AtomicBool::new(false),
                 processed: AtomicU64::new(0),
                 progress: tokio::sync::Notify::new(),
+                info: Mutex::new(SessionInfo::default()),
+                clock: Mutex::new(None),
+                last_live_emit: Mutex::new(Instant::now()),
             });
             // session/load の履歴の再送を受け取るため、先に受信を始める
             tokio::spawn(pump(inner.clone(), id.to_string(), live.clone(), rx));
@@ -299,20 +313,23 @@ impl Engine {
             let opened: Result<String, CoreError> = async {
                 match reopen {
                     Some(old) if live.client.supports_load_session() => {
-                        let (_, barrier) = live.client.load_session(&old, cwd).await?;
+                        let (resp, barrier) = live.client.load_session(&old, cwd).await?;
                         live.wait_processed(barrier).await;
+                        live.info.lock().unwrap().apply_session_response(&resp);
                         inner.notice(id, "session/load で開き直しました（履歴はエージェントから再送されます）");
                         Ok(old)
                     }
                     _ => {
                         let r = live.client.new_session(cwd).await?;
                         let sid = r.session_id.0.to_string();
+                        live.info.lock().unwrap().apply_session_response(&serde_json::to_value(&r).unwrap_or_default());
                         if reopen.is_some() {
                             inner.notice(id, "このエージェントは開き直しに対応していないため、新しいセッションを作りました（文脈は引き継がれません）");
                         }
                         inner.store.set_acp_session_id(id, &sid)?;
                         if let Some(mode) = &resolved.default_mode {
                             live.client.set_mode(&sid, mode).await?;
+                            live.info.lock().unwrap().current_mode = Some(mode.clone());
                         }
                         Ok(sid)
                     }
@@ -332,6 +349,7 @@ impl Engine {
                 }
             }
             inner.live.lock().unwrap().insert(id.to_string(), live.clone());
+            emit_info(&inner, id, &live);
             tokio::spawn(watchdog(inner.clone(), id.to_string(), live));
             Ok(())
         }
@@ -358,6 +376,8 @@ impl Engine {
         }
         live.touch();
         live.stalled.store(false, Ordering::SeqCst);
+        *live.clock.lock().unwrap() = Some(TurnClock::new());
+        live.info.lock().unwrap().live = Some(LiveTurn::default());
         inner.set_status(id, SessionStatus::Working);
         let id = id.to_string();
         let text = text.to_string();
@@ -369,10 +389,12 @@ impl Engine {
                 Ok(turn) => {
                     // このターンの通知を配信し終えてから、ターンの終わりを知らせる
                     live.wait_processed(turn.barrier).await;
+                    finish_turn(&inner, &id, &live, &turn.raw["usage"]);
                     let stop = serde_json::to_value(turn.response.stop_reason).ok().and_then(|v| v.as_str().map(str::to_string));
                     inner.emit(EngineEvent::TurnEnded { session_id: id.clone(), stop_reason: stop, error: None });
                 }
                 Err(e) => {
+                    finish_turn(&inner, &id, &live, &Value::Null);
                     inner.notice(&id, format!("ターンがエラーで終わりました: {e}"));
                     inner.emit(EngineEvent::TurnEnded { session_id: id.clone(), stop_reason: None, error: Some(e.to_string()) });
                 }
@@ -418,9 +440,37 @@ impl Engine {
         Ok(())
     }
 
+    /// 今のセッション情報（エージェントが動いていなければ None）
+    pub fn session_info(&self, id: &str) -> Option<SessionInfo> {
+        self.inner.live(id).ok().map(|l| l.info.lock().unwrap().clone())
+    }
+
+    /// 設定項目を ID で変える
+    pub async fn set_config_option(&self, id: &str, config_id: &str, value: &str) -> Result<(), CoreError> {
+        let live = self.inner.live(id)?;
+        let opts = live.client.set_config_option(&live.sid(), config_id, value).await?;
+        live.info.lock().unwrap().set_config(&opts);
+        emit_info(&self.inner, id, &live);
+        Ok(())
+    }
+
+    /// model / effort / mode を、エージェントごとの名前の違いを気にせずに変える。
+    /// mode は configOptions になければ旧来の session/set_mode を使う
+    pub async fn set_by_category(&self, id: &str, category: Category, value: &str) -> Result<(), CoreError> {
+        let live = self.inner.live(id)?;
+        let config_id = live.info.lock().unwrap().option(category).map(|o| o.id.clone());
+        match (config_id, category) {
+            (Some(cid), _) => self.set_config_option(id, &cid, value).await,
+            (None, Category::Mode) => self.set_mode(id, value).await,
+            (None, c) => Err(CoreError::NoSuchOption(c)),
+        }
+    }
+
     pub async fn set_mode(&self, id: &str, mode_id: &str) -> Result<(), CoreError> {
         let live = self.inner.live(id)?;
         live.client.set_mode(&live.sid(), mode_id).await?;
+        live.info.lock().unwrap().current_mode = Some(mode_id.to_string());
+        emit_info(&self.inner, id, &live);
         Ok(())
     }
 
@@ -484,7 +534,27 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
                 if live.stalled.swap(false, Ordering::SeqCst) && live.in_turn.load(Ordering::SeqCst) {
                     inner.set_status(&id, SessionStatus::Working);
                 }
-                inner.emit(EngineEvent::Update { session_id: id.clone(), update: raw["update"].clone() });
+                let update = &raw["update"];
+                let changed = live.info.lock().unwrap().apply_update(update);
+                let text = matches!(update["sessionUpdate"].as_str(), Some("agent_message_chunk" | "agent_thought_chunk"))
+                    .then(|| update["content"]["text"].as_str())
+                    .flatten();
+                let mut live_due = false;
+                if let Some(t) = text
+                    && let Some(clock) = live.clock.lock().unwrap().as_mut()
+                {
+                    clock.on_text(t);
+                    let mut last = live.last_live_emit.lock().unwrap();
+                    if last.elapsed() >= Duration::from_millis(500) {
+                        *last = Instant::now();
+                        live.info.lock().unwrap().live = Some(clock.live());
+                        live_due = true;
+                    }
+                }
+                inner.emit(EngineEvent::Update { session_id: id.clone(), update: update.clone() });
+                if changed || live_due {
+                    emit_info(inner, &id, live);
+                }
             }
             AgentMessage::PermissionRequest { request_id, request } => {
                 live.touch();
@@ -550,4 +620,15 @@ async fn watchdog(inner: Arc<Inner>, id: String, live: Arc<Live>) {
             inner.notice(&id, format!("{} 秒間、エージェントから何も届いていません", idle.as_secs()));
         }
     }
+}
+
+fn emit_info(inner: &Inner, id: &str, live: &Live) {
+    let info = live.info.lock().unwrap().clone();
+    inner.emit(EngineEvent::Info { session_id: id.into(), info: Box::new(info) });
+}
+
+fn finish_turn(inner: &Inner, id: &str, live: &Live, usage: &Value) {
+    let Some(clock) = live.clock.lock().unwrap().take() else { return };
+    live.info.lock().unwrap().finish_turn(clock.finish(usage));
+    emit_info(inner, id, live);
 }

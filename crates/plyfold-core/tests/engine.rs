@@ -262,3 +262,48 @@ async fn turn_end_is_delivered_after_all_updates_of_the_turn() {
     }
     eng.close_session(&s.id).await.unwrap();
 }
+
+#[tokio::test]
+async fn session_info_config_switching_and_usage() {
+    use plyfold_core::Category;
+    let base = tmp("info");
+    let eng = engine(&base.join("state"), 60_000);
+    let mut rx = eng.subscribe();
+    let s = eng
+        .start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.clone(), worktree: false })
+        .await
+        .unwrap();
+
+    let info = eng.session_info(&s.id).unwrap();
+    assert_eq!(info.option(Category::Model).unwrap().current.as_deref(), Some("mock-large"));
+    assert_eq!(info.option(Category::ThoughtLevel).unwrap().id, "effort");
+
+    // カテゴリで切り替え（ID の違いを気にしない）
+    eng.set_by_category(&s.id, Category::ThoughtLevel, "high").await.unwrap();
+    eng.set_by_category(&s.id, Category::Mode, "plan").await.unwrap();
+    let info = eng.session_info(&s.id).unwrap();
+    assert_eq!(info.option(Category::ThoughtLevel).unwrap().current.as_deref(), Some("high"));
+    assert_eq!(info.option(Category::Mode).unwrap().current.as_deref(), Some("plan"));
+    assert!(eng.set_by_category(&s.id, Category::Model, "no-such-model").await.is_err());
+
+    // ターンの後に使用量が入る。Info はターン終了より前に届く
+    eng.prompt(&s.id, "count my tokens please").unwrap();
+    let mut saw_info_with_turn = false;
+    loop {
+        match tokio::time::timeout(Duration::from_secs(10), rx.recv()).await.unwrap().unwrap() {
+            EngineEvent::Info { info, .. } if info.last_turn.is_some() => saw_info_with_turn = true,
+            EngineEvent::TurnEnded { .. } => break,
+            _ => {}
+        }
+    }
+    assert!(saw_info_with_turn, "ターン終了の前に使用量の Info が届くこと");
+    let info = eng.session_info(&s.id).unwrap();
+    let turn = info.last_turn.unwrap();
+    assert_eq!(turn.usage.unwrap().input, 100);
+    assert!(turn.ttft_ms.is_some());
+    assert_eq!(info.context_size, Some(100_000));
+    assert_eq!(info.reported_model.as_deref(), Some("mock-large-2026"));
+    assert!(info.cost.is_some());
+    assert_eq!(info.total.input, 100);
+    eng.close_session(&s.id).await.unwrap();
+}

@@ -38,6 +38,8 @@ pub enum AgentMessage {
 #[derive(Debug, Clone)]
 pub struct TurnResult {
     pub response: PromptResponse,
+    /// 応答の生の JSON（`usage` など、型にまだない項目を読むため）
+    pub raw: Value,
     pub barrier: u64,
 }
 
@@ -137,9 +139,9 @@ impl AcpClient {
         let req = PromptRequest::new(SessionId::new(session_id), vec![ContentBlock::Text(TextContent::new(text))]);
         let params = serde_json::to_value(req).expect("serialize");
         let (v, barrier) = self.conn.request_with_barrier("session/prompt", params, None).await?;
-        let response = serde_json::from_value(v)
+        let response = serde_json::from_value(v.clone())
             .map_err(|source| AcpError::Decode { method: "session/prompt".into(), source })?;
-        Ok(TurnResult { response, barrier })
+        Ok(TurnResult { response, raw: v, barrier })
     }
 
     pub async fn cancel(&self, session_id: &str) -> Result<(), AcpError> {

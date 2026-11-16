@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
-use plyfold_core::{Engine, EngineEvent, EngineOptions, PermissionChoice, StartSession, Status};
+use plyfold_core::{Category, Engine, EngineEvent, EngineOptions, PermissionChoice, SessionInfo, StartSession, Status};
 use plyfold_profile::{Config, KeychainStore, default_state_dir};
 use plyfold_store::EventKind;
 use serde_json::Value;
@@ -216,7 +216,8 @@ async fn repl(
     mut rx: tokio::sync::broadcast::Receiver<EngineEvent>,
     first: Option<String>,
 ) -> Result<()> {
-    println!("入力するとプロンプトとして送ります。/cancel /diff /mode <id> /quit");
+    println!("入力するとプロンプトとして送ります。/model /effort /mode [値]（/mode だけなら次のモードへ） /config /cancel /diff /quit");
+    let mut info: SessionInfo = engine.session_info(sid).unwrap_or_default();
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
     let mut pending: Option<PendingPermission> = None;
     let mut working = false;
@@ -224,6 +225,7 @@ async fn repl(
         engine.prompt(sid, &p)?;
         working = true;
     }
+    print!("{}", status_line(&info));
     prompt_mark(working);
     loop {
         tokio::select! {
@@ -252,9 +254,15 @@ async fn repl(
                             Some(e) => println!("\n[ターン終了: エラー] {e}"),
                             None => println!("\n[ターン終了: {}]", stop_reason.unwrap_or_default()),
                         }
+                        // ターン終了の直前に Info が届いているはずだが、念のため取り直す
+                        if let Some(i) = engine.session_info(sid) {
+                            info = i;
+                        }
+                        print!("{}", status_line(&info));
                         prompt_mark(working);
                     }
                     EngineEvent::Notice { message, .. } => println!("\n※ {message}"),
+                    EngineEvent::Info { info: i, .. } => info = *i,
                     EngineEvent::Status { status, .. } => {
                         if matches!(status, Status::Error | Status::Closed) {
                             println!("\n[状態] {status:?}。終了します（plyfold resume {sid} で再開）");
@@ -295,7 +303,47 @@ async fn repl(
                         }
                         Err(e) => println!("差分を出せません: {e}"),
                     },
-                    l if l.starts_with("/mode ") => engine.set_mode(sid, l.trim_start_matches("/mode ").trim()).await?,
+                    "/config" => {
+                        for o in &info.config {
+                            let choices: Vec<&str> = o.choices.iter().map(|c| c.value.as_str()).collect();
+                            println!("  {:20} = {:12} [{}]", o.id, o.current.as_deref().unwrap_or("-"), choices.join(", "));
+                        }
+                        if info.config.is_empty() && !info.modes.is_empty() {
+                            println!("  mode = {}（旧来の modes）", info.current_mode.as_deref().unwrap_or("-"));
+                        }
+                    }
+                    l if l.starts_with("/model") || l.starts_with("/effort") || l.starts_with("/mode") => {
+                        let (cmd, arg) = l.split_once(' ').map(|(c, a)| (c, a.trim())).unwrap_or((l, ""));
+                        let cat = match cmd {
+                            "/model" => Category::Model,
+                            "/effort" => Category::ThoughtLevel,
+                            _ => Category::Mode,
+                        };
+                        let value = if !arg.is_empty() {
+                            Some(arg.to_string())
+                        } else if cat == Category::Mode {
+                            next_mode(&info)
+                        } else {
+                            if let Some(o) = info.option(cat) {
+                                let choices: Vec<&str> = o.choices.iter().map(|c| c.value.as_str()).collect();
+                                println!("  {} = {}  [{}]", o.id, o.current.as_deref().unwrap_or("-"), choices.join(", "));
+                            } else {
+                                println!("  このエージェントには {cmd} の設定がありません");
+                            }
+                            None
+                        };
+                        if let Some(v) = value {
+                            match engine.set_by_category(sid, cat, &v).await {
+                                Ok(()) => {
+                                    if let Some(i) = engine.session_info(sid) {
+                                        info = i;
+                                    }
+                                    print!("{}", status_line(&info));
+                                }
+                                Err(e) => println!("  変更できません: {e}"),
+                            }
+                        }
+                    }
                     text => {
                         if working {
                             println!("ターンの途中です（/cancel で中断）");
@@ -326,7 +374,8 @@ fn belongs(e: &EngineEvent, sid: &str) -> bool {
         | EngineEvent::PermissionRequested { session_id, .. }
         | EngineEvent::PermissionResolved { session_id, .. }
         | EngineEvent::TurnEnded { session_id, .. }
-        | EngineEvent::Notice { session_id, .. } => session_id,
+        | EngineEvent::Notice { session_id, .. }
+        | EngineEvent::Info { session_id, .. } => session_id,
     };
     id == sid
 }
@@ -398,4 +447,63 @@ fn print_log(engine: &Engine, sid: &str) -> Result<()> {
     }
     println!();
     Ok(())
+}
+
+/// Claude Code の Shift+Tab のように、次のモードへ
+fn next_mode(info: &SessionInfo) -> Option<String> {
+    let (choices, current): (Vec<String>, Option<String>) = match info.option(Category::Mode) {
+        Some(o) => (o.choices.iter().map(|c| c.value.clone()).collect(), o.current.clone()),
+        None => (info.modes.iter().map(|c| c.value.clone()).collect(), info.current_mode.clone()),
+    };
+    if choices.is_empty() {
+        return None;
+    }
+    let pos = current.and_then(|c| choices.iter().position(|x| *x == c)).map(|p| p + 1).unwrap_or(0);
+    Some(choices[pos % choices.len()].clone())
+}
+
+fn human(n: u64) -> String {
+    match n {
+        0..1_000 => n.to_string(),
+        1_000..1_000_000 => format!("{:.1}k", n as f64 / 1e3),
+        _ => format!("{:.2}M", n as f64 / 1e6),
+    }
+}
+
+/// OpenCode の入力欄のような状態行
+fn status_line(info: &SessionInfo) -> String {
+    let get = |c: Category| info.option(c).and_then(|o| o.current.clone());
+    let mut parts = Vec::new();
+    let model = get(Category::Model);
+    match (&model, &info.reported_model) {
+        (Some(m), Some(r)) if !r.contains(m.as_str()) => parts.push(format!("{m}（実際: {r}）")),
+        (Some(m), _) => parts.push(m.clone()),
+        (None, Some(r)) => parts.push(r.clone()),
+        _ => {}
+    }
+    if let Some(e) = get(Category::ThoughtLevel) {
+        parts.push(format!("effort {e}"));
+    }
+    if let Some(m) = get(Category::Mode).or(info.current_mode.clone()) {
+        parts.push(format!("mode {m}"));
+    }
+    if let (Some(u), Some(sz)) = (info.context_used, info.context_size) {
+        parts.push(format!("ctx {}/{}（{:.0}%）", human(u), human(sz), u as f64 * 100.0 / sz.max(1) as f64));
+    }
+    if let Some(t) = &info.last_turn {
+        if let Some(u) = &t.usage {
+            parts.push(format!("↑{} ↓{}", human(u.input + u.cached_read + u.cached_write), human(u.output)));
+        }
+        if let Some(tps) = t.tokens_per_sec {
+            parts.push(format!("{}{tps:.0} tok/s", if t.estimated { "~" } else { "" }));
+        }
+    }
+    if let Some(c) = &info.cost {
+        parts.push(format!("{} {:.4}", c.currency, c.amount));
+    }
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!("\n\x1b[2m[{}]\x1b[0m", parts.join(" · "))
+    }
 }
