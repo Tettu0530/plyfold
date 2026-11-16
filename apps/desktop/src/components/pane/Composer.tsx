@@ -9,6 +9,7 @@ import type { Category, ConfigOption, SessionInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { isDangerMode, ModeIcon, ProviderLogo } from "../icons";
 import { Keys } from "../Keys";
+import { CHIP_TRIGGER } from "./chip";
 import { smooth } from "../motion";
 
 function option(info: SessionInfo | null, c: Category): ConfigOption | undefined {
@@ -97,7 +98,7 @@ function ControlRow({
     <div className="flex items-center gap-0.5 text-xs">
       {model && (
         <Select value={model.current ?? undefined} onValueChange={(v) => onSet("model", v)}>
-          <SelectTrigger aria-label="model" className="h-6 gap-1 border-0 bg-transparent px-1.5 text-xs shadow-none hover:bg-accent [&>svg:last-child]:hidden">
+          <SelectTrigger aria-label="model" className={CHIP_TRIGGER}>
             <ProviderLogo agent={agent} className="size-3 text-muted-foreground" />
             <span>{model.choices.find((c) => c.value === model.current)?.name ?? model.current}</span>
             <ChevronsUpDown className="size-3 text-muted-foreground" aria-hidden />
@@ -113,7 +114,7 @@ function ControlRow({
       )}
       {effort && (
         <Select value={effort.current ?? undefined} onValueChange={(v) => onSet("thought_level", v)}>
-          <SelectTrigger aria-label="effort" className="h-6 gap-1.5 border-0 bg-transparent px-1.5 text-xs shadow-none hover:bg-accent [&>svg:last-child]:hidden">
+          <SelectTrigger aria-label="effort" className={`${CHIP_TRIGGER} gap-1.5`}>
             <span className="flex h-2.5 items-end gap-0.5" aria-hidden>
               {effort.choices.map((c, i) => (
                 <span

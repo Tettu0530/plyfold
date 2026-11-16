@@ -2,12 +2,13 @@ import { ArrowUp, ChevronsUpDown, FolderOpen, GitBranch, Plus, X } from "lucide-
 import { useState } from "react";
 
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { repoName } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { AGENT_NAMES, ProviderLogo } from "../icons";
+import { CHIP_TRIGGER } from "./chip";
 
 /** 認証の種類の表記 */
 function authLabel(p: { keyed: boolean; custom_provider: boolean }) {
@@ -52,10 +53,14 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
         {draft.error && <p className="max-w-md text-center whitespace-pre-wrap text-error">{draft.error}</p>}
       </div>
 
-      <div className="flex shrink-0 flex-col gap-1 px-3 pb-3">
+      <Popover>
+      <div className="flex shrink-0 flex-col px-3 pb-3">
+      {/* リポジトリの欄は、この 1 行＋入力欄のまとまりと同じ幅で、すぐ上に開く */}
+      <PopoverAnchor asChild>
+      <div className="flex flex-col gap-1">
         <div className="flex items-center gap-0.5 text-xs">
           <Select value={draft.profile ?? undefined} onValueChange={(v) => updateDraft(id, { profile: v })}>
-            <SelectTrigger aria-label="プロファイル" className="h-6 gap-1.5 border-0 bg-transparent px-1.5 text-xs shadow-none hover:bg-accent [&>svg:last-child]:hidden">
+            <SelectTrigger aria-label="プロファイル" className={`${CHIP_TRIGGER} gap-1.5`}>
               {current && <ProviderLogo agent={current.agent} className="size-3 text-muted-foreground" />}
               <span>{current ? (current.name === current.agent ? "default" : current.label) : "プロファイル"}</span>
               <ChevronsUpDown className="size-3 text-muted-foreground" aria-hidden />
@@ -74,23 +79,12 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
             </SelectContent>
           </Select>
 
-          <Popover>
-            <PopoverTrigger asChild>
-              <button type="button" aria-label="リポジトリ" title={draft.repo} className="flex h-6 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent">
-                <FolderOpen className="size-3 text-muted-foreground" aria-hidden />
-                <span className="font-mono">{repoName(draft.repo)}</span>
-              </button>
-            </PopoverTrigger>
-            <PopoverContent side="top" align="start" className="w-80 p-2">
-              <Input
-                aria-label="リポジトリのパス"
-                value={draft.repo}
-                onChange={(e) => updateDraft(id, { repo: e.target.value })}
-                className="h-7 font-mono text-xs"
-                autoFocus
-              />
-            </PopoverContent>
-          </Popover>
+          <PopoverTrigger asChild>
+            <button type="button" aria-label="リポジトリ" title={draft.repo} className="flex h-6 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent data-[state=open]:bg-accent">
+              <FolderOpen className="size-3 text-muted-foreground" aria-hidden />
+              <span className="font-mono">{repoName(draft.repo)}</span>
+            </button>
+          </PopoverTrigger>
 
           <button
             type="button"
@@ -134,6 +128,19 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
           </button>
         </div>
       </div>
+      </PopoverAnchor>
+      </div>
+      <PopoverContent side="top" align="start" sideOffset={6} className="w-(--radix-popper-anchor-width) p-2">
+        <Input
+          aria-label="リポジトリのパス"
+          value={draft.repo}
+          onChange={(e) => updateDraft(id, { repo: e.target.value })}
+          className="h-7 font-mono text-xs"
+          autoFocus
+        />
+      </PopoverContent>
+      </Popover>
+
     </section>
   );
 }
