@@ -11,6 +11,7 @@ use std::path::{Component, Path, PathBuf};
 use plyfold_acp::SpawnSpec;
 use serde::{Deserialize, Serialize};
 
+pub mod edit;
 pub mod secrets;
 
 pub use secrets::{KeychainStore, MemoryStore, SecretStore};
@@ -33,6 +34,8 @@ pub enum ProfileError {
     Io(#[from] std::io::Error),
     #[error("設定ファイルの形式が不正です: {0}")]
     Parse(#[from] toml::de::Error),
+    #[error("{0}")]
+    Form(String),
 }
 
 /// ACP で起動するエージェント

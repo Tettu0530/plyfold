@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 use plyfold_acp::{AcpClient, AcpError, AgentMessage, Direction, FrameSink};
@@ -21,6 +21,7 @@ use tokio::sync::{broadcast, mpsc};
 
 pub use plyfold_store::SessionStatus as Status;
 
+pub mod check;
 pub mod info;
 pub use info::{Category, Choice, ConfigOption, Cost, LiveTurn, SessionInfo, TokenUsage, TurnStats};
 use info::TurnClock;
@@ -139,7 +140,8 @@ impl Live {
 
 struct Inner {
     store: Store,
-    config: Config,
+    /// 画面からプロファイルを編集したら差し替える（動いているセッションには影響しない）
+    config: RwLock<Config>,
     secrets: Arc<dyn SecretStore>,
     state_dir: PathBuf,
     worktrees: Worktrees,
@@ -189,7 +191,7 @@ impl Engine {
         Ok(Self {
             inner: Arc::new(Inner {
                 store,
-                config: opts.config,
+                config: RwLock::new(opts.config),
                 secrets: opts.secrets,
                 worktrees: Worktrees::new(opts.state_dir.join("worktrees")),
                 state_dir: opts.state_dir,
@@ -209,6 +211,17 @@ impl Engine {
         &self.inner.store
     }
 
+    /// 接続テスト（記録には残さない）
+    pub async fn check_profile(&self, profile: &str) -> check::CheckResult {
+        let config = self.inner.config.read().unwrap().clone();
+        check::check_profile(&config, profile, &self.inner.state_dir, self.inner.secrets.as_ref()).await
+    }
+
+    /// プロファイルの設定を差し替える（次に起動するセッションから効く）
+    pub fn set_config(&self, config: Config) {
+        *self.inner.config.write().unwrap() = config;
+    }
+
     pub fn is_running(&self, id: &str) -> bool {
         self.inner.live.lock().unwrap().contains_key(id)
     }
@@ -217,6 +230,8 @@ impl Engine {
         let inner = &self.inner;
         let agent = inner
             .config
+            .read()
+            .unwrap()
             .profiles
             .get(&req.profile)
             .map(|p| p.agent.clone())
@@ -275,7 +290,7 @@ impl Engine {
         let inner = self.inner.clone();
         inner.set_status(id, SessionStatus::Starting);
         let result: Result<(), CoreError> = async {
-            let resolved = inner.config.resolve(profile, &inner.state_dir, cwd, inner.secrets.as_ref())?;
+            let resolved = inner.config.read().unwrap().resolve(profile, &inner.state_dir, cwd, inner.secrets.as_ref())?;
             let mut msg = format!("起動: {} {}", resolved.spawn.command, resolved.spawn.args.join(" "));
             if !resolved.env_summary.is_empty() {
                 msg += &format!("（{}）", resolved.env_summary.join(", "));

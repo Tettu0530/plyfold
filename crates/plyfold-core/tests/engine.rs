@@ -307,3 +307,20 @@ async fn session_info_config_switching_and_usage() {
     assert_eq!(info.total.input, 100);
     eng.close_session(&s.id).await.unwrap();
 }
+
+#[tokio::test]
+async fn check_profile_reports_reply_and_model() {
+    let state = tmp("check");
+    let engine = engine(&state, 30_000);
+    let r = engine.check_profile("mock-keyed").await;
+    assert!(r.ok, "{:?}", r.error);
+    assert!(!r.reply.is_empty());
+    assert_eq!(r.configured_model.as_deref(), Some("mock-large"));
+    assert_eq!(r.reported_model.as_deref(), Some("mock-large-2026"));
+    assert!(r.first_text_ms.is_some());
+    // 記録には残さない
+    assert!(engine.store().list_sessions().unwrap().is_empty());
+
+    let bad = engine.check_profile("nope").await;
+    assert!(!bad.ok && bad.error.is_some());
+}

@@ -1,11 +1,12 @@
 //! Plyfold のデスクトップアプリ: エンジンを Tauri のコマンドとして公開し、EngineEvent を画面へ流す
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use plyfold_core::{Category, Engine, EngineOptions, SessionInfo, StartSession};
-use plyfold_profile::{Config, KeychainStore, default_state_dir};
+use plyfold_profile::edit::{self, AuthKind, ProfileForm};
+use plyfold_profile::{Config, KeychainStore, SecretStore, default_state_dir};
 use plyfold_store::{EventRecord, SessionRecord};
 use plyfold_worktree::Diff;
 use serde::Serialize;
@@ -17,7 +18,20 @@ const KEYCHAIN_SERVICE: &str = "plyfold";
 
 struct AppState {
     engine: Engine,
-    config: Config,
+    config: RwLock<Config>,
+    config_path: PathBuf,
+    secrets: Arc<KeychainStore>,
+}
+
+impl AppState {
+    /// config.toml を読み直し、画面とエンジンの両方に反映する
+    fn reload(&self) -> CmdResult<()> {
+        let mut config = Config::load(&self.config_path).map_err(err)?;
+        resolve_mock_agent(&mut config);
+        self.engine.set_config(config.clone());
+        *self.config.write().unwrap() = config;
+        Ok(())
+    }
 }
 
 /// コマンドのエラーは文字列で返す（画面でそのまま見せる）
@@ -41,7 +55,7 @@ struct ProfileSummary {
 
 #[tauri::command]
 fn list_profiles(state: State<'_, AppState>) -> Vec<ProfileSummary> {
-    let cfg = &state.config;
+    let cfg = state.config.read().unwrap();
     let mut out: Vec<ProfileSummary> = cfg
         .profiles
         .iter()
@@ -174,16 +188,133 @@ fn resolve_mock_agent(config: &mut Config) {
     }
 }
 
+#[derive(Serialize)]
+struct ProfileDetail {
+    form: ProfileForm,
+    supported: Vec<AuthKind>,
+    /// キーを渡す環境変数
+    key_var: Option<String>,
+    /// キーチェーンのアカウント名
+    key_account: Option<String>,
+    key_set: bool,
+    /// 保存したキーの末尾 4 文字（どのキーかを見分けるため。全体は画面に渡さない）
+    key_tail: Option<String>,
+    /// 同じキーを使っているほかのプロファイル
+    shared_with: Vec<String>,
+    /// 専用ディレクトリにするときに差し替える環境変数
+    config_dir_env: Option<String>,
+}
+
+#[tauri::command]
+fn profile_detail(state: State<'_, AppState>, name: String) -> CmdResult<ProfileDetail> {
+    let cfg = state.config.read().unwrap();
+    let def = cfg.profiles.get(&name).ok_or_else(|| format!("プロファイル '{name}' はありません"))?;
+    let form = edit::describe(&name, def);
+    let account = edit::key_account(&name, def);
+    let value = account.as_ref().and_then(|(_, a)| state.secrets.get(a).ok());
+    let shared_with = match &account {
+        Some((_, a)) => cfg
+            .profiles
+            .iter()
+            .filter(|(n, d)| **n != name && edit::key_account(n, d).is_some_and(|(_, b)| &b == a))
+            .map(|(n, _)| n.clone())
+            .collect(),
+        None => Vec::new(),
+    };
+    Ok(ProfileDetail {
+        supported: edit::supported_auth(&def.agent),
+        key_var: account.as_ref().map(|(v, _)| v.clone()),
+        key_account: account.as_ref().map(|(_, a)| a.clone()),
+        key_set: value.is_some(),
+        key_tail: value.map(|v| v.chars().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect()),
+        shared_with,
+        config_dir_env: cfg.agents.get(&def.agent).and_then(|a| a.config_dir_env.clone()),
+        form,
+    })
+}
+
+/// 保存する。`original` と名前が違えば名前を変える（キーチェーンの中身も移す）
+#[tauri::command]
+fn save_profile(state: State<'_, AppState>, form: ProfileForm, original: Option<String>) -> CmdResult<()> {
+    let (def, old_account) = {
+        let cfg = state.config.read().unwrap();
+        let renaming = original.as_deref().is_some_and(|o| o != form.name);
+        if original.is_none() || renaming {
+            edit::validate_name(&form.name, &cfg).map_err(err)?;
+            if cfg.profiles.contains_key(&form.name) {
+                return Err(format!("'{}' という名前のプロファイルはもうあります", form.name));
+            }
+        }
+        if !cfg.agents.contains_key(&form.agent) {
+            return Err(format!("エージェント '{}' はありません", form.agent));
+        }
+        let existing = original.as_ref().and_then(|o| cfg.profiles.get(o));
+        let def = edit::to_def(&form, existing).map_err(err)?;
+        let old_account = original.as_ref().zip(existing).and_then(|(o, d)| edit::key_account(o, d));
+        (def, old_account)
+    };
+    // 名前を変えたら、このプロファイル専用のキーを新しい名前のアカウントへ移す
+    if let (Some(orig), Some((_, old))) = (original.as_ref(), old_account.as_ref())
+        && orig != &form.name
+        && let Some((_, new)) = edit::key_account(&form.name, &def)
+        && new != *old
+        && let Ok(v) = state.secrets.get(old)
+    {
+        state.secrets.set(&new, &v).map_err(err)?;
+        let _ = state.secrets.delete(old);
+    }
+    edit::upsert_profile(&state.config_path, &form.name, &def).map_err(err)?;
+    if let Some(orig) = original.filter(|o| *o != form.name) {
+        edit::remove_profile(&state.config_path, &orig).map_err(err)?;
+    }
+    state.reload()
+}
+
+/// キーをキーチェーンに保存する（値はログにも画面にも戻さない）
+#[tauri::command]
+fn set_profile_key(state: State<'_, AppState>, name: String, value: String) -> CmdResult<()> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err("キーが空です".into());
+    }
+    let cfg = state.config.read().unwrap();
+    let def = cfg.profiles.get(&name).ok_or_else(|| format!("プロファイル '{name}' はありません"))?;
+    let (_, account) = edit::key_account(&name, def).ok_or("このプロファイルはキーを使いません")?;
+    state.secrets.set(&account, value).map_err(err)
+}
+
+/// 削除する。このプロファイル専用のキーもキーチェーンから消す（共有のキーは残す）
+#[tauri::command]
+fn delete_profile(state: State<'_, AppState>, name: String) -> CmdResult<()> {
+    let own = {
+        let cfg = state.config.read().unwrap();
+        let def = cfg.profiles.get(&name).ok_or_else(|| format!("プロファイル '{name}' はありません"))?;
+        edit::key_account(&name, def).filter(|(var, a)| *a == format!("{name}/{var}"))
+    };
+    edit::remove_profile(&state.config_path, &name).map_err(err)?;
+    if let Some((_, a)) = own {
+        let _ = state.secrets.delete(&a);
+    }
+    state.reload()
+}
+
+#[tauri::command]
+async fn check_profile(state: State<'_, AppState>, name: String) -> CmdResult<plyfold_core::check::CheckResult> {
+    Ok(state.engine.check_profile(&name).await)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             let state_dir = default_state_dir();
-            let mut config = Config::load(&state_dir.join("config.toml"))?;
+            let config_path = state_dir.join("config.toml");
+            let mut config = Config::load(&config_path)?;
             resolve_mock_agent(&mut config);
+            let secrets = Arc::new(KeychainStore::new(KEYCHAIN_SERVICE));
             let engine = Engine::open(EngineOptions {
                 state_dir,
                 config: config.clone(),
-                secrets: Arc::new(KeychainStore::new(KEYCHAIN_SERVICE)),
+                secrets: secrets.clone(),
                 stall_after: Duration::from_secs(120),
             })?;
 
@@ -202,7 +333,7 @@ pub fn run() {
                 }
             });
 
-            app.manage(AppState { engine, config });
+            app.manage(AppState { engine, config: RwLock::new(config), config_path, secrets });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -219,6 +350,11 @@ pub fn run() {
             set_by_category,
             session_info,
             session_diff,
+            profile_detail,
+            save_profile,
+            set_profile_key,
+            delete_profile,
+            check_profile,
         ])
         .run(tauri::generate_context!())
         .expect("Plyfold を起動できません");
