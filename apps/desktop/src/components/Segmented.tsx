@@ -2,7 +2,7 @@ import { motion } from "motion/react";
 import { useId } from "react";
 
 import { cn } from "@/lib/utils";
-import { spring, squashX } from "./motion";
+import { press, snappy } from "./motion";
 
 interface Props<T extends string | number> {
   label: string;
@@ -33,13 +33,12 @@ export function Segmented<T extends string | number>({ label, value, options, on
             )}
           >
             {on && (
-              <motion.span layoutId={`thumb-${id}`} transition={spring} className="absolute inset-0 -z-10">
-                <motion.span
-                  key={String(value)}
-                  {...squashX}
-                  className="block size-full rounded-md bg-background shadow-[0_1px_2px_rgba(0,0,0,.4)]"
-                />
-              </motion.span>
+              <motion.span
+                layoutId={`thumb-${id}`}
+                whileTap={press.whileTap}
+                transition={{ layout: snappy, scale: press.transition }}
+                className="absolute inset-0 -z-10 rounded-md bg-background shadow-[0_1px_2px_rgba(0,0,0,.4)]"
+              />
             )}
             {o.label}
           </button>

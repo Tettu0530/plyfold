@@ -3,6 +3,7 @@ import { MotionConfig } from "motion/react";
 import { useEffect } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { MotionLab } from "./components/MotionLab";
 import { NewSessionDialog } from "./components/NewSessionDialog";
 import { Pane } from "./components/pane/Pane";
 import { SearchCard } from "./components/SearchCard";
@@ -20,6 +21,9 @@ function useShortcuts() {
       if (e.key === "k") {
         e.preventDefault();
         s.setSearchOpen(!s.searchOpen);
+      } else if (e.key === ",") {
+        e.preventDefault();
+        s.setLabOpen(true);
       } else if (e.key === "n") {
         e.preventDefault();
         s.setNewSessionOpen(true);
@@ -103,6 +107,7 @@ export default function App() {
         </div>
         <SearchCard />
         <NewSessionDialog />
+        <MotionLab />
       </TooltipProvider>
     </MotionConfig>
   );

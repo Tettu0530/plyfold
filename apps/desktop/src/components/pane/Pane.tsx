@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { ProviderLogo, StatusIcon } from "../icons";
-import { spring } from "../motion";
+import { smooth } from "../motion";
 import { Composer } from "./Composer";
 import { PermissionCard } from "./PermissionCard";
 import { Transcript } from "./Transcript";
@@ -58,7 +58,7 @@ export function Pane({ index }: { index: number }) {
   return (
     <motion.section
       layout
-      transition={spring}
+      transition={smooth}
       aria-label={`ペイン ${index + 1}: ${r.title}`}
       onMouseDown={() => focusPane(index)}
       className={cn("flex min-w-0 flex-col border-r last:border-r-0", focused && "bg-white/[0.01]")}

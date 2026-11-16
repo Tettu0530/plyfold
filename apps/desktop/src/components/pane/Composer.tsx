@@ -7,7 +7,7 @@ import { tokens } from "@/lib/format";
 import type { Category, ConfigOption, SessionInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { isDangerMode, ModeIcon, ProviderLogo } from "../icons";
-import { squashX } from "../motion";
+import { smooth } from "../motion";
 
 function option(info: SessionInfo | null, c: Category): ConfigOption | undefined {
   return info?.config.find((o) => o.category === c);
@@ -95,7 +95,7 @@ function ControlRow({
             isDangerMode(mode) ? "border-error/40 text-error" : "border-border",
           )}
         >
-          <motion.span key={mode ?? ""} {...squashX} className="flex items-center gap-1.5">
+          <motion.span key={mode ?? ""} initial={{ opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }} transition={smooth} className="flex items-center gap-1.5">
             <ModeIcon mode={mode} />
             {mode}
           </motion.span>
@@ -109,7 +109,7 @@ function ControlRow({
           className="flex items-center gap-1.5 font-mono text-muted-foreground tabular"
         >
           <span role="progressbar" aria-label="コンテキストの使用量" aria-valuenow={ctxPct} aria-valuemin={0} aria-valuemax={100} className="h-1 w-10 overflow-hidden rounded-sm bg-muted">
-            <motion.span className="block h-full bg-foreground" animate={{ width: `${ctxPct}%` }} />
+            <motion.span className="block h-full bg-foreground" animate={{ width: `${ctxPct}%` }} transition={smooth} />
           </span>
           {ctxPct}%
         </span>

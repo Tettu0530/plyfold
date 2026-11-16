@@ -6,7 +6,7 @@ import { age, repoName } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { ProviderLogo, STATUS, StatusIcon } from "./icons";
-import { spring } from "./motion";
+import { smooth, snappy } from "./motion";
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return <kbd className="font-mono text-xs text-muted-foreground">{children}</kbd>;
@@ -19,6 +19,7 @@ export function Sidebar() {
   const openInPane = useStore((s) => s.openInPane);
   const setSearchOpen = useStore((s) => s.setSearchOpen);
   const setNewSessionOpen = useStore((s) => s.setNewSessionOpen);
+  const setLabOpen = useStore((s) => s.setLabOpen);
   const [closed, setClosed] = useState<Record<string, boolean>>({});
 
   // リポジトリごとにまとめ、新しく更新されたものから
@@ -70,7 +71,7 @@ export function Sidebar() {
                 onClick={() => setClosed((c) => ({ ...c, [repo]: !c[repo] }))}
                 className="mt-1 flex h-7 w-full items-center gap-1 rounded-md pr-2 pl-1 text-xs text-muted-foreground hover:text-foreground"
               >
-                <motion.span animate={{ rotate: isClosed ? 0 : 90 }} transition={spring} className="flex">
+                <motion.span animate={{ rotate: isClosed ? 0 : 90 }} transition={snappy} className="flex">
                   <ChevronRight className="size-3.5" aria-hidden />
                 </motion.span>
                 <span className="grow text-left">{repo}</span>
@@ -83,7 +84,7 @@ export function Sidebar() {
                   return (
                     <motion.a
                       layout
-                      transition={spring}
+                      transition={smooth}
                       key={r.id}
                       href="#"
                       aria-current={open.has(r.id) ? "true" : undefined}
@@ -121,7 +122,7 @@ export function Sidebar() {
           <KeyRound className="size-4" aria-hidden />
           <span className="grow text-left">プロファイル</span>
         </button>
-        <button type="button" className="flex h-7 items-center gap-2 rounded-lg px-2 text-muted-foreground hover:bg-accent hover:text-foreground">
+        <button type="button" onClick={() => setLabOpen(true)} className="flex h-7 items-center gap-2 rounded-lg px-2 text-muted-foreground hover:bg-accent hover:text-foreground">
           <Settings className="size-4" aria-hidden />
           <span className="grow text-left">設定</span>
           <Kbd>⌘,</Kbd>

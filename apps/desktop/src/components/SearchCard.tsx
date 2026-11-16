@@ -6,6 +6,7 @@ import { repoName } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { ProviderLogo } from "./icons";
+import { smooth, snappy } from "./motion";
 
 interface Entry {
   key: string;
@@ -77,16 +78,15 @@ export function SearchCard() {
             onClick={close}
             className="absolute inset-0 cursor-default bg-black/45"
             initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: smooth }}
+            exit={{ opacity: 0, transition: smooth }}
           />
           <motion.div
             role="dialog"
             aria-label="検索"
-            initial={{ opacity: 0, x: -140, y: -40, scaleX: 0.15, scaleY: 0.06 }}
-            animate={{ opacity: 1, x: 0, y: 0, scaleX: 1, scaleY: 1 }}
-            exit={{ opacity: 0, scale: 0.9, y: -8 }}
-            transition={{ type: "spring", stiffness: 380, damping: 18, mass: 0.9 }}
+            initial={{ opacity: 0, x: -120, y: -24, scale: 0.4 }}
+            animate={{ opacity: 1, x: 0, y: 0, scale: 1, transition: snappy }}
+            exit={{ opacity: 0, scale: 0.96, y: -6, transition: smooth }}
             style={{ transformOrigin: "0 0" }}
             className="absolute top-24 left-1/2 -ml-[280px] flex w-[560px] flex-col rounded-[14px] border bg-card/85 shadow-[0_16px_48px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,255,255,.06)] backdrop-blur-2xl backdrop-saturate-150"
             onKeyDown={(e) => {

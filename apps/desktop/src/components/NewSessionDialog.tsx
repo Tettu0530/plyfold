@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { AGENT_NAMES, ProviderLogo } from "./icons";
-import { spring } from "./motion";
+import { snappy } from "./motion";
 
 const LAST_REPO_KEY = "plyfold.lastRepo";
 
@@ -102,7 +102,7 @@ export function NewSessionDialog() {
                   )}
                 >
                   <span className={cn("mt-px flex size-4 shrink-0 items-center justify-center rounded-full border", on ? "border-foreground" : "border-input")}>
-                    {on && <motion.span layoutId="ns-radio" transition={spring} className="block size-2 rounded-full bg-foreground" />}
+                    {on && <motion.span layoutId="ns-radio" transition={snappy} className="block size-2 rounded-full bg-foreground" />}
                   </span>
                   <span className="flex min-w-0 flex-col gap-0.5">
                     <span className="flex items-center gap-1.5">

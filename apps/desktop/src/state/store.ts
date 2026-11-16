@@ -35,6 +35,7 @@ interface State {
   focusedPane: number;
   searchOpen: boolean;
   newSessionOpen: boolean;
+  labOpen: boolean;
   ready: boolean;
 
   init: () => Promise<void>;
@@ -44,6 +45,7 @@ interface State {
   focusPane: (pane: number) => void;
   setSearchOpen: (open: boolean) => void;
   setNewSessionOpen: (open: boolean) => void;
+  setLabOpen: (open: boolean) => void;
   startSession: (args: { profile: string; repo: string; title: string; worktree: boolean; prompt?: string }) => Promise<void>;
   sendPrompt: (id: string, text: string) => Promise<void>;
   cancel: (id: string) => Promise<void>;
@@ -105,6 +107,7 @@ export const useStore = create<State>((set, get) => ({
   focusedPane: 0,
   searchOpen: false,
   newSessionOpen: false,
+  labOpen: false,
   ready: false,
 
   init: async () => {
@@ -153,6 +156,7 @@ export const useStore = create<State>((set, get) => ({
   focusPane: (focusedPane) => set({ focusedPane }),
   setSearchOpen: (searchOpen) => set({ searchOpen }),
   setNewSessionOpen: (newSessionOpen) => set({ newSessionOpen }),
+  setLabOpen: (labOpen) => set({ labOpen }),
 
   startSession: async ({ prompt, ...args }) => {
     const rec = await api.startSession(args);
