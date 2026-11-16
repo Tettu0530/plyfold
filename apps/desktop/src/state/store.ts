@@ -172,9 +172,14 @@ export const useStore = create<State>((set, get) => ({
     } else {
       const target = pane ?? firstFreePane(s.panes, s.paneCount, s.focusedPane);
       const panes = [...s.panes];
+      const displaced = panes[target];
       panes[target] = id;
+      // 入れ替えられたセッションは、ペインから縮んで元の場所（サイドバーの行）の裏へ戻る
+      if (displaced) liquidCloseFrom(`pane-${target}-out`, { anchor: anchorOf(displaced), target: () => paneEl(target), toLook: PANE_LOOK });
       if (from) liquidOpen(`pane-${target}`, { anchor: from, target: () => paneEl(target), toLook: PANE_LOOK });
-      set({ panes, focusedPane: target });
+      const drafts = { ...s.drafts };
+      if (isDraft(displaced)) delete drafts[displaced!];
+      set({ panes, focusedPane: target, drafts });
     }
     if (isDraft(id)) return;
     // 止まっているセッションは、記録から会話を読み込む
