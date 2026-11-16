@@ -33,6 +33,11 @@ export function liquidAnchor(name: string) {
   };
 }
 
+/** 登録した出発点の要素 */
+export function liquidAnchorElement(name: string): HTMLElement | undefined {
+  return anchors.get(name);
+}
+
 const GOO_ID = "plyfold-goo";
 
 /** goo フィルタの定義（アプリに 1 つ置く） */
@@ -102,6 +107,8 @@ interface Options {
   toLook?: Look;
   /** true なら「開いた状態」から始める（すでに表示中の面を、閉じる動きで出発点へ戻すとき） */
   initiallyOpen?: boolean;
+  /** 出発点の上に実体を重ねる量（0〜1、GPU の描画だけ）。0 より大きいあいだ、出発点は手前に出さないこと */
+  over?: MotionValue<number>;
 }
 
 export interface Look {
@@ -128,7 +135,7 @@ const TRAIL = appleSpring({ duration: 0.45, bounce: 0.2 });
  * 分離アニメーション。`revealed` が true のあいだ本物を見せ、`layer` をどこかに描く。
  * `mounted` は本物を DOM に置いておくべきか（動いているあいだも置いて大きさを測る）
  */
-export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRadius = 8, color = "#262626", style = "pop", zIndex = 60, sizeLag = 0.12, fromLook = DEFAULT_FROM, toLook = DEFAULT_TO, initiallyOpen = false }: Options) {
+export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRadius = 8, color = "#262626", style = "pop", zIndex = 60, sizeLag = 0.12, fromLook = DEFAULT_FROM, toLook = DEFAULT_TO, initiallyOpen = false, over }: Options) {
   const reduced = useReducedMotion();
   const [phase, setPhase] = useState<Phase>(initiallyOpen ? "open" : "closed");
   const L = useMotionValue(0);
@@ -307,6 +314,7 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
                 lineS: parseColor(borderColor.get()),
                 shadow: parseShadow(boxShadow.get()),
                 opacity: opacity.get(),
+                over: over?.get() ?? 0,
               };
             },
           });
@@ -439,7 +447,8 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
   const popScaleY = useTransform(popScaleX, (s) => 1 / Math.sqrt(s));
 
   const animating = phase === "opening" || phase === "closing";
-  const edgesRef = useMemo(() => ({ L, T, R, B, rad }), [L, T, R, B, rad]);
+  // look は開き具合（0 = 出発点、1 = 行き先。閉じるときは 1 から 0 へ）
+  const edgesRef = useMemo(() => ({ L, T, R, B, rad, look }), [L, T, R, B, rad, look]);
   if (style === "pop") {
     // GPU が使えるときは、出発点と融合した形を liquid-gl のキャンバスに描く（DOM の面は出さない）。
     // 使えなければ、枠線と影の付いた DOM の面だけを描く（融合はしない）

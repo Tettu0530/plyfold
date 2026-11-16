@@ -2,7 +2,8 @@
 // 動いている分離アニメーションごとに、出発点と実体の距離場を smin で 1 つにして塗る（式は sdf.ts と同じ）。
 //
 //   - 塗り・枠線・影は、smin の混ざり具合で出発点の見た目と実体の見た目を混ぜる
-//   - 出発点（本物のボタン）の中は塗らない（本物の上に重ねない。出発点から生えて見える）
+//   - 出発点（本物のボタン）の中は塗らない（本物の上に重ねない。出発点から生えて見える）。
+//     ただし over（0〜1）のぶんだけ、実体だけの形を出発点の上に重ねて塗る（メニューは開いている途中から上に乗る）
 //   - 縁は 1 デバイス px で滑らかにする
 
 export interface Rgba {
@@ -25,6 +26,8 @@ export interface BlobFrame {
   lineS: Rgba;
   shadow: { x: number; y: number; blur: number; color: Rgba };
   opacity: number;
+  /** 出発点の上に実体を重ねる量（0 = 出発点の裏、1 = 出発点の上）。出発点は手前に出さずに描くこと */
+  over: number;
 }
 
 export interface Blob {
@@ -51,6 +54,7 @@ uniform vec4 uFillA; uniform vec4 uFillS;
 uniform vec4 uLineA; uniform vec4 uLineS;
 uniform vec4 uShadow; uniform vec3 uShadowGeo;   // 色、ずれ x・y とぼかし
 uniform float uOpacity;
+uniform float uOver;
 out vec4 outColor;
 
 float sdBox(vec2 p, vec4 b, float r) {
@@ -68,7 +72,8 @@ vec2 smin(float a, float b, float k) {
 void main() {
   vec2 p = vec2(gl_FragCoord.x, uView.y * uDpr - gl_FragCoord.y) / uDpr;
   float dA = sdBox(p, uA, uAr);
-  vec2 u = smin(dA, sdBox(p, uS, uSr), uK);
+  float dS = sdBox(p, uS, uSr);
+  vec2 u = smin(dA, dS, uK);
   float px = 1.0 / uDpr;
   float cov = clamp(0.5 - u.x / px, 0.0, 1.0);
   // 枠線: 縁から内側 1px の帯（CSS の border と同じ位置）
@@ -86,7 +91,20 @@ void main() {
   float la = line.a * band;
   c = vec4(line.rgb * la, la) + c * (1.0 - la);
   // 出発点の中は塗らない
-  c *= 1.0 - clamp(0.5 - dA / px, 0.0, 1.0);
+  float inA = clamp(0.5 - dA / px, 0.0, 1.0);
+  c *= 1.0 - inA;
+  // 出発点の上に乗るぶん: 出発点の中に、実体だけの形（影・塗り・枠線）を重ねる
+  if (uOver > 0.0) {
+    float covS = clamp(0.5 - dS / px, 0.0, 1.0);
+    float bandS = covS - clamp(0.5 - (dS + 1.0) / px, 0.0, 1.0);
+    float shS = uShadow.a * (1.0 - smoothstep(-sig, sig * 2.0, sdBox(ps, uS, uSr)));
+    float faS = uFillS.a * covS;
+    vec4 o = vec4(uShadow.rgb * shS, shS) * (1.0 - faS) + vec4(uFillS.rgb * faS, faS);
+    float laS = uLineS.a * bandS;
+    o = vec4(uLineS.rgb * laS, laS) + o * (1.0 - laS);
+    o *= uOver * inA;
+    c = o + c * (1.0 - o.a);
+  }
   outColor = c * uOpacity;
 }`;
 
@@ -123,7 +141,7 @@ function createScene(): Scene | null {
     gl.attachShader(prog, compile(gl, gl.FRAGMENT_SHADER, FRAG));
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) ?? "link");
-    const names = ["uRect", "uView", "uDpr", "uA", "uAr", "uS", "uSr", "uK", "uFillA", "uFillS", "uLineA", "uLineS", "uShadow", "uShadowGeo", "uOpacity"];
+    const names = ["uRect", "uView", "uDpr", "uA", "uAr", "uS", "uSr", "uK", "uFillA", "uFillS", "uLineA", "uLineS", "uShadow", "uShadowGeo", "uOpacity", "uOver"];
     const loc = Object.fromEntries(names.map((n) => [n, gl.getUniformLocation(prog, n)]));
     gl.bindVertexArray(gl.createVertexArray());
     document.body.appendChild(canvas);
@@ -190,6 +208,7 @@ function render(sc: Scene) {
     col("uShadow", f.shadow.color);
     gl.uniform3f(loc.uShadowGeo, f.shadow.x, f.shadow.y, f.shadow.blur);
     gl.uniform1f(loc.uOpacity, f.opacity);
+    gl.uniform1f(loc.uOver, f.over);
     // 描く範囲: 2 つの箱と、融合のふくらみ（k/4）と影
     const pad = f.k / 4 + f.shadow.blur * 1.5 + Math.max(Math.abs(f.shadow.x), Math.abs(f.shadow.y)) + 2;
     gl.uniform4f(loc.uRect, Math.min(f.a.l, f.s.l) - pad, Math.min(f.a.t, f.s.t) - pad, Math.max(f.a.r, f.s.r) + pad, Math.max(f.a.b, f.s.b) + pad);

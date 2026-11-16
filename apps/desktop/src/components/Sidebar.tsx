@@ -9,7 +9,7 @@ import { ProviderLogo, STATUS, StatusIcon } from "./icons";
 import { Keys } from "./Keys";
 import { SessionMenu } from "./SessionMenu";
 import { liquidAnchor } from "./liquid/liquid";
-import { useLiquidActiveAnchors } from "./liquid/stage";
+import { useLiquidActiveAnchors, useLiquidMovingAnchors } from "./liquid/stage";
 import { smooth, snappy } from "./motion";
 
 export function Sidebar() {
@@ -27,6 +27,8 @@ export function Sidebar() {
   const searchLayer = useStore((s) => s.searchLayerActive);
   const unread = useStore((s) => s.unread);
   const active = useLiquidActiveAnchors();
+  // 右クリックのメニューは途中で行を実体の下へ下げる。下げても、動いているあいだは選択中の色で残す
+  const moving = useLiquidMovingAnchors();
   const searchOpen = useStore((s) => s.searchOpen);
   const [closed, setClosed] = useState<Record<string, boolean>>({});
   // 名前を変えている行
@@ -121,9 +123,9 @@ export function Sidebar() {
                         void openInPane(r.id, undefined, `session:${r.id}`);
                       }}
                       className={cn(
-                        "relative mb-1 flex flex-col gap-1 rounded-lg p-2 text-foreground no-underline hover:bg-accent",
-                        open.has(r.id) && "bg-accent",
-                        active.has(`session:${r.id}`) && "z-[57] bg-accent",
+                        "relative mb-1 flex flex-col gap-1 rounded-lg p-2 text-foreground no-underline hover:bg-accent data-[state=open]:bg-accent",
+                        (open.has(r.id) || moving.has(`session:${r.id}`)) && "bg-accent",
+                        active.has(`session:${r.id}`) && "z-[57]",
                       )}
                     >
                       <span className="flex min-w-0 items-center gap-2">

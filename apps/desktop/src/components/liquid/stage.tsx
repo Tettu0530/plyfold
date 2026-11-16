@@ -6,11 +6,12 @@
 //   useLiquidRevealed("pane-0")                                          … 本物を見せてよいか（動いているあいだは false）
 //
 // 実体の描画は、アプリに 1 つ置く <LiquidStage /> がまとめて行う。
+import { useMotionValue } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 
 import { useStore } from "@/state/store";
-import { useLiquidMorph, type Look } from "./liquid";
+import { liquidAnchorElement, useLiquidMorph, type Look } from "./liquid";
 
 export interface LiquidJobOptions {
   anchor: string;
@@ -28,6 +29,11 @@ export interface LiquidJobOptions {
    * 開くときは出だしだけ、閉じるときは戻ってくる終わりだけにする（広がった実体の上にボタンが残らない）
    */
   cover?: boolean;
+  /**
+   * メニューのように、行き先が出発点に重なって開くとき。出だしは出発点の裏から出て、
+   * 開いている途中（開き具合 0.2〜0.5）から実体を出発点の上に乗せる（閉じるときは逆に、途中で裏へ戻る）
+   */
+  rise?: boolean;
   fromLook?: Look;
   toLook?: Look;
 }
@@ -38,7 +44,7 @@ interface Job extends LiquidJobOptions {
   initiallyOpen: boolean;
   /** 同じ id で開き直したときに作り直すための番号 */
   nonce: number;
-  /** cover のとき、いま出発点を実体の下に下げているか */
+  /** cover / rise のとき、いま出発点を実体の下に下げているか */
   lowered?: boolean;
   /** 開ききって本物を見せているが、液架橋の尾がまだ戻りきっていない */
   lingering?: boolean;
@@ -71,7 +77,8 @@ export function liquidClose(id: string) {
 /** 今表示中の面を、閉じる動きで出発点へ戻す（liquidOpen で開いていない面にも使える） */
 export function liquidCloseFrom(id: string, opts: LiquidJobOptions) {
   useStage.setState((s) => ({
-    jobs: { ...s.jobs, [id]: { ...opts, id, open: false, initiallyOpen: true, nonce: ++nonce } },
+    // 開いた状態から始めるので、cover / rise の出発点は最初から実体の下
+    jobs: { ...s.jobs, [id]: { ...opts, id, open: false, initiallyOpen: true, nonce: ++nonce, lowered: !!(opts.cover || opts.rise) } },
     revealed: { ...s.revealed, [id]: false },
   }));
 }
@@ -86,11 +93,22 @@ export function useLiquidBusy(): boolean {
   return useStage((s) => Object.keys(s.jobs).length > 0);
 }
 
-/** いま動いている分離アニメーションの出発点の名前（出発点を実体より手前に出すため） */
+/** 分離アニメーションの出発点のうち、いま実体より手前に出すものの名前（z-[57] を付ける） */
 export function useLiquidActiveAnchors(): Set<string> {
   const key = useStage((s) =>
     Object.values(s.jobs)
       .filter((j) => !j.lowered)
+      .map((j) => j.anchor)
+      .sort()
+      .join("\n"),
+  );
+  return new Set(key ? key.split("\n") : []);
+}
+
+/** 分離アニメーションが動いている出発点の名前（下げているものも含む。選択中の色で残すため） */
+export function useLiquidMovingAnchors(): Set<string> {
+  const key = useStage((s) =>
+    Object.values(s.jobs)
       .map((j) => j.anchor)
       .sort()
       .join("\n"),
@@ -140,9 +158,10 @@ export function useLiquidClip(id: string, ref: React.RefObject<HTMLElement | nul
         const right = Math.max(0, box.right - r);
         const bottom = Math.max(0, box.bottom - b);
         el.style.clipPath = `inset(${top}px ${right}px ${bottom}px ${left}px round ${e.rad.get()}px)`;
-        // 面積の割合で見せる（3 割から 8 割まで広がるあいだにフェード）
+        // 面積の割合で見せる（3 割から 8 割まで広がるあいだにフェード）。
+        // 出発点が行き先と同じくらい大きい（右クリックの行など）と最初から面積が足りるので、開き具合でも抑える
         const k = Math.min(1, Math.max(0, ((r - l) * (b - t)) / (box.width * box.height)));
-        const x = Math.min(1, Math.max(0, (k - 0.3) / 0.5));
+        const x = Math.min(1, Math.max(0, (k - 0.3) / 0.5), Math.max(0, (e.look.get() - 0.3) / 0.5));
         el.style.opacity = String(x * x * (3 - 2 * x));
         el.style.transition = "none";
         el.style.animation = "none";
@@ -177,7 +196,10 @@ export function useLiquidMenu(id: string, anchor: string) {
   // 動いているあいだは、最初のフレームから隠しておく（フェードは useLiquidClip が毎フレーム上書きする）
   const moving = useLiquidClip(id, ref);
   const onOpenChange = (open: boolean) => {
-    const base = { anchor, radius: 8, anchorRadius: 6, fromLook: CHIP_LOOK, toLook: MENU_LOOK };
+    // 出発点の角の丸みは本物に合わせる（途中で出発点を下げると、ずれた角が見える）
+    const el0 = liquidAnchorElement(anchor);
+    const anchorRadius = (el0 && parseFloat(getComputedStyle(el0).borderTopLeftRadius)) || 6;
+    const base = { anchor, radius: 8, anchorRadius, fromLook: CHIP_LOOK, toLook: MENU_LOOK, rise: true };
     if (open) {
       liquidOpen(id, { ...base, target: () => ref.current });
       return;
@@ -211,6 +233,8 @@ function JobView({ job }: { job: Job }) {
       return job.target();
     },
   }).current as React.RefObject<HTMLElement | null>;
+  // 出発点の上に実体を乗せる量（cover / rise）。下げた状態から始める面は 1 から
+  const over = useMotionValue(job.lowered ? 1 : 0);
   const { revealed, mounted, layer, edges, settling } = useLiquidMorph(job.open, {
     anchor: job.anchor,
     target: targetRef,
@@ -220,6 +244,7 @@ function JobView({ job }: { job: Job }) {
     style,
     sizeLag,
     initiallyOpen: job.initiallyOpen,
+    over,
     ...(job.fromLook ? { fromLook: job.fromLook } : {}),
     ...(job.toLook ? { toLook: job.toLook } : {}),
   });
@@ -236,15 +261,35 @@ function JobView({ job }: { job: Job }) {
     };
   }, [job.id, edges]);
 
-  // 全面の画面: 出発点を手前に出す時間を、裏から出る出だし／裏へ戻る終わりだけにする
+  // 出発点を下げる（実体を上に乗せる）。下げたあいだ、GPU の描画は実体を出発点の上にも塗る
   useEffect(() => {
-    if (!job.cover) return;
+    if (!job.cover && !job.rise) return;
     const setLowered = (lowered: boolean) =>
-      useStage.setState((s) => (s.jobs[job.id]?.nonce === job.nonce ? { jobs: { ...s.jobs, [job.id]: { ...s.jobs[job.id], lowered } } } : s));
-    setLowered(!job.open);
-    const t = setTimeout(() => setLowered(job.open), job.open ? 150 : 300);
+      useStage.setState((s) => {
+        const j = s.jobs[job.id];
+        if (j?.nonce !== job.nonce || !!j.lowered === lowered) return s;
+        return { jobs: { ...s.jobs, [job.id]: { ...j, lowered } } };
+      });
+    if (job.rise) {
+      // メニュー: 開き具合に合わせて、途中から上に乗せる（ぱっと替えず、0.2〜0.5 のあいだに重ねていく）
+      const update = (v: number) => {
+        const x = Math.min(1, Math.max(0, (v - 0.2) / 0.3));
+        const o = x * x * (3 - 2 * x);
+        over.set(o);
+        setLowered(o > 0);
+      };
+      update(edges.look.get());
+      return edges.look.on("change", update);
+    }
+    // 全面の画面: 出発点を手前に出す時間を、裏から出る出だし／裏へ戻る終わりだけにする
+    const lower = (lowered: boolean) => {
+      over.set(lowered ? 1 : 0);
+      setLowered(lowered);
+    };
+    lower(!job.open);
+    const t = setTimeout(() => lower(job.open), job.open ? 150 : 300);
     return () => clearTimeout(t);
-  }, [job.cover, job.open, job.id, job.nonce]);
+  }, [job.cover, job.rise, job.open, job.id, job.nonce, edges, over]);
 
   // 開ききったら、あるいは閉じきったら、登録を外す（開いた面はそのまま見えている）。
   // 開いた後も液架橋の尾が戻りきるまでは残す（そのあいだ、画面の切り抜きやクリックの止めは解く）
