@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { AGENT_NAMES, ProviderLogo } from "./icons";
+import { Keys } from "./Keys";
 import { snappy } from "./motion";
 
 const LAST_REPO_KEY = "plyfold.lastRepo";
@@ -150,7 +151,7 @@ export function NewSessionDialog() {
           </Button>
           <Button size="sm" className="h-7 gap-2" disabled={!profile || busy} onClick={() => void submit()}>
             {busy ? "起動中…" : "始める"}
-            <kbd className="font-mono text-xs opacity-60">⌘⏎</kbd>
+            <Keys keys={["cmd", "enter"]} onPrimary />
           </Button>
         </DialogFooter>
       </DialogContent>

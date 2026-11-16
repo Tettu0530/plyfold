@@ -1,4 +1,4 @@
-import { ArrowBigUp, ArrowRightToLine, ArrowUp, ChevronsUpDown } from "lucide-react";
+import { ArrowUp, ChevronsUpDown } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 
@@ -8,6 +8,7 @@ import { money, tokens } from "@/lib/format";
 import type { Category, ConfigOption, SessionInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { isDangerMode, ModeIcon, ProviderLogo } from "../icons";
+import { Keys } from "../Keys";
 import { smooth } from "../motion";
 
 function option(info: SessionInfo | null, c: Category): ConfigOption | undefined {
@@ -22,21 +23,6 @@ function modeChoices(info: SessionInfo | null): string[] {
   const o = option(info, "mode");
   if (o) return o.choices.map((c) => c.value);
   return info?.modes.map((m) => m.value) ?? [];
-}
-
-/** Shift と Tab のキーの形 */
-function ShiftTab() {
-  const key = "flex size-4 items-center justify-center rounded-[4px] border text-muted-foreground";
-  return (
-    <span aria-hidden className="flex gap-0.5">
-      <span className={key}>
-        <ArrowBigUp className="size-2.5" strokeWidth={2.25} />
-      </span>
-      <span className={key}>
-        <ArrowRightToLine className="size-2.5" strokeWidth={2.25} />
-      </span>
-    </span>
-  );
 }
 
 /** コンテキストの使用率。押すと内訳を出す */
@@ -162,7 +148,7 @@ function ControlRow({
             <ModeIcon mode={mode} />
             {mode}
           </motion.span>
-          <ShiftTab />
+          <Keys keys={["shift", "tab"]} />
         </button>
       )}
       <span className="grow" />

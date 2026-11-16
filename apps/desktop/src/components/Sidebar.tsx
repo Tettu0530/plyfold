@@ -6,11 +6,9 @@ import { age, repoName } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { ProviderLogo, STATUS, StatusIcon } from "./icons";
+import { Keys } from "./Keys";
+import { liquidAnchor } from "./liquid/liquid";
 import { smooth, snappy } from "./motion";
-
-function Kbd({ children }: { children: React.ReactNode }) {
-  return <kbd className="font-mono text-xs text-muted-foreground">{children}</kbd>;
-}
 
 export function Sidebar() {
   const sessions = useStore((s) => s.sessions);
@@ -45,9 +43,10 @@ export function Sidebar() {
         >
           <Plus className="size-4" aria-hidden />
           <span className="grow text-left">新しいセッション</span>
-          <Kbd>⌘N</Kbd>
+          <Keys keys={["cmd", "n"]} />
         </button>
         <button
+          ref={liquidAnchor("search")}
           type="button"
           onClick={() => setSearchOpen(true)}
           aria-haspopup="dialog"
@@ -55,7 +54,7 @@ export function Sidebar() {
         >
           <Search className="size-4" aria-hidden />
           <span className="grow text-left">検索</span>
-          <Kbd>⌘K</Kbd>
+          <Keys keys={["cmd", "k"]} />
         </button>
       </div>
 
@@ -125,7 +124,7 @@ export function Sidebar() {
         <button type="button" onClick={() => setLabOpen(true)} className="flex h-7 items-center gap-2 rounded-lg px-2 text-muted-foreground hover:bg-accent hover:text-foreground">
           <Settings className="size-4" aria-hidden />
           <span className="grow text-left">設定</span>
-          <Kbd>⌘,</Kbd>
+          <Keys keys={["cmd", ","]} />
         </button>
       </div>
     </nav>

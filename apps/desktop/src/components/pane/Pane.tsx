@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { ProviderLogo, StatusIcon } from "../icons";
+import { Keys } from "../Keys";
 import { Composer } from "./Composer";
 import { PermissionCard } from "./PermissionCard";
 import { Transcript } from "./Transcript";
@@ -22,9 +23,9 @@ function EmptyPane({ index }: { index: number }) {
           focusPane(index);
           setNewSessionOpen(true);
         }}
-        className="rounded-md px-2 py-1 hover:bg-accent hover:text-foreground"
+        className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent hover:text-foreground"
       >
-        新しいセッション <kbd className="font-mono">⌘N</kbd>
+        新しいセッション <Keys keys={["cmd", "n"]} />
       </button>
     </section>
   );

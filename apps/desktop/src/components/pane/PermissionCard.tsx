@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 
 import { Button } from "@/components/ui/button";
 import type { PendingPermission } from "@/state/transcript";
+import { Keys } from "../Keys";
 import { dropIn } from "../motion";
 
 /** エージェントによって「拒否」でターンが終わるかが違う（docs/probe-findings.md） */
@@ -40,7 +41,7 @@ export function PermissionCard({
         <div className="flex flex-wrap items-center gap-1.5">
           {once && (
             <Button size="sm" autoFocus onClick={() => onRespond(once.option_id)} className="h-7 gap-1.5 px-2.5">
-              今回だけ許可<kbd className="font-mono text-xs opacity-60">⏎</kbd>
+              今回だけ許可<Keys keys={["enter"]} onPrimary />
             </Button>
           )}
           {always && (
@@ -54,8 +55,9 @@ export function PermissionCard({
             </Button>
           )}
           <span className="grow" />
-          <Button size="sm" variant="ghost" onClick={onStop} className="h-7 px-2 text-error hover:text-error">
+          <Button size="sm" variant="ghost" onClick={onStop} className="h-7 gap-1.5 px-2 text-error hover:text-error">
             停止
+            <Keys keys={["cmd", "."]} />
           </Button>
         </div>
       </div>

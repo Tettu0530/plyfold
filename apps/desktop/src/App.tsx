@@ -3,6 +3,7 @@ import { MotionConfig } from "motion/react";
 import { useEffect } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { GooDefs } from "./components/liquid/liquid";
 import { MotionLab } from "./components/MotionLab";
 import { NewSessionDialog } from "./components/NewSessionDialog";
 import { PaneGrid } from "./components/pane/PaneGrid";
@@ -99,6 +100,7 @@ export default function App() {
             </p>
           )}
         </div>
+        <GooDefs />
         <SearchCard />
         <NewSessionDialog />
         <MotionLab />
