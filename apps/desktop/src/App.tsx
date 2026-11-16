@@ -1,4 +1,4 @@
-import { Bell, Columns2, Grid2x2, Square } from "lucide-react";
+import { Columns2, Grid2x2, Square } from "lucide-react";
 import { MotionConfig } from "motion/react";
 import { useEffect } from "react";
 
@@ -7,6 +7,7 @@ import { GooDefs } from "./components/liquid/liquid";
 import { LiquidStage } from "./components/liquid/stage";
 import { DiffView } from "./components/DiffView";
 import { ProfilesView } from "./components/ProfilesView";
+import { Notifications } from "./components/Notifications";
 import { SettingsView } from "./components/SettingsView";
 import { MotionLab } from "./components/MotionLab";
 import { PaneGrid } from "./components/pane/PaneGrid";
@@ -55,7 +56,6 @@ export default function App() {
   const init = useStore((s) => s.init);
   const paneCount = useStore((s) => s.paneCount);
   const setPaneCount = useStore((s) => s.setPaneCount);
-  const waiting = useStore((s) => Object.values(s.sessions).filter((v) => v.record.status === "awaiting_permission").length);
   const focusedRepo = useStore((s) => {
     const id = s.panes[s.focusedPane];
     return id ? s.sessions[id]?.record.repo_path ?? null : null;
@@ -84,14 +84,7 @@ export default function App() {
                 { value: 4 as PaneCount, label: <Grid2x2 className="size-3.5" aria-hidden />, aria: "ペイン 4 枚" },
               ]}
             />
-            <button
-              type="button"
-              aria-label={waiting ? `権限確認待ち ${waiting} 件` : "通知"}
-              className="relative flex size-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <Bell className="size-4" aria-hidden />
-              {waiting > 0 && <span aria-hidden className="absolute top-1 right-1 size-[7px] rounded-full border-2 border-background bg-permission" />}
-            </button>
+            <Notifications />
           </header>
 
           <div className="flex min-h-0 grow">

@@ -100,6 +100,8 @@ interface State {
   settingsView: { closing: boolean } | null;
   /** プロファイルごとの、前回のセッションの設定項目（下書きで使う） */
   infoCache: InfoCache;
+  /** 見ていないあいだにターンが終わったセッション（ペインで開くと消える）。値は終わった時刻 */
+  unread: Record<string, { at: number; error: boolean }>;
   openSettings: () => void;
   closeSettings: () => void;
   settings: AppSettings;
@@ -200,6 +202,7 @@ export const useStore = create<State>((set, get) => ({
   profilesView: null,
   settingsView: null,
   infoCache: loadInfoCache(),
+  unread: {},
   settings: { editor: "auto", cleanup_after_merge: false, stall_seconds: 120, worktree_default: true },
   liquidStyle: "pop",
   searchLayerActive: false,
@@ -208,7 +211,17 @@ export const useStore = create<State>((set, get) => ({
 
   init: async () => {
     if (!inTauri || get().ready) return;
-    await onEngineEvent((e) => set((s) => ({ sessions: reduceEvent(s.sessions, e) })));
+    await onEngineEvent((e) =>
+      set((s) => {
+        const sessions = reduceEvent(s.sessions, e);
+        // 画面に出ていないセッション（またはアプリを見ていないとき）のターンの終わりは、知らせに残す
+        if (e.type === "turn_ended") {
+          const shown = s.panes.slice(0, s.paneCount).includes(e.session_id) && document.hasFocus();
+          if (!shown) return { sessions, unread: { ...s.unread, [e.session_id]: { at: Date.now(), error: !!e.error } } };
+        }
+        return { sessions };
+      }),
+    );
     const [profiles, records, sv] = await Promise.all([api.listProfiles(), api.listSessions(), api.getSettings()]);
     const sessions: Record<string, SessionView> = {};
     for (const r of records) sessions[r.id] = newView(r);
@@ -218,6 +231,11 @@ export const useStore = create<State>((set, get) => ({
   setPaneCount: (paneCount) => set((s) => ({ paneCount, focusedPane: Math.min(s.focusedPane, paneCount - 1) })),
 
   openInPane: async (id, pane, from) => {
+    if (get().unread[id]) {
+      const unread = { ...get().unread };
+      delete unread[id];
+      set({ unread });
+    }
     const s = get();
     const already = s.panes.slice(0, s.paneCount).indexOf(id);
     if (already >= 0) {

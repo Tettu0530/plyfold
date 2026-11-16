@@ -111,13 +111,15 @@ export function useLiquidActive(id: string): boolean {
 export function useLiquidClip(id: string, ref: React.RefObject<HTMLElement | null>) {
   const active = useLiquidActive(id);
   useEffect(() => {
-    const el = ref.current;
-    if (!active || !el) return;
+    if (!active) return;
     let raf = 0;
+    // 行き先は開いた直後にはまだないことがある（メニューなど）。毎フレーム引き直す
+    let el: HTMLElement | null = null;
     const tick = () => {
+      el = ref.current ?? el;
       const e = liveEdges.get(id);
-      const box = el.getBoundingClientRect();
-      if (e && box.width > 0) {
+      const box = el?.getBoundingClientRect();
+      if (el && e && box && box.width > 0) {
         const l = e.L.get(), t = e.T.get(), r = e.R.get(), b = e.B.get();
         const top = Math.max(0, t - box.top);
         const left = Math.max(0, l - box.left);
@@ -129,18 +131,48 @@ export function useLiquidClip(id: string, ref: React.RefObject<HTMLElement | nul
         const x = Math.min(1, Math.max(0, (k - 0.3) / 0.5));
         el.style.opacity = String(x * x * (3 - 2 * x));
         el.style.transition = "none";
+        el.style.animation = "none";
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(raf);
+      if (!el) return;
       el.style.clipPath = "";
       el.style.opacity = "";
       el.style.transition = "";
+      el.style.animation = "";
     };
   }, [active, id, ref]);
   return active;
+}
+
+const CHIP_LOOK: Look = { background: "rgba(38, 38, 38, 1)", border: "rgba(255, 255, 255, 0)", shadow: "0px 0px 0px rgba(0, 0, 0, 0)", blur: 0 };
+const MENU_LOOK: Look = { background: "rgba(23, 23, 23, 1)", border: "rgba(255, 255, 255, 0.1)", shadow: "0px 4px 12px rgba(0, 0, 0, 0.45)", blur: 0 };
+
+/**
+ * 小さなメニュー（Select / Popover）用。出発点のチップから飛び出して広がり、閉じると縮んで戻る。
+ * Radix は閉じると中身をすぐ消すので、閉じる動きは直前の大きさから縮める。
+ * 使い方: `const m = useLiquidMenu(id, anchorName)` → チップに `ref={liquidAnchor(anchorName)}`、
+ * Root に `onOpenChange={m.onOpenChange}`、Content に `ref={m.ref}` と z-[58]
+ */
+export function useLiquidMenu(id: string, anchor: string) {
+  const ref = useRef<HTMLElement | null>(null);
+  useLiquidClip(id, ref);
+  const onOpenChange = (open: boolean) => {
+    const base = { anchor, radius: 8, anchorRadius: 6, fromLook: CHIP_LOOK, toLook: MENU_LOOK };
+    if (open) {
+      liquidOpen(id, { ...base, target: () => ref.current });
+      return;
+    }
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const ghost = { getBoundingClientRect: () => rect } as unknown as HTMLElement;
+    liquidCloseFrom(id, { ...base, target: () => ghost });
+  };
+  return { ref, onOpenChange };
 }
 
 /** 指定があれば、待ってから動き出す */

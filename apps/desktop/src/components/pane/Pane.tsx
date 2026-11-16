@@ -143,6 +143,7 @@ function SessionPane({ index }: { index: number }) {
       </div>
 
       <Composer
+        scope={id}
         agent={r.agent}
         info={(() => {
           // 動いていないあいだは、前回の値（このプロファイルで覚えているもの）に、選んでおいた値を重ねて出す

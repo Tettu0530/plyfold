@@ -109,7 +109,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
           </button>
         </div>
 
-        <ControlRow agent={current?.agent ?? ""} info={info} onSet={choose} empty={draft.profile ? "model と effort は起動後に選べます（次からは前回の値を出します）" : undefined} />
+        <ControlRow scope={id} agent={current?.agent ?? ""} info={info} onSet={choose} empty={draft.profile ? "model と effort は起動後に選べます（次からは前回の値を出します）" : undefined} />
 
         <div className="flex items-end gap-2 rounded-xl border border-input bg-card py-1.5 pr-1.5 pl-3 focus-within:border-ring">
           <textarea
