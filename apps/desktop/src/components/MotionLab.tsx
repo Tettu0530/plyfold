@@ -141,9 +141,11 @@ const STYLES: { value: LiquidStyle; label: string; note: string }[] = [
 function SeparationDemo() {
   const style = useStore((s) => s.liquidStyle);
   const setStyle = useStore((s) => s.setLiquidStyle);
+  const lag = useStore((s) => s.liquidLag);
+  const setLag = useStore((s) => s.setLiquidLag);
   const [open, setOpen] = useState(false);
   const target = useRef<HTMLDivElement>(null);
-  const { revealed, mounted, layer } = useLiquidMorph(open, { anchor: "lab-src", target, radius: 12, anchorRadius: 8, style });
+  const { revealed, mounted, layer } = useLiquidMorph(open, { anchor: "lab-src", target, radius: 12, anchorRadius: 8, style, sizeLag: lag });
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-3">
@@ -151,6 +153,7 @@ function SeparationDemo() {
         <Segmented<LiquidStyle> label="分離の型" value={style} onChange={setStyle} options={STYLES.map((s) => ({ value: s.value, label: s.label }))} />
       </div>
       <p className="text-xs text-muted-foreground">{STYLES.find((s) => s.value === style)?.note}</p>
+      {style === "pop" && <Slider label="大きさの遅れ" value={lag} min={0} max={0.3} step={0.01} onChange={setLag} />}
       <div className="relative h-44 rounded-lg bg-background p-3">
         <button
           ref={liquidAnchor("lab-src")}

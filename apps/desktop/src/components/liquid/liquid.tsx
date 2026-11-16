@@ -7,7 +7,7 @@
 //   droplet : 丸い滴に縮んで離れ、移動してから広がる
 //   pop     : 出発点の裏から滑り出て、そのまま 1 本のばねで行き先の形へ（標準。出発点の面より下に描く）
 // 測定（tools/liquid-probe）では、Apple の変形は外枠が 1 本のばねで動く。どの型も段ごとに 1 本のばねで動かす
-import { animate, motion, useMotionValue, useReducedMotion, useTransform, useVelocity, type AnimationPlaybackControls, type MotionValue } from "motion/react";
+import { animate, motion, motionValue, useMotionValue, useReducedMotion, useTransform, useVelocity, type AnimationPlaybackControls, type MotionValue } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -57,6 +57,7 @@ function edgesOf(el: Element | null | undefined, radius: number): Edges | null {
 }
 
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
+const motionValueOf = (v: number) => motionValue(v);
 const drop = (cx: number, cy: number, d = 30): Edges => ({ l: cx - d / 2, t: cy - d / 2, r: cx + d / 2, b: cy + d / 2, radius: d / 2 });
 
 type Phase = "closed" | "opening" | "open" | "closing";
@@ -73,6 +74,8 @@ interface Options {
   style?: LiquidStyle;
   /** 実体を描く重なり順。出発点の面（サイドバーなど）より小さくすると、その裏から出てくる */
   zIndex?: number;
+  /** pop の型で、大きさの変化を位置の変化より遅らせる秒数（0 なら 1 段階、大きいほど 2 段階に近い） */
+  sizeLag?: number;
 }
 
 const LEAD = appleSpring({ duration: 0.3, bounce: 0.3 });
@@ -82,7 +85,7 @@ const TRAIL = appleSpring({ duration: 0.45, bounce: 0.2 });
  * 分離アニメーション。`revealed` が true のあいだ本物を見せ、`layer` をどこかに描く。
  * `mounted` は本物を DOM に置いておくべきか（動いているあいだも置いて大きさを測る）
  */
-export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRadius = 8, color = "#262626", style = "pop", zIndex = 60 }: Options) {
+export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRadius = 8, color = "#262626", style = "pop", zIndex = 60, sizeLag = 0.08 }: Options) {
   const reduced = useReducedMotion();
   const [phase, setPhase] = useState<Phase>("closed");
   const L = useMotionValue(0);
@@ -137,6 +140,11 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
       const alive = () => run.current === id;
       stopAll();
       const src = edgesOf(anchors.get(anchor), anchorRadius);
+      // 行き先が描かれるまで待つ（開いた直後はまだ DOM にないことがある）
+      for (let i = 0; i < 10 && !target.current; i++) {
+        await new Promise((r) => requestAnimationFrame(r));
+        if (!alive()) return;
+      }
       const dst = edgesOf(target.current, radius);
       if (reduced || !src || !dst) {
         setPhase(opening ? "open" : "closed");
@@ -151,9 +159,36 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
       setPhase(opening ? "opening" : "closing");
 
       if (style === "pop") {
-        // 1 段階: 出発点の形から行き先の形へ、位置と大きさを 1 本のばねで（出発点の面の裏から出てくる）
+        // 1 段階と 2 段階の中間: 位置は先に動き、大きさは少し遅れて長めのばねで広がる（閉じるときは逆）
         ghostOpacity.set(0);
-        await moveAll(to, opening ? bouncy : snappy);
+        const a = { l: L.get(), t: T.get(), r: R.get(), b: B.get(), radius: rad.get() };
+        const ac = { x: (a.l + a.r) / 2, y: (a.t + a.b) / 2, w: a.r - a.l, h: a.b - a.t };
+        const bc = { x: (to.l + to.r) / 2, y: (to.t + to.b) / 2, w: to.r - to.l, h: to.b - to.t };
+        const p = motionValueOf(0);
+        const q = motionValueOf(0);
+        const apply = () => {
+          const pv = p.get();
+          const qv = q.get();
+          const cx = lerp(ac.x, bc.x, pv);
+          const cy = lerp(ac.y, bc.y, pv);
+          const w = Math.max(4, lerp(ac.w, bc.w, qv));
+          const h = Math.max(4, lerp(ac.h, bc.h, qv));
+          L.set(cx - w / 2);
+          R.set(cx + w / 2);
+          T.set(cy - h / 2);
+          B.set(cy + h / 2);
+          rad.set(lerp(a.radius, to.radius, Math.min(1, Math.max(0, qv))));
+        };
+        const offP = p.on("change", apply);
+        const offQ = q.on("change", apply);
+        const posSpring = snappy;
+        const sizeSpring = appleSpring({ duration: 0.42, bounce: 0.3 });
+        await Promise.all([
+          go(p, 1, opening ? { ...posSpring } : { ...posSpring, delay: sizeLag }),
+          go(q, 1, opening ? { ...sizeSpring, delay: sizeLag } : { ...snappy }),
+        ]);
+        offP();
+        offQ();
       } else if (style === "morph") {
         if (!opening) ghostOpacity.set(0);
         await moveEdges(to, LEAD, TRAIL);
@@ -194,7 +229,7 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [anchor, anchorRadius, radius, reduced, style],
+    [anchor, anchorRadius, radius, reduced, style, sizeLag],
   );
 
   useEffect(() => {
