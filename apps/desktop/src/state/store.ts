@@ -176,7 +176,8 @@ export const useStore = create<State>((set, get) => ({
       panes[target] = id;
       // 入れ替えられたセッションは、ペインから縮んで元の場所（サイドバーの行）の裏へ戻る
       if (displaced) liquidCloseFrom(`pane-${target}-out`, { anchor: anchorOf(displaced), target: () => paneEl(target), toLook: PANE_LOOK });
-      if (from) liquidOpen(`pane-${target}`, { anchor: from, target: () => paneEl(target), toLook: PANE_LOOK });
+      // 入れ替えのときは、戻る動きが出たのを見てから飛び出す（すれ違いを少しずらす）
+      if (from) liquidOpen(`pane-${target}`, { anchor: from, target: () => paneEl(target), toLook: PANE_LOOK, delay: displaced ? 140 : 0 });
       const drafts = { ...s.drafts };
       if (isDraft(displaced)) delete drafts[displaced!];
       set({ panes, focusedPane: target, drafts });

@@ -8,7 +8,7 @@ import { useStore } from "@/state/store";
 import { ProviderLogo, STATUS, StatusIcon } from "./icons";
 import { Keys } from "./Keys";
 import { liquidAnchor } from "./liquid/liquid";
-import { useLiquidBusy } from "./liquid/stage";
+import { useLiquidActiveAnchors } from "./liquid/stage";
 import { smooth, snappy } from "./motion";
 
 export function Sidebar() {
@@ -19,10 +19,9 @@ export function Sidebar() {
   const setSearchOpen = useStore((s) => s.setSearchOpen);
   const newDraft = useStore((s) => s.newDraft);
   const setLabOpen = useStore((s) => s.setLabOpen);
-  // 検索カードの実体はサイドバーの裏から出てくる。そのあいだサイドバーを手前に出し、暗くする幕を自分の上に掛ける
+  // 実体は出発点（ボタンや行）だけの裏から出る。実体はサイドバーの地より上（55）、出発点はその上（57）
   const searchLayer = useStore((s) => s.searchLayerActive);
-  const liquidBusy = useLiquidBusy();
-  const layerActive = searchLayer || liquidBusy;
+  const active = useLiquidActiveAnchors();
   const searchOpen = useStore((s) => s.searchOpen);
   const [closed, setClosed] = useState<Record<string, boolean>>({});
 
@@ -40,19 +39,7 @@ export function Sidebar() {
   const open = new Set(panes.slice(0, paneCount).filter(Boolean));
 
   return (
-    <nav aria-label="セッション" className={cn("relative flex w-60 shrink-0 flex-col border-r bg-sidebar", layerActive && "z-[56]")}>
-      {searchLayer && (
-        <motion.button
-          type="button"
-          aria-label="検索を閉じる"
-          tabIndex={-1}
-          onClick={() => setSearchOpen(false)}
-          className="absolute inset-0 z-10 cursor-default bg-black/45"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: searchOpen ? 1 : 0 }}
-          transition={smooth}
-        />
-      )}
+    <nav aria-label="セッション" className="relative flex w-60 shrink-0 flex-col border-r bg-sidebar">
       <div className="flex flex-col p-2">
         <motion.button
           ref={liquidAnchor("new-session")}
@@ -60,7 +47,10 @@ export function Sidebar() {
           whileTap={{ scale: 1.06 }}
           transition={snappy}
           onClick={() => newDraft()}
-          className="flex h-7 items-center gap-2 rounded-lg px-2 text-muted-foreground hover:bg-accent hover:text-foreground"
+          className={cn(
+            "relative flex h-7 items-center gap-2 rounded-lg px-2 text-muted-foreground hover:bg-accent hover:text-foreground",
+            active.has("new-session") && "z-[57] bg-accent text-foreground",
+          )}
         >
           <Plus className="size-4" aria-hidden />
           <span className="grow text-left">新しいセッション</span>
@@ -77,7 +67,7 @@ export function Sidebar() {
           transition={snappy}
           className={cn(
             "relative flex h-7 items-center gap-2 rounded-lg px-2 text-muted-foreground hover:bg-accent hover:text-foreground",
-            layerActive && "z-20",
+            searchLayer && "z-[57]",
             searchOpen && "bg-accent text-foreground",
           )}
         >
@@ -123,8 +113,9 @@ export function Sidebar() {
                         void openInPane(r.id, undefined, `session:${r.id}`);
                       }}
                       className={cn(
-                        "mb-1 flex flex-col gap-1 rounded-lg p-2 text-foreground no-underline hover:bg-accent",
+                        "relative mb-1 flex flex-col gap-1 rounded-lg p-2 text-foreground no-underline hover:bg-accent",
                         open.has(r.id) && "bg-accent",
+                        active.has(`session:${r.id}`) && "z-[57] bg-accent",
                       )}
                     >
                       <span className="flex min-w-0 items-center gap-2">

@@ -6,7 +6,7 @@
 //   useLiquidRevealed("pane-0")                                          … 本物を見せてよいか（動いているあいだは false）
 //
 // 実体の描画は、アプリに 1 つ置く <LiquidStage /> がまとめて行う。
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 
 import { useStore } from "@/state/store";
@@ -17,8 +17,10 @@ export interface LiquidJobOptions {
   target: () => HTMLElement | null;
   radius?: number;
   anchorRadius?: number;
-  /** 実体の重なり順。出発点がサイドバーなら、サイドバー（56）より下の 55 */
+  /** 実体の重なり順。出発点（57）より下、サイドバーの地より上の 55 */
   zIndex?: number;
+  /** 動き出すまでの待ち（ms）。待つあいだも行き先の中身は隠したまま */
+  delay?: number;
   fromLook?: Look;
   toLook?: Look;
 }
@@ -73,6 +75,23 @@ export function useLiquidBusy(): boolean {
   return useStage((s) => Object.keys(s.jobs).length > 0);
 }
 
+/** いま動いている分離アニメーションの出発点の名前（出発点を実体より手前に出すため） */
+export function useLiquidActiveAnchors(): Set<string> {
+  const key = useStage((s) => Object.values(s.jobs).map((j) => j.anchor).sort().join("\n"));
+  return new Set(key ? key.split("\n") : []);
+}
+
+/** 指定があれば、待ってから動き出す */
+function DelayedJob({ job }: { job: Job }) {
+  const [ready, setReady] = useState(!job.delay);
+  useEffect(() => {
+    if (!job.delay) return;
+    const t = setTimeout(() => setReady(true), job.delay);
+    return () => clearTimeout(t);
+  }, [job.delay]);
+  return ready ? <JobView job={job} /> : null;
+}
+
 function JobView({ job }: { job: Job }) {
   const style = useStore((s) => s.liquidStyle);
   const sizeLag = useStore((s) => s.liquidLag);
@@ -121,7 +140,7 @@ export function LiquidStage() {
   return (
     <>
       {Object.values(jobs).map((j) => (
-        <JobView key={`${j.id}:${j.nonce}`} job={j} />
+        <DelayedJob key={`${j.id}:${j.nonce}`} job={j} />
       ))}
     </>
   );
