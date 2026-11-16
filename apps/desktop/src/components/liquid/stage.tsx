@@ -115,10 +115,22 @@ export function useLiquidClip(id: string, ref: React.RefObject<HTMLElement | nul
   useEffect(() => {
     if (!active) return;
     let raf = 0;
-    // 行き先は開いた直後にはまだないことがある（メニューなど）。毎フレーム引き直す
+    // 行き先は開いた直後にはまだないことがある（メニューなど）。毎フレーム引き直す。
+    // 触る前の値を覚えておき、終わったら戻す（React が style で付けた値を消さない）
     let el: HTMLElement | null = null;
+    const KEYS = ["clipPath", "opacity", "transition", "animation", "background", "borderColor", "boxShadow", "backdropFilter"] as const;
+    let saved: Partial<Record<(typeof KEYS)[number], string>> | null = null;
     const tick = () => {
       el = ref.current ?? el;
+      if (el && !saved) {
+        saved = Object.fromEntries(KEYS.map((k) => [k, el!.style[k]]));
+        // 動いているあいだの「体」は液体の実体だけにする（本物の地・枠線・影を消す）。
+        // 本物と実体が 2 つあると、ばねの跳ね返りで大きさがずれ、あいだに隙間が見えるため
+        el.style.background = "transparent";
+        el.style.borderColor = "transparent";
+        el.style.boxShadow = "none";
+        el.style.backdropFilter = "none";
+      }
       const e = liveEdges.get(id);
       const box = el?.getBoundingClientRect();
       if (el && e && box && box.width > 0) {
@@ -140,11 +152,8 @@ export function useLiquidClip(id: string, ref: React.RefObject<HTMLElement | nul
     raf = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(raf);
-      if (!el) return;
-      el.style.clipPath = "";
-      el.style.opacity = "";
-      el.style.transition = "";
-      el.style.animation = "";
+      if (!el || !saved) return;
+      for (const k of KEYS) el.style[k] = saved[k] ?? "";
     };
   }, [active, id, ref]);
   return active;
@@ -153,11 +162,15 @@ export function useLiquidClip(id: string, ref: React.RefObject<HTMLElement | nul
 const CHIP_LOOK: Look = { background: "rgba(38, 38, 38, 1)", border: "rgba(255, 255, 255, 0)", shadow: "0px 0px 0px rgba(0, 0, 0, 0)", blur: 0 };
 const MENU_LOOK: Look = { background: "rgba(23, 23, 23, 1)", border: "rgba(255, 255, 255, 0.1)", shadow: "0px 4px 12px rgba(0, 0, 0, 0.45)", blur: 0 };
 
+/** Radix の既定のフェード・拡大を必ず止める（クラスでは打ち消せないので、インラインで）。
+ * アニメーションが無いと、Radix は閉じたときに中身をすぐ外す（元のフェードで残らない） */
+const NO_ANIMATION: React.CSSProperties = { animation: "none" };
+
 /**
  * 小さなメニュー（Select / Popover）用。出発点のチップから飛び出して広がり、閉じると縮んで戻る。
  * Radix は閉じると中身をすぐ消すので、閉じる動きは直前の大きさから縮める。
  * 使い方: `const m = useLiquidMenu(id, anchorName)` → チップに `ref={liquidAnchor(anchorName)}`、
- * Root に `onOpenChange={m.onOpenChange}`、Content に `ref={m.ref}` と z-[58]
+ * Root に `onOpenChange={m.onOpenChange}`、Content に `ref={m.ref}`・`style={m.style}`・z-[58]
  */
 export function useLiquidMenu(id: string, anchor: string) {
   const ref = useRef<HTMLElement | null>(null);
@@ -175,7 +188,7 @@ export function useLiquidMenu(id: string, anchor: string) {
     const ghost = { getBoundingClientRect: () => rect } as unknown as HTMLElement;
     liquidCloseFrom(id, { ...base, target: () => ghost });
   };
-  return { ref, onOpenChange, moving };
+  return { ref, onOpenChange, moving, style: NO_ANIMATION };
 }
 
 /** 指定があれば、待ってから動き出す */

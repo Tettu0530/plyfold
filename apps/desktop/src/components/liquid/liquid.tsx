@@ -13,7 +13,7 @@ import { createPortal } from "react-dom";
 
 import { appleSpring, bouncy, interactive, smooth, snappy, springToCss } from "../motion";
 import { addBlob, liquidGlSupported, parseColor, parseShadow } from "./liquid-gl";
-import { Adhesion, mergeAt, mergeWidth, PeelSpring } from "./sdf";
+import { Adhesion, mergeAt, mergeWidth, PeelSpring, separation } from "./sdf";
 
 type Rect = { l: number; t: number; r: number; b: number };
 const rectGap = (a: Rect, s: Rect) => Math.hypot(Math.max(0, s.l - a.r, a.l - s.r), Math.max(0, s.t - a.b, a.t - s.b));
@@ -285,14 +285,16 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
               const ab = el?.getBoundingClientRect();
               const a = ab ? { l: ab.left, t: ab.top, r: ab.right, b: ab.bottom } : src;
               const grown = Math.min(1, Math.max(0, q.get()));
-              // 閉じるときは、戻ってくるにつれてつながる幅を広げる（吸い込まれる）
-              const k = opening ? mergeAt(kMax, grown) : kMax * Math.min(1, Math.max(0, (grown - 0.25) / 0.5));
-              const pull = adh.update(dt, rectGap(a, raw), k);
-              if (opening) tension.set(pull);
               const sx = popScaleX.get();
               const sy = popScaleY.get();
               const cx = (L.get() + R.get()) / 2;
               const cy = (T.get() + B.get()) / 2;
+              // 重なっているあいだは融合させない（ぴったり重なると全体がふくらみ、出発点より大きく見える）
+              const sep = separation(Math.hypot(cx - (a.l + a.r) / 2, cy - (a.t + a.b) / 2), Math.min(a.r - a.l, a.b - a.t));
+              // 閉じるときは、戻ってくるにつれてつながる幅を広げる（吸い込まれる）
+              const k = (opening ? mergeAt(kMax, grown) : kMax * Math.min(1, Math.max(0, (grown - 0.25) / 0.5))) * sep;
+              const pull = adh.update(dt, rectGap(a, raw), k);
+              if (opening) tension.set(pull);
               const hw = ((R.get() - L.get()) * sx) / 2;
               const hh = ((B.get() - T.get()) * sy) / 2;
               return {

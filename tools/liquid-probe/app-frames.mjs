@@ -23,9 +23,16 @@ await send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, dev
 await send("Page.navigate", { url });
 await waitEvent("Page.loadEventFired");
 await new Promise((r) => setTimeout(r, 1500));
+// 準備の操作（環境変数 PRE）: 時間を止める前に実行して、落ち着くまで待つ
+if (process.env.PRE) {
+  const r = await send("Runtime.evaluate", { expression: process.env.PRE, awaitPromise: true });
+  if (r.result?.exceptionDetails) console.log("pre error", JSON.stringify(r.result.exceptionDetails).slice(0, 300));
+  await new Promise((r2) => setTimeout(r2, Number(process.env.PRE_WAIT ?? 1500)));
+}
 await send("Emulation.setVirtualTimePolicy", { policy: "pause" });
 const r0 = await send("Runtime.evaluate", { expression: action, awaitPromise: false });
 if (r0.result?.exceptionDetails) console.log("action error", JSON.stringify(r0.result.exceptionDetails).slice(0, 300));
+if (process.env.SHOW) console.log("action result", String(r0.result?.result?.value).slice(0, 1500));
 const shots = [];
 for (let i = 0; i < n; i++) {
   await send("Emulation.setVirtualTimePolicy", { policy: "advance", budget: 16.667 });

@@ -52,6 +52,14 @@ const smoothstep = (a: number, b: number, x: number) => {
 };
 
 /**
+ * 重なりぐあいで k を弱める: smin は 2 つの形がぴったり重なると全体を k/4 ふくらませる（出だしと戻り際に、
+ * 出発点より大きな塊になる）。中心どうしが離れていないうちは 0、出発点の太さ 1 つぶん離れたら 1
+ */
+export function separation(centerDist: number, anchorThickness: number): number {
+  return smoothstep(0, Math.max(1, anchorThickness), centerDist);
+}
+
+/**
  * 動きの途中の k。広がりきる前に 0 へ絞り、最後は必ず別々の形にする
  * （行き先が出発点のすぐ隣でも、くっついたまま止まらない）。grown は大きさの広がりの進み具合
  */

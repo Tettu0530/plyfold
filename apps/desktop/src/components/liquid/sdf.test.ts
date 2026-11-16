@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { Adhesion, boxOf, mergeAt, mergeWidth, PeelSpring, sdBox, smin } from "./sdf";
+import { Adhesion, boxOf, mergeAt, mergeWidth, PeelSpring, sdBox, separation, smin } from "./sdf";
 
 describe("距離場", () => {
   it("角丸の箱: 中は負、外は縁までの距離", () => {
@@ -32,6 +32,18 @@ describe("距離場", () => {
     expect(mergeWidth(200)).toBe(72);
     expect(mergeAt(60, 0.3)).toBe(60);
     expect(mergeAt(60, 0.9)).toBe(0);
+  });
+});
+
+describe("重なりぐあい", () => {
+  it("ぴったり重なっているときは融合させない（ふくらまない）", () => {
+    expect(separation(0, 28)).toBe(0);
+    expect(separation(14, 28)).toBeCloseTo(0.5, 5);
+    expect(separation(40, 28)).toBe(1);
+    // 同じ箱どうしを k で融合すると k/4 ふくらむ。separation を掛ければ元の大きさのまま
+    const k = 48;
+    expect(smin(-1, -1, k).d).toBeCloseTo(-1 - k / 4, 5);
+    expect(smin(-1, -1, k * separation(0, 28)).d).toBe(-1);
   });
 });
 
