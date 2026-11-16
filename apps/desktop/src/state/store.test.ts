@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { SessionInfo, SessionRecord } from "@/lib/types";
-import { reduceEvent, type SessionView } from "./store";
+import { reduceEvent, restoreLayout, type SessionView } from "./store";
 
 const record: SessionRecord = {
   id: "s1",
@@ -63,5 +63,18 @@ describe("reduceEvent", () => {
     t = reduceEvent(t, { type: "notice", session_id: "s1", message: "起動: npx …" });
     t = reduceEvent(t, { type: "notice", session_id: "s1", message: "120 秒間、エージェントから何も届いていません" });
     expect(t.s1.transcript.items).toEqual([{ kind: "notice", text: "120 秒間、エージェントから何も届いていません" }]);
+  });
+});
+
+describe("restoreLayout", () => {
+  it("keeps sessions that still exist and drops drafts and removed ones", () => {
+    const l = restoreLayout({ panes: ["a", "gone", "draft:1", "b"], paneCount: 4, focusedPane: 3 }, (id) => id === "a" || id === "b");
+    expect(l).toEqual({ panes: ["a", null, null, "b"], paneCount: 4, focusedPane: 3 });
+  });
+
+  it("rejects broken data and clamps the focused pane", () => {
+    expect(restoreLayout(null, () => true)).toBeNull();
+    expect(restoreLayout({ panes: [], paneCount: 3 }, () => true)).toBeNull();
+    expect(restoreLayout({ panes: ["a"], paneCount: 1, focusedPane: 2 }, () => true)?.focusedPane).toBe(0);
   });
 });

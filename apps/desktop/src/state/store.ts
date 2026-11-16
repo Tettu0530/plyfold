@@ -62,6 +62,37 @@ function lastRepo(): string {
   }
 }
 
+// ペインの並べ方と、ペインに出していたセッション（起動したときに戻す）
+const LAYOUT_KEY = "plyfold.layout";
+export interface Layout {
+  panes: (string | null)[];
+  paneCount: PaneCount;
+  focusedPane: number;
+}
+
+/** 覚えておいた並べ方を、今あるセッションに合わせて戻す（消えたセッションと下書きは空のペインにする） */
+export function restoreLayout(saved: unknown, exists: (id: string) => boolean): Layout | null {
+  if (!saved || typeof saved !== "object") return null;
+  const o = saved as Partial<Layout>;
+  const paneCount = o.paneCount === 1 || o.paneCount === 2 || o.paneCount === 4 ? o.paneCount : null;
+  if (!paneCount || !Array.isArray(o.panes)) return null;
+  const panes = [0, 1, 2, 3].map((i) => {
+    const id = o.panes![i];
+    return typeof id === "string" && !isDraft(id) && exists(id) ? id : null;
+  });
+  const focusedPane = typeof o.focusedPane === "number" && o.focusedPane >= 0 && o.focusedPane < paneCount ? o.focusedPane : 0;
+  return { panes, paneCount, focusedPane };
+}
+
+function readLayout(): unknown {
+  try {
+    const raw = localStorage.getItem(LAYOUT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 interface State {
   sessions: Record<string, SessionView>;
   drafts: Record<string, Draft>;
@@ -235,7 +266,10 @@ export const useStore = create<State>((set, get) => ({
     const [profiles, records, sv] = await Promise.all([api.listProfiles(), api.listSessions(), api.getSettings()]);
     const sessions: Record<string, SessionView> = {};
     for (const r of records) sessions[r.id] = newView(r);
-    set({ profiles, sessions, settings: sv.settings, ready: true });
+    // 前回の並べ方と、ペインに出していたセッションを戻す（分離アニメーションは付けない）
+    const layout = restoreLayout(readLayout(), (id) => !!sessions[id]);
+    set({ profiles, sessions, settings: sv.settings, ready: true, ...(layout ?? {}) });
+    for (const id of layout?.panes ?? []) if (id) void loadSession(id);
   },
 
   setPaneCount: (paneCount) => set((s) => ({ paneCount, focusedPane: Math.min(s.focusedPane, paneCount - 1) })),
@@ -264,18 +298,7 @@ export const useStore = create<State>((set, get) => ({
       set({ panes, focusedPane: target, drafts });
     }
     if (isDraft(id)) return;
-    // 止まっているセッションは、記録から会話を読み込む
-    const v = get().sessions[id];
-    if (v && !v.historyLoaded) {
-      const events = await api.sessionHistory(id);
-      set((st) => ({
-        sessions: { ...st.sessions, [id]: { ...st.sessions[id], transcript: fromHistory(events), historyLoaded: true } },
-      }));
-    }
-    if (v && v.info === null) {
-      const info = await api.sessionInfo(id);
-      if (info) set((st) => ({ sessions: { ...st.sessions, [id]: { ...st.sessions[id], info } } }));
-    }
+    await loadSession(id);
   },
 
   openDiff: (id) => {
@@ -483,6 +506,33 @@ export const useStore = create<State>((set, get) => ({
     });
   },
 }));
+
+/** 止まっているセッションは、記録から会話を読み込む。設定項目もまだなら取りにいく */
+async function loadSession(id: string) {
+  const v = useStore.getState().sessions[id];
+  if (!v) return;
+  if (!v.historyLoaded) {
+    const events = await api.sessionHistory(id);
+    useStore.setState((st) =>
+      st.sessions[id] ? { sessions: { ...st.sessions, [id]: { ...st.sessions[id], transcript: fromHistory(events), historyLoaded: true } } } : st,
+    );
+  }
+  if (v.info === null) {
+    const info = await api.sessionInfo(id);
+    if (info) useStore.setState((st) => (st.sessions[id] ? { sessions: { ...st.sessions, [id]: { ...st.sessions[id], info } } } : st));
+  }
+}
+
+// 並べ方が変わったら覚えておく（下書きは残さない）
+useStore.subscribe((st, prev) => {
+  if (!st.ready || (st.panes === prev.panes && st.paneCount === prev.paneCount && st.focusedPane === prev.focusedPane)) return;
+  const layout: Layout = { panes: st.panes.map((p) => (isDraft(p) ? null : p)), paneCount: st.paneCount, focusedPane: st.focusedPane };
+  try {
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
+  } catch {
+    // 保存できなくても動きには困らない
+  }
+});
 
 function firstFreePane(panes: (string | null)[], count: number, focused: number): number {
   const free = panes.slice(0, count).indexOf(null);
