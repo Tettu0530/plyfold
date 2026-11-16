@@ -326,20 +326,34 @@ impl Engine {
             tokio::spawn(pump(inner.clone(), id.to_string(), live.clone(), rx));
 
             let opened: Result<String, CoreError> = async {
-                match reopen {
-                    Some(old) if live.client.supports_load_session() => {
-                        let (resp, barrier) = live.client.load_session(&old, cwd).await?;
-                        live.wait_processed(barrier).await;
-                        live.info.lock().unwrap().apply_session_response(&resp);
-                        inner.notice(id, "session/load で開き直しました（履歴はエージェントから再送されます）");
-                        Ok(old)
+                // 開き直せないときの理由（新しいセッションで続けるときに知らせる）
+                let mut fallback = None;
+                if let Some(old) = &reopen {
+                    if live.client.supports_load_session() {
+                        match live.client.load_session(old, cwd).await {
+                            Ok((resp, barrier)) => {
+                                live.wait_processed(barrier).await;
+                                live.info.lock().unwrap().apply_session_response(&resp);
+                                inner.notice(id, "session/load で開き直しました（履歴はエージェントから再送されます）");
+                                return Ok(old.clone());
+                            }
+                            // エージェントの側に会話の記録がない（書き残す前に終わったなど）。新しいセッションで続ける
+                            Err(AcpError::Rpc { code: -32002, .. }) => {
+                                fallback = Some("エージェントの側にこの会話の記録が見つからないため、新しいセッションを作りました（文脈は引き継がれません。Plyfold の記録は残っています）");
+                            }
+                            Err(e) => return Err(e.into()),
+                        }
+                    } else {
+                        fallback = Some("このエージェントは開き直しに対応していないため、新しいセッションを作りました（文脈は引き継がれません）");
                     }
-                    _ => {
+                }
+                {
+                    {
                         let r = live.client.new_session(cwd).await?;
                         let sid = r.session_id.0.to_string();
                         live.info.lock().unwrap().apply_session_response(&serde_json::to_value(&r).unwrap_or_default());
-                        if reopen.is_some() {
-                            inner.notice(id, "このエージェントは開き直しに対応していないため、新しいセッションを作りました（文脈は引き継がれません）");
+                        if let Some(msg) = fallback {
+                            inner.notice(id, msg);
                         }
                         inner.store.set_acp_session_id(id, &sid)?;
                         if let Some(mode) = &resolved.default_mode {

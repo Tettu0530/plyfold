@@ -324,3 +324,29 @@ async fn check_profile_reports_reply_and_model() {
     let bad = engine.check_profile("nope").await;
     assert!(!bad.ok && bad.error.is_some());
 }
+
+#[tokio::test]
+async fn reopen_falls_back_to_new_session_when_agent_lost_the_transcript() {
+    let base = tmp("reopen-lost");
+    let state = base.join("state");
+    let eng = engine(&state, 60_000);
+    let mut rx = eng.subscribe();
+    let s = eng
+        .start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.clone(), worktree: false })
+        .await
+        .unwrap();
+    eng.prompt(&s.id, "hello").unwrap();
+    wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { .. })).await;
+    let old_sid = eng.store().get_session(&s.id).unwrap().acp_session_id.unwrap();
+    eng.close_session(&s.id).await.unwrap();
+    // エージェントの側の記録を消す（書き残す前に落ちた場合に相当）
+    std::fs::remove_dir_all(base.join(".plyfold-mock")).unwrap();
+
+    eng.reopen_session(&s.id).await.unwrap();
+    assert!(eng.is_running(&s.id));
+    let new_sid = eng.store().get_session(&s.id).unwrap().acp_session_id.unwrap();
+    assert_ne!(old_sid, new_sid);
+    let events = eng.store().events(&s.id, None, 1000).unwrap();
+    assert!(events.iter().any(|e| e.payload.contains("記録が見つからない")));
+    eng.close_session(&s.id).await.unwrap();
+}
