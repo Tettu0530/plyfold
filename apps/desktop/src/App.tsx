@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { MotionLab } from "./components/MotionLab";
 import { NewSessionDialog } from "./components/NewSessionDialog";
-import { Pane } from "./components/pane/Pane";
+import { PaneGrid } from "./components/pane/PaneGrid";
 import { SearchCard } from "./components/SearchCard";
 import { Segmented } from "./components/Segmented";
 import { Sidebar } from "./components/Sidebar";
@@ -91,17 +91,7 @@ export default function App() {
 
           <div className="flex min-h-0 grow">
             <Sidebar />
-            <main
-              className="grid min-w-0 grow"
-              style={{
-                gridTemplateColumns: `repeat(${paneCount === 1 ? 1 : 2}, minmax(0, 1fr))`,
-                gridTemplateRows: `repeat(${paneCount === 4 ? 2 : 1}, minmax(0, 1fr))`,
-              }}
-            >
-              {Array.from({ length: paneCount }, (_, i) => (
-                <Pane key={i} index={i} />
-              ))}
-            </main>
+            <PaneGrid count={paneCount} />
           </div>
           {!inTauri && (
             <p className="fixed right-3 bottom-3 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">

@@ -83,7 +83,7 @@ export function Sidebar() {
                   const quiet = r.status === "idle" || r.status === "closed" || r.status === "starting";
                   return (
                     <motion.a
-                      layout
+                      layout="position"
                       transition={smooth}
                       key={r.id}
                       href="#"

@@ -1,12 +1,11 @@
 import { Square, TriangleAlert, X } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence } from "motion/react";
 import { useEffect, useState } from "react";
 
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { ProviderLogo, StatusIcon } from "../icons";
-import { smooth } from "../motion";
 import { Composer } from "./Composer";
 import { PermissionCard } from "./PermissionCard";
 import { Transcript } from "./Transcript";
@@ -56,12 +55,10 @@ export function Pane({ index }: { index: number }) {
   const mismatch = reported && modelOpt?.current && !reported.toLowerCase().includes(modelOpt.current.toLowerCase());
 
   return (
-    <motion.section
-      layout
-      transition={smooth}
+    <section
       aria-label={`ペイン ${index + 1}: ${r.title}`}
       onMouseDown={() => focusPane(index)}
-      className={cn("flex min-w-0 flex-col border-r last:border-r-0", focused && "bg-white/[0.01]")}
+      className={cn("flex min-w-0 flex-col", focused && "bg-white/[0.01]")}
     >
       <div className="flex h-9 shrink-0 items-center gap-2 border-b pr-1.5 pl-3">
         <StatusIcon status={r.status} />
@@ -130,6 +127,6 @@ export function Pane({ index }: { index: number }) {
         onSend={(t) => void sendPrompt(id, t)}
         onSet={(c, v) => void setCategory(id, c, v)}
       />
-    </motion.section>
+    </section>
   );
 }
