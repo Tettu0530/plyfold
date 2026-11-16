@@ -159,7 +159,8 @@ const MENU_LOOK: Look = { background: "rgba(23, 23, 23, 1)", border: "rgba(255, 
  */
 export function useLiquidMenu(id: string, anchor: string) {
   const ref = useRef<HTMLElement | null>(null);
-  useLiquidClip(id, ref);
+  // 動いているあいだは、最初のフレームから隠しておく（フェードは useLiquidClip が毎フレーム上書きする）
+  const moving = useLiquidClip(id, ref);
   const onOpenChange = (open: boolean) => {
     const base = { anchor, radius: 8, anchorRadius: 6, fromLook: CHIP_LOOK, toLook: MENU_LOOK };
     if (open) {
@@ -172,7 +173,7 @@ export function useLiquidMenu(id: string, anchor: string) {
     const ghost = { getBoundingClientRect: () => rect } as unknown as HTMLElement;
     liquidCloseFrom(id, { ...base, target: () => ghost });
   };
-  return { ref, onOpenChange };
+  return { ref, onOpenChange, moving };
 }
 
 /** 指定があれば、待ってから動き出す */

@@ -59,7 +59,7 @@ function ContextMeter({ info, pct, scope }: { info: SessionInfo; pct: number; sc
           {pct}%
         </button>
       </PopoverTrigger>
-      <PopoverContent ref={menu.ref as React.Ref<HTMLDivElement>} side="top" align="end" className="z-[58] flex w-60 flex-col gap-2 p-3 text-xs">
+      <PopoverContent ref={menu.ref as React.Ref<HTMLDivElement>} side="top" align="end" className={cn("z-[58] flex w-60 flex-col gap-2 p-3 text-xs data-[state=open]:animate-none data-[state=closed]:animate-none", menu.moving && "opacity-0")}>
         <div className="flex items-baseline justify-between">
           <span className="font-medium">コンテキスト</span>
           <span className="font-mono tabular">
@@ -126,7 +126,7 @@ export function ControlRow({
             <span>{model.choices.find((c) => c.value === model.current)?.name ?? model.current}</span>
             <ChevronsUpDown className="size-3 text-muted-foreground" aria-hidden />
           </SelectTrigger>
-          <SelectContent ref={modelMenu.ref as React.Ref<HTMLDivElement>} className="z-[58]">
+          <SelectContent ref={modelMenu.ref as React.Ref<HTMLDivElement>} position="popper" side="top" align="start" sideOffset={6} className={cn("z-[58] data-[state=open]:animate-none data-[state=closed]:animate-none", modelMenu.moving && "opacity-0")}>
             {model.choices.map((c) => (
               <SelectItem key={c.value} value={c.value}>
                 {c.name}
@@ -149,7 +149,7 @@ export function ControlRow({
             </span>
             <span className="text-muted-foreground">{effort.current}</span>
           </SelectTrigger>
-          <SelectContent ref={effortMenu.ref as React.Ref<HTMLDivElement>} className="z-[58]">
+          <SelectContent ref={effortMenu.ref as React.Ref<HTMLDivElement>} position="popper" side="top" align="start" sideOffset={6} className={cn("z-[58] data-[state=open]:animate-none data-[state=closed]:animate-none", effortMenu.moving && "opacity-0")}>
             {effort.choices.map((c) => (
               <SelectItem key={c.value} value={c.value}>
                 {c.name}

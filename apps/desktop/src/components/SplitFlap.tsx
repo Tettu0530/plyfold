@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import { appleSpring } from "./motion";
 
@@ -14,33 +14,34 @@ const BOTTOM = "inset(50% 0 0 0)";
 export function SplitFlap<T extends string>({ value, render, className }: { value: T; render: (v: T) => React.ReactNode; className?: string }) {
   const [prev, setPrev] = useState<T | null>(null);
   const [flip, setFlip] = useState(0);
-  const last = useRef(value);
-
-  useEffect(() => {
-    if (last.current === value) return;
-    setPrev(last.current);
+  const [shown, setShown] = useState(value);
+  // 描画の中で前の値を覚える（effect で覚えると、1 フレームだけ新しい値がそのまま見えてしまう）
+  if (shown !== value) {
+    setPrev(shown);
+    setShown(value);
     setFlip((n) => n + 1);
-    last.current = value;
-  }, [value]);
+  }
 
   const cell = "col-start-1 row-start-1 flex items-center gap-1.5";
   if (prev === null) {
     return <span className={`inline-grid ${className ?? ""}`}><span className={cell}>{render(value)}</span></span>;
   }
+  // めくれているあいだは、半分ずつを地の色で塗りつぶす（透けると古い文字と新しい文字が重なって見える）
+  const solid = `${cell} bg-background`;
   return (
     <span className={`inline-grid [perspective:120px] ${className ?? ""}`}>
       {/* 奥: 新しい上半分と、まだ残っている古い下半分 */}
-      <span className={cell} style={{ clipPath: TOP }}>
+      <span className={solid} style={{ clipPath: TOP }}>
         {render(value)}
       </span>
-      <span className={cell} style={{ clipPath: BOTTOM }} aria-hidden>
+      <span className={solid} style={{ clipPath: BOTTOM }} aria-hidden>
         {render(prev)}
       </span>
       {/* 倒れる古い上半分 */}
       <motion.span
         key={`top-${flip}`}
         aria-hidden
-        className={cell}
+        className={solid}
         style={{ clipPath: TOP, transformOrigin: "50% 50%", backfaceVisibility: "hidden" }}
         initial={{ rotateX: 0 }}
         animate={{ rotateX: -90 }}
@@ -52,7 +53,7 @@ export function SplitFlap<T extends string>({ value, render, className }: { valu
       <motion.span
         key={`bottom-${flip}`}
         aria-hidden
-        className={cell}
+        className={solid}
         style={{ clipPath: BOTTOM, transformOrigin: "50% 50%", backfaceVisibility: "hidden" }}
         initial={{ rotateX: 90 }}
         animate={{ rotateX: 0 }}

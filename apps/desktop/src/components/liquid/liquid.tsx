@@ -8,7 +8,7 @@
 //   pop     : 出発点の裏から滑り出て、そのまま 1 本のばねで行き先の形へ（標準。出発点の面より下に描く）
 // 測定（tools/liquid-probe）では、Apple の変形は外枠が 1 本のばねで動く。どの型も段ごとに 1 本のばねで動かす
 import { animate, motion, motionValue, useMotionValue, useReducedMotion, useTransform, useVelocity, type AnimationPlaybackControls, type MotionValue } from "motion/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { appleSpring, bouncy, interactive, smooth, snappy } from "../motion";
@@ -59,6 +59,76 @@ function edgesOf(el: Element | null | undefined, radius: number): Edges | null {
 }
 
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
+
+// ---- 液架橋: 出発点と実体のあいだに張る液体の首（メタボールの橋）
+type Pt = { x: number; y: number };
+const at = (c: Pt, a: number, r: number): Pt => ({ x: c.x + r * Math.cos(a), y: c.y + r * Math.sin(a) });
+const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, lo > hi ? (lo + hi) / 2 : v));
+
+/** 円 1（出発点）と円 2（実体）をつなぐ首の輪郭。離れすぎたら切れる（null） */
+export function bridgePath(c1: Pt, r1: number, c2: Pt, r2: number, stretch = 3.5, v = 0.5, handle = 2.4): string | null {
+  const d = dist(c1, c2);
+  const max = r1 + r2 * stretch;
+  if (r1 <= 0 || r2 <= 0 || d > max || d <= Math.abs(r1 - r2)) return null;
+  let u1 = 0;
+  let u2 = 0;
+  if (d < r1 + r2) {
+    u1 = Math.acos(clamp((r1 * r1 + d * d - r2 * r2) / (2 * r1 * d), -1, 1));
+    u2 = Math.acos(clamp((r2 * r2 + d * d - r1 * r1) / (2 * r2 * d), -1, 1));
+  }
+  const base = Math.atan2(c2.y - c1.y, c2.x - c1.x);
+  const spread = Math.acos(clamp((r1 - r2) / d, -1, 1));
+  const a1 = base + u1 + (spread - u1) * v;
+  const a2 = base - u1 - (spread - u1) * v;
+  const a3 = base + Math.PI - u2 - (Math.PI - u2 - spread) * v;
+  const a4 = base - Math.PI + u2 + (Math.PI - u2 - spread) * v;
+  const p1 = at(c1, a1, r1);
+  const p2 = at(c1, a2, r1);
+  const p3 = at(c2, a3, r2);
+  const p4 = at(c2, a4, r2);
+  // 離れるほど首が細くなる（取っ手を短くする）
+  const k = Math.min(v * handle, dist(p1, p3) / (r1 + r2)) * Math.min(1, (d * 2) / (r1 + r2));
+  const h1 = at(p1, a1 - Math.PI / 2, r1 * k);
+  const h2 = at(p2, a2 + Math.PI / 2, r1 * k);
+  const h3 = at(p3, a3 + Math.PI / 2, r2 * k);
+  const h4 = at(p4, a4 - Math.PI / 2, r2 * k);
+  const f = (p: Pt) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
+  return `M ${f(p1)} C ${f(h1)} ${f(h3)} ${f(p3)} A ${r2} ${r2} 0 ${d > r1 - r2 ? 1 : 0} 0 ${f(p4)} C ${f(h4)} ${f(h2)} ${f(p2)} Z`;
+}
+
+/** 出発点と実体のあいだの液架橋を、毎フレーム描き直す */
+function Bridge({ anchor, edges, fill, opacity, zIndex }: { anchor: string; edges: { L: MotionValue<number>; T: MotionValue<number>; R: MotionValue<number>; B: MotionValue<number> }; fill: MotionValue<string>; opacity: MotionValue<number>; zIndex: number }) {
+  const path = useRef<SVGPathElement>(null);
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      const el = anchors.get(anchor);
+      const p = path.current;
+      if (el && p) {
+        const a = el.getBoundingClientRect();
+        const s = { l: edges.L.get(), t: edges.T.get(), r: edges.R.get(), b: edges.B.get() };
+        const r1 = Math.min(a.height, a.width) / 2;
+        const r2 = Math.min(Math.min(s.r - s.l, s.b - s.t) / 2, r1 * 1.6);
+        const sc = { x: (s.l + s.r) / 2, y: (s.t + s.b) / 2 };
+        // それぞれの形の中で、相手にいちばん近い円の中心
+        const c1 = { x: clamp(sc.x, a.left + r1, a.right - r1), y: clamp(sc.y, a.top + r1, a.bottom - r1) };
+        const c2 = { x: clamp(c1.x, s.l + r2, s.r - r2), y: clamp(c1.y, s.t + r2, s.b - r2) };
+        const d = bridgePath(c1, r1, c2, r2);
+        p.setAttribute("d", d ?? "");
+        p.style.fill = fill.get();
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [anchor, edges, fill]);
+  return (
+    <motion.svg aria-hidden className="pointer-events-none fixed inset-0 size-full overflow-visible" style={{ zIndex, opacity }}>
+      <path ref={path} />
+    </motion.svg>
+  );
+}
 const motionValueOf = (v: number) => motionValue(v);
 const drop = (cx: number, cy: number, d = 30): Edges => ({ l: cx - d / 2, t: cy - d / 2, r: cx + d / 2, b: cy + d / 2, radius: d / 2 });
 
@@ -170,6 +240,18 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
       for (let i = 0; i < 10 && !target.current; i++) {
         await new Promise((r) => requestAnimationFrame(r));
         if (!alive()) return;
+      }
+      // メニューなどは、出た直後に位置が決まる。位置が落ち着くまで待ってから測る
+      if (opening) {
+        let last = "";
+        for (let i = 0; i < 8 && target.current; i++) {
+          const b = target.current.getBoundingClientRect();
+          const key = `${Math.round(b.left)},${Math.round(b.top)},${Math.round(b.width)},${Math.round(b.height)}`;
+          if (key === last && b.width > 0) break;
+          last = key;
+          await new Promise((r) => requestAnimationFrame(r));
+          if (!alive()) return;
+        }
       }
       const dst = edgesOf(target.current, radius);
       if (reduced || !src || !dst) {
@@ -303,10 +385,13 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
   const popScaleY = useTransform(popScaleX, (s) => 1 / Math.sqrt(s));
 
   const animating = phase === "opening" || phase === "closing";
+  const edgesRef = useMemo(() => ({ L, T, R, B, rad }), [L, T, R, B, rad]);
   if (style === "pop") {
     // 枠線と影を見せたいので goo フィルタは掛けない（裏から出るので糸も要らない）
     const surface = animating
       ? createPortal(
+          <>
+          <Bridge anchor={anchor} edges={edgesRef} fill={background} opacity={opacity} zIndex={zIndex} />
           <motion.div
             aria-hidden
             className="pointer-events-none fixed top-0 left-0 border"
@@ -326,11 +411,12 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
               backdropFilter: backdrop,
               WebkitBackdropFilter: backdrop,
             }}
-          />,
+          />
+          </>,
           document.body,
         )
       : null;
-    return { revealed: phase === "open", mounted: phase !== "closed", layer: surface, edges: { L, T, R, B, rad } };
+    return { revealed: phase === "open", mounted: phase !== "closed", layer: surface, edges: edgesRef };
   }
   const layer = animating
     ? createPortal(
@@ -349,5 +435,5 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
       )
     : null;
 
-  return { revealed: phase === "open", mounted: phase !== "closed", layer, edges: { L, T, R, B, rad } };
+  return { revealed: phase === "open", mounted: phase !== "closed", layer, edges: edgesRef };
 }
