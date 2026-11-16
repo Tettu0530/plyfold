@@ -16,7 +16,9 @@ import { appleSpring, bouncy, interactive, smooth, snappy } from "../motion";
 export type LiquidStyle = "pop" | "morph" | "tear" | "droplet";
 
 // ---- 出発点の登録（名前 → 要素）
-const anchors = new Map<string, HTMLElement>();
+// 開発中の部分的な差し替え（HMR）でこのファイルが 2 つ読み込まれても、登録簿は 1 つに保つ
+const g = globalThis as { __plyfoldAnchors?: Map<string, HTMLElement> };
+const anchors = (g.__plyfoldAnchors ??= new Map<string, HTMLElement>());
 
 /** 分離の出発点にする要素を登録する ref を返す */
 export function liquidAnchor(name: string) {

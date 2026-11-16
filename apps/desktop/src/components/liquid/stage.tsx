@@ -36,7 +36,12 @@ interface StageState {
   revealed: Record<string, boolean>;
 }
 
-const useStage = create<StageState>(() => ({ jobs: {}, revealed: {} }));
+// HMR でこのファイルが 2 つ読み込まれても、登録先は 1 つに保つ
+const gs = globalThis as { __plyfoldStage?: ReturnType<typeof createStage> };
+function createStage() {
+  return create<StageState>(() => ({ jobs: {}, revealed: {} }));
+}
+const useStage = (gs.__plyfoldStage ??= createStage());
 let nonce = 0;
 
 export function liquidOpen(id: string, opts: LiquidJobOptions) {
