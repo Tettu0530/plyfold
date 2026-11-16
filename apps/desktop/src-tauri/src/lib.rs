@@ -9,7 +9,7 @@ use plyfold_profile::edit::{self, AuthKind, ProfileForm};
 use plyfold_profile::{Config, KeychainStore, SecretStore, default_state_dir};
 use plyfold_store::{EventRecord, SessionRecord};
 use plyfold_worktree::Diff;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager, State};
 
 /// 画面へ流すイベントの名前
@@ -21,6 +21,77 @@ struct AppState {
     config: RwLock<Config>,
     config_path: PathBuf,
     secrets: Arc<KeychainStore>,
+    state_dir: PathBuf,
+    settings: RwLock<AppSettings>,
+}
+
+/// アプリの設定（<state_dir>/settings.json）。プロファイルは config.toml の方
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+struct AppSettings {
+    /// "auto" / "zed" / "cursor" / "code" / "finder"
+    editor: String,
+    /// main に取り込んだら、エージェントを止めて worktree と枝を消す
+    cleanup_after_merge: bool,
+    /// ターンの途中でこれだけ何も届かなければ無応答にする
+    stall_seconds: u64,
+    /// 新しいセッションを worktree で始める
+    worktree_default: bool,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self { editor: "auto".into(), cleanup_after_merge: false, stall_seconds: 120, worktree_default: true }
+    }
+}
+
+fn load_settings(path: &std::path::Path) -> AppSettings {
+    std::fs::read_to_string(path).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+}
+
+#[derive(Serialize)]
+struct SettingsView {
+    settings: AppSettings,
+    config_path: String,
+    state_dir: String,
+}
+
+#[tauri::command]
+fn get_settings(state: State<'_, AppState>) -> SettingsView {
+    SettingsView {
+        settings: state.settings.read().unwrap().clone(),
+        config_path: state.config_path.display().to_string(),
+        state_dir: state.state_dir.display().to_string(),
+    }
+}
+
+#[tauri::command]
+fn save_settings(state: State<'_, AppState>, settings: AppSettings) -> CmdResult<()> {
+    if !["auto", "zed", "cursor", "code", "finder"].contains(&settings.editor.as_str()) {
+        return Err(format!("エディタ '{}' は選べません", settings.editor));
+    }
+    if !(30..=3600).contains(&settings.stall_seconds) {
+        return Err("無応答とみなすまでの時間は 30 秒から 1 時間までです".into());
+    }
+    let path = state.state_dir.join("settings.json");
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, serde_json::to_string_pretty(&settings).map_err(err)?).map_err(err)?;
+    std::fs::rename(tmp, path).map_err(err)?;
+    state.engine.set_stall_after(Duration::from_secs(settings.stall_seconds));
+    *state.settings.write().unwrap() = settings;
+    Ok(())
+}
+
+/// 設定ファイル（なければデータのフォルダ）を Finder で見せる
+#[tauri::command]
+fn reveal_path(state: State<'_, AppState>, which: String) -> CmdResult<()> {
+    let mut cmd = std::process::Command::new("open");
+    match which.as_str() {
+        "config" if state.config_path.exists() => cmd.arg("-R").arg(&state.config_path),
+        _ => cmd.arg(&state.state_dir),
+    };
+    cmd.spawn().map_err(err)?;
+    Ok(())
 }
 
 impl AppState {
@@ -308,9 +379,21 @@ fn commit_session(state: State<'_, AppState>, id: String, message: String) -> Cm
     state.engine.commit(&id, &message).map_err(err)
 }
 
+#[derive(Serialize)]
+struct MergeResult {
+    target: String,
+    /// 設定に従って worktree を片付けた
+    cleaned: bool,
+}
+
 #[tauri::command]
-fn merge_session(state: State<'_, AppState>, id: String) -> CmdResult<String> {
-    state.engine.merge(&id).map_err(err)
+async fn merge_session(state: State<'_, AppState>, id: String) -> CmdResult<MergeResult> {
+    let target = state.engine.merge(&id).map_err(err)?;
+    let cleanup = state.settings.read().unwrap().cleanup_after_merge;
+    if cleanup {
+        state.engine.cleanup_worktree(&id).await.map_err(|e| format!("{target} には取り込みましたが、片付けに失敗しました: {e}"))?;
+    }
+    Ok(MergeResult { target, cleaned: cleanup })
 }
 
 #[tauri::command]
@@ -320,7 +403,8 @@ fn create_pr(state: State<'_, AppState>, id: String) -> CmdResult<String> {
 
 #[tauri::command]
 fn open_in_editor(state: State<'_, AppState>, id: String) -> CmdResult<String> {
-    state.engine.open_in_editor(&id).map_err(err)
+    let editor = state.settings.read().unwrap().editor.clone();
+    state.engine.open_in_editor(&id, &editor).map_err(err)
 }
 
 #[tauri::command]
@@ -341,11 +425,12 @@ pub fn run() {
             let mut config = Config::load(&config_path)?;
             resolve_mock_agent(&mut config);
             let secrets = Arc::new(KeychainStore::new(KEYCHAIN_SERVICE));
+            let settings = load_settings(&state_dir.join("settings.json"));
             let engine = Engine::open(EngineOptions {
-                state_dir,
+                state_dir: state_dir.clone(),
                 config: config.clone(),
                 secrets: secrets.clone(),
-                stall_after: Duration::from_secs(120),
+                stall_after: Duration::from_secs(settings.stall_seconds),
             })?;
 
             // エンジンのイベントをそのまま画面へ
@@ -363,7 +448,7 @@ pub fn run() {
                 }
             });
 
-            app.manage(AppState { engine, config: RwLock::new(config), config_path, secrets });
+            app.manage(AppState { engine, config: RwLock::new(config), config_path, secrets, state_dir, settings: RwLock::new(settings) });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -391,6 +476,9 @@ pub fn run() {
             discard_session_changes,
             create_pr,
             open_in_editor,
+            get_settings,
+            save_settings,
+            reveal_path,
         ])
         .run(tauri::generate_context!())
         .expect("Plyfold を起動できません");

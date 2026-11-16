@@ -18,7 +18,8 @@ export function Sidebar() {
   const openInPane = useStore((s) => s.openInPane);
   const setSearchOpen = useStore((s) => s.setSearchOpen);
   const newDraft = useStore((s) => s.newDraft);
-  const setLabOpen = useStore((s) => s.setLabOpen);
+  const openSettings = useStore((s) => s.openSettings);
+  const settingsOpen = useStore((s) => !!s.settingsView);
   const openProfiles = useStore((s) => s.openProfiles);
   const profilesOpen = useStore((s) => !!s.profilesView);
   // 実体は出発点（ボタンや行）だけの裏から出る。実体はサイドバーの地より上（55）、出発点はその上（57）
@@ -156,11 +157,22 @@ export function Sidebar() {
           <KeyRound className="size-4" aria-hidden />
           <span className="grow text-left">プロファイル</span>
         </motion.button>
-        <button type="button" onClick={() => setLabOpen(true)} className="flex h-7 items-center gap-2 rounded-lg px-2 text-muted-foreground hover:bg-accent hover:text-foreground">
+        <motion.button
+          ref={liquidAnchor("settings")}
+          type="button"
+          whileTap={{ scale: 1.06 }}
+          transition={snappy}
+          onClick={() => openSettings()}
+          className={cn(
+            "relative flex h-7 items-center gap-2 rounded-lg px-2 text-muted-foreground hover:bg-accent hover:text-foreground",
+            settingsOpen && "bg-accent text-foreground",
+            active.has("settings") && "z-[57] bg-accent text-foreground",
+          )}
+        >
           <Settings className="size-4" aria-hidden />
           <span className="grow text-left">設定</span>
           <Keys keys={["cmd", ","]} />
-        </button>
+        </motion.button>
       </div>
     </nav>
   );

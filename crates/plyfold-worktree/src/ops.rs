@@ -104,13 +104,22 @@ pub fn create_pr(wt: &Worktree, title: &str) -> Result<String, WorktreeError> {
     Ok(String::from_utf8_lossy(&out.stdout).lines().last().unwrap_or("").trim().to_string())
 }
 
-/// worktree をエディタで開く。見つかったエディタの名前を返す（なければ Finder）
-pub fn open_in_editor(wt: &Worktree) -> Result<String, WorktreeError> {
+/// worktree をエディタで開く。`prefer` は "auto" / "zed" / "cursor" / "code" / "finder"。
+/// 開いたエディタの名前を返す（auto で見つからなければ Finder）
+pub fn open_in_editor(wt: &Worktree, prefer: &str) -> Result<String, WorktreeError> {
     let path = wt.path.display().to_string();
-    for (cmd, name) in [("zed", "Zed"), ("cursor", "Cursor"), ("code", "VS Code")] {
+    let editors = [("zed", "Zed"), ("cursor", "Cursor"), ("code", "VS Code")];
+    if let Some((cmd, name)) = editors.iter().find(|(c, _)| *c == prefer) {
+        if !has(cmd) {
+            return Err(fail(format!("{name} のコマンド（{cmd}）が見つかりません。設定でエディタを選び直してください")));
+        }
+        std::process::Command::new(cmd).arg(&path).spawn()?;
+        return Ok((*name).into());
+    }
+    for (cmd, name) in editors.iter().filter(|_| prefer != "finder") {
         if has(cmd) {
-            std::process::Command::new(cmd).arg(&path).spawn()?;
-            return Ok(name.into());
+            std::process::Command::new(*cmd).arg(&path).spawn()?;
+            return Ok((*name).into());
         }
     }
     std::process::Command::new("open").arg(&path).spawn()?;

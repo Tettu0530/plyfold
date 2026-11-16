@@ -1,4 +1,4 @@
-import { KeyRound, ListChecks, Plus, Search, Square } from "lucide-react";
+import { KeyRound, ListChecks, Plus, Search, Settings, Square } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -23,7 +23,7 @@ interface Entry {
 export function SearchCard() {
   const open = useStore((s) => s.searchOpen);
   const sessions = useStore((s) => s.sessions);
-  const { setSearchOpen, openInPane, newDraft, cancel, setLabOpen } = useStore.getState();
+  const { setSearchOpen, openInPane, newDraft, cancel, openSettings, openProfiles } = useStore.getState();
   const focusedId = useStore((s) => s.panes[s.focusedPane]);
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
@@ -64,13 +64,14 @@ export function SearchCard() {
       { key: "new", label: "新しいセッション", keys: ["cmd", "n"], icon: <Plus className="size-3.5" />, run: () => newDraft() },
       { key: "mode", label: "mode を切り替え", keys: ["shift", "tab"], icon: <ListChecks className="size-3.5" />, run: () => {} },
       { key: "stop", label: "作業中のターンを停止", keys: ["cmd", "."], icon: <Square className="size-3.5" />, run: () => focusedId && void cancel(focusedId) },
-      { key: "settings", label: "設定", keys: ["cmd", ","], icon: <KeyRound className="size-3.5" />, run: () => setLabOpen(true) },
+      { key: "settings", label: "設定", keys: ["cmd", ","], icon: <Settings className="size-3.5" />, run: () => openSettings() },
+      { key: "profiles", label: "プロファイル", icon: <KeyRound className="size-3.5" />, run: () => openProfiles() },
     ].filter((c) => match(c.label));
     return [
       { title: "最近のセッション", items: recent },
       { title: "コマンド", items: commands },
     ].filter((g) => g.items.length > 0);
-  }, [q, sessions, focusedId, openInPane, newDraft, cancel, setLabOpen]);
+  }, [q, sessions, focusedId, openInPane, newDraft, cancel, openSettings, openProfiles]);
 
   const flat = entries.flatMap((g) => g.items);
   const choose = (e: Entry | undefined) => {

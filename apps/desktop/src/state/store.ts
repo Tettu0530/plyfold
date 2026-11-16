@@ -5,7 +5,7 @@ import { create } from "zustand";
 import type { Look, LiquidStyle } from "@/components/liquid/liquid";
 import { liquidCloseFrom, liquidOpen } from "@/components/liquid/stage";
 import { api, inTauri, onEngineEvent } from "@/lib/api";
-import type { Category, EngineEvent, ProfileSummary, SessionInfo, SessionRecord } from "@/lib/types";
+import type { AppSettings, Category, EngineEvent, ProfileSummary, SessionInfo, SessionRecord } from "@/lib/types";
 import {
   addNotice,
   applyUpdate,
@@ -42,6 +42,7 @@ export const isDraft = (id: string | null | undefined): id is string => !!id && 
 
 /** ペインの見た目（分離アニメーションの行き先） */
 const PANE_LOOK: Look = { background: "rgba(10, 10, 10, 1)", border: "rgba(255, 255, 255, 0.1)", shadow: "0px 0px 0px rgba(0, 0, 0, 0)", blur: 0 };
+const settingsEl = () => document.querySelector<HTMLElement>("[data-settings-view]");
 const profilesEl = () => document.querySelector<HTMLElement>("[data-profiles-view]");
 const diffEl = () => document.querySelector<HTMLElement>("[data-diff-view]");
 const paneEl = (i: number) => document.querySelector<HTMLElement>(`[data-pane-index="${i}"]`);
@@ -91,6 +92,12 @@ interface State {
   closeDiff: () => void;
   /** プロファイルの画面（差分と同じく、閉じる動きのあいだは残す） */
   profilesView: { closing: boolean } | null;
+  settingsView: { closing: boolean } | null;
+  openSettings: () => void;
+  closeSettings: () => void;
+  settings: AppSettings;
+  saveSettings: (patch: Partial<AppSettings>) => Promise<void>;
+  reloadSessions: () => Promise<void>;
   openProfiles: () => void;
   closeProfiles: () => void;
   refreshProfiles: () => Promise<void>;
@@ -166,6 +173,8 @@ export const useStore = create<State>((set, get) => ({
   diffVersion: 0,
   bumpDiff: () => set((s) => ({ diffVersion: s.diffVersion + 1 })),
   profilesView: null,
+  settingsView: null,
+  settings: { editor: "auto", cleanup_after_merge: false, stall_seconds: 120, worktree_default: true },
   liquidStyle: "pop",
   searchLayerActive: false,
   liquidLag: 0.12,
@@ -174,10 +183,10 @@ export const useStore = create<State>((set, get) => ({
   init: async () => {
     if (!inTauri || get().ready) return;
     await onEngineEvent((e) => set((s) => ({ sessions: reduceEvent(s.sessions, e) })));
-    const [profiles, records] = await Promise.all([api.listProfiles(), api.listSessions()]);
+    const [profiles, records, sv] = await Promise.all([api.listProfiles(), api.listSessions(), api.getSettings()]);
     const sessions: Record<string, SessionView> = {};
     for (const r of records) sessions[r.id] = newView(r);
-    set({ profiles, sessions, ready: true });
+    set({ profiles, sessions, settings: sv.settings, ready: true });
   },
 
   setPaneCount: (paneCount) => set((s) => ({ paneCount, focusedPane: Math.min(s.focusedPane, paneCount - 1) })),
@@ -241,6 +250,40 @@ export const useStore = create<State>((set, get) => ({
     liquidCloseFrom("profiles", { anchor: "profiles", target: profilesEl, toLook: PANE_LOOK, onDone: () => set({ profilesView: null }) });
   },
 
+  openSettings: () => {
+    if (get().settingsView) return;
+    liquidOpen("settings", { anchor: "settings", target: settingsEl, toLook: PANE_LOOK });
+    set({ settingsView: { closing: false } });
+  },
+
+  closeSettings: () => {
+    const v = get().settingsView;
+    if (!v || v.closing) return;
+    set({ settingsView: { closing: true } });
+    liquidCloseFrom("settings", { anchor: "settings", target: settingsEl, toLook: PANE_LOOK, onDone: () => set({ settingsView: null }) });
+  },
+
+  saveSettings: async (patch) => {
+    const prev = get().settings;
+    const next = { ...prev, ...patch };
+    set({ settings: next });
+    try {
+      await api.saveSettings(next);
+    } catch (e) {
+      set({ settings: prev });
+      throw e;
+    }
+  },
+
+  reloadSessions: async () => {
+    const records = await api.listSessions();
+    set((st) => {
+      const sessions = { ...st.sessions };
+      for (const r of records) sessions[r.id] = sessions[r.id] ? { ...sessions[r.id], record: r } : newView(r);
+      return { sessions };
+    });
+  },
+
   refreshProfiles: async () => {
     if (!inTauri) return;
     set({ profiles: await api.listProfiles() });
@@ -263,7 +306,7 @@ export const useStore = create<State>((set, get) => ({
     const s = get();
     const id = `draft:${Date.now()}`;
     const named = s.profiles.find((p) => p.name !== p.agent) ?? s.profiles[0];
-    set({ drafts: { ...s.drafts, [id]: { profile: named?.name ?? null, repo: lastRepo(), worktree: true, busy: false, error: null } } });
+    set({ drafts: { ...s.drafts, [id]: { profile: named?.name ?? null, repo: lastRepo(), worktree: s.settings.worktree_default, busy: false, error: null } } });
     void get().openInPane(id, undefined, "new-session");
   },
 

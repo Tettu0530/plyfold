@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-import type { Category, CheckResult, Diff, EngineEvent, EventRecord, ProfileDetail, ProfileForm, ProfileSummary, SessionInfo, SessionRecord, WtStatus } from "./types";
+import type { Category, CheckResult, Diff, EngineEvent, EventRecord, ProfileDetail, ProfileForm, ProfileSummary, SessionInfo, SessionRecord, SettingsView, WtStatus, AppSettings } from "./types";
 
 // Tauri のコマンド（src-tauri/src/lib.rs）の薄い包み。引数名は Rust 側の camelCase 変換に合わせる
 export const api = {
@@ -23,7 +23,10 @@ export const api = {
   sessionDiff: (id: string) => invoke<Diff>("session_diff", { id }),
   worktreeStatus: (id: string) => invoke<WtStatus>("worktree_status", { id }),
   commitSession: (id: string, message: string) => invoke<string>("commit_session", { id, message }),
-  mergeSession: (id: string) => invoke<string>("merge_session", { id }),
+  mergeSession: (id: string) => invoke<{ target: string; cleaned: boolean }>("merge_session", { id }),
+  getSettings: () => invoke<SettingsView>("get_settings"),
+  saveSettings: (settings: AppSettings) => invoke<void>("save_settings", { settings }),
+  revealPath: (which: "config" | "data") => invoke<void>("reveal_path", { which }),
   createPr: (id: string) => invoke<string>("create_pr", { id }),
   openInEditor: (id: string) => invoke<string>("open_in_editor", { id }),
   discardSessionChanges: (id: string) => invoke<void>("discard_session_changes", { id }),

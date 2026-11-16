@@ -147,7 +147,7 @@ struct Inner {
     worktrees: Worktrees,
     live: Mutex<HashMap<String, Arc<Live>>>,
     tx: broadcast::Sender<EngineEvent>,
-    stall_after: Duration,
+    stall_after_ms: AtomicU64,
     perm_seq: AtomicU64,
 }
 
@@ -197,7 +197,7 @@ impl Engine {
                 state_dir: opts.state_dir,
                 live: Mutex::new(HashMap::new()),
                 tx: broadcast::channel(4096).0,
-                stall_after: opts.stall_after,
+                stall_after_ms: AtomicU64::new(opts.stall_after.as_millis() as u64),
                 perm_seq: AtomicU64::new(0),
             }),
         })
@@ -557,10 +557,26 @@ impl Engine {
         Ok(url)
     }
 
-    pub fn open_in_editor(&self, id: &str) -> Result<String, CoreError> {
+    pub fn open_in_editor(&self, id: &str, prefer: &str) -> Result<String, CoreError> {
         let rec = self.inner.store.get_session(id)?;
         let wt = worktree_of(&rec).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
-        Ok(plyfold_worktree::ops::open_in_editor(&wt)?)
+        Ok(plyfold_worktree::ops::open_in_editor(&wt, prefer)?)
+    }
+
+    /// 取り込んだ後の片付け: エージェントを止め、worktree と枝を消す。記録は残り、開き直すと元のリポジトリで動く
+    pub async fn cleanup_worktree(&self, id: &str) -> Result<(), CoreError> {
+        let rec = self.inner.store.get_session(id)?;
+        let wt = worktree_of(&rec).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
+        self.close_session(id).await?;
+        self.inner.worktrees.remove(&wt, true)?;
+        self.inner.store.set_workspace(id, rec.repo_path.as_deref(), None, None, None)?;
+        self.inner.notice(id, format!("worktree と枝 {} を片付けました", wt.branch));
+        Ok(())
+    }
+
+    /// 無応答とみなすまでの時間を変える（次の見張りから効く）
+    pub fn set_stall_after(&self, d: Duration) {
+        self.inner.stall_after_ms.store(d.as_millis() as u64, Ordering::SeqCst);
     }
 
     /// 作業ツリーを基準のコミットまで戻す
@@ -672,7 +688,7 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
 }
 
 async fn watchdog(inner: Arc<Inner>, id: String, live: Arc<Live>) {
-    let tick = (inner.stall_after / 4).clamp(Duration::from_millis(50), Duration::from_secs(1));
+    let tick = (Duration::from_millis(inner.stall_after_ms.load(Ordering::SeqCst)) / 4).clamp(Duration::from_millis(50), Duration::from_secs(1));
     loop {
         tokio::time::sleep(tick).await;
         if live.closing.load(Ordering::SeqCst) || !inner.live.lock().unwrap().contains_key(&id) {
@@ -681,7 +697,7 @@ async fn watchdog(inner: Arc<Inner>, id: String, live: Arc<Live>) {
         let idle = live.last_activity.lock().unwrap().elapsed();
         if live.in_turn.load(Ordering::SeqCst)
             && live.permissions.lock().unwrap().is_empty()
-            && idle >= inner.stall_after
+            && idle >= Duration::from_millis(inner.stall_after_ms.load(Ordering::SeqCst))
             && !live.stalled.swap(true, Ordering::SeqCst)
         {
             inner.set_status(&id, SessionStatus::Stalled);

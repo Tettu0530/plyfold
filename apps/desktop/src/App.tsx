@@ -7,6 +7,7 @@ import { GooDefs } from "./components/liquid/liquid";
 import { LiquidStage } from "./components/liquid/stage";
 import { DiffView } from "./components/DiffView";
 import { ProfilesView } from "./components/ProfilesView";
+import { SettingsView } from "./components/SettingsView";
 import { MotionLab } from "./components/MotionLab";
 import { PaneGrid } from "./components/pane/PaneGrid";
 import { SearchCard } from "./components/SearchCard";
@@ -26,7 +27,8 @@ function useShortcuts() {
         s.setSearchOpen(!s.searchOpen);
       } else if (e.key === ",") {
         e.preventDefault();
-        s.setLabOpen(true);
+        if (s.settingsView) s.closeSettings();
+        else s.openSettings();
       } else if (e.key === "n") {
         e.preventDefault();
         s.newDraft();
@@ -105,6 +107,7 @@ export default function App() {
         <GooDefs />
         <DiffView />
         <ProfilesView />
+        <SettingsView />
         <LiquidStage />
         <SearchCard />
         <MotionLab />

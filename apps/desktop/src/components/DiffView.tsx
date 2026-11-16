@@ -231,7 +231,12 @@ function Actions({ id, title, status, busy, onDone }: { id: string; title: strin
     }
   };
   const commit = () => run(async () => `コミットしました（${await api.commitSession(id, message)}）`);
-  const merge = () => run(async () => `${await api.mergeSession(id)} に取り込みました`);
+  const merge = () =>
+    run(async () => {
+      const r = await api.mergeSession(id);
+      if (r.cleaned) await useStore.getState().reloadSessions();
+      return r.cleaned ? `${r.target} に取り込み、worktree を片付けました` : `${r.target} に取り込みました`;
+    });
   const pr = () => run(async () => `PR を作りました: ${await api.createPr(id)}`);
   const openEditor = async () => {
     setError(null);

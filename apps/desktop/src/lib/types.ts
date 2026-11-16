@@ -118,6 +118,21 @@ export interface FileStat {
   binary: boolean;
 }
 
+export type EditorChoice = "auto" | "zed" | "cursor" | "code" | "finder";
+
+export interface AppSettings {
+  editor: EditorChoice;
+  cleanup_after_merge: boolean;
+  stall_seconds: number;
+  worktree_default: boolean;
+}
+
+export interface SettingsView {
+  settings: AppSettings;
+  config_path: string;
+  state_dir: string;
+}
+
 export interface WtStatus {
   dirty: boolean;
   commits: number;
