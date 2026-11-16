@@ -96,6 +96,53 @@ export function useLiquidActiveAnchors(): Set<string> {
   return new Set(key ? key.split("\n") : []);
 }
 
+type Edges = ReturnType<typeof useLiquidMorph>["edges"];
+const liveEdges = new Map<string, Edges>();
+
+/** id の分離アニメーションが動いているか */
+export function useLiquidActive(id: string): boolean {
+  return useStage((s) => !!s.jobs[id]);
+}
+
+/**
+ * 全面の画面用: 動いているあいだ、画面を実体の形で切り抜き、広がるのに合わせてフェードで見せる
+ * （閉じるときは縮むのに合わせて薄れる）。広がりきるのを待たずに中身が出てくる
+ */
+export function useLiquidClip(id: string, ref: React.RefObject<HTMLElement | null>) {
+  const active = useLiquidActive(id);
+  useEffect(() => {
+    const el = ref.current;
+    if (!active || !el) return;
+    let raf = 0;
+    const tick = () => {
+      const e = liveEdges.get(id);
+      const box = el.getBoundingClientRect();
+      if (e && box.width > 0) {
+        const l = e.L.get(), t = e.T.get(), r = e.R.get(), b = e.B.get();
+        const top = Math.max(0, t - box.top);
+        const left = Math.max(0, l - box.left);
+        const right = Math.max(0, box.right - r);
+        const bottom = Math.max(0, box.bottom - b);
+        el.style.clipPath = `inset(${top}px ${right}px ${bottom}px ${left}px round ${e.rad.get()}px)`;
+        // 面積の割合で見せる（3 割から 8 割まで広がるあいだにフェード）
+        const k = Math.min(1, Math.max(0, ((r - l) * (b - t)) / (box.width * box.height)));
+        const x = Math.min(1, Math.max(0, (k - 0.3) / 0.5));
+        el.style.opacity = String(x * x * (3 - 2 * x));
+        el.style.transition = "none";
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      el.style.clipPath = "";
+      el.style.opacity = "";
+      el.style.transition = "";
+    };
+  }, [active, id, ref]);
+  return active;
+}
+
 /** 指定があれば、待ってから動き出す */
 function DelayedJob({ job }: { job: Job }) {
   const [ready, setReady] = useState(!job.delay);
@@ -116,7 +163,7 @@ function JobView({ job }: { job: Job }) {
       return job.target();
     },
   }).current as React.RefObject<HTMLElement | null>;
-  const { revealed, mounted, layer } = useLiquidMorph(job.open, {
+  const { revealed, mounted, layer, edges } = useLiquidMorph(job.open, {
     anchor: job.anchor,
     target: targetRef,
     radius: job.radius ?? 0,
@@ -132,6 +179,14 @@ function JobView({ job }: { job: Job }) {
   useEffect(() => {
     useStage.setState((s) => ({ revealed: { ...s.revealed, [job.id]: revealed } }));
   }, [revealed, job.id]);
+
+  // 実体の形を、行き先の画面から読めるようにする（useLiquidClip）
+  useEffect(() => {
+    liveEdges.set(job.id, edges);
+    return () => {
+      if (liveEdges.get(job.id) === edges) liveEdges.delete(job.id);
+    };
+  }, [job.id, edges]);
 
   // 全面の画面: 出発点を手前に出す時間を、裏から出る出だし／裏へ戻る終わりだけにする
   useEffect(() => {

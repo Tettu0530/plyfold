@@ -330,7 +330,7 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
           document.body,
         )
       : null;
-    return { revealed: phase === "open", mounted: phase !== "closed", layer: surface };
+    return { revealed: phase === "open", mounted: phase !== "closed", layer: surface, edges: { L, T, R, B, rad } };
   }
   const layer = animating
     ? createPortal(
@@ -349,5 +349,5 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
       )
     : null;
 
-  return { revealed: phase === "open", mounted: phase !== "closed", layer };
+  return { revealed: phase === "open", mounted: phase !== "closed", layer, edges: { L, T, R, B, rad } };
 }

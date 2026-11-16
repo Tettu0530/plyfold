@@ -1,5 +1,5 @@
 import { ChevronLeft, ExternalLink, GitBranch, GitCommitHorizontal, GitMerge, GitPullRequest, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
 import { parsePatch, toSplit, type FilePatch, type PatchLine } from "@/lib/patch";
@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { ProviderLogo } from "./icons";
 import { Keys } from "./Keys";
-import { useLiquidRevealed } from "./liquid/stage";
+import { useLiquidClip, useLiquidRevealed } from "./liquid/stage";
 import { Segmented } from "./Segmented";
 
 type View = "unified" | "split";
@@ -27,6 +27,8 @@ export function DiffView() {
   const view = useStore((s) => (diff ? s.sessions[diff.id] : undefined));
   const closeDiff = useStore((s) => s.closeDiff);
   const revealed = useLiquidRevealed("diff");
+  const surface = useRef<HTMLDivElement>(null);
+  const moving = useLiquidClip("diff", surface);
   const [data, setData] = useState<Diff | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sel, setSel] = useState(0);
@@ -76,11 +78,12 @@ export function DiffView() {
 
   return (
     <div
+      ref={surface}
       data-diff-view
       role="dialog"
       aria-label={`差分: ${r.title}`}
       aria-hidden={!visible}
-      className={cn("fixed inset-x-0 top-10 bottom-0 z-40 flex flex-col bg-background transition-opacity duration-150", visible ? "opacity-100" : "pointer-events-none opacity-0")}
+      className={cn("fixed inset-x-0 top-10 bottom-0 flex flex-col bg-background transition-opacity duration-150", moving ? "pointer-events-none z-[56]" : "z-40", visible ? "opacity-100" : "pointer-events-none opacity-0")}
     >
       <div className="flex h-10 shrink-0 items-center gap-2 border-b pr-3 pl-2">
         <button type="button" onClick={closeDiff} className="flex h-7 items-center gap-1 rounded-lg pr-2 pl-1 text-muted-foreground hover:bg-accent hover:text-foreground">

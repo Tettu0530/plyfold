@@ -1,5 +1,5 @@
 import { ChevronLeft, FolderOpen, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
@@ -7,7 +7,7 @@ import type { AppSettings, EditorChoice, SettingsView as Paths } from "@/lib/typ
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { Keys } from "./Keys";
-import { useLiquidRevealed } from "./liquid/stage";
+import { useLiquidClip, useLiquidRevealed } from "./liquid/stage";
 import { Segmented } from "./Segmented";
 
 const EDITORS: { value: EditorChoice; label: string }[] = [
@@ -27,6 +27,8 @@ export function SettingsView() {
   const save = useStore((s) => s.saveSettings);
   const setLabOpen = useStore((s) => s.setLabOpen);
   const revealed = useLiquidRevealed("settings");
+  const surface = useRef<HTMLDivElement>(null);
+  const moving = useLiquidClip("settings", surface);
   const [paths, setPaths] = useState<Paths | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,11 +52,12 @@ export function SettingsView() {
 
   return (
     <div
+      ref={surface}
       data-settings-view
       role="dialog"
       aria-label="設定"
       aria-hidden={!visible}
-      className={cn("fixed inset-x-0 top-10 bottom-0 z-40 flex flex-col bg-background transition-opacity duration-150", visible ? "opacity-100" : "pointer-events-none opacity-0")}
+      className={cn("fixed inset-x-0 top-10 bottom-0 flex flex-col bg-background transition-opacity duration-150", moving ? "pointer-events-none z-[56]" : "z-40", visible ? "opacity-100" : "pointer-events-none opacity-0")}
     >
       <div className="flex h-10 shrink-0 items-center gap-2 border-b pr-3 pl-2">
         <button type="button" onClick={close} className="flex h-7 items-center gap-1 rounded-lg pr-2 pl-1 text-muted-foreground hover:bg-accent hover:text-foreground">

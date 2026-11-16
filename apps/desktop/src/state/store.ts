@@ -5,6 +5,7 @@ import { create } from "zustand";
 import type { Look, LiquidStyle } from "@/components/liquid/liquid";
 import { liquidCloseFrom, liquidOpen } from "@/components/liquid/stage";
 import { api, inTauri, onEngineEvent } from "@/lib/api";
+import { loadInfoCache, saveInfoCache, snapshot, type InfoCache } from "./infoCache";
 import type { AppSettings, Category, EngineEvent, ProfileSummary, SessionInfo, SessionRecord } from "@/lib/types";
 import {
   addNotice,
@@ -34,6 +35,8 @@ export interface Draft {
   profile: string | null;
   repo: string;
   worktree: boolean;
+  /** 起動前に選んだ model / effort / mode（起動した直後に設定する） */
+  choices: Partial<Record<Category, string>>;
   busy: boolean;
   error: string | null;
 }
@@ -93,6 +96,8 @@ interface State {
   /** プロファイルの画面（差分と同じく、閉じる動きのあいだは残す） */
   profilesView: { closing: boolean } | null;
   settingsView: { closing: boolean } | null;
+  /** プロファイルごとの、前回のセッションの設定項目（下書きで使う） */
+  infoCache: InfoCache;
   openSettings: () => void;
   closeSettings: () => void;
   settings: AppSettings;
@@ -174,6 +179,7 @@ export const useStore = create<State>((set, get) => ({
   bumpDiff: () => set((s) => ({ diffVersion: s.diffVersion + 1 })),
   profilesView: null,
   settingsView: null,
+  infoCache: loadInfoCache(),
   settings: { editor: "auto", cleanup_after_merge: false, stall_seconds: 120, worktree_default: true },
   liquidStyle: "pop",
   searchLayerActive: false,
@@ -306,7 +312,7 @@ export const useStore = create<State>((set, get) => ({
     const s = get();
     const id = `draft:${Date.now()}`;
     const named = s.profiles.find((p) => p.name !== p.agent) ?? s.profiles[0];
-    set({ drafts: { ...s.drafts, [id]: { profile: named?.name ?? null, repo: lastRepo(), worktree: s.settings.worktree_default, busy: false, error: null } } });
+    set({ drafts: { ...s.drafts, [id]: { profile: named?.name ?? null, repo: lastRepo(), worktree: s.settings.worktree_default, choices: {}, busy: false, error: null } } });
     void get().openInPane(id, undefined, "new-session");
   },
 
@@ -324,6 +330,18 @@ export const useStore = create<State>((set, get) => ({
       }
       const title = prompt.trim().split("\n")[0].slice(0, 40) || "新しいセッション";
       const rec = await api.startSession({ profile: d.profile, repo: d.repo, title, worktree: d.worktree });
+      // 下書きで選んだ model / effort / mode を、最初のプロンプトの前に設定する
+      const wanted = Object.entries(d.choices) as [Category, string][];
+      if (wanted.length > 0) {
+        const info = await api.sessionInfo(rec.id);
+        for (const [cat, value] of wanted) {
+          const cur = cat === "mode" ? (info?.config.find((o) => o.category === "mode")?.current ?? info?.current_mode) : info?.config.find((o) => o.category === cat)?.current;
+          if (cur === value) continue;
+          await api.setByCategory(rec.id, cat, value).catch(() => {
+            // 候補が変わっていた場合などは、エージェントの既定のまま始める
+          });
+        }
+      }
       set((s) => {
         const panes = s.panes.map((p) => (p === id ? rec.id : p));
         const drafts = { ...s.drafts };
@@ -396,3 +414,20 @@ function firstFreePane(panes: (string | null)[], count: number, focused: number)
   const free = panes.slice(0, count).indexOf(null);
   return free >= 0 ? free : focused;
 }
+
+// セッションの設定項目が変わったら、プロファイルごとに覚えておく
+useStore.subscribe((st, prev) => {
+  if (st.sessions === prev.sessions) return;
+  let next: InfoCache | null = null;
+  for (const [id, v] of Object.entries(st.sessions)) {
+    if (!v.info || v.info === prev.sessions[id]?.info || v.info.config.length === 0) continue;
+    const snap = snapshot(v.info);
+    const old = (next ?? st.infoCache)[v.record.profile];
+    if (old && JSON.stringify(old) === JSON.stringify(snap)) continue;
+    next = { ...(next ?? st.infoCache), [v.record.profile]: snap };
+  }
+  if (next) {
+    useStore.setState({ infoCache: next });
+    saveInfoCache(next);
+  }
+});

@@ -74,14 +74,17 @@ function ContextMeter({ info, pct }: { info: SessionInfo; pct: number }) {
 }
 
 /** 入力欄のすぐ上: model / effort / mode と、コンテキストの使用量 */
-function ControlRow({
+export function ControlRow({
   agent,
   info,
   onSet,
+  empty,
 }: {
   agent: string;
   info: SessionInfo | null;
   onSet: (c: Category, v: string) => void;
+  /** 設定項目がまだ分からないときに出す文 */
+  empty?: string;
 }) {
   const model = option(info, "model");
   const effort = option(info, "thought_level");
@@ -152,6 +155,7 @@ function ControlRow({
           <Keys keys={["shift", "tab"]} />
         </button>
       )}
+      {empty && !model && !effort && modes.length === 0 && <span className="px-1.5 text-muted-foreground">{empty}</span>}
       <span className="grow" />
       {ctxPct != null && info && <ContextMeter info={info} pct={ctxPct} />}
     </div>

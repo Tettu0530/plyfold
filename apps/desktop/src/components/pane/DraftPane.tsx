@@ -9,6 +9,9 @@ import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { AGENT_NAMES, ProviderLogo } from "../icons";
 import { CHIP_TRIGGER } from "./chip";
+import { ControlRow } from "./Composer";
+import { withChoices } from "@/state/infoCache";
+import type { Category } from "@/lib/types";
 
 /** 認証の種類の表記 */
 function authLabel(p: { keyed: boolean; custom_provider: boolean }) {
@@ -24,9 +27,14 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const profiles = useStore((s) => s.profiles);
   const { updateDraft, startDraft, closePane, focusPane } = useStore.getState();
   const [text, setText] = useState("");
+  const cached = useStore((s) => (draft?.profile ? s.infoCache[draft.profile] : undefined));
   if (!draft) return null;
   const sorted = [...profiles].sort((a, b) => Number(a.name === a.agent) - Number(b.name === b.agent) || a.name.localeCompare(b.name));
   const current = profiles.find((p) => p.name === draft.profile);
+  const info = cached && draft ? withChoices(cached, draft.choices) : null;
+  const choose = (c: Category, v: string) => updateDraft(id, { choices: { ...draft!.choices, [c]: v } });
+  const modes = info ? (info.config.find((o) => o.category === "mode")?.choices.map((c) => c.value) ?? info.modes.map((m) => m.value)) : [];
+  const mode = info ? (info.config.find((o) => o.category === "mode")?.current ?? info.current_mode) : null;
   const send = () => {
     if (draft.busy || !draft.profile) return;
     void startDraft(id, text);
@@ -59,7 +67,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
       <PopoverAnchor asChild>
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-0.5 text-xs">
-          <Select value={draft.profile ?? undefined} onValueChange={(v) => updateDraft(id, { profile: v })}>
+          <Select value={draft.profile ?? undefined} onValueChange={(v) => updateDraft(id, { profile: v, choices: {} })}>
             <SelectTrigger aria-label="プロファイル" className={`${CHIP_TRIGGER} gap-1.5`}>
               {current && <ProviderLogo agent={current.agent} className="size-3 text-muted-foreground" />}
               <span>{current ? (current.name === current.agent ? "default" : current.label) : "プロファイル"}</span>
@@ -101,6 +109,8 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
           </button>
         </div>
 
+        <ControlRow agent={current?.agent ?? ""} info={info} onSet={choose} empty={draft.profile ? "model と effort は起動後に選べます（次からは前回の値を出します）" : undefined} />
+
         <div className="flex items-end gap-2 rounded-xl border border-input bg-card py-1.5 pr-1.5 pl-3 focus-within:border-ring">
           <textarea
             aria-label="初期プロンプト"
@@ -113,6 +123,10 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
               if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 send();
+              } else if (e.key === "Tab" && e.shiftKey && modes.length > 0) {
+                e.preventDefault();
+                const i = mode ? modes.indexOf(mode) : -1;
+                choose("mode", modes[(i + 1) % modes.length]);
               }
             }}
             className="min-h-0 grow resize-none bg-transparent py-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"

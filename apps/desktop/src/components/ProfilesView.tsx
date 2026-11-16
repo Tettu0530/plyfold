@@ -1,5 +1,5 @@
 import { ChevronLeft, CircleAlert, CircleCheck, Plus, TriangleAlert } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { AGENT_NAMES, ProviderLogo } from "./icons";
 import { Keys } from "./Keys";
-import { useLiquidRevealed } from "./liquid/stage";
+import { useLiquidClip, useLiquidRevealed } from "./liquid/stage";
 import { Segmented } from "./Segmented";
 
 const AUTH_LABEL: Record<AuthKind, string> = { api: "公式 API", login: "既存のログイン", custom: "カスタムプロバイダー" };
@@ -44,6 +44,8 @@ export function ProfilesView() {
   const sessions = useStore((s) => s.sessions);
   const close = useStore((s) => s.closeProfiles);
   const revealed = useLiquidRevealed("profiles");
+  const surface = useRef<HTMLDivElement>(null);
+  const moving = useLiquidClip("profiles", surface);
   const agents = useMemo(() => profiles.filter((p) => p.name === p.agent && (p.agent !== "mock" || import.meta.env.DEV)).map((p) => p.agent), [profiles]);
   const [agent, setAgent] = useState<string>("claude");
   // 選んでいるプロファイル。null は新規
@@ -72,11 +74,12 @@ export function ProfilesView() {
 
   return (
     <div
+      ref={surface}
       data-profiles-view
       role="dialog"
       aria-label="プロファイル"
       aria-hidden={!visible}
-      className={cn("fixed inset-x-0 top-10 bottom-0 z-40 flex flex-col bg-background transition-opacity duration-150", visible ? "opacity-100" : "pointer-events-none opacity-0")}
+      className={cn("fixed inset-x-0 top-10 bottom-0 flex flex-col bg-background transition-opacity duration-150", moving ? "pointer-events-none z-[56]" : "z-40", visible ? "opacity-100" : "pointer-events-none opacity-0")}
     >
       <div className="flex h-10 shrink-0 items-center gap-2 border-b pr-3 pl-2">
         <button type="button" onClick={close} className="flex h-7 items-center gap-1 rounded-lg pr-2 pl-1 text-muted-foreground hover:bg-accent hover:text-foreground">
