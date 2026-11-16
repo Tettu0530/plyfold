@@ -50,7 +50,8 @@ export function PaneGrid({ count }: { count: PaneCount }) {
             animate={{ ...pct(r), opacity: 1 }}
             exit={{ ...pct(collapsed(r)), opacity: 0 }}
             transition={smooth}
-            className="absolute flex overflow-hidden border-r border-b [&>section]:min-w-[280px] [&>section]:grow"
+            data-pane-index={i}
+            className="absolute flex overflow-hidden border-r border-b [&>div>section]:min-w-[280px] [&>div>section]:grow"
             style={{ contain: "layout paint" }}
           >
             <Pane index={i} />

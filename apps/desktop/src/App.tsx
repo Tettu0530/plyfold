@@ -4,8 +4,8 @@ import { useEffect } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { GooDefs } from "./components/liquid/liquid";
+import { LiquidStage } from "./components/liquid/stage";
 import { MotionLab } from "./components/MotionLab";
-import { NewSessionDialog } from "./components/NewSessionDialog";
 import { PaneGrid } from "./components/pane/PaneGrid";
 import { SearchCard } from "./components/SearchCard";
 import { Segmented } from "./components/Segmented";
@@ -27,7 +27,7 @@ function useShortcuts() {
         s.setLabOpen(true);
       } else if (e.key === "n") {
         e.preventDefault();
-        s.setNewSessionOpen(true);
+        s.newDraft();
       } else if (e.key === ".") {
         const id = s.panes[s.focusedPane];
         if (id) {
@@ -101,8 +101,8 @@ export default function App() {
           )}
         </div>
         <GooDefs />
+        <LiquidStage />
         <SearchCard />
-        <NewSessionDialog />
         <MotionLab />
       </TooltipProvider>
     </MotionConfig>

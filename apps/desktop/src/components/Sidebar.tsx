@@ -8,6 +8,7 @@ import { useStore } from "@/state/store";
 import { ProviderLogo, STATUS, StatusIcon } from "./icons";
 import { Keys } from "./Keys";
 import { liquidAnchor } from "./liquid/liquid";
+import { useLiquidBusy } from "./liquid/stage";
 import { smooth, snappy } from "./motion";
 
 export function Sidebar() {
@@ -16,10 +17,12 @@ export function Sidebar() {
   const paneCount = useStore((s) => s.paneCount);
   const openInPane = useStore((s) => s.openInPane);
   const setSearchOpen = useStore((s) => s.setSearchOpen);
-  const setNewSessionOpen = useStore((s) => s.setNewSessionOpen);
+  const newDraft = useStore((s) => s.newDraft);
   const setLabOpen = useStore((s) => s.setLabOpen);
   // 検索カードの実体はサイドバーの裏から出てくる。そのあいだサイドバーを手前に出し、暗くする幕を自分の上に掛ける
-  const layerActive = useStore((s) => s.searchLayerActive);
+  const searchLayer = useStore((s) => s.searchLayerActive);
+  const liquidBusy = useLiquidBusy();
+  const layerActive = searchLayer || liquidBusy;
   const searchOpen = useStore((s) => s.searchOpen);
   const [closed, setClosed] = useState<Record<string, boolean>>({});
 
@@ -38,7 +41,7 @@ export function Sidebar() {
 
   return (
     <nav aria-label="セッション" className={cn("relative flex w-60 shrink-0 flex-col border-r bg-sidebar", layerActive && "z-[56]")}>
-      {layerActive && (
+      {searchLayer && (
         <motion.button
           type="button"
           aria-label="検索を閉じる"
@@ -51,15 +54,18 @@ export function Sidebar() {
         />
       )}
       <div className="flex flex-col p-2">
-        <button
+        <motion.button
+          ref={liquidAnchor("new-session")}
           type="button"
-          onClick={() => setNewSessionOpen(true)}
+          whileTap={{ scale: 1.06 }}
+          transition={snappy}
+          onClick={() => newDraft()}
           className="flex h-7 items-center gap-2 rounded-lg px-2 text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <Plus className="size-4" aria-hidden />
           <span className="grow text-left">新しいセッション</span>
           <Keys keys={["cmd", "n"]} />
-        </button>
+        </motion.button>
         <motion.button
           ref={liquidAnchor("search")}
           type="button"
@@ -108,11 +114,13 @@ export function Sidebar() {
                       layout="position"
                       transition={smooth}
                       key={r.id}
+                      ref={liquidAnchor(`session:${r.id}`)}
                       href="#"
+                      whileTap={{ scale: 1.03 }}
                       aria-current={open.has(r.id) ? "true" : undefined}
                       onClick={(e) => {
                         e.preventDefault();
-                        void openInPane(r.id);
+                        void openInPane(r.id, undefined, `session:${r.id}`);
                       }}
                       className={cn(
                         "mb-1 flex flex-col gap-1 rounded-lg p-2 text-foreground no-underline hover:bg-accent",

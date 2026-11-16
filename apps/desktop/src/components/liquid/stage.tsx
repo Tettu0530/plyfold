@@ -1,0 +1,123 @@
+// 分離アニメーションの規格の入口（.claude/skills/no-ai-slop-ui の 4. 動き）
+//
+//   liquidOpen("pane-0", { anchor: "session:<id>", target: () => 要素 })   … 出発点の裏から飛び出して、行き先に広がる
+//   liquidClose("pane-0")                                                … 行き先から縮んで、出発点の裏へ戻る
+//   liquidCloseFrom("pane-0", { anchor, target })                        … 今表示中の面を、閉じる動きで出発点へ戻す
+//   useLiquidRevealed("pane-0")                                          … 本物を見せてよいか（動いているあいだは false）
+//
+// 実体の描画は、アプリに 1 つ置く <LiquidStage /> がまとめて行う。
+import { useEffect, useRef } from "react";
+import { create } from "zustand";
+
+import { useStore } from "@/state/store";
+import { useLiquidMorph, type Look } from "./liquid";
+
+export interface LiquidJobOptions {
+  anchor: string;
+  target: () => HTMLElement | null;
+  radius?: number;
+  anchorRadius?: number;
+  /** 実体の重なり順。出発点がサイドバーなら、サイドバー（56）より下の 55 */
+  zIndex?: number;
+  fromLook?: Look;
+  toLook?: Look;
+}
+
+interface Job extends LiquidJobOptions {
+  id: string;
+  open: boolean;
+  initiallyOpen: boolean;
+  /** 同じ id で開き直したときに作り直すための番号 */
+  nonce: number;
+}
+
+interface StageState {
+  jobs: Record<string, Job>;
+  revealed: Record<string, boolean>;
+}
+
+const useStage = create<StageState>(() => ({ jobs: {}, revealed: {} }));
+let nonce = 0;
+
+export function liquidOpen(id: string, opts: LiquidJobOptions) {
+  useStage.setState((s) => ({
+    jobs: { ...s.jobs, [id]: { ...opts, id, open: true, initiallyOpen: false, nonce: ++nonce } },
+    revealed: { ...s.revealed, [id]: false },
+  }));
+}
+
+export function liquidClose(id: string) {
+  useStage.setState((s) => (s.jobs[id] ? { jobs: { ...s.jobs, [id]: { ...s.jobs[id], open: false } } } : s));
+}
+
+/** 今表示中の面を、閉じる動きで出発点へ戻す（liquidOpen で開いていない面にも使える） */
+export function liquidCloseFrom(id: string, opts: LiquidJobOptions) {
+  useStage.setState((s) => ({
+    jobs: { ...s.jobs, [id]: { ...opts, id, open: false, initiallyOpen: true, nonce: ++nonce } },
+    revealed: { ...s.revealed, [id]: false },
+  }));
+}
+
+/** id の面を見せてよいか。動きが登録されていなければ true */
+export function useLiquidRevealed(id: string): boolean {
+  return useStage((s) => (s.jobs[id] ? !!s.revealed[id] : true));
+}
+
+/** 何かの分離アニメーションが動いているか（サイドバーを実体より手前に出すため） */
+export function useLiquidBusy(): boolean {
+  return useStage((s) => Object.keys(s.jobs).length > 0);
+}
+
+function JobView({ job }: { job: Job }) {
+  const style = useStore((s) => s.liquidStyle);
+  const sizeLag = useStore((s) => s.liquidLag);
+  // 行き先は関数で受け取り、測るたびに引き直す
+  const targetRef = useRef({
+    get current() {
+      return job.target();
+    },
+  }).current as React.RefObject<HTMLElement | null>;
+  const { revealed, mounted, layer } = useLiquidMorph(job.open, {
+    anchor: job.anchor,
+    target: targetRef,
+    radius: job.radius ?? 0,
+    anchorRadius: job.anchorRadius ?? 8,
+    zIndex: job.zIndex ?? 55,
+    style,
+    sizeLag,
+    initiallyOpen: job.initiallyOpen,
+    ...(job.fromLook ? { fromLook: job.fromLook } : {}),
+    ...(job.toLook ? { toLook: job.toLook } : {}),
+  });
+
+  useEffect(() => {
+    useStage.setState((s) => ({ revealed: { ...s.revealed, [job.id]: revealed } }));
+  }, [revealed, job.id]);
+
+  // 開ききったら、あるいは閉じきったら、登録を外す（開いた面はそのまま見えている）
+  useEffect(() => {
+    if ((job.open && revealed) || (!job.open && !mounted)) {
+      useStage.setState((s) => {
+        if (s.jobs[job.id]?.nonce !== job.nonce) return s;
+        const jobs = { ...s.jobs };
+        delete jobs[job.id];
+        const rv = { ...s.revealed };
+        delete rv[job.id];
+        return { jobs, revealed: rv };
+      });
+    }
+  }, [job.open, revealed, mounted, job.id, job.nonce]);
+
+  return layer;
+}
+
+export function LiquidStage() {
+  const jobs = useStage((s) => s.jobs);
+  return (
+    <>
+      {Object.values(jobs).map((j) => (
+        <JobView key={`${j.id}:${j.nonce}`} job={j} />
+      ))}
+    </>
+  );
+}

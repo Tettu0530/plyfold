@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { useStore } from "@/state/store";
+import { isDraft, useStore } from "@/state/store";
+import { useLiquidRevealed } from "../liquid/stage";
+import { DraftPane } from "./DraftPane";
 import { ProviderLogo, StatusIcon } from "../icons";
 import { Keys } from "../Keys";
 import { Composer } from "./Composer";
@@ -12,7 +14,7 @@ import { PermissionCard } from "./PermissionCard";
 import { Transcript } from "./Transcript";
 
 function EmptyPane({ index }: { index: number }) {
-  const setNewSessionOpen = useStore((s) => s.setNewSessionOpen);
+  const newDraft = useStore((s) => s.newDraft);
   const focusPane = useStore((s) => s.focusPane);
   return (
     <section aria-label={`ペイン ${index + 1}（空き）`} className="flex min-w-0 flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
@@ -21,7 +23,7 @@ function EmptyPane({ index }: { index: number }) {
         type="button"
         onClick={() => {
           focusPane(index);
-          setNewSessionOpen(true);
+          newDraft();
         }}
         className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent hover:text-foreground"
       >
@@ -31,7 +33,18 @@ function EmptyPane({ index }: { index: number }) {
   );
 }
 
+/** 分離アニメーションで開いているあいだは中身を隠す（広がりきってから現れる） */
 export function Pane({ index }: { index: number }) {
+  const revealed = useLiquidRevealed(`pane-${index}`);
+  const id = useStore((s) => s.panes[index]);
+  return (
+    <div className="flex min-w-0 grow transition-opacity duration-150" style={{ opacity: revealed ? 1 : 0 }}>
+      {isDraft(id) ? <DraftPane index={index} id={id} /> : <SessionPane index={index} />}
+    </div>
+  );
+}
+
+function SessionPane({ index }: { index: number }) {
   const id = useStore((s) => s.panes[index]);
   const view = useStore((s) => (id ? s.sessions[id] : undefined));
   const focused = useStore((s) => s.focusedPane === index);

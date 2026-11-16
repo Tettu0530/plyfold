@@ -2,7 +2,8 @@
 
 import { create } from "zustand";
 
-import type { LiquidStyle } from "@/components/liquid/liquid";
+import type { Look, LiquidStyle } from "@/components/liquid/liquid";
+import { liquidCloseFrom, liquidOpen } from "@/components/liquid/stage";
 import { api, inTauri, onEngineEvent } from "@/lib/api";
 import type { Category, EngineEvent, ProfileSummary, SessionInfo, SessionRecord } from "@/lib/types";
 import {
@@ -28,14 +29,38 @@ export interface SessionView {
 
 export type PaneCount = 1 | 2 | 4;
 
+/** まだ始めていないセッション（ペインに空の状態で開く） */
+export interface Draft {
+  profile: string | null;
+  repo: string;
+  worktree: boolean;
+  busy: boolean;
+  error: string | null;
+}
+
+export const isDraft = (id: string | null | undefined): id is string => !!id && id.startsWith("draft:");
+
+/** ペインの見た目（分離アニメーションの行き先） */
+const PANE_LOOK: Look = { background: "rgba(10, 10, 10, 1)", border: "rgba(255, 255, 255, 0.1)", shadow: "0px 0px 0px rgba(0, 0, 0, 0)", blur: 0 };
+const paneEl = (i: number) => document.querySelector<HTMLElement>(`[data-pane-index="${i}"]`);
+const anchorOf = (id: string) => (isDraft(id) ? "new-session" : `session:${id}`);
+const LAST_REPO_KEY = "plyfold.lastRepo";
+function lastRepo(): string {
+  try {
+    return localStorage.getItem(LAST_REPO_KEY) ?? "~/projects";
+  } catch {
+    return "~/projects";
+  }
+}
+
 interface State {
   sessions: Record<string, SessionView>;
+  drafts: Record<string, Draft>;
   profiles: ProfileSummary[];
   panes: (string | null)[];
   paneCount: PaneCount;
   focusedPane: number;
   searchOpen: boolean;
-  newSessionOpen: boolean;
   labOpen: boolean;
   /** 分離アニメーションの型（動きの調整で選ぶ） */
   liquidStyle: LiquidStyle;
@@ -47,11 +72,16 @@ interface State {
 
   init: () => Promise<void>;
   setPaneCount: (n: PaneCount) => void;
-  openInPane: (id: string, pane?: number) => Promise<void>;
+  /** from を渡すと、その出発点から分離アニメーションで開く */
+  openInPane: (id: string, pane?: number, from?: string) => Promise<void>;
+  /** 新しいセッションの下書きを、空いているペインに開く */
+  newDraft: () => void;
+  updateDraft: (id: string, patch: Partial<Draft>) => void;
+  /** 下書きを本物のセッションとして始める（同じペインのまま入れ替わる） */
+  startDraft: (id: string, prompt: string) => Promise<void>;
   closePane: (pane: number) => void;
   focusPane: (pane: number) => void;
   setSearchOpen: (open: boolean) => void;
-  setNewSessionOpen: (open: boolean) => void;
   setLabOpen: (open: boolean) => void;
   setLiquidStyle: (s: LiquidStyle) => void;
   setSearchLayerActive: (v: boolean) => void;
@@ -111,12 +141,12 @@ export function reduceEvent(sessions: Record<string, SessionView>, e: EngineEven
 
 export const useStore = create<State>((set, get) => ({
   sessions: {},
+  drafts: {},
   profiles: [],
   panes: [null, null, null, null],
   paneCount: 2,
   focusedPane: 0,
   searchOpen: false,
-  newSessionOpen: false,
   labOpen: false,
   liquidStyle: "pop",
   searchLayerActive: false,
@@ -134,7 +164,7 @@ export const useStore = create<State>((set, get) => ({
 
   setPaneCount: (paneCount) => set((s) => ({ paneCount, focusedPane: Math.min(s.focusedPane, paneCount - 1) })),
 
-  openInPane: async (id, pane) => {
+  openInPane: async (id, pane, from) => {
     const s = get();
     const already = s.panes.slice(0, s.paneCount).indexOf(id);
     if (already >= 0) {
@@ -143,8 +173,10 @@ export const useStore = create<State>((set, get) => ({
       const target = pane ?? firstFreePane(s.panes, s.paneCount, s.focusedPane);
       const panes = [...s.panes];
       panes[target] = id;
+      if (from) liquidOpen(`pane-${target}`, { anchor: from, target: () => paneEl(target), toLook: PANE_LOOK });
       set({ panes, focusedPane: target });
     }
+    if (isDraft(id)) return;
     // 止まっているセッションは、記録から会話を読み込む
     const v = get().sessions[id];
     if (v && !v.historyLoaded) {
@@ -159,16 +191,56 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
-  closePane: (pane) =>
+  closePane: (pane) => {
+    const id = get().panes[pane];
+    // 閉じるときは、ペインから縮んで出発点（サイドバーの行）の裏へ戻る
+    if (id) liquidCloseFrom(`pane-${pane}`, { anchor: anchorOf(id), target: () => paneEl(pane), toLook: PANE_LOOK });
     set((s) => {
       const panes = [...s.panes];
       panes[pane] = null;
-      return { panes };
-    }),
+      const drafts = { ...s.drafts };
+      if (isDraft(id)) delete drafts[id];
+      return { panes, drafts };
+    });
+  },
+
+  newDraft: () => {
+    const s = get();
+    const id = `draft:${Date.now()}`;
+    const named = s.profiles.find((p) => p.name !== p.agent) ?? s.profiles[0];
+    set({ drafts: { ...s.drafts, [id]: { profile: named?.name ?? null, repo: lastRepo(), worktree: true, busy: false, error: null } } });
+    void get().openInPane(id, undefined, "new-session");
+  },
+
+  updateDraft: (id, patch) => set((s) => (s.drafts[id] ? { drafts: { ...s.drafts, [id]: { ...s.drafts[id], ...patch } } } : s)),
+
+  startDraft: async (id, prompt) => {
+    const d = get().drafts[id];
+    if (!d?.profile || d.busy) return;
+    get().updateDraft(id, { busy: true, error: null });
+    try {
+      try {
+        localStorage.setItem(LAST_REPO_KEY, d.repo);
+      } catch {
+        // 保存できなくても続ける
+      }
+      const title = prompt.trim().split("\n")[0].slice(0, 40) || "新しいセッション";
+      const rec = await api.startSession({ profile: d.profile, repo: d.repo, title, worktree: d.worktree });
+      set((s) => {
+        const panes = s.panes.map((p) => (p === id ? rec.id : p));
+        const drafts = { ...s.drafts };
+        delete drafts[id];
+        const sessions = s.sessions[rec.id] ? s.sessions : { ...s.sessions, [rec.id]: { ...newView(rec), historyLoaded: true } };
+        return { panes, drafts, sessions };
+      });
+      if (prompt.trim()) await get().sendPrompt(rec.id, prompt);
+    } catch (e) {
+      get().updateDraft(id, { busy: false, error: String(e) });
+    }
+  },
 
   focusPane: (focusedPane) => set({ focusedPane }),
   setSearchOpen: (searchOpen) => set({ searchOpen }),
-  setNewSessionOpen: (newSessionOpen) => set({ newSessionOpen }),
   setLabOpen: (labOpen) => set({ labOpen }),
   setLiquidStyle: (liquidStyle) => set({ liquidStyle }),
   setSearchLayerActive: (searchLayerActive) => set({ searchLayerActive }),

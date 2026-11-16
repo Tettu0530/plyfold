@@ -79,6 +79,8 @@ interface Options {
   /** pop の型で、出発点と行き先の見た目。大きさの広がりに合わせて色・枠線・影・ぼかしが変わる */
   fromLook?: Look;
   toLook?: Look;
+  /** true なら「開いた状態」から始める（すでに表示中の面を、閉じる動きで出発点へ戻すとき） */
+  initiallyOpen?: boolean;
 }
 
 export interface Look {
@@ -98,9 +100,9 @@ const TRAIL = appleSpring({ duration: 0.45, bounce: 0.2 });
  * 分離アニメーション。`revealed` が true のあいだ本物を見せ、`layer` をどこかに描く。
  * `mounted` は本物を DOM に置いておくべきか（動いているあいだも置いて大きさを測る）
  */
-export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRadius = 8, color = "#262626", style = "pop", zIndex = 60, sizeLag = 0.12, fromLook = DEFAULT_FROM, toLook = DEFAULT_TO }: Options) {
+export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRadius = 8, color = "#262626", style = "pop", zIndex = 60, sizeLag = 0.12, fromLook = DEFAULT_FROM, toLook = DEFAULT_TO, initiallyOpen = false }: Options) {
   const reduced = useReducedMotion();
-  const [phase, setPhase] = useState<Phase>("closed");
+  const [phase, setPhase] = useState<Phase>(initiallyOpen ? "open" : "closed");
   const L = useMotionValue(0);
   const T = useMotionValue(0);
   const R = useMotionValue(0);
@@ -110,7 +112,7 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
   const ghostOpacity = useMotionValue(0);
   const ghostScale = useMotionValue(1);
   /** 見た目の進み具合（0 = 出発点、1 = 行き先） */
-  const look = useMotionValue(0);
+  const look = useMotionValue(initiallyOpen ? 1 : 0);
   const [ghost, setGhost] = useState<Edges | null>(null);
   const running = useRef<AnimationPlaybackControls[]>([]);
   const run = useRef(0);
