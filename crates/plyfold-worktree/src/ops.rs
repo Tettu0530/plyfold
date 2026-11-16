@@ -73,6 +73,50 @@ pub fn merge(wt: &Worktree) -> Result<String, WorktreeError> {
     Ok(target)
 }
 
+fn has(cmd: &str) -> bool {
+    std::process::Command::new("sh").args(["-c", &format!("command -v {cmd} >/dev/null 2>&1")]).status().is_ok_and(|s| s.success())
+}
+
+/// 枝を origin に push して、GitHub の PR を作る（gh を使う）。PR の URL を返す
+pub fn create_pr(wt: &Worktree, title: &str) -> Result<String, WorktreeError> {
+    let st = status(wt)?;
+    if st.dirty {
+        return Err(fail("コミットしていない変更があります。先にコミットしてください"));
+    }
+    if st.commits == 0 {
+        return Err(fail("PR にするコミットがありません"));
+    }
+    if !has("gh") {
+        return Err(fail("gh（GitHub CLI）が見つかりません。brew install gh で入れて、gh auth login してください"));
+    }
+    if git(&wt.repo, &["remote", "get-url", "origin"]).is_err() {
+        return Err(fail("このリポジトリには origin がありません"));
+    }
+    git(&wt.path, &["push", "-q", "-u", "origin", &wt.branch])?;
+    let mut args = vec!["pr", "create", "--head", &wt.branch, "--title", title, "--body", "Plyfold のセッションで作った変更です。"];
+    if let Some(t) = st.target.as_deref() {
+        args.extend(["--base", t]);
+    }
+    let out = std::process::Command::new("gh").args(&args).current_dir(&wt.path).output()?;
+    if !out.status.success() {
+        return Err(fail(format!("PR を作れませんでした（枝は push 済みです）: {}", String::from_utf8_lossy(&out.stderr).trim())));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).lines().last().unwrap_or("").trim().to_string())
+}
+
+/// worktree をエディタで開く。見つかったエディタの名前を返す（なければ Finder）
+pub fn open_in_editor(wt: &Worktree) -> Result<String, WorktreeError> {
+    let path = wt.path.display().to_string();
+    for (cmd, name) in [("zed", "Zed"), ("cursor", "Cursor"), ("code", "VS Code")] {
+        if has(cmd) {
+            std::process::Command::new(cmd).arg(&path).spawn()?;
+            return Ok(name.into());
+        }
+    }
+    std::process::Command::new("open").arg(&path).spawn()?;
+    Ok("Finder".into())
+}
+
 /// 基準のコミットまで戻す（コミットも未コミットの変更も、未追跡のファイルも消える。無視しているファイルは残す）
 pub fn discard(wt: &Worktree) -> Result<(), WorktreeError> {
     git(&wt.path, &["reset", "-q", "--hard", &wt.base])?;

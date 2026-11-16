@@ -314,6 +314,16 @@ fn merge_session(state: State<'_, AppState>, id: String) -> CmdResult<String> {
 }
 
 #[tauri::command]
+fn create_pr(state: State<'_, AppState>, id: String) -> CmdResult<String> {
+    state.engine.create_pr(&id).map_err(err)
+}
+
+#[tauri::command]
+fn open_in_editor(state: State<'_, AppState>, id: String) -> CmdResult<String> {
+    state.engine.open_in_editor(&id).map_err(err)
+}
+
+#[tauri::command]
 fn discard_session_changes(state: State<'_, AppState>, id: String) -> CmdResult<()> {
     state.engine.discard(&id).map_err(err)
 }
@@ -379,6 +389,8 @@ pub fn run() {
             commit_session,
             merge_session,
             discard_session_changes,
+            create_pr,
+            open_in_editor,
         ])
         .run(tauri::generate_context!())
         .expect("Plyfold を起動できません");

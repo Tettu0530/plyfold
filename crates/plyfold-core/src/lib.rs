@@ -548,6 +548,21 @@ impl Engine {
         Ok(target)
     }
 
+    /// 枝を push して PR を作る。URL を返す
+    pub fn create_pr(&self, id: &str) -> Result<String, CoreError> {
+        let wt = self.idle_worktree(id)?;
+        let title = self.inner.store.get_session(id)?.title;
+        let url = plyfold_worktree::ops::create_pr(&wt, &title)?;
+        self.inner.notice(id, format!("PR を作りました: {url}"));
+        Ok(url)
+    }
+
+    pub fn open_in_editor(&self, id: &str) -> Result<String, CoreError> {
+        let rec = self.inner.store.get_session(id)?;
+        let wt = worktree_of(&rec).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
+        Ok(plyfold_worktree::ops::open_in_editor(&wt)?)
+    }
+
     /// 作業ツリーを基準のコミットまで戻す
     pub fn discard(&self, id: &str) -> Result<(), CoreError> {
         let wt = self.idle_worktree(id)?;

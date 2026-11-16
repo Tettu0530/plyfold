@@ -1,4 +1,4 @@
-import { ChevronLeft, GitBranch, GitCommitHorizontal, GitMerge, Trash2 } from "lucide-react";
+import { ChevronLeft, ExternalLink, GitBranch, GitCommitHorizontal, GitMerge, GitPullRequest, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "@/lib/api";
@@ -207,6 +207,7 @@ function Actions({ id, title, status, busy, onDone }: { id: string; title: strin
   const [composing, setComposing] = useState(false);
   const [message, setMessage] = useState(title);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [confirmPr, setConfirmPr] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -221,6 +222,7 @@ function Actions({ id, title, status, busy, onDone }: { id: string; title: strin
       setDone(await f());
       setComposing(false);
       setConfirmDiscard(false);
+      setConfirmPr(false);
       await onDone();
     } catch (e) {
       setError(String(e));
@@ -230,6 +232,15 @@ function Actions({ id, title, status, busy, onDone }: { id: string; title: strin
   };
   const commit = () => run(async () => `コミットしました（${await api.commitSession(id, message)}）`);
   const merge = () => run(async () => `${await api.mergeSession(id)} に取り込みました`);
+  const pr = () => run(async () => `PR を作りました: ${await api.createPr(id)}`);
+  const openEditor = async () => {
+    setError(null);
+    try {
+      setDone(`${await api.openInEditor(id)} で開きました`);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
   const discard = () =>
     run(async () => {
       await api.discardSessionChanges(id);
@@ -265,7 +276,24 @@ function Actions({ id, title, status, busy, onDone }: { id: string; title: strin
         </form>
       ) : (
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">{busy ? "ターンの途中は操作できません" : summary}</span>
+          <button type="button" onClick={() => void openEditor()} className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent">
+            <ExternalLink className="size-3.5" aria-hidden />
+            エディタで開く
+          </button>
+          {!status.dirty &&
+            status.commits > 0 &&
+            (confirmPr ? (
+              <button type="button" disabled={running || busy} onClick={() => void pr()} className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent disabled:opacity-40">
+                <GitPullRequest className="size-3.5" aria-hidden />
+                origin に push して PR を作る
+              </button>
+            ) : (
+              <button type="button" disabled={running || busy} onClick={() => setConfirmPr(true)} className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent disabled:opacity-40">
+                <GitPullRequest className="size-3.5" aria-hidden />
+                PR を作る…
+              </button>
+            ))}
+          <span className="pl-2 text-xs text-muted-foreground">{busy ? "ターンの途中は操作できません" : summary}</span>
           <span className="grow" />
           {!nothing &&
             (confirmDiscard ? (
@@ -301,7 +329,7 @@ function Actions({ id, title, status, busy, onDone }: { id: string; title: strin
           )}
         </div>
       )}
-      {done && !error && <p className="text-xs text-muted-foreground">{done}</p>}
+      {done && !error && <p className="text-xs text-muted-foreground select-text">{done}</p>}
       {error && <p className="text-xs whitespace-pre-wrap text-error">{error}</p>}
     </div>
   );
