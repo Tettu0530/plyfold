@@ -42,6 +42,7 @@ export const isDraft = (id: string | null | undefined): id is string => !!id && 
 
 /** ペインの見た目（分離アニメーションの行き先） */
 const PANE_LOOK: Look = { background: "rgba(10, 10, 10, 1)", border: "rgba(255, 255, 255, 0.1)", shadow: "0px 0px 0px rgba(0, 0, 0, 0)", blur: 0 };
+const diffEl = () => document.querySelector<HTMLElement>("[data-diff-view]");
 const paneEl = (i: number) => document.querySelector<HTMLElement>(`[data-pane-index="${i}"]`);
 const anchorOf = (id: string) => (isDraft(id) ? "new-session" : `session:${id}`);
 const LAST_REPO_KEY = "plyfold.lastRepo";
@@ -80,6 +81,10 @@ interface State {
   /** 下書きを本物のセッションとして始める（同じペインのまま入れ替わる） */
   startDraft: (id: string, prompt: string) => Promise<void>;
   closePane: (pane: number) => void;
+  /** 差分の画面。closing のあいだは、縮む動きのために画面を残しておく */
+  diff: { id: string; closing: boolean } | null;
+  openDiff: (id: string) => void;
+  closeDiff: () => void;
   focusPane: (pane: number) => void;
   setSearchOpen: (open: boolean) => void;
   setLabOpen: (open: boolean) => void;
@@ -148,6 +153,7 @@ export const useStore = create<State>((set, get) => ({
   focusedPane: 0,
   searchOpen: false,
   labOpen: false,
+  diff: null,
   liquidStyle: "pop",
   searchLayerActive: false,
   liquidLag: 0.12,
@@ -195,6 +201,19 @@ export const useStore = create<State>((set, get) => ({
       const info = await api.sessionInfo(id);
       if (info) set((st) => ({ sessions: { ...st.sessions, [id]: { ...st.sessions[id], info } } }));
     }
+  },
+
+  openDiff: (id) => {
+    // 差分の画面は、ペインの差分の数（+12 −3）から飛び出して広がる
+    liquidOpen("diff", { anchor: `diff:${id}`, target: diffEl, toLook: PANE_LOOK });
+    set({ diff: { id, closing: false } });
+  },
+
+  closeDiff: () => {
+    const d = get().diff;
+    if (!d || d.closing) return;
+    set({ diff: { ...d, closing: true } });
+    liquidCloseFrom("diff", { anchor: `diff:${d.id}`, target: diffEl, toLook: PANE_LOOK, onDone: () => set({ diff: null }) });
   },
 
   closePane: (pane) => {

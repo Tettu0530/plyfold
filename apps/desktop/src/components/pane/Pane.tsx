@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { isDraft, useStore } from "@/state/store";
-import { useLiquidRevealed } from "../liquid/stage";
+import { liquidAnchor } from "../liquid/liquid";
+import { useLiquidActiveAnchors, useLiquidRevealed } from "../liquid/stage";
 import { DraftPane } from "./DraftPane";
 import { ProviderLogo, StatusIcon } from "../icons";
 import { Keys } from "../Keys";
@@ -50,6 +51,9 @@ function SessionPane({ index }: { index: number }) {
   const focused = useStore((s) => s.focusedPane === index);
   const { focusPane, closePane, sendPrompt, cancel, respondPermission, setCategory } = useStore.getState();
   const [diffStat, setDiffStat] = useState<{ added: number; removed: number } | null>(null);
+  const openDiff = useStore((s) => s.openDiff);
+  const diffActive = useLiquidActiveAnchors().has(`diff:${id}`);
+  const diffOpen = useStore((s) => s.diff?.id === id);
 
   const status = view?.record.status;
   // ターンが終わるたびに、worktree の差分の数を取り直す
@@ -89,10 +93,20 @@ function SessionPane({ index }: { index: number }) {
         )}
         <span className="grow" />
         {diffStat && diffStat.added + diffStat.removed > 0 && (
-          <span title={`差分（${r.branch ?? ""}）`} className="flex h-6 items-center gap-1 rounded-md px-1.5 font-mono text-xs">
+          <button
+            ref={liquidAnchor(`diff:${id}`)}
+            type="button"
+            title={`差分を見る（${r.branch ?? ""}）`}
+            onClick={() => openDiff(id)}
+            className={cn(
+              "relative flex h-6 items-center gap-1 rounded-md px-1.5 font-mono text-xs hover:bg-accent",
+              (diffActive || diffOpen) && "bg-accent",
+              diffActive && "z-[57]",
+            )}
+          >
             <span className="text-working">+{diffStat.added}</span>
             <span className="text-error">−{diffStat.removed}</span>
-          </span>
+          </button>
         )}
         {working && (
           <button type="button" aria-label="停止（⌘.）" onClick={() => void cancel(id)} className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">

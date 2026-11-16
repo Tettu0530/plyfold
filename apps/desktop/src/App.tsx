@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { GooDefs } from "./components/liquid/liquid";
 import { LiquidStage } from "./components/liquid/stage";
+import { DiffView } from "./components/DiffView";
 import { MotionLab } from "./components/MotionLab";
 import { PaneGrid } from "./components/pane/PaneGrid";
 import { SearchCard } from "./components/SearchCard";
@@ -101,6 +102,7 @@ export default function App() {
           )}
         </div>
         <GooDefs />
+        <DiffView />
         <LiquidStage />
         <SearchCard />
         <MotionLab />

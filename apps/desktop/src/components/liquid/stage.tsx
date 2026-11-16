@@ -21,6 +21,8 @@ export interface LiquidJobOptions {
   zIndex?: number;
   /** 動き出すまでの待ち（ms）。待つあいだも行き先の中身は隠したまま */
   delay?: number;
+  /** 動きが終わったとき（閉じる動きなら、行き先をここで片付ける） */
+  onDone?: () => void;
   fromLook?: Look;
   toLook?: Look;
 }
@@ -127,6 +129,7 @@ function JobView({ job }: { job: Job }) {
         delete jobs[job.id];
         const rv = { ...s.revealed };
         delete rv[job.id];
+        queueMicrotask(() => job.onDone?.());
         return { jobs, revealed: rv };
       });
     }
