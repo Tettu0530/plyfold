@@ -203,7 +203,7 @@ async fn delete_session(state: State<'_, AppState>, id: String, remove_worktree:
 }
 
 #[tauri::command]
-fn prompt(state: State<'_, AppState>, id: String, text: String) -> CmdResult<()> {
+async fn prompt(state: State<'_, AppState>, id: String, text: String) -> CmdResult<()> {
     state.engine.prompt(&id, &text).map_err(err)
 }
 
@@ -233,7 +233,7 @@ fn session_info(state: State<'_, AppState>, id: String) -> Option<SessionInfo> {
 }
 
 #[tauri::command]
-fn session_diff(state: State<'_, AppState>, id: String) -> CmdResult<Diff> {
+async fn session_diff(state: State<'_, AppState>, id: String) -> CmdResult<Diff> {
     state.engine.diff(&id).map_err(err)
 }
 
@@ -370,12 +370,12 @@ fn delete_profile(state: State<'_, AppState>, name: String) -> CmdResult<()> {
 }
 
 #[tauri::command]
-fn worktree_status(state: State<'_, AppState>, id: String) -> CmdResult<plyfold_worktree::WtStatus> {
+async fn worktree_status(state: State<'_, AppState>, id: String) -> CmdResult<plyfold_worktree::WtStatus> {
     state.engine.worktree_status(&id).map_err(err)
 }
 
 #[tauri::command]
-fn commit_session(state: State<'_, AppState>, id: String, message: String) -> CmdResult<String> {
+async fn commit_session(state: State<'_, AppState>, id: String, message: String) -> CmdResult<String> {
     state.engine.commit(&id, &message).map_err(err)
 }
 
@@ -397,7 +397,7 @@ async fn merge_session(state: State<'_, AppState>, id: String) -> CmdResult<Merg
 }
 
 #[tauri::command]
-fn create_pr(state: State<'_, AppState>, id: String) -> CmdResult<String> {
+async fn create_pr(state: State<'_, AppState>, id: String) -> CmdResult<String> {
     state.engine.create_pr(&id).map_err(err)
 }
 
@@ -408,7 +408,7 @@ fn open_in_editor(state: State<'_, AppState>, id: String) -> CmdResult<String> {
 }
 
 #[tauri::command]
-fn discard_session_changes(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+async fn discard_session_changes(state: State<'_, AppState>, id: String) -> CmdResult<()> {
     state.engine.discard(&id).map_err(err)
 }
 
