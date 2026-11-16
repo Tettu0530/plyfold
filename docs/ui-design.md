@@ -1,6 +1,23 @@
 # UI 設計（下書き）
 
-試作の画面: Plyfold UI 試作（Design のキャンバス、4 枚）。macOS 専用、Tauri ＋ 独自 UI。ネイティブの Liquid Glass は使わない。
+試作の画面: Plyfold UI 試作（Design のキャンバス、5 枚）。macOS 専用、Tauri ＋ React + TypeScript。ネイティブの Liquid Glass は使わない。
+見た目と動きの決まりは `.claude/skills/no-ai-slop-ui/SKILL.md` に従う。
+
+## 見た目の土台
+
+- shadcn/ui（Tailwind v4、Radix 版）のダークテーマ（neutral）。色を使うのは状態と差分だけ
+- 書体は Geist / Geist Mono。数値は等幅
+- エージェント向けの部品は AffectUI の無料（MIT）のものだけ（Tool Call Card、Code Block）。
+  権限確認（Approval Card、Permission Request）、入力欄（Run Controls）、使用量（Usage Meter）は Pro なので自前で作る
+- ランディングページ向けの部品集（Ruixen、Pin UI など）は本体には使わない
+
+## 動き（液体ガラス）
+
+- 適度に跳ねるばね（0.35 秒以内）。選択の印は Motion の `layoutId` で流す
+- 融合と分離は SVG の goo フィルタを背景の形だけにかける（文字にはかけない）。1 画面で 1〜2 か所まで
+- 使う場所: ペインの分割と融合、権限確認の滴（状態の点から落ちて広がり、答えると吸い込まれる）、チップからメニューが伸びる、切り替えの印
+- macOS の「視差効果を減らす」では 150ms のフェードに置き換える
+- ガラスの質感（背景のぼかし）は浮いている層（ポップオーバー、ダイアログ、権限確認）だけ
 
 ## 画面の骨格
 
@@ -54,7 +71,6 @@
 
 ## まだ決めていないこと
 
-- フロントエンドの技術（React + TypeScript / SolidJS / Svelte / Rust の Leptos）
 - ペインの並べ方: 決まった枠（1 / 2 / 4）か、自由に分割か
 - 作業中に入力した指示を、次のターンに積むか（Claude のアダプタは `promptQueueing` を持っている）
 - worktree の後片付け（取り込み、PR、破棄）の具体的な流れ
