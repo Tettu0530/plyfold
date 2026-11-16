@@ -109,6 +109,11 @@ interface Options {
   initiallyOpen?: boolean;
   /** 出発点の上に実体を重ねる量（0〜1、GPU の描画だけ）。0 より大きいあいだ、出発点は手前に出さないこと */
   over?: MotionValue<number>;
+  /**
+   * 開いたあとも実体を消さず、本物の枠として描き続ける（メニュー。GPU の描画だけ）。
+   * 本物の地・枠線・影と入れ替えないので、ばねの跳ね返りで枠と実体がずれない。行き先の大きさが変われば追う
+   */
+  hold?: boolean;
 }
 
 export interface Look {
@@ -135,7 +140,7 @@ const TRAIL = appleSpring({ duration: 0.45, bounce: 0.2 });
  * 分離アニメーション。`revealed` が true のあいだ本物を見せ、`layer` をどこかに描く。
  * `mounted` は本物を DOM に置いておくべきか（動いているあいだも置いて大きさを測る）
  */
-export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRadius = 8, color = "#262626", style = "pop", zIndex = 60, sizeLag = 0.12, fromLook = DEFAULT_FROM, toLook = DEFAULT_TO, initiallyOpen = false, over }: Options) {
+export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRadius = 8, color = "#262626", style = "pop", zIndex = 60, sizeLag = 0.12, fromLook = DEFAULT_FROM, toLook = DEFAULT_TO, initiallyOpen = false, over, hold = false }: Options) {
   const reduced = useReducedMotion();
   const [phase, setPhase] = useState<Phase>(initiallyOpen ? "open" : "closed");
   const L = useMotionValue(0);
@@ -372,6 +377,19 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
         offP();
         offQ();
         offT();
+        if (opening && hold && gl && alive()) {
+          // 実体がそのまま枠になる: 止まった後も行き先を追い、閉じる（別の動きに替わる）まで描き続ける
+          setPhase("open");
+          let raf = 0;
+          const follow = () => {
+            track();
+            set({ ...toLive, radius: toLive.radius });
+            raf = requestAnimationFrame(follow);
+          };
+          raf = requestAnimationFrame(follow);
+          running.current.push({ stop: () => cancelAnimationFrame(raf) });
+          return;
+        }
         // ここからは本物の面が同じ場所に出る（途中で向きが変わったときは、新しい動きの位置を上書きしない）
         if (alive()) {
           track();
@@ -496,6 +514,8 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
     return {
       revealed: phase === "open",
       mounted: phase !== "closed",
+      /** 開いた後も実体が枠として残っている（stage は登録を外さない） */
+      holding: hold && gl && phase === "open",
       layer: surface,
       edges: edgesRef,
       /** 開いた後も、まだ何かが動いている（今は使っていない。stage の lingering の受け口） */
@@ -519,5 +539,5 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
       )
     : null;
 
-  return { revealed: phase === "open", mounted: phase !== "closed", layer, edges: edgesRef, settling: false };
+  return { revealed: phase === "open", mounted: phase !== "closed", holding: false, layer, edges: edgesRef, settling: false };
 }

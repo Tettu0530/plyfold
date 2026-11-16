@@ -34,6 +34,8 @@ export interface LiquidJobOptions {
    * 開いている途中（開き具合 0.2〜0.5）から実体を出発点の上に乗せる（閉じるときは逆に、途中で裏へ戻る）
    */
   rise?: boolean;
+  /** 開いたあとも実体を本物の枠として描き続ける（メニュー）。閉じるまで登録を外さない */
+  hold?: boolean;
   fromLook?: Look;
   toLook?: Look;
 }
@@ -201,7 +203,8 @@ export function useLiquidMenu(id: string, anchor: string) {
     // 出発点の角の丸みは本物に合わせる（途中で出発点を下げると、ずれた角が見える）
     const el0 = liquidAnchorElement(anchor);
     const anchorRadius = (el0 && parseFloat(getComputedStyle(el0).borderTopLeftRadius)) || 6;
-    const base = { anchor, radius: 8, anchorRadius, fromLook: CHIP_LOOK, toLook: MENU_LOOK, rise: true };
+    // hold: 開いた後も実体が枠のまま（本物の地・枠線・影は出さない）。入れ替えないので、ばねで枠とずれない
+    const base = { anchor, radius: 8, anchorRadius, fromLook: CHIP_LOOK, toLook: MENU_LOOK, rise: true, hold: true };
     if (open) {
       liquidOpen(id, { ...base, target: () => ref.current });
       return;
@@ -237,7 +240,7 @@ function JobView({ job }: { job: Job }) {
   }).current as React.RefObject<HTMLElement | null>;
   // 出発点の上に実体を乗せる量（cover / rise）。下げた状態から始める面は 1 から
   const over = useMotionValue(job.lowered ? 1 : 0);
-  const { revealed, mounted, layer, edges, settling } = useLiquidMorph(job.open, {
+  const { revealed, mounted, holding, layer, edges, settling } = useLiquidMorph(job.open, {
     anchor: job.anchor,
     target: targetRef,
     radius: job.radius ?? 0,
@@ -247,6 +250,7 @@ function JobView({ job }: { job: Job }) {
     sizeLag,
     initiallyOpen: job.initiallyOpen,
     over,
+    hold: !!job.hold,
     ...(job.fromLook ? { fromLook: job.fromLook } : {}),
     ...(job.toLook ? { toLook: job.toLook } : {}),
   });
@@ -296,6 +300,8 @@ function JobView({ job }: { job: Job }) {
   // 開ききったら、あるいは閉じきったら、登録を外す（開いた面はそのまま見えている）。
   // 開いた後も液架橋の尾が戻りきるまでは残す（そのあいだ、画面の切り抜きやクリックの止めは解く）
   useEffect(() => {
+    // 実体が枠として残っているあいだは外さない（閉じる動きが来たら、その登録に置き換わる）
+    if (job.open && holding) return;
     if (job.open && revealed && settling) {
       useStage.setState((s) => (s.jobs[job.id]?.nonce === job.nonce && !s.jobs[job.id].lingering ? { jobs: { ...s.jobs, [job.id]: { ...s.jobs[job.id], lingering: true } } } : s));
       return;
@@ -311,7 +317,7 @@ function JobView({ job }: { job: Job }) {
         return { jobs, revealed: rv };
       });
     }
-  }, [job.open, revealed, mounted, settling, job.id, job.nonce]);
+  }, [job.open, revealed, mounted, settling, holding, job.id, job.nonce]);
 
   return layer;
 }
