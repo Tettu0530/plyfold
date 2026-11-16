@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { SessionRecord } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
+import { useLiquidMenu } from "./liquid/stage";
 
 const ITEM =
   "flex h-7 cursor-default items-center gap-2 rounded-md px-2 text-sm outline-none select-none data-[disabled]:opacity-40 data-[highlighted]:bg-accent";
@@ -16,10 +17,13 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
   const [error, setError] = useState<string | null>(null);
   const running = record.status !== "closed" && record.status !== "error";
   const run = (f: () => Promise<void>) => void f().catch((e) => setError(String(e)));
+  // メニューは、右クリックした行から飛び出して広がり、閉じると行へ戻る
+  const menu = useLiquidMenu(`menu:session:${record.id}`, `session:${record.id}`);
 
   return (
     <ContextMenu.Root
       onOpenChange={(o) => {
+        menu.onOpenChange(o);
         if (!o) {
           setConfirm(false);
           setError(null);
@@ -28,7 +32,11 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
     >
       <ContextMenu.Trigger asChild>{children}</ContextMenu.Trigger>
       <ContextMenu.Portal>
-        <ContextMenu.Content className="z-[80] flex min-w-52 flex-col gap-0.5 rounded-[10px] border bg-popover p-1 text-popover-foreground shadow-[0_8px_24px_rgba(0,0,0,.45)]">
+        <ContextMenu.Content
+          ref={menu.ref as React.Ref<HTMLDivElement>}
+          style={menu.style}
+          className={cn("z-[80] flex min-w-52 flex-col gap-0.5 rounded-[10px] border bg-popover p-1 text-popover-foreground shadow-[0_8px_24px_rgba(0,0,0,.45)]", menu.moving && "opacity-0")}
+        >
           {!confirm ? (
             <>
               <ContextMenu.Item className={ITEM} onSelect={onRename}>

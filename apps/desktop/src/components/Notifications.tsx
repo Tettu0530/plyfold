@@ -7,6 +7,8 @@ import type { SessionStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { StatusIcon } from "./icons";
+import { liquidAnchor } from "./liquid/liquid";
+import { useLiquidActiveAnchors, useLiquidMenu } from "./liquid/stage";
 
 interface Item {
   id: string;
@@ -31,6 +33,13 @@ export function Notifications() {
   const unread = useStore((s) => s.unread);
   const openInPane = useStore((s) => s.openInPane);
   const [open, setOpen] = useState(false);
+  // 知らせの欄は、ベルから飛び出して広がり、閉じるとベルへ戻る
+  const menu = useLiquidMenu("menu:notifications", "notifications");
+  const raised = useLiquidActiveAnchors().has("notifications");
+  const toggle = (o: boolean) => {
+    menu.onOpenChange(o);
+    setOpen(o);
+  };
 
   // アプリに戻ってきたら、ペインに出ているセッションの知らせは読んだことにする
   useEffect(() => {
@@ -68,12 +77,13 @@ export function Notifications() {
   const label = urgent ? `手を貸す必要があるセッション ${urgent} 件` : items.length ? `新しい知らせ ${items.length} 件` : "知らせ";
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={toggle}>
       <PopoverTrigger asChild>
         <button
+          ref={liquidAnchor("notifications")}
           type="button"
           aria-label={label}
-          className="relative flex size-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground data-[state=open]:bg-accent"
+          className={cn("relative flex size-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground data-[state=open]:bg-accent", raised && "z-[57]")}
         >
           <Bell className="size-4" aria-hidden />
           {items.length > 0 && (
@@ -81,7 +91,13 @@ export function Notifications() {
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="flex w-80 flex-col gap-0.5 p-1.5">
+      <PopoverContent
+        ref={menu.ref as React.Ref<HTMLDivElement>}
+        style={menu.style}
+        align="end"
+        sideOffset={6}
+        className={cn("z-[58] flex w-80 flex-col gap-0.5 p-1.5", menu.moving && "opacity-0")}
+      >
         <div className="px-2 pt-1 pb-1.5 text-xs font-medium text-muted-foreground">知らせ</div>
         {items.length === 0 && <p className="px-2 pb-2 text-xs text-muted-foreground">新しい知らせはありません</p>}
         {items.map((i) => (
@@ -89,7 +105,7 @@ export function Notifications() {
             key={i.id}
             type="button"
             onClick={() => {
-              setOpen(false);
+              toggle(false);
               void openInPane(i.id);
             }}
             className="flex w-full items-start gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-accent"
