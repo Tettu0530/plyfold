@@ -18,3 +18,13 @@ python3 fit.py out.jsonl 0.1.0 r 0.1 1.7  # SwiftUI 側のコンテナ（0.1.0�
 - SwiftUI 側のコンテナ（`SDFLayer`）の大きさは毎フレーム変わり、形の右端・下端の軌跡になる
 - `withAnimation(.default)` の glassEffectID の変形: 右端も下端も **同じ瞬間に同じ曲線**（duration 0.50 秒、bounce 0、誤差 0.4% 以内）。
   端ごとに遅れる動きではない。液体らしさは形の合成（SDF）の描き方による
+
+## 液架橋のコマ送り（bridge-film.mjs）
+
+`apps/desktop/src/components/liquid/bridge.ts` は外部に頼らないので、Node（v23.6 以降）でそのまま読める。
+pop の型と同じばね（位置 0.35 秒 / 0.3、大きさ 0.42 秒 / 0.3 を 0.12 秒遅れ）で動かし、1/30 秒ごとのコマを 1 枚の SVG にする。
+
+```sh
+node tools/liquid-probe/bridge-film.mjs "$PWD/apps/desktop/src/components/liquid/bridge.ts" row /tmp/row.svg   # row | far | chip
+qlmanage -t -s 1400 -o /tmp /tmp/row.svg   # PNG にして見る
+```
