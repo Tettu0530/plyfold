@@ -15,6 +15,7 @@ export const api = {
   renameSession: (id: string, title: string) => invoke<void>("rename_session", { id, title }),
   closeSession: (id: string) => invoke<void>("close_session", { id }),
   deleteSession: (id: string, removeWorktree: boolean) => invoke<void>("delete_session", { id, removeWorktree }),
+  setUiLang: (lang: string) => invoke<void>("set_ui_lang", { lang }),
   revealFile: (path: string) => invoke<void>("reveal_file", { path }),
   openUrl: (url: string) => invoke<void>("open_url", { url }),
   completeDirs: (input: string) => invoke<DirCandidate[]>("complete_dirs", { input }),

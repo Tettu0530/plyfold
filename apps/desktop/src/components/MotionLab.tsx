@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { useT, type MessageKey } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import {
@@ -45,19 +46,20 @@ function useFrameRate() {
 }
 
 function Curve({ p }: { p: SpringParams }) {
+  const t = useT();
   const W = 280;
   const H = 96;
   const { ms } = springToCss(p);
   const k = springConstants(p);
   const total = Math.max(ms / 1000, p.duration) * 1.1;
   const pts = Array.from({ length: 120 }, (_, i) => {
-    const t = (total * i) / 119;
-    const y = springPosition(k, t);
+    const time = (total * i) / 119;
+    const y = springPosition(k, time);
     return `${(W * i) / 119},${H - 12 - y * (H - 36)}`;
   }).join(" ");
   const target = H - 12 - (H - 36);
   return (
-    <svg width={W} height={H} role="img" aria-label="ばねの位置の変化" className="rounded-lg bg-background">
+    <svg width={W} height={H} role="img" aria-label={t("motionLab.curveLabel")} className="rounded-lg bg-background">
       <line x1={0} x2={W} y1={target} y2={target} stroke="currentColor" className="text-border" strokeDasharray="3 3" />
       <polyline points={pts} fill="none" stroke="currentColor" strokeWidth={2} className="text-foreground" />
     </svg>
@@ -83,6 +85,7 @@ const CORNERS = (w: number, h: number) => [
 
 /** 投げると、Apple と同じ減速率で行き先を予測して四隅に吸い付く。枠の外ではゴムのように伸びる */
 function ThrowCard({ p }: { p: SpringParams }) {
+  const t = useT();
   const area = useRef<HTMLDivElement>(null);
   const x = useMotionValue(0);
   const y = useMotionValue(0);
@@ -102,7 +105,7 @@ function ThrowCard({ p }: { p: SpringParams }) {
       <motion.div
         role="button"
         tabIndex={0}
-        aria-label="投げて四隅に吸い付かせるカード"
+        aria-label={t("motionLab.throwCardLabel")}
         style={{ x, y, width: CARD, height: CARD }}
         whileTap={{ scale: 1.06 }}
         className="absolute top-0 left-0 cursor-grab touch-none rounded-xl bg-primary active:cursor-grabbing"
@@ -130,15 +133,17 @@ function ThrowCard({ p }: { p: SpringParams }) {
   );
 }
 
-const STYLES: { value: LiquidStyle; label: string; note: string }[] = [
-  { value: "pop", label: "飛び出し", note: "出発点と同じ形のまま横へ飛び出し、行き先の上の辺りまで移ってから広がる（標準）" },
-  { value: "morph", label: "変形", note: "出発点の形のまま、行き先側の端が先に伸び、反対側が遅れてついてきて収まる" },
-  { value: "tear", label: "ちぎれ", note: "出発点にくっついたまま引き伸ばされ、限界でちぎれて、勢いで行き先の形まで飛ぶ" },
-  { value: "droplet", label: "水滴", note: "丸い滴に縮んで離れ、移動してから広がる" },
+// 名前と説明は辞書のキー（言語が途中で変わるため、描くときに引く）
+const STYLES: { value: LiquidStyle; label: MessageKey; note: MessageKey }[] = [
+  { value: "pop", label: "motionLab.stylePop", note: "motionLab.stylePopNote" },
+  { value: "morph", label: "motionLab.styleMorph", note: "motionLab.styleMorphNote" },
+  { value: "tear", label: "motionLab.styleTear", note: "motionLab.styleTearNote" },
+  { value: "droplet", label: "motionLab.styleDroplet", note: "motionLab.styleDropletNote" },
 ];
 
 /** 分離アニメーションの見本。選んだ型は検索カード（⌘K）にも使われる */
 function SeparationDemo() {
+  const t = useT();
   const style = useStore((s) => s.liquidStyle);
   const setStyle = useStore((s) => s.setLiquidStyle);
   const lag = useStore((s) => s.liquidLag);
@@ -146,14 +151,15 @@ function SeparationDemo() {
   const [open, setOpen] = useState(false);
   const target = useRef<HTMLDivElement>(null);
   const { revealed, mounted, layer } = useLiquidMorph(open, { anchor: "lab-src", target, radius: 12, anchorRadius: 8, style, sizeLag: lag });
+  const note = STYLES.find((s) => s.value === style)?.note;
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-3">
-        <span className="text-xs text-muted-foreground">分離の型</span>
-        <Segmented<LiquidStyle> label="分離の型" value={style} onChange={setStyle} options={STYLES.map((s) => ({ value: s.value, label: s.label }))} />
+        <span className="text-xs text-muted-foreground">{t("motionLab.separationStyle")}</span>
+        <Segmented<LiquidStyle> label={t("motionLab.separationStyle")} value={style} onChange={setStyle} options={STYLES.map((s) => ({ value: s.value, label: t(s.label) }))} />
       </div>
-      <p className="text-xs text-muted-foreground">{STYLES.find((s) => s.value === style)?.note}</p>
-      {style === "pop" && <Slider label="大きさの遅れ" value={lag} min={0} max={0.3} step={0.01} onChange={setLag} />}
+      <p className="text-xs text-muted-foreground">{note && t(note)}</p>
+      {style === "pop" && <Slider label={t("motionLab.sizeLag")} value={lag} min={0} max={0.3} step={0.01} onChange={setLag} />}
       <div className="relative h-44 rounded-lg bg-background p-3">
         <button
           ref={liquidAnchor("lab-src")}
@@ -161,7 +167,7 @@ function SeparationDemo() {
           onClick={() => setOpen(!open)}
           className="flex h-7 w-40 items-center gap-2 rounded-lg px-2 text-muted-foreground hover:bg-accent hover:text-foreground"
         >
-          {open ? "閉じる" : "開く"}
+          {open ? t("motionLab.close") : t("motionLab.open")}
         </button>
         {mounted && (
           <div
@@ -171,8 +177,8 @@ function SeparationDemo() {
               revealed ? "opacity-100" : "opacity-0",
             )}
           >
-            <span className="font-medium text-foreground">開いた面</span>
-            <span className="text-muted-foreground">本物の中身は、広がりきってから現れます</span>
+            <span className="font-medium text-foreground">{t("motionLab.openedSurface")}</span>
+            <span className="text-muted-foreground">{t("motionLab.openedSurfaceNote")}</span>
           </div>
         )}
       </div>
@@ -182,6 +188,7 @@ function SeparationDemo() {
 }
 
 export function MotionLab() {
+  const t = useT();
   const open = useStore((s) => s.labOpen);
   const setOpen = useStore((s) => s.setLabOpen);
   const hz = useFrameRate();
@@ -201,19 +208,19 @@ export function MotionLab() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-[880px]">
         <DialogHeader>
-          <DialogTitle>動きの調整</DialogTitle>
-          <DialogDescription>SwiftUI と同じ式のばねです。同じ Mac の Finder やシステム設定の動きと見比べて調整します。</DialogDescription>
+          <DialogTitle>{t("motionLab.title")}</DialogTitle>
+          <DialogDescription>{t("motionLab.description")}</DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-[300px_minmax(0,1fr)] gap-6">
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">描画の頻度</span>
-              <span className={cn("font-mono tabular", hz !== null && hz < 100 && "text-permission")}>{hz === null ? "計測中" : `${hz} Hz`}</span>
+              <span className="text-muted-foreground">{t("motionLab.frameRate")}</span>
+              <span className={cn("font-mono tabular", hz !== null && hz < 100 && "text-permission")}>{hz === null ? t("motionLab.measuring") : `${hz} Hz`}</span>
             </div>
-            {hz !== null && hz < 100 && <p className="text-xs text-muted-foreground">120Hz の画面なら、WebView が 60Hz に制限されています。</p>}
+            {hz !== null && hz < 100 && <p className="text-xs text-muted-foreground">{t("motionLab.throttled")}</p>}
             <Segmented<string>
-              label="プリセット"
+              label={t("motionLab.preset")}
               value={presets.find(([, v]) => v.duration === p.duration && v.bounce === p.bounce)?.[0] ?? "custom"}
               onChange={(name) => setP(presets.find(([n]) => n === name)?.[1] ?? p)}
               options={presets.map(([n]) => ({ value: n, label: n }))}
@@ -231,7 +238,7 @@ export function MotionLab() {
                 <dd>{k.damping.toFixed(2)}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">落ち着く</dt>
+                <dt className="text-muted-foreground">{t("motionLab.settle")}</dt>
                 <dd>{ms} ms</dd>
               </div>
             </dl>
@@ -243,7 +250,7 @@ export function MotionLab() {
                 <motion.span layout transition={appleSpring(p)} className="block size-8 rounded-md bg-primary" />
               </div>
               <Button size="sm" variant="outline" className="h-7" onClick={() => setPos(pos ? 0 : 1)}>
-                動かす
+                {t("motionLab.move")}
               </Button>
             </div>
             <div className="flex items-center gap-4">
@@ -253,16 +260,16 @@ export function MotionLab() {
                 transition={appleSpring(INTERACTIVE)}
                 className="h-9 rounded-xl bg-muted px-4"
               >
-                押すと膨らむ
+                {t("motionLab.pressToGrow")}
               </motion.button>
               <label className="flex items-center gap-2 text-xs">
                 <Switch checked={on} onCheckedChange={setOn} />
-                スイッチ（CSS のばね）
+                {t("motionLab.cssSwitch")}
               </label>
             </div>
             <SeparationDemo />
             <ThrowCard p={p} />
-            <p className="text-xs text-muted-foreground">カードを投げると、指の勢いを引き継いで四隅に吸い付きます。枠の外へ引っ張るとゴムのように伸びます。</p>
+            <p className="text-xs text-muted-foreground">{t("motionLab.throwNote")}</p>
           </div>
         </div>
       </DialogContent>

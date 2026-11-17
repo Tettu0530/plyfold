@@ -2,6 +2,7 @@ import { Bell } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useT, type MessageKey } from "@/i18n";
 import { age } from "@/lib/format";
 import type { SessionStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -21,14 +22,16 @@ interface Item {
   urgent: boolean;
 }
 
-const URGENT: Partial<Record<SessionStatus, { reason: string; color: string }>> = {
-  awaiting_permission: { reason: "権限確認待ち", color: "text-permission" },
-  stalled: { reason: "無応答", color: "text-stalled" },
-  error: { reason: "エラーで止まりました", color: "text-error" },
+// 理由は辞書のキーで持ち、描くときに今の言語で引く
+const URGENT: Partial<Record<SessionStatus, { reasonKey: MessageKey; color: string }>> = {
+  awaiting_permission: { reasonKey: "notifications.awaitingPermission", color: "text-permission" },
+  stalled: { reasonKey: "notifications.stalled", color: "text-stalled" },
+  error: { reasonKey: "notifications.stoppedWithError", color: "text-error" },
 };
 
 /** 見出しのベル: 手を貸す必要があるセッションと、見ていないあいだに終わったターン */
 export function Notifications() {
+  const t = useT();
   const sessions = useStore((s) => s.sessions);
   const unread = useStore((s) => s.unread);
   const openInPane = useStore((s) => s.openInPane);
@@ -58,7 +61,7 @@ export function Notifications() {
   const items: Item[] = [];
   for (const v of Object.values(sessions)) {
     const u = URGENT[v.record.status];
-    if (u) items.push({ id: v.record.id, title: v.record.title, status: v.record.status, at: v.record.updated_at, urgent: true, ...u });
+    if (u) items.push({ id: v.record.id, title: v.record.title, status: v.record.status, at: v.record.updated_at, urgent: true, reason: t(u.reasonKey), color: u.color });
     else if (unread[v.record.id]) {
       const r = unread[v.record.id];
       items.push({
@@ -67,14 +70,14 @@ export function Notifications() {
         status: v.record.status,
         at: r.at,
         urgent: false,
-        reason: r.error ? "ターンがエラーで終わりました" : "ターンが終わりました",
+        reason: r.error ? t("notifications.turnEndedWithError") : t("notifications.turnEnded"),
         color: r.error ? "text-error" : "text-muted-foreground",
       });
     }
   }
   items.sort((a, b) => Number(b.urgent) - Number(a.urgent) || b.at - a.at);
   const urgent = items.filter((i) => i.urgent).length;
-  const label = urgent ? `手を貸す必要があるセッション ${urgent} 件` : items.length ? `新しい通知 ${items.length} 件` : "通知";
+  const label = urgent ? t("notifications.urgentLabel", { count: urgent }) : items.length ? t("notifications.newLabel", { count: items.length }) : t("notifications.title");
 
   return (
     <Popover open={open} onOpenChange={toggle}>
@@ -98,8 +101,8 @@ export function Notifications() {
         sideOffset={6}
         className={cn("z-[58] flex w-80 flex-col gap-0.5 p-1.5", menu.moving && "opacity-0")}
       >
-        <div className="px-2 pt-1 pb-1.5 text-xs font-medium text-muted-foreground">通知</div>
-        {items.length === 0 && <p className="px-2 pb-2 text-xs text-muted-foreground">新しい通知はありません</p>}
+        <div className="px-2 pt-1 pb-1.5 text-xs font-medium text-muted-foreground">{t("notifications.title")}</div>
+        {items.length === 0 && <p className="px-2 pb-2 text-xs text-muted-foreground">{t("notifications.empty")}</p>}
         {items.map((i) => (
           <button
             key={i.id}

@@ -116,7 +116,7 @@ pub fn to_def(form: &ProfileForm, existing: Option<&ProfileDef>) -> Result<Profi
 
     let s = spec(&form.agent);
     if form.auth != AuthKind::Login && s.is_none() {
-        return Err(ProfileError::Form(format!("{} はキーでの接続に対応していません", form.agent)));
+        return Err(ProfileError::Form(plyfold_i18n::tr!("{} はキーでの接続に対応していません", "{} does not support connecting with a key", form.agent)));
     }
     // 画面で扱う変数だけを入れ替える（ほかの変数はそのまま）
     let all_key_vars = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "GEMINI_API_KEY", CODEX_PROVIDER_KEY];
@@ -138,9 +138,9 @@ pub fn to_def(form: &ProfileForm, existing: Option<&ProfileDef>) -> Result<Profi
     if let (Some(s), Some(var)) = (s, key_var(&form.agent, form.auth)) {
         def.keys.insert(var.into(), keep_source(var));
         if form.auth == AuthKind::Custom {
-            let url = form.base_url.as_deref().map(str::trim).filter(|u| !u.is_empty()).ok_or_else(|| ProfileError::Form("ベース URL を入力してください".into()))?;
+            let url = form.base_url.as_deref().map(str::trim).filter(|u| !u.is_empty()).ok_or_else(|| ProfileError::Form(plyfold_i18n::tr!("ベース URL を入力してください", "Enter a base URL")))?;
             if !(url.starts_with("https://") || url.starts_with("http://")) {
-                return Err(ProfileError::Form("ベース URL は http:// か https:// で始めてください".into()));
+                return Err(ProfileError::Form(plyfold_i18n::tr!("ベース URL は http:// か https:// で始めてください", "The base URL must start with http:// or https://")));
             }
             match s.custom_base {
                 Some(env) => {
@@ -169,10 +169,13 @@ pub fn key_account(name: &str, def: &ProfileDef) -> Option<(String, String)> {
 /// プロファイル名に使える文字（ディレクトリ名とキーチェーンのアカウント名になる）
 pub fn validate_name(name: &str, config: &Config) -> Result<(), ProfileError> {
     if name.is_empty() || name.len() > 40 || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
-        return Err(ProfileError::Form("名前は英数字と - _ だけで、40 文字までにしてください".into()));
+        return Err(ProfileError::Form(plyfold_i18n::tr!(
+            "名前は英数字と - _ だけで、40 文字までにしてください",
+            "Use only letters, digits, - and _ in the name, up to 40 characters"
+        )));
     }
     if config.agents.contains_key(name) {
-        return Err(ProfileError::Form(format!("'{name}' はエージェントの名前なので使えません")));
+        return Err(ProfileError::Form(plyfold_i18n::tr!("'{name}' はエージェントの名前なので使えません", "'{name}' is an agent name and cannot be used")));
     }
     Ok(())
 }
@@ -183,7 +186,7 @@ fn read_doc(path: &Path) -> Result<DocumentMut, ProfileError> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(e) => return Err(e.into()),
     };
-    text.parse::<DocumentMut>().map_err(|e| ProfileError::Form(format!("設定ファイルの形式が不正です: {e}")))
+    text.parse::<DocumentMut>().map_err(|e| ProfileError::Form(plyfold_i18n::tr!("設定ファイルの形式が不正です: {e}", "The config file is malformed: {e}")))
 }
 
 fn write_doc(path: &Path, doc: &DocumentMut) -> Result<(), ProfileError> {
@@ -206,7 +209,7 @@ pub fn upsert_profile(path: &Path, name: &str, def: &ProfileDef) -> Result<(), P
         t.set_implicit(true);
         doc["profiles"] = toml_edit::Item::Table(t);
     }
-    let profiles = doc["profiles"].as_table_mut().ok_or_else(|| ProfileError::Form("profiles が表ではありません".into()))?;
+    let profiles = doc["profiles"].as_table_mut().ok_or_else(|| ProfileError::Form(plyfold_i18n::tr!("profiles が表ではありません", "profiles is not a table")))?;
     let mut table = value.as_table().clone();
     for (_, item) in table.iter_mut() {
         if let Some(t) = item.as_table_mut() {

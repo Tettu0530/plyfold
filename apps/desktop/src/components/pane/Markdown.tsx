@@ -8,6 +8,7 @@ import { memo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { useT } from "@/i18n";
 import { api, inTauri } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "./MessageActions";
@@ -20,16 +21,34 @@ function openLink(href: string | undefined) {
 
 /** コードの塊: 言語の名前とコピーのボタンを上に出す */
 function CodeBlock({ lang, code }: { lang: string | null; code: string }) {
+  const t = useT();
   return (
     <div className="my-2 overflow-hidden rounded-[10px] border bg-card">
       <div className="flex h-7 items-center border-b pr-1 pl-3">
         <span className="grow font-mono text-xs text-muted-foreground">{lang ?? "text"}</span>
-        <CopyButton text={code} label="コードをコピー" />
+        <CopyButton text={code} label={t("transcript.copyCode")} />
       </div>
       <pre className="m-0 overflow-x-auto px-3 py-2 font-mono text-xs leading-5 select-text">
         <code>{code}</code>
       </pre>
     </div>
+  );
+}
+
+/** 外の画像は読み込まず、代替テキストをリンクとして出す */
+function ImageLink({ src, alt }: { src: string | undefined; alt: string | undefined }) {
+  const t = useT();
+  return (
+    <a
+      href={src}
+      onClick={(e) => {
+        e.preventDefault();
+        openLink(src);
+      }}
+      className="text-muted-foreground underline underline-offset-2"
+    >
+      {t("transcript.image", { alt: alt || (src ?? "") })}
+    </a>
   );
 }
 
@@ -66,18 +85,7 @@ const components: Components = {
       {children}
     </a>
   ),
-  img: ({ src, alt }) => (
-    <a
-      href={typeof src === "string" ? src : undefined}
-      onClick={(e) => {
-        e.preventDefault();
-        openLink(typeof src === "string" ? src : undefined);
-      }}
-      className="text-muted-foreground underline underline-offset-2"
-    >
-      画像: {alt || (typeof src === "string" ? src : "")}
-    </a>
-  ),
+  img: ({ src, alt }) => <ImageLink src={typeof src === "string" ? src : undefined} alt={alt} />,
   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
   table: ({ children }) => (
     <div className="my-2 overflow-x-auto rounded-[10px] border">

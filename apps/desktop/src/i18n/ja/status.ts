@@ -1,3 +1,21 @@
 // icons.tsx（セッションの状態、mode の名前、エージェントの名前）
 export const status = {
+  starting: "起動中",
+  working: "作業中",
+  awaitingPermission: "確認待ち",
+  stalled: "無応答",
+  error: "エラー",
+  idle: "待機",
+  closed: "停止",
+  modeDefault: "デフォルト",
+  modeAcceptEdits: "編集を許可",
+  modePlan: "プラン",
+  modeAuto: "自動",
+  modeBypassPermissions: "権限スキップ",
+  modeReadOnly: "読み取りのみ",
+  modeWorkspaceWrite: "書き込み可",
+  modeAgent: "自動",
+  modeAgentFullAccess: "フルアクセス",
+  modeBuild: "ビルド",
+  agentMock: "模擬エージェント",
 } satisfies Record<string, string>;

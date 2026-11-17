@@ -3,6 +3,7 @@ import { Check, ChevronRight, CircleX, FileText, LoaderCircle, Pencil, Search, S
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 
+import { useT } from "@/i18n";
 import { seconds } from "@/lib/format";
 
 import { lineDiff } from "@/lib/lineDiff";
@@ -35,6 +36,7 @@ function useNow(active: boolean, ms = 100) {
 const shortPath = (p: string) => p.split("/").slice(-3).join("/");
 
 function Status({ t }: { t: ToolCall }) {
+  const tr = useT();
   const running = t.status === "pending" || t.status === "in_progress";
   const now = useNow(running);
   // 実行中は経過時間を数え、終わったらかかった時間を出す
@@ -44,7 +46,7 @@ function Status({ t }: { t: ToolCall }) {
     return (
       <span className="flex items-center gap-1 text-xs text-working">
         <LoaderCircle className="size-3.5 animate-spin" aria-hidden />
-        実行中
+        {tr("transcript.toolRunning")}
         {time}
       </span>
     );
@@ -54,18 +56,18 @@ function Status({ t }: { t: ToolCall }) {
         <CircleX className="size-3.5" aria-hidden />
         {t.exitCode != null && t.exitCode !== 0 ? (
           <>
-            <span className="font-sans">終了コード</span>
+            <span className="font-sans">{tr("transcript.exitCode")}</span>
             {t.exitCode}
           </>
         ) : (
-          <span className="font-sans">失敗</span>
+          <span className="font-sans">{tr("transcript.toolFailed")}</span>
         )}
       </span>
     );
   return (
     <span className="flex items-center gap-1 text-xs text-muted-foreground">
       <Check className="size-3.5" aria-hidden />
-      完了
+      {tr("transcript.toolDone")}
       {time}
     </span>
   );
@@ -73,12 +75,17 @@ function Status({ t }: { t: ToolCall }) {
 
 /** 長い文字は最初の行だけ見せ、残りは押して出す */
 function useClamp(text: string, first: number) {
+  const t = useT();
   const [all, setAll] = useState(false);
   const lines = useMemo(() => text.replace(/\n$/, "").split("\n"), [text]);
   const rest = all ? 0 : Math.max(0, lines.length - first);
+  // 数は等幅の部品で出すので、訳文の {n} の前後で切る
+  const [before, after = ""] = t("transcript.showMore", { count: rest }).split("{n}");
   const more = rest > 0 && (
     <button type="button" onClick={() => setAll(true)} className="flex h-7 w-full items-center px-3 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
-      残り <span className="mx-1 font-mono tabular">{rest}</span> 行を表示
+      {before}
+      <span className="mx-1 font-mono tabular">{rest}</span>
+      {after}
     </button>
   );
   return { text: rest ? lines.slice(0, first).join("\n") : lines.join("\n"), more, folded: rest > 0 };
@@ -111,6 +118,7 @@ function Command({ text }: { text: string }) {
 }
 
 function Detail({ t }: { t: ToolCall }) {
+  const tr = useT();
   const output = t.stream || t.result;
   // 読んだファイルの中身や書いた内容は、差分や題名で分かるので path だけにする
   // 題名で全部読める短いコマンドは、もう一度は出さない
@@ -121,16 +129,17 @@ function Detail({ t }: { t: ToolCall }) {
       {t.note && <p className="m-0 text-xs text-muted-foreground">{t.note}</p>}
       {showCommand && <Command text={t.command!} />}
       {showPath && <p className="m-0 font-mono text-xs break-all text-muted-foreground select-text">{t.path}</p>}
-      {output ? <Output text={output} /> : !showCommand && !showPath && !t.note && <p className="m-0 text-xs text-muted-foreground">結果はまだありません</p>}
+      {output ? <Output text={output} /> : !showCommand && !showPath && !t.note && <p className="m-0 text-xs text-muted-foreground">{tr("transcript.noResult")}</p>}
     </div>
   );
 }
 
 function ToolRow({ t, first }: { t: ToolCall; first: boolean }) {
+  const tr = useT();
   const [open, setOpen] = useState(false);
   const Icon = TOOL_ICONS[t.toolKind] ?? Wrench;
   const hasDetail = !!(t.command || t.path || t.note || t.stream || t.result);
-  const title = t.title || t.command || "ツール";
+  const title = t.title || t.command || tr("transcript.tool");
   return (
     <div className={cn(!first && "border-t")}>
       <button
@@ -184,6 +193,7 @@ export function ToolCalls({ tools }: { tools: ToolCall[] }) {
 
 /** 会話の中のファイルの差分。見出しを押すと畳める */
 export function DiffBlock({ d }: { d: DiffPreview }) {
+  const t = useT();
   const [open, setOpen] = useState(true);
   const diff = useMemo(() => lineDiff(d.oldText, d.newText), [d.oldText, d.newText]);
   return (
@@ -195,7 +205,7 @@ export function DiffBlock({ d }: { d: DiffPreview }) {
         <span className="min-w-0 grow truncate font-mono text-xs" title={d.path}>
           {shortPath(d.path)}
         </span>
-        {d.oldText == null && <span className="text-xs text-muted-foreground">新しいファイル</span>}
+        {d.oldText == null && <span className="text-xs text-muted-foreground">{t("transcript.newFile")}</span>}
         <span className="font-mono text-xs tabular">
           <span className="text-working">+{diff.added}</span> <span className="text-error">−{diff.removed}</span>
         </span>

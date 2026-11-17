@@ -39,7 +39,7 @@ pub async fn check_profile(config: &Config, profile: &str, state_dir: &Path, sec
     match result {
         Ok(Ok(())) => out.ok = true,
         Ok(Err(e)) => out.error = Some(e),
-        Err(_) => out.error = Some(format!("{} 秒たっても応答が終わりません", TIMEOUT.as_secs())),
+        Err(_) => out.error = Some(plyfold_i18n::tr!("{} 秒たっても応答が終わりません", "The response did not finish within {} seconds", TIMEOUT.as_secs())),
     }
     out.total_ms = started.elapsed().as_millis() as u64;
     out.at = now();
@@ -103,7 +103,7 @@ async fn run(config: &Config, profile: &str, state_dir: &Path, secrets: &dyn Sec
         let reply = text.lock().unwrap().trim().to_string();
         out.reply = reply.chars().take(200).collect();
         if reply.is_empty() {
-            return Err("応答の文が届きませんでした".into());
+            return Err(plyfold_i18n::tr!("応答の文が届きませんでした", "No reply text arrived"));
         }
         Ok(())
     }

@@ -13,8 +13,10 @@ import { bouncy, smooth } from "../motion";
 import { Keys } from "../Keys";
 import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
+import { useT } from "@/i18n";
 
 export function useAttachments() {
+  const t = useT();
   const [items, setItems] = useState<Attached[]>([]);
   const [over, setOver] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -41,8 +43,8 @@ export function useAttachments() {
     const picked = await openDialog({
       multiple: true,
       directory: false,
-      title: kind === "image" ? "添える画像" : "添えるファイル",
-      ...(kind === "image" ? { filters: [{ name: "画像", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }] } : {}),
+      title: kind === "image" ? t("attach.pickImageTitle") : t("attach.pickFileTitle"),
+      ...(kind === "image" ? { filters: [{ name: t("attach.imageFilter"), extensions: ["png", "jpg", "jpeg", "gif", "webp"] }] } : {}),
     });
     const paths = picked == null ? [] : Array.isArray(picked) ? picked : [picked];
     if (paths.length) setItems((a) => [...a, ...paths.map(fromPath)]);
@@ -61,10 +63,11 @@ export function useAttachments() {
 export type AttachmentsState = ReturnType<typeof useAttachments>;
 
 function Chip({ a, onRemove }: { a: Attached; onRemove: () => void }) {
+  const t = useT();
   const remove = (
     <button
       type="button"
-      aria-label={`${a.preview.name} を外す`}
+      aria-label={t("attach.removeItem", { name: a.preview.name })}
       onClick={onRemove}
       className="flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
     >
@@ -92,6 +95,9 @@ const MENU_ITEM = "flex h-8 cursor-default items-center gap-2 rounded-md px-2 te
 
 /** 入力欄の左の + : 添えるもののメニュー（ほかのメニューと同じ分離アニメーションで開く） */
 function AddMenu({ att }: { att: AttachmentsState }) {
+  const t = useT();
+  // 文の中のキーの位置は言語で違うので、{keys} の前後で分けて Keys を挟む
+  const [hintBefore, hintAfter = ""] = t("attach.pasteHint").split("{keys}").map((s) => s.trim());
   const anchor = `add:${useId()}`;
   const menu = useLiquidMenu(`menu:${anchor}`, anchor);
   const raised = useLiquidActiveAnchors().has(anchor);
@@ -101,7 +107,7 @@ function AddMenu({ att }: { att: AttachmentsState }) {
         <button
           ref={liquidAnchor(anchor)}
           type="button"
-          aria-label="添える"
+          aria-label={t("attach.add")}
           className={cn(
             "relative flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground",
             raised && "z-[57]",
@@ -121,16 +127,17 @@ function AddMenu({ att }: { att: AttachmentsState }) {
         >
           <DropdownMenu.Item className={MENU_ITEM} onSelect={() => void att.pick("file")}>
             <Paperclip className="size-3.5 text-muted-foreground" aria-hidden />
-            ファイルを添える
+            {t("attach.attachFile")}
           </DropdownMenu.Item>
           <DropdownMenu.Item className={MENU_ITEM} onSelect={() => void att.pick("image")}>
             <ImageIcon className="size-3.5 text-muted-foreground" aria-hidden />
-            画像を添える
+            {t("attach.attachImage")}
           </DropdownMenu.Item>
           <DropdownMenu.Separator className="my-0.5 h-px bg-border" />
           <p className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-muted-foreground">
+            {hintBefore}
             <Keys keys={["cmd", "v"]} />
-            で画像を貼り付け。ペインに落としても添えられます
+            {hintAfter}
           </p>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

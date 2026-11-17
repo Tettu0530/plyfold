@@ -2,6 +2,7 @@ import { Pencil, Square, Trash2 } from "lucide-react";
 import { ContextMenu } from "radix-ui";
 import { useState } from "react";
 
+import { useT } from "@/i18n";
 import type { SessionRecord } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
@@ -12,6 +13,7 @@ const ITEM =
 
 /** サイドバーの行の右クリックメニュー: 名前を変える・止める・削除（worktree を残すか選ぶ） */
 export function SessionMenu({ record, onRename, children }: { record: SessionRecord; onRename: () => void; children: React.ReactNode }) {
+  const t = useT();
   const { stopSession, removeSession } = useStore.getState();
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,11 +43,11 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
             <>
               <ContextMenu.Item className={ITEM} onSelect={onRename}>
                 <Pencil className="size-3.5 text-muted-foreground" aria-hidden />
-                名前を変える
+                {t("sessionMenu.rename")}
               </ContextMenu.Item>
               <ContextMenu.Item className={ITEM} disabled={!running} onSelect={() => run(() => stopSession(record.id))}>
                 <Square className="size-3.5 text-muted-foreground" aria-hidden />
-                止める
+                {t("sessionMenu.stop")}
               </ContextMenu.Item>
               <ContextMenu.Separator className="my-0.5 h-px bg-border" />
               <ContextMenu.Item
@@ -57,21 +59,21 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
                 }}
               >
                 <Trash2 className="size-3.5" aria-hidden />
-                削除…
+                {t("sessionMenu.delete")}
               </ContextMenu.Item>
             </>
           ) : (
             <>
-              <ContextMenu.Label className="px-2 pt-1 pb-1.5 text-xs text-muted-foreground">「{record.title}」を消します</ContextMenu.Label>
+              <ContextMenu.Label className="px-2 pt-1 pb-1.5 text-xs text-muted-foreground">{t("sessionMenu.confirmDelete", { title: record.title })}</ContextMenu.Label>
               {record.worktree_path && (
                 <ContextMenu.Item className={cn(ITEM, "text-error data-[highlighted]:bg-error/10")} onSelect={() => run(() => removeSession(record.id, true))}>
                   <Trash2 className="size-3.5" aria-hidden />
-                  worktree と枝も消す
+                  {t("sessionMenu.deleteWithWorktree")}
                 </ContextMenu.Item>
               )}
               <ContextMenu.Item className={cn(ITEM, "text-error data-[highlighted]:bg-error/10")} onSelect={() => run(() => removeSession(record.id, false))}>
                 <Trash2 className="size-3.5" aria-hidden />
-                {record.worktree_path ? "記録だけ消す（worktree は残す）" : "記録を消す"}
+                {record.worktree_path ? t("sessionMenu.deleteRecordOnly") : t("sessionMenu.deleteRecord")}
               </ContextMenu.Item>
               <ContextMenu.Item
                 className={ITEM}
@@ -80,7 +82,7 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
                   setConfirm(false);
                 }}
               >
-                やめる
+                {t("sessionMenu.cancel")}
               </ContextMenu.Item>
             </>
           )}

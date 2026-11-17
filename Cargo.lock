@@ -2795,6 +2795,7 @@ name = "plyfold-acp"
 version = "0.1.0"
 dependencies = [
  "agent-client-protocol-schema",
+ "plyfold-i18n",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
@@ -2821,6 +2822,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.23.1",
  "plyfold-acp",
+ "plyfold-i18n",
  "plyfold-profile",
  "plyfold-store",
  "plyfold-worktree",
@@ -2836,6 +2838,7 @@ name = "plyfold-desktop"
 version = "0.1.0"
 dependencies = [
  "plyfold-core",
+ "plyfold-i18n",
  "plyfold-profile",
  "plyfold-store",
  "plyfold-worktree",
@@ -2847,6 +2850,10 @@ dependencies = [
  "tauri-plugin-notification",
  "tokio",
 ]
+
+[[package]]
+name = "plyfold-i18n"
+version = "0.1.0"
 
 [[package]]
 name = "plyfold-probe"
@@ -2865,6 +2872,7 @@ name = "plyfold-profile"
 version = "0.1.0"
 dependencies = [
  "plyfold-acp",
+ "plyfold-i18n",
  "serde",
  "thiserror 2.0.21",
  "toml 1.2.1+spec-1.1.0",
@@ -2875,6 +2883,7 @@ dependencies = [
 name = "plyfold-store"
 version = "0.1.0"
 dependencies = [
+ "plyfold-i18n",
  "rusqlite",
  "serde",
  "serde_json",
@@ -2885,6 +2894,7 @@ dependencies = [
 name = "plyfold-worktree"
 version = "0.1.0"
 dependencies = [
+ "plyfold-i18n",
  "serde",
  "thiserror 2.0.21",
 ]

@@ -9,12 +9,14 @@ import type { TranscriptItem } from "@/state/transcript";
 import { Keys } from "../Keys";
 import { isSendKey, sendKeys } from "@/lib/keys";
 import { useStore } from "@/state/store";
+import { t as translate, useT } from "@/i18n";
 
 const ICON_BUTTON =
   "flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40";
 
 /** 押すと文字をコピーし、少しのあいだ印を替える */
-export function CopyButton({ text, label = "コピー" }: { text: string; label?: string }) {
+export function CopyButton({ text, label }: { text: string; label?: string }) {
+  const t = useT();
   const [done, setDone] = useState(false);
   useEffect(() => {
     if (!done) return;
@@ -24,8 +26,8 @@ export function CopyButton({ text, label = "コピー" }: { text: string; label?
   return (
     <button
       type="button"
-      aria-label={done ? "コピーしました" : label}
-      title={done ? "コピーしました" : label}
+      aria-label={done ? t("message.copied") : (label ?? t("message.copy"))}
+      title={done ? t("message.copied") : (label ?? t("message.copy"))}
       onClick={() => void navigator.clipboard.writeText(text).then(() => setDone(true))}
       className={ICON_BUTTON}
     >
@@ -49,13 +51,14 @@ export function ActionRow({ align, children }: { align: "start" | "end"; childre
 }
 
 export function UserActions({ text, busy, onEdit, onResend }: { text: string; busy: boolean; onEdit: () => void; onResend: () => void }) {
+  const t = useT();
   return (
     <ActionRow align="end">
       <CopyButton text={text} />
-      <button type="button" aria-label="編集して送る" title="編集して送る（新しいターンになります）" disabled={busy} onClick={onEdit} className={ICON_BUTTON}>
+      <button type="button" aria-label={t("message.editAndSend")} title={t("message.editAndSendHint")} disabled={busy} onClick={onEdit} className={ICON_BUTTON}>
         <Pencil className="size-3.5" aria-hidden />
       </button>
-      <button type="button" aria-label="もう一度送る" title="もう一度送る（新しいターンになります）" disabled={busy} onClick={onResend} className={ICON_BUTTON}>
+      <button type="button" aria-label={t("message.resend")} title={t("message.resendHint")} disabled={busy} onClick={onResend} className={ICON_BUTTON}>
         <RotateCcw className="size-3.5" aria-hidden />
       </button>
     </ActionRow>
@@ -64,6 +67,7 @@ export function UserActions({ text, busy, onEdit, onResend }: { text: string; bu
 
 /** 自分の発言をその場で直して送る欄 */
 export function EditBox({ initial, onSend, onCancel }: { initial: string; onSend: (text: string) => void; onCancel: () => void }) {
+  const t = useT();
   const [text, setText] = useState(initial);
   const ref = useRef<HTMLTextAreaElement>(null);
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
@@ -87,7 +91,7 @@ export function EditBox({ initial, onSend, onCancel }: { initial: string; onSend
     <div className="flex w-full flex-col gap-1.5 rounded-[10px] border border-input bg-card p-2 focus-within:border-ring">
       <textarea
         ref={ref}
-        aria-label="発言を編集"
+        aria-label={t("message.editLabel")}
         value={text}
         rows={1}
         onChange={(e) => setText(e.target.value)}
@@ -103,9 +107,9 @@ export function EditBox({ initial, onSend, onCancel }: { initial: string; onSend
         className="resize-none bg-transparent px-1 leading-relaxed outline-none"
       />
       <div className="flex items-center justify-end gap-1.5 text-xs">
-        <span className="mr-auto px-1 text-muted-foreground">新しいターンとして送ります</span>
+        <span className="mr-auto px-1 text-muted-foreground">{t("message.sendsAsNewTurn")}</span>
         <button type="button" onClick={onCancel} className="flex h-6 items-center gap-1.5 rounded-md px-2 text-muted-foreground hover:bg-accent hover:text-foreground">
-          やめる
+          {t("message.cancel")}
           <Keys keys={["esc"]} />
         </button>
         <button
@@ -114,7 +118,7 @@ export function EditBox({ initial, onSend, onCancel }: { initial: string; onSend
           onClick={send}
           className="flex h-6 items-center gap-1.5 rounded-md bg-primary px-2 text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
         >
-          送る
+          {t("message.send")}
           <Keys keys={sendKeys(sendKey)} onPrimary />
         </button>
       </div>
@@ -127,15 +131,15 @@ export function workingLabel(items: TranscriptItem[]): string {
   // このターンで実行中のツールがあれば、何が最後に届いても「実行しています」
   for (let i = items.length - 1; i >= 0 && items[i].kind !== "user"; i--) {
     const it = items[i];
-    if (it.kind === "tool" && (it.status === "pending" || it.status === "in_progress")) return "実行しています";
+    if (it.kind === "tool" && (it.status === "pending" || it.status === "in_progress")) return translate("message.running");
   }
   const last = items[items.length - 1];
-  if (!last || last.kind === "user") return "考えています";
-  if (last.kind === "thought") return "考えています";
-  if (last.kind === "tool") return last.status === "pending" || last.status === "in_progress" ? "実行しています" : "考えています";
-  if (last.kind === "agent") return "書いています";
-  if (last.kind === "plan") return "計画しています";
-  return "考えています";
+  if (!last || last.kind === "user") return translate("message.thinking");
+  if (last.kind === "thought") return translate("message.thinking");
+  if (last.kind === "tool") return last.status === "pending" || last.status === "in_progress" ? translate("message.running") : translate("message.thinking");
+  if (last.kind === "agent") return translate("message.writing");
+  if (last.kind === "plan") return translate("message.planning");
+  return translate("message.thinking");
 }
 
 export function Working({ label }: { label: string }) {

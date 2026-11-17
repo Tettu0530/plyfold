@@ -40,17 +40,17 @@ pub type FrameSink = Arc<dyn Fn(Direction, &str) + Send + Sync>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AcpError {
-    #[error("RPC エラー {code}: {message}")]
+    #[error("{}", plyfold_i18n::tr!("RPC エラー {}: {}", "RPC error {}: {}", .code, .message))]
     Rpc { code: i64, message: String, data: Option<Value> },
-    #[error("{method} が {secs} 秒でタイムアウトしました")]
+    #[error("{}", plyfold_i18n::tr!("{} が {} 秒でタイムアウトしました", "{} timed out after {} seconds", .method, .secs))]
     Timeout { method: String, secs: u64 },
-    #[error("エージェントとの接続が切れました: {0}")]
+    #[error("{}", plyfold_i18n::tr!("エージェントとの接続が切れました: {}", "Lost the connection to the agent: {}", .0))]
     Closed(String),
-    #[error("エージェントを起動できません（{command}）: {source}")]
+    #[error("{}", plyfold_i18n::tr!("エージェントを起動できません（{}）: {}", "Cannot start the agent ({}): {}", .command, .source))]
     Spawn { command: String, source: std::io::Error },
-    #[error("応答の形式が想定と違います（{method}）: {source}")]
+    #[error("{}", plyfold_i18n::tr!("応答の形式が想定と違います（{}）: {}", "Unexpected response format ({}): {}", .method, .source))]
     Decode { method: String, source: serde_json::Error },
-    #[error("書き込みに失敗しました: {0}")]
+    #[error("{}", plyfold_i18n::tr!("書き込みに失敗しました: {}", "Write failed: {}", .0))]
     Io(#[from] std::io::Error),
 }
 
@@ -158,7 +158,7 @@ impl Connection {
                     dispatch(msg, &pending, &tx, &delivered);
                 }
                 for (_, waiter) in pending.lock().unwrap().drain() {
-                    let _ = waiter.send(Err(AcpError::Closed("プロセスが終了しました".into())));
+                    let _ = waiter.send(Err(AcpError::Closed(plyfold_i18n::tr!("プロセスが終了しました", "the process exited"))));
                 }
                 let _ = tx.send(Incoming::Closed);
             });
@@ -207,7 +207,7 @@ impl Connection {
             self.pending.lock().unwrap().remove(&id);
             return Err(e);
         }
-        let wait = async { rx.await.unwrap_or_else(|_| Err(AcpError::Closed("応答を受け取れませんでした".into()))) };
+        let wait = async { rx.await.unwrap_or_else(|_| Err(AcpError::Closed(plyfold_i18n::tr!("応答を受け取れませんでした", "no response was received")))) };
         match timeout {
             None => wait.await,
             Some(d) => match tokio::time::timeout(d, wait).await {

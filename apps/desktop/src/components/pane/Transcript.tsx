@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp, ChevronRight, Clock, Coins, Gauge, Info, ListChecks } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { useT } from "@/i18n";
 import { money, seconds, tokens } from "@/lib/format";
 import type { SessionInfo, TurnStats } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -41,26 +42,27 @@ export function TurnStatsRow({
   stopReason?: string | null;
   endedAt?: number | null;
 }) {
+  const t = useT();
   if (error) return <p className="text-xs text-error">{error}</p>;
   return (
     <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground tabular">
       {stats?.tokens_per_sec != null && (
-        <Stat icon={Gauge} title={stats.estimated ? "出力トークン/秒（推定）" : "出力トークン/秒"}>
+        <Stat icon={Gauge} title={stats.estimated ? t("transcript.tokPerSecEstimated") : t("transcript.tokPerSec")}>
           {stats.estimated ? "~" : ""}
           {Math.round(stats.tokens_per_sec)} tok/s
         </Stat>
       )}
       {stats?.usage && (
         <>
-          <Stat icon={ArrowUp} title="入力トークン">{tokens(stats.usage.input + stats.usage.cached_read + stats.usage.cached_write)}</Stat>
-          <Stat icon={ArrowDown} title="出力トークン">{tokens(stats.usage.output)}</Stat>
+          <Stat icon={ArrowUp} title={t("transcript.inputTokens")}>{tokens(stats.usage.input + stats.usage.cached_read + stats.usage.cached_write)}</Stat>
+          <Stat icon={ArrowDown} title={t("transcript.outputTokens")}>{tokens(stats.usage.output)}</Stat>
         </>
       )}
-      {cost && <Stat icon={Coins} title="このターンの費用">{cost}</Stat>}
-      {stats && stats.elapsed_ms > 0 && <Stat icon={Clock} title="かかった時間">{seconds(stats.elapsed_ms)}</Stat>}
-      {stopReason === "cancelled" && <span>停止しました</span>}
+      {cost && <Stat icon={Coins} title={t("transcript.turnCost")}>{cost}</Stat>}
+      {stats && stats.elapsed_ms > 0 && <Stat icon={Clock} title={t("transcript.elapsed")}>{seconds(stats.elapsed_ms)}</Stat>}
+      {stopReason === "cancelled" && <span>{t("transcript.stopped")}</span>}
       {endedAt != null && (
-        <time dateTime={new Date(endedAt).toISOString()} title="答え終えた時刻" className="ml-auto">
+        <time dateTime={new Date(endedAt).toISOString()} title={t("transcript.endedAt")} className="ml-auto">
           {clock(endedAt)}
         </time>
       )}
@@ -69,6 +71,7 @@ export function TurnStatsRow({
 }
 
 function Thought({ text }: { text: string }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   return (
     <div>
@@ -79,7 +82,7 @@ function Thought({ text }: { text: string }) {
         className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
       >
         <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} aria-hidden />
-        考えた内容
+        {t("transcript.thought")}
       </button>
       {open && <p className="mt-1 border-l pl-3 text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">{text}</p>}
     </div>
@@ -101,6 +104,7 @@ export function Transcript({
   /** 自分の発言を（直して）新しいターンとして送る */
   onResend?: (text: string, attachments: Attached[]) => void;
 }) {
+  const tr = useT();
   // 編集している自分の発言（blocks の位置）
   const [editing, setEditing] = useState<number | null>(null);
   const end = useRef<HTMLDivElement>(null);
@@ -120,7 +124,7 @@ export function Transcript({
 
   return (
     <div className="flex min-h-0 grow flex-col gap-3 overflow-y-auto px-5 pt-4 pb-2">
-      {items.length === 0 && <p className="m-auto text-xs text-muted-foreground">まだやり取りはありません</p>}
+      {items.length === 0 && <p className="m-auto text-xs text-muted-foreground">{tr("transcript.empty")}</p>}
       {blocks.map((b, i) => {
         switch (b.kind) {
           case "user":
@@ -176,7 +180,7 @@ export function Transcript({
               <div key={i} className="rounded-[10px] border bg-card px-3 py-2">
                 <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
                   <ListChecks className="size-3.5" aria-hidden />
-                  計画
+                  {tr("transcript.plan")}
                 </div>
                 {b.entries.map((e, k) => (
                   <div key={k} className={cn("text-xs leading-6", e.status === "completed" && "text-muted-foreground line-through")}>
@@ -218,7 +222,7 @@ export function Transcript({
         </div>
       )}
       <div ref={end} />
-      {info?.cost && <span className="sr-only">セッションの費用 {money(info.cost.amount, info.cost.currency)}</span>}
+      {info?.cost && <span className="sr-only">{tr("transcript.sessionCost", { cost: money(info.cost.amount, info.cost.currency) })}</span>}
     </div>
   );
 }

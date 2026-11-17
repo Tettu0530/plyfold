@@ -12,11 +12,11 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
-    #[error("データベースのエラー: {0}")]
+    #[error("{}", plyfold_i18n::tr!("データベースのエラー: {}", "Database error: {}", .0))]
     Sql(#[from] rusqlite::Error),
-    #[error("セッション {0} がありません")]
+    #[error("{}", plyfold_i18n::tr!("セッション {} がありません", "Session {} not found", .0))]
     NotFound(String),
-    #[error("ディレクトリを作れません: {0}")]
+    #[error("{}", plyfold_i18n::tr!("ディレクトリを作れません: {}", "Cannot create the directory: {}", .0))]
     Io(#[from] std::io::Error),
 }
 
@@ -423,6 +423,14 @@ mod tests {
         store
             .create_session(NewSession { title: title.into(), profile: "p".into(), agent: "mock".into(), ..Default::default() })
             .unwrap()
+    }
+
+    #[test]
+    fn errors_follow_the_language() {
+        plyfold_i18n::set_lang("en");
+        assert_eq!(StoreError::NotFound("s1".into()).to_string(), "Session s1 not found");
+        plyfold_i18n::set_lang("ja");
+        assert_eq!(StoreError::NotFound("s1".into()).to_string(), "セッション s1 がありません");
     }
 
     #[test]

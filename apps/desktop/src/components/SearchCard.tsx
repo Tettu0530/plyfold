@@ -2,6 +2,7 @@ import { KeyRound, ListChecks, Plus, Search, Settings, Square } from "lucide-rea
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useT } from "@/i18n";
 import { repoName } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
@@ -22,6 +23,7 @@ interface Entry {
 
 /** ⌘K の検索カード。サイドバーの「検索」から実体が水滴のように分かれ、移動してきて広がる */
 export function SearchCard() {
+  const t = useT();
   const open = useStore((s) => s.searchOpen);
   const sessions = useStore((s) => s.sessions);
   const { setSearchOpen, openInPane, newDraft, cancel, openSettings, openProfiles } = useStore.getState();
@@ -62,17 +64,17 @@ export function SearchCard() {
         run: () => void openInPane(v.record.id),
       }));
     const commands: Entry[] = [
-      { key: "new", label: "新しいセッション", keys: ["cmd", "n"], icon: <Plus className="size-3.5" />, run: () => newDraft() },
-      { key: "mode", label: "mode を切り替え", keys: ["shift", "tab"], icon: <ListChecks className="size-3.5" />, run: () => {} },
-      { key: "stop", label: "作業中のターンを停止", keys: ["cmd", "."], icon: <Square className="size-3.5" />, run: () => focusedId && void cancel(focusedId) },
-      { key: "settings", label: "設定", keys: ["cmd", ","], icon: <Settings className="size-3.5" />, run: () => openSettings() },
-      { key: "profiles", label: "プロファイル", icon: <KeyRound className="size-3.5" />, run: () => openProfiles() },
+      { key: "new", label: t("search.newSession"), keys: ["cmd", "n"], icon: <Plus className="size-3.5" />, run: () => newDraft() },
+      { key: "mode", label: t("search.switchMode"), keys: ["shift", "tab"], icon: <ListChecks className="size-3.5" />, run: () => {} },
+      { key: "stop", label: t("search.stopTurn"), keys: ["cmd", "."], icon: <Square className="size-3.5" />, run: () => focusedId && void cancel(focusedId) },
+      { key: "settings", label: t("search.settings"), keys: ["cmd", ","], icon: <Settings className="size-3.5" />, run: () => openSettings() },
+      { key: "profiles", label: t("search.profiles"), icon: <KeyRound className="size-3.5" />, run: () => openProfiles() },
     ].filter((c) => match(c.label));
     return [
-      { title: "最近のセッション", items: recent },
-      { title: "コマンド", items: commands },
+      { title: t("search.recent"), items: recent },
+      { title: t("search.commands"), items: commands },
     ].filter((g) => g.items.length > 0);
-  }, [q, sessions, focusedId, openInPane, newDraft, cancel, openSettings, openProfiles]);
+  }, [q, sessions, focusedId, openInPane, newDraft, cancel, openSettings, openProfiles, t]);
 
   const flat = entries.flatMap((g) => g.items);
   const choose = (e: Entry | undefined) => {
@@ -89,7 +91,7 @@ export function SearchCard() {
           <motion.button
             key="backdrop"
             type="button"
-            aria-label="検索を閉じる"
+            aria-label={t("search.close")}
             onClick={close}
             className="fixed inset-0 z-50 cursor-default bg-black/45"
             initial={{ opacity: 0 }}
@@ -102,7 +104,7 @@ export function SearchCard() {
         <div
           ref={card}
           role="dialog"
-          aria-label="検索"
+          aria-label={t("search.label")}
           aria-hidden={!revealed}
           className={cn(
             "fixed top-24 left-1/2 z-[70] -ml-[280px] flex w-[560px] flex-col rounded-[14px] border bg-card/85 shadow-[0_16px_48px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,255,255,.06)] backdrop-blur-2xl backdrop-saturate-150 transition-opacity duration-150",
@@ -123,8 +125,8 @@ export function SearchCard() {
             <Search className="size-4 text-muted-foreground" aria-hidden />
             <input
               ref={input}
-              aria-label="セッションやコマンドを検索"
-              placeholder="セッションやコマンドを検索"
+              aria-label={t("search.placeholder")}
+              placeholder={t("search.placeholder")}
               value={q}
               onChange={(e) => {
                 setQ(e.target.value);
@@ -135,7 +137,7 @@ export function SearchCard() {
             <Keys keys={["esc"]} />
           </div>
           <div className="flex max-h-[420px] flex-col gap-0.5 overflow-y-auto p-2">
-            {flat.length === 0 && <p className="px-2 py-3 text-xs text-muted-foreground">見つかりません</p>}
+            {flat.length === 0 && <p className="px-2 py-3 text-xs text-muted-foreground">{t("search.noResults")}</p>}
             {entries.map((g) => (
               <div key={g.title} className="flex flex-col gap-0.5">
                 <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">{g.title}</div>
@@ -161,11 +163,11 @@ export function SearchCard() {
           <div className="flex h-8 items-center gap-4 border-t px-3.5 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <Keys keys={["up", "down"]} />
-              移動
+              {t("search.navigate")}
             </span>
             <span className="flex items-center gap-1.5">
               <Keys keys={["enter"]} />
-              開く
+              {t("search.open")}
             </span>
           </div>
         </div>

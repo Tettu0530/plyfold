@@ -1,3 +1,26 @@
 // pane/Transcript.tsx、pane/ToolCall.tsx、pane/Markdown.tsx（会話）
 export const transcript = {
+  tokPerSecEstimated: "出力トークン/秒（推定）",
+  tokPerSec: "出力トークン/秒",
+  inputTokens: "入力トークン",
+  outputTokens: "出力トークン",
+  turnCost: "このターンの費用",
+  elapsed: "かかった時間",
+  stopped: "停止しました",
+  endedAt: "答え終えた時刻",
+  thought: "考えた内容",
+  empty: "まだやり取りはありません",
+  plan: "計画",
+  sessionCost: "セッションの費用 {cost}",
+  toolRunning: "実行中",
+  exitCode: "終了コード",
+  toolFailed: "失敗",
+  toolDone: "完了",
+  // {n} は数の部品に差し替える（数は等幅で出す）。{count} は複数形を選ぶため
+  showMore: "残り {n} 行を表示",
+  noResult: "結果はまだありません",
+  tool: "ツール",
+  newFile: "新しいファイル",
+  copyCode: "コードをコピー",
+  image: "画像: {alt}",
 } satisfies Record<string, string>;

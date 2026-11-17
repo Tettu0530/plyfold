@@ -19,6 +19,7 @@ import { AttachBox, useAttachments } from "./Attachments";
 import { useAutoGrow } from "./autoGrow";
 import { isImeKey, isSendKey } from "@/lib/keys";
 import { useStore, type Queued } from "@/state/store";
+import { useT } from "@/i18n";
 
 function option(info: SessionInfo | null, c: Category): ConfigOption | undefined {
   return info?.config.find((o) => o.category === c);
@@ -39,12 +40,13 @@ function ContextMeter({ info, pct, scope }: { info: SessionInfo; pct: number; sc
   const anchor = `${scope}:ctx`;
   const menu = useLiquidMenu(`menu:${anchor}`, anchor);
   const raised = useLiquidActiveAnchors().has(anchor);
-  const t = info.total;
+  const t = useT();
+  const total = info.total;
   const rows: [string, string][] = [
-    ["入力（累計）", tokens(t.input + t.cached_read + t.cached_write)],
-    ["うちキャッシュ", tokens(t.cached_read + t.cached_write)],
-    ["出力（累計）", tokens(t.output)],
-    ["費用（累計）", info.cost ? money(info.cost.amount, info.cost.currency) : "—"],
+    [t("composer.inputTotal"), tokens(total.input + total.cached_read + total.cached_write)],
+    [t("composer.cachedPart"), tokens(total.cached_read + total.cached_write)],
+    [t("composer.outputTotal"), tokens(total.output)],
+    [t("composer.costTotal"), info.cost ? money(info.cost.amount, info.cost.currency) : "—"],
   ];
   return (
     <Popover onOpenChange={menu.onOpenChange}>
@@ -52,13 +54,13 @@ function ContextMeter({ info, pct, scope }: { info: SessionInfo; pct: number; sc
         <button
           ref={liquidAnchor(anchor)}
           type="button"
-          aria-label="コンテキストの詳細"
+          aria-label={t("composer.contextDetails")}
           className={cn(
             "relative flex h-6 items-center gap-1.5 rounded-md px-1.5 font-mono text-muted-foreground tabular hover:bg-accent hover:text-foreground data-[state=open]:bg-accent",
             raised && "z-[57]",
           )}
         >
-          <span role="progressbar" aria-label="コンテキストの使用量" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} className="h-1 w-10 overflow-hidden rounded-sm bg-muted">
+          <span role="progressbar" aria-label={t("composer.contextUsage")} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} className="h-1 w-10 overflow-hidden rounded-sm bg-muted">
             <motion.span className="block h-full bg-foreground" animate={{ width: `${pct}%` }} transition={smooth} />
           </span>
           {pct}%
@@ -66,7 +68,7 @@ function ContextMeter({ info, pct, scope }: { info: SessionInfo; pct: number; sc
       </PopoverTrigger>
       <PopoverContent ref={menu.ref as React.Ref<HTMLDivElement>} style={menu.style} side="top" align="end" className={cn("z-[58] flex w-60 flex-col gap-2 p-3 text-xs", menu.moving && "opacity-0")}>
         <div className="flex items-baseline justify-between">
-          <span className="font-medium">コンテキスト</span>
+          <span className="font-medium">{t("composer.context")}</span>
           <span className="font-mono tabular">
             {tokens(info.context_used ?? 0)} / {tokens(info.context_size ?? 0)}
           </span>
@@ -84,7 +86,7 @@ function ContextMeter({ info, pct, scope }: { info: SessionInfo; pct: number; sc
         </dl>
         {info.reported_model && (
           <p className="text-muted-foreground">
-            応答モデル <span className="font-mono text-foreground">{info.reported_model}</span>
+            {t("composer.reportedModel")} <span className="font-mono text-foreground">{info.reported_model}</span>
           </p>
         )}
       </PopoverContent>
@@ -108,6 +110,7 @@ export function ControlRow({
   /** 分離アニメーションの出発点の名前を、ペインごとに分けるため（セッションか下書きの id） */
   scope: string;
 }) {
+  const t = useT();
   const raised = useLiquidActiveAnchors();
   const modelMenu = useLiquidMenu(`menu:${scope}:model`, `${scope}:model`);
   const effortMenu = useLiquidMenu(`menu:${scope}:effort`, `${scope}:effort`);
@@ -167,7 +170,7 @@ export function ControlRow({
         <button
           type="button"
           onClick={nextMode}
-          aria-label={`mode を切り替え（今は${modeLabel(mode)}、⇧⇥）`}
+          aria-label={t("composer.switchMode", { mode: modeLabel(mode) })}
           className={cn(
             "flex h-6 items-center gap-1.5 rounded-md border px-1.5 hover:bg-accent",
             isDangerMode(mode) ? "border-error/40 text-error" : "border-border",
@@ -194,6 +197,7 @@ export function ControlRow({
 
 /** ターンの途中に送った指示の並び。ターンが終わると先頭から送る */
 function QueueList({ items, busy, onRemove, onSendNow }: { items: Queued[]; busy: boolean; onRemove: (key: string) => void; onSendNow: () => void }) {
+  const t = useT();
   return (
     <AnimatePresence initial={false}>
       {items.length > 0 && (
@@ -201,12 +205,12 @@ function QueueList({ items, busy, onRemove, onSendNow }: { items: Queued[]; busy
           <div className="flex flex-col gap-0.5 pb-1">
             <div className="flex items-center gap-1.5 px-1.5 text-xs text-muted-foreground">
               <ListOrdered className="size-3.5" aria-hidden />
-              {busy ? "ターンが終わったら送ります" : "送っていない指示"}
+              {busy ? t("composer.queueSendAfterTurn") : t("composer.queueUnsent")}
               <span className="font-mono tabular">{items.length}</span>
               {!busy && (
                 <button type="button" onClick={onSendNow} className="ml-auto flex h-6 items-center gap-1 rounded-md px-1.5 text-foreground hover:bg-accent">
                   <ArrowUp className="size-3" aria-hidden />
-                  先頭を送る
+                  {t("composer.sendFirst")}
                 </button>
               )}
             </div>
@@ -223,10 +227,10 @@ function QueueList({ items, busy, onRemove, onSendNow }: { items: Queued[]; busy
                 >
                   <CornerDownRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                   <span className="min-w-0 grow truncate">{q.text || q.attachments.map((a) => a.preview.name).join(" ")}</span>
-                  {q.attachments.length > 0 && <Paperclip className="size-3 shrink-0 text-muted-foreground" aria-label={`添えたもの ${q.attachments.length}`} />}
+                  {q.attachments.length > 0 && <Paperclip className="size-3 shrink-0 text-muted-foreground" aria-label={t("composer.attachmentsCount", { count: q.attachments.length })} />}
                   <button
                     type="button"
-                    aria-label="キューから外す"
+                    aria-label={t("composer.removeFromQueue")}
                     onClick={() => onRemove(q.key)}
                     className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                   >
@@ -270,6 +274,7 @@ export function Composer({
   onUnqueue?: (key: string) => void;
   onSendQueued?: () => void;
 }) {
+  const t = useT();
   const [text, setText] = useState("");
   const att = useAttachments();
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
@@ -293,7 +298,7 @@ export function Composer({
       <AttachBox att={att}>
         <textarea
           ref={textRef}
-          aria-label="指示"
+          aria-label={t("composer.message")}
           rows={1}
           value={text}
           placeholder={placeholder}
@@ -317,8 +322,8 @@ export function Composer({
         {stopMode ? (
           <button
             type="button"
-            aria-label="停止（esc）"
-            title="停止（esc）"
+            aria-label={t("composer.stopEsc")}
+            title={t("composer.stopEsc")}
             onClick={onStop}
             className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
           >
@@ -327,8 +332,8 @@ export function Composer({
         ) : (
           <button
             type="button"
-            aria-label={busy ? "キューに積む" : "送る"}
-            title={busy ? "キューに積む（ターンが終わったら送ります）" : undefined}
+            aria-label={busy ? t("composer.addToQueue") : t("composer.send")}
+            title={busy ? t("composer.addToQueueHint") : undefined}
             disabled={!canSend}
             onClick={send}
             className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground hover:bg-accent disabled:opacity-40"

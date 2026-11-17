@@ -1,3 +1,22 @@
 // pane/Composer.tsx（入力欄、model / effort、コンテキスト、キュー）
 export const composer = {
+  inputTotal: "入力（累計）",
+  cachedPart: "うちキャッシュ",
+  outputTotal: "出力（累計）",
+  costTotal: "費用（累計）",
+  contextDetails: "コンテキストの詳細",
+  contextUsage: "コンテキストの使用量",
+  context: "コンテキスト",
+  reportedModel: "応答モデル",
+  switchMode: "mode を切り替え（今は{mode}、⇧⇥）",
+  queueSendAfterTurn: "ターンが終わったら送ります",
+  queueUnsent: "送っていない指示",
+  sendFirst: "先頭を送る",
+  attachmentsCount: "添えたもの {count}",
+  removeFromQueue: "キューから外す",
+  message: "指示",
+  stopEsc: "停止（esc）",
+  addToQueue: "キューに積む",
+  send: "送る",
+  addToQueueHint: "キューに積む（ターンが終わったら送ります）",
 } satisfies Record<string, string>;

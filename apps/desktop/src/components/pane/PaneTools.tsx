@@ -4,6 +4,7 @@ import { Check, Circle, FileText, LoaderCircle, Pencil, SquareStop, SquareTermin
 import { useMemo } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useT, type MessageKey } from "@/i18n";
 import { api, inTauri } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { backgroundShells, currentPlan, touchedFiles, type BackgroundShell, type ShellState } from "@/state/paneData";
@@ -47,15 +48,16 @@ function Empty({ children }: { children: React.ReactNode }) {
 
 const relative = (path: string, base: string | null) => (base && path.startsWith(`${base}/`) ? path.slice(base.length + 1) : path);
 
-const SHELL: Record<ShellState, { label: string; Icon: typeof Check; className: string; spin?: boolean }> = {
-  running: { label: "実行中", Icon: LoaderCircle, className: "text-working", spin: true },
-  done: { label: "終了", Icon: Check, className: "text-muted-foreground" },
-  failed: { label: "失敗", Icon: CircleX, className: "text-error" },
-  stopped: { label: "停止", Icon: SquareStop, className: "text-muted-foreground" },
-  unknown: { label: "不明", Icon: CircleHelp, className: "text-muted-foreground" },
+const SHELL: Record<ShellState, { label: MessageKey; Icon: typeof Check; className: string; spin?: boolean }> = {
+  running: { label: "pane.shellRunning", Icon: LoaderCircle, className: "text-working", spin: true },
+  done: { label: "pane.shellDone", Icon: Check, className: "text-muted-foreground" },
+  failed: { label: "pane.shellFailed", Icon: CircleX, className: "text-error" },
+  stopped: { label: "pane.shellStopped", Icon: SquareStop, className: "text-muted-foreground" },
+  unknown: { label: "pane.shellUnknown", Icon: CircleHelp, className: "text-muted-foreground" },
 };
 
 function ShellRow({ s }: { s: BackgroundShell }) {
+  const t = useT();
   const st = SHELL[s.state];
   const last = s.output.trim().split("\n").slice(-3).join("\n");
   return (
@@ -67,7 +69,7 @@ function ShellRow({ s }: { s: BackgroundShell }) {
         </span>
         <span className={cn("flex shrink-0 items-center gap-1 text-xs", st.className)}>
           <st.Icon className={cn("size-3.5", st.spin && "animate-spin")} aria-hidden />
-          {st.label}
+          {t(st.label)}
         </span>
       </div>
       {last && <pre className="m-0 overflow-hidden rounded-[6px] bg-background px-2 py-1 font-mono text-xs leading-5 whitespace-pre text-muted-foreground">{last}</pre>}
@@ -83,6 +85,7 @@ const PLAN_ICON: Record<string, { Icon: typeof Check; className: string; spin?: 
 };
 
 export function PaneTools({ scope, items, worktree, alive }: { scope: string; items: TranscriptItem[]; worktree: string | null; alive: boolean }) {
+  const t = useT();
   const files = useMemo(() => touchedFiles(items), [items]);
   const shells = useMemo(() => backgroundShells(items, alive), [items, alive]);
   const plan = useMemo(() => currentPlan(items), [items]);
@@ -91,8 +94,8 @@ export function PaneTools({ scope, items, worktree, alive }: { scope: string; it
 
   return (
     <>
-      <ToolButton scope={scope} name="plan" label="計画" icon={<ListChecks className="size-3.5" aria-hidden />} badge={plan.length ? `${done}/${plan.length}` : null} width="w-80">
-          {plan.length === 0 && <Empty>まだ計画はありません。エージェントがタスクの一覧を作ると、ここに出ます</Empty>}
+      <ToolButton scope={scope} name="plan" label={t("pane.plan")} icon={<ListChecks className="size-3.5" aria-hidden />} badge={plan.length ? `${done}/${plan.length}` : null} width="w-80">
+          {plan.length === 0 && <Empty>{t("pane.planEmpty")}</Empty>}
           {plan.map((e, i) => {
             const p = PLAN_ICON[e.status] ?? PLAN_ICON.pending;
             return (
@@ -106,27 +109,27 @@ export function PaneTools({ scope, items, worktree, alive }: { scope: string; it
         <ToolButton
           scope={scope}
           name="shells"
-          label="バックグラウンドのシェル"
+          label={t("pane.shells")}
           icon={<SquareTerminal className={cn("size-3.5", running > 0 && "text-working")} aria-hidden />}
           badge={shells.length ? (running > 0 ? running : shells.length) : null}
           width="w-96"
         >
-          {shells.length === 0 && <Empty>バックグラウンドで動いているシェルはありません</Empty>}
+          {shells.length === 0 && <Empty>{t("pane.shellsEmpty")}</Empty>}
           {shells.map((s, i) => (
             <ShellRow key={s.id ?? i} s={s} />
           ))}
         </ToolButton>
-        <ToolButton scope={scope} name="files" label="触ったファイル" icon={<FileText className="size-3.5" aria-hidden />} badge={files.length || null} width="w-96">
-          {files.length === 0 && <Empty>まだファイルを読んだり書いたりしていません</Empty>}
+        <ToolButton scope={scope} name="files" label={t("pane.files")} icon={<FileText className="size-3.5" aria-hidden />} badge={files.length || null} width="w-96">
+          {files.length === 0 && <Empty>{t("pane.filesEmpty")}</Empty>}
           {files.map((f) => (
             <button
               key={f.path}
               type="button"
-              title={inTauri ? `${f.path}（Finder で見せる）` : f.path}
+              title={inTauri ? t("pane.revealInFinder", { path: f.path }) : f.path}
               onClick={() => inTauri && void api.revealFile(f.path).catch(() => {})}
               className="flex h-7 w-full items-center gap-2 rounded-md px-1.5 text-left hover:bg-accent"
             >
-              {f.edited ? <Pencil className="size-3.5 shrink-0 text-muted-foreground" aria-label="編集した" /> : <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-label="読んだ" />}
+              {f.edited ? <Pencil className="size-3.5 shrink-0 text-muted-foreground" aria-label={t("pane.fileEdited")} /> : <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-label={t("pane.fileRead")} />}
               <span className="min-w-0 grow truncate font-mono text-xs">{relative(f.path, worktree)}</span>
               {f.count > 1 && <span className="shrink-0 font-mono text-xs text-muted-foreground tabular">{f.count}</span>}
             </button>

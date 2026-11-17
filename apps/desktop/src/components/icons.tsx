@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { t, useT, type MessageKey } from "@/i18n";
 import type { SessionStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -32,7 +33,10 @@ export const AGENT_NAMES: Record<string, string> = {
   codex: "Codex",
   opencode: "OpenCode",
   gemini: "Gemini CLI",
-  mock: "模擬エージェント",
+  // 表示のときに今の言語で引く（読み込みのときに引くと、言語を変えても変わらない）
+  get mock() {
+    return t("status.agentMock");
+  },
 };
 
 export function ProviderLogo({ agent, className }: { agent: string; className?: string }) {
@@ -46,29 +50,41 @@ export function ProviderLogo({ agent, className }: { agent: string; className?: 
 }
 
 interface StatusMeta {
-  label: string;
+  /** 表示名の辞書のキー */
+  labelKey: MessageKey;
+  /** 表示名（読むたびに今の言語で引く） */
+  readonly label: string;
   Icon: LucideIcon;
   /** Tailwind の文字色 */
   color: string;
   spin?: boolean;
 }
 
+const statusMeta = (labelKey: MessageKey, rest: Omit<StatusMeta, "labelKey" | "label">): StatusMeta => ({
+  labelKey,
+  get label() {
+    return t(labelKey);
+  },
+  ...rest,
+});
+
 export const STATUS: Record<SessionStatus, StatusMeta> = {
-  starting: { label: "起動中", Icon: LoaderCircle, color: "text-muted-foreground", spin: true },
-  working: { label: "作業中", Icon: LoaderCircle, color: "text-working", spin: true },
-  awaiting_permission: { label: "確認待ち", Icon: Shield, color: "text-permission" },
-  stalled: { label: "無応答", Icon: Hourglass, color: "text-stalled" },
-  error: { label: "エラー", Icon: CircleX, color: "text-error" },
-  idle: { label: "待機", Icon: Circle, color: "text-muted-foreground" },
-  closed: { label: "停止", Icon: Square, color: "text-muted-foreground" },
+  starting: statusMeta("status.starting", { Icon: LoaderCircle, color: "text-muted-foreground", spin: true }),
+  working: statusMeta("status.working", { Icon: LoaderCircle, color: "text-working", spin: true }),
+  awaiting_permission: statusMeta("status.awaitingPermission", { Icon: Shield, color: "text-permission" }),
+  stalled: statusMeta("status.stalled", { Icon: Hourglass, color: "text-stalled" }),
+  error: statusMeta("status.error", { Icon: CircleX, color: "text-error" }),
+  idle: statusMeta("status.idle", { Icon: Circle, color: "text-muted-foreground" }),
+  closed: statusMeta("status.closed", { Icon: Square, color: "text-muted-foreground" }),
 };
 
 export function StatusIcon({ status, className }: { status: SessionStatus; className?: string }) {
+  const t = useT();
   const m = STATUS[status];
   return (
     <m.Icon
       role="img"
-      aria-label={m.label}
+      aria-label={t(m.labelKey)}
       strokeWidth={2.25}
       className={cn("size-3.5 shrink-0", m.color, m.spin && "animate-spin [animation-duration:1.1s]", className)}
     />
@@ -90,23 +106,23 @@ export function ModeIcon({ mode, className }: { mode: string | null; className?:
   return <Icon aria-hidden className={cn("size-3 shrink-0", className)} />;
 }
 
-/** mode の表示名（エージェントが返す id → 日本語）。知らない mode は id のまま */
-const MODE_LABELS: Record<string, string> = {
+/** mode の表示名（エージェントが返す id → 辞書のキー）。知らない mode は id のまま */
+const MODE_LABELS: Record<string, MessageKey> = {
   // Claude Code
-  default: "デフォルト",
-  acceptEdits: "編集を許可",
-  plan: "プラン",
-  auto: "自動",
-  bypassPermissions: "権限スキップ",
+  default: "status.modeDefault",
+  acceptEdits: "status.modeAcceptEdits",
+  plan: "status.modePlan",
+  auto: "status.modeAuto",
+  bypassPermissions: "status.modeBypassPermissions",
   // Codex
-  "read-only": "読み取りのみ",
-  "workspace-write": "書き込み可",
-  agent: "自動",
-  "agent-full-access": "フルアクセス",
+  "read-only": "status.modeReadOnly",
+  "workspace-write": "status.modeWorkspaceWrite",
+  agent: "status.modeAgent",
+  "agent-full-access": "status.modeAgentFullAccess",
   // OpenCode
-  build: "ビルド",
+  build: "status.modeBuild",
 };
 
-export const modeLabel = (mode: string | null) => (mode ? (MODE_LABELS[mode] ?? mode) : "");
+export const modeLabel = (mode: string | null) => (mode ? (MODE_LABELS[mode] ? t(MODE_LABELS[mode]) : mode) : "");
 
 export const isDangerMode = (mode: string | null) => mode === "bypassPermissions" || mode === "agent-full-access";

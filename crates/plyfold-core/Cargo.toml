@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 base64 = "0.23.1"
 plyfold-acp = { version = "0.1.0", path = "../plyfold-acp" }
+plyfold-i18n = { version = "0.1.0", path = "../plyfold-i18n" }
 plyfold-profile = { version = "0.1.0", path = "../plyfold-profile" }
 plyfold-store = { version = "0.1.0", path = "../plyfold-store" }
 plyfold-worktree = { version = "0.1.0", path = "../plyfold-worktree" }

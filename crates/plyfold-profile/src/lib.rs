@@ -18,21 +18,25 @@ pub use secrets::{KeychainStore, MemoryStore, SecretStore};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProfileError {
-    #[error("'{0}' はプロファイルにもエージェントにもありません")]
+    #[error("{}", plyfold_i18n::tr!("'{}' はプロファイルにもエージェントにもありません", "'{}' is neither a profile nor an agent", .0))]
     UnknownTarget(String),
-    #[error("プロファイル '{profile}' のエージェント '{agent}' が定義されていません")]
+    #[error("{}", plyfold_i18n::tr!("プロファイル '{}' のエージェント '{}' が定義されていません", "Agent '{1}' for profile '{0}' is not defined", .profile, .agent))]
     UnknownAgent { profile: String, agent: String },
-    #[error("エージェント '{0}' は config_dir_env がないので isolate できません")]
+    #[error("{}", plyfold_i18n::tr!("エージェント '{}' は config_dir_env がないので isolate できません", "Agent '{}' has no config_dir_env, so it cannot be isolated", .0))]
     CannotIsolate(String),
-    #[error("{0} のパスはプロファイルのディレクトリの中に限ります: {1}")]
+    #[error("{}", plyfold_i18n::tr!("{} のパスはプロファイルのディレクトリの中に限ります: {}", "{} paths must stay inside the profile directory: {}", .0, .1))]
     PathEscape(&'static str, String),
-    #[error("キーの取得元 '{0}' は不明です（keychain / keychain:<名前>/<変数名> / env:VAR）")]
+    #[error("{}", plyfold_i18n::tr!(
+        "キーの取得元 '{}' は不明です（keychain / keychain:<名前>/<変数名> / env:VAR）",
+        "Unknown key source '{}' (use keychain / keychain:<name>/<variable> / env:VAR)",
+        .0
+    ))]
     BadKeySource(String),
-    #[error("秘密の値を取得できません（{account}）: {reason}")]
+    #[error("{}", plyfold_i18n::tr!("秘密の値を取得できません（{}）: {}", "Cannot get the secret ({}): {}", .account, .reason))]
     Secret { account: String, reason: String },
-    #[error("設定ファイルを読めません: {0}")]
+    #[error("{}", plyfold_i18n::tr!("設定ファイルを読めません: {}", "Cannot read the config file: {}", .0))]
     Io(#[from] std::io::Error),
-    #[error("設定ファイルの形式が不正です: {0}")]
+    #[error("{}", plyfold_i18n::tr!("設定ファイルの形式が不正です: {}", "The config file is malformed: {}", .0))]
     Parse(#[from] toml::de::Error),
     #[error("{0}")]
     Form(String),
@@ -205,7 +209,7 @@ impl Config {
             } else if let Some(other) = source.strip_prefix("env:") {
                 std::env::var(other).map_err(|_| ProfileError::Secret {
                     account: format!("env:{other}"),
-                    reason: "環境変数がありません".into(),
+                    reason: plyfold_i18n::tr!("環境変数がありません", "The environment variable is not set"),
                 })?
             } else {
                 return Err(ProfileError::BadKeySource(source.clone()));

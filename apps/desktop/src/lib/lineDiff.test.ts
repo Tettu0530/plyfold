@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+
+import { setLang } from "@/i18n";
 
 import { lineDiff } from "./lineDiff";
 
 describe("lineDiff", () => {
+  // 省略の行の文は言語で変わる。期待値は日本語で書いてある
+  beforeAll(() => setLang("ja"));
   it("marks changed lines and keeps nearby context", () => {
     const old = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"].join("\n") + "\n";
     const neu = ["a", "b", "c", "d", "e", "F", "g", "h", "i", "j"].join("\n") + "\n";

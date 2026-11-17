@@ -13,6 +13,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 plyfold-core = { version = "0.1.0", path = "../../../crates/plyfold-core" }
+plyfold-i18n = { version = "0.1.0", path = "../../../crates/plyfold-i18n" }
 plyfold-profile = { version = "0.1.0", path = "../../../crates/plyfold-profile" }
 plyfold-store = { version = "0.1.0", path = "../../../crates/plyfold-store" }
 plyfold-worktree = { version = "0.1.0", path = "../../../crates/plyfold-worktree" }

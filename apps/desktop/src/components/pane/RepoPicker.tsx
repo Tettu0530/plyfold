@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { Keys } from "../Keys";
 import { isImeKey } from "@/lib/keys";
+import { useT } from "@/i18n";
 
 const baseName = (p: string) => p.replace(/\/+$/, "").split("/").pop() || p;
 
@@ -31,6 +32,7 @@ function useRecent(current: string): DirCandidate[] {
 }
 
 export function RepoPicker({ value, onPick }: { value: string; onPick: (path: string) => void }) {
+  const t = useT();
   const [query, setQuery] = useState(value);
   const [dirs, setDirs] = useState<DirCandidate[]>([]);
   const [active, setActive] = useState(0);
@@ -45,12 +47,12 @@ export function RepoPicker({ value, onPick }: { value: string; onPick: (path: st
       return;
     }
     let alive = true;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       void api.completeDirs(query).then((d) => alive && setDirs(d)).catch(() => alive && setDirs([]));
     }, 80);
     return () => {
       alive = false;
-      clearTimeout(t);
+      clearTimeout(timer);
     };
   }, [query, touched]);
 
@@ -85,7 +87,7 @@ export function RepoPicker({ value, onPick }: { value: string; onPick: (path: st
   return (
     <div className="flex flex-col gap-1">
       <input
-        aria-label="リポジトリのパス"
+        aria-label={t("draft.repoPath")}
         role="combobox"
         aria-expanded={rows.length > 0}
         aria-controls="repo-picker-list"
@@ -100,13 +102,13 @@ export function RepoPicker({ value, onPick }: { value: string; onPick: (path: st
         className="h-8 rounded-md border border-input bg-transparent px-2 font-mono text-xs outline-none focus:border-ring"
       />
       {rows.length > 0 && (
-        <div ref={listRef} id="repo-picker-list" role="listbox" aria-label="リポジトリの候補" className="max-h-64 overflow-y-auto">
+        <div ref={listRef} id="repo-picker-list" role="listbox" aria-label={t("draft.repoSuggestions")} className="max-h-64 overflow-y-auto">
           {rows.map((r, i) => {
             const Icon = r.git ? GitBranch : Folder;
             const head = (i === 0 && r.recent) || (!r.recent && (i === 0 || rows[i - 1].recent));
             return (
               <div key={`${r.recent ? "r" : "d"}:${r.path}`}>
-                {head && <p className="px-2 pt-1.5 pb-0.5 text-xs text-muted-foreground">{r.recent ? "最近" : "フォルダ"}</p>}
+                {head && <p className="px-2 pt-1.5 pb-0.5 text-xs text-muted-foreground">{r.recent ? t("draft.recent") : t("draft.folders")}</p>}
                 <button
                   type="button"
                   role="option"

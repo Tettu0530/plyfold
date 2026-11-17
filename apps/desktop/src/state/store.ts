@@ -5,7 +5,7 @@ import { create } from "zustand";
 import type { Look, LiquidStyle } from "@/components/liquid/liquid";
 import { liquidCloseFrom, liquidOpen } from "@/components/liquid/stage";
 import type { Attached } from "@/lib/attachments";
-import { resolveLang, setLang } from "@/i18n";
+import { resolveLang, setLang, t } from "@/i18n";
 import { api, inTauri, onEngineEvent } from "@/lib/api";
 import { notify } from "@/lib/notify";
 import { loadInfoCache, saveInfoCache, snapshot, type InfoCache } from "./infoCache";
@@ -62,6 +62,13 @@ function lastRepo(): string {
   } catch {
     return "~/projects";
   }
+}
+
+/** 画面の言語を決め、エンジン（エラーや知らせの文）にも同じ言語を伝える */
+function applyLang(setting: AppSettings["language"] | undefined) {
+  const lang = resolveLang(setting);
+  setLang(lang);
+  if (inTauri) void api.setUiLang(lang).catch(() => {});
 }
 
 /** ターンの途中に送った指示 */
@@ -285,9 +292,9 @@ export const useStore = create<State>((set, get) => ({
       set((s) => {
         const sessions = reduceEvent(s.sessions, e);
         // アプリを見ていないときは、macOS の通知も出す
-        const title = s.sessions[(e as { session_id?: string }).session_id ?? ""]?.record.title ?? "セッション";
-        if (e.type === "permission_requested") notify(title, "権限確認待ちです");
-        if (e.type === "turn_ended") notify(title, e.error ? `エラーで止まりました: ${e.error}` : "ターンが終わりました");
+        const title = s.sessions[(e as { session_id?: string }).session_id ?? ""]?.record.title ?? t("store.fallbackTitle");
+        if (e.type === "permission_requested") notify(title, t("store.notifyPermission"));
+        if (e.type === "turn_ended") notify(title, e.error ? t("store.notifyError", { error: e.error }) : t("store.notifyTurnEnded"));
         // 画面に出ていないセッション（またはアプリを見ていないとき）のターンの終わりは、通知に残す
         if (e.type === "turn_ended") {
           const shown = s.panes.slice(0, s.paneCount).includes(e.session_id) && document.hasFocus();
@@ -304,7 +311,7 @@ export const useStore = create<State>((set, get) => ({
     for (const r of records) sessions[r.id] = newView(r);
     // 前回の並べ方と、ペインに出していたセッションを戻す（分離アニメーションは付けない）
     const layout = restoreLayout(readLayout(), (id) => !!sessions[id]);
-    setLang(resolveLang(sv.settings.language));
+    applyLang(sv.settings.language);
     set({ profiles, sessions, settings: sv.settings, ready: true, ...(layout ?? {}) });
     for (const id of layout?.panes ?? []) if (id) void loadSession(id);
   },
@@ -381,7 +388,7 @@ export const useStore = create<State>((set, get) => ({
     const prev = get().settings;
     const next = { ...prev, ...patch };
     set({ settings: next });
-    if (patch.language) setLang(resolveLang(next.language));
+    if (patch.language) applyLang(next.language);
     try {
       await api.saveSettings(next);
     } catch (e) {
@@ -459,7 +466,7 @@ export const useStore = create<State>((set, get) => ({
       } catch {
         // 保存できなくても続ける
       }
-      const title = prompt.trim().split("\n")[0].slice(0, 40) || "新しいセッション";
+      const title = prompt.trim().split("\n")[0].slice(0, 40) || t("store.newSessionTitle");
       const rec = await api.startSession({ profile: d.profile, repo: d.repo, title, worktree: d.worktree });
       // 下書きで選んだ model / effort / mode を、最初のプロンプトの前に設定する
       await applyChoices(rec.id, d.choices);

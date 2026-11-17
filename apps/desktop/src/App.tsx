@@ -14,6 +14,7 @@ import { PaneGrid } from "./components/pane/PaneGrid";
 import { SearchCard } from "./components/SearchCard";
 import { Segmented } from "./components/Segmented";
 import { Sidebar } from "./components/Sidebar";
+import { useT } from "./i18n";
 import { inTauri } from "./lib/api";
 import { repoName } from "./lib/format";
 import { useStore, type PaneCount } from "./state/store";
@@ -53,6 +54,7 @@ function useShortcuts() {
 }
 
 export default function App() {
+  const t = useT();
   const init = useStore((s) => s.init);
   const paneCount = useStore((s) => s.paneCount);
   const setPaneCount = useStore((s) => s.setPaneCount);
@@ -75,13 +77,13 @@ export default function App() {
             </span>
             <span data-tauri-drag-region className="grow" />
             <Segmented<PaneCount>
-              label="ペインの数"
+              label={t("app.paneCount")}
               value={paneCount}
               onChange={setPaneCount}
               options={[
-                { value: 1 as PaneCount, label: <Square className="size-3.5" aria-hidden />, aria: "ペイン 1 枚" },
-                { value: 2 as PaneCount, label: <Columns2 className="size-3.5" aria-hidden />, aria: "ペイン 2 枚" },
-                { value: 4 as PaneCount, label: <Grid2x2 className="size-3.5" aria-hidden />, aria: "ペイン 4 枚" },
+                { value: 1 as PaneCount, label: <Square className="size-3.5" aria-hidden />, aria: t("app.panes", { count: 1 }) },
+                { value: 2 as PaneCount, label: <Columns2 className="size-3.5" aria-hidden />, aria: t("app.panes", { count: 2 }) },
+                { value: 4 as PaneCount, label: <Grid2x2 className="size-3.5" aria-hidden />, aria: t("app.panes", { count: 4 }) },
               ]}
             />
             <Notifications />
@@ -93,7 +95,7 @@ export default function App() {
           </div>
           {!inTauri && (
             <p className="fixed right-3 bottom-3 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
-              ブラウザでは表示だけです（Tauri で起動するとエンジンにつながります）
+              {t("app.browserOnly")}
             </p>
           )}
         </div>

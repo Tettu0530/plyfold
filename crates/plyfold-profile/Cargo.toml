@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 plyfold-acp = { version = "0.1.0", path = "../plyfold-acp" }
+plyfold-i18n = { version = "0.1.0", path = "../plyfold-i18n" }
 serde = { version = "1.0.229", features = ["derive"] }
 thiserror = "2.0.21"
 toml = "1.2.1"

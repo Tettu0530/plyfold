@@ -2,6 +2,7 @@ import { ChevronLeft, FolderOpen, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Switch } from "@/components/ui/switch";
+import { useT } from "@/i18n";
 import { api } from "@/lib/api";
 import type { AppSettings, EditorChoice, SettingsView as Paths } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -10,8 +11,9 @@ import { Keys } from "./Keys";
 import { useLiquidClip, useLiquidRevealed } from "./liquid/stage";
 import { Segmented } from "./Segmented";
 
-const EDITORS: { value: EditorChoice; label: string }[] = [
-  { value: "auto", label: "自動" },
+// auto の名前は描くときに引く（言語が途中で変わるため）
+const EDITORS: { value: EditorChoice; label: string | null }[] = [
+  { value: "auto", label: null },
   { value: "zed", label: "Zed" },
   { value: "cursor", label: "Cursor" },
   { value: "code", label: "VS Code" },
@@ -21,6 +23,7 @@ const STALL = [60, 120, 300, 600];
 
 /** 設定の画面。サイドバーの「設定」から飛び出して広がる。変えたらすぐ保存する */
 export function SettingsView() {
+  const t = useT();
   const view = useStore((s) => s.settingsView);
   const close = useStore((s) => s.closeSettings);
   const settings = useStore((s) => s.settings);
@@ -55,108 +58,108 @@ export function SettingsView() {
       ref={surface}
       data-settings-view
       role="dialog"
-      aria-label="設定"
+      aria-label={t("settings.title")}
       aria-hidden={!visible}
       className={cn("fixed inset-x-0 top-10 bottom-0 flex flex-col bg-background transition-opacity duration-150", moving ? "pointer-events-none z-[56]" : "z-40", visible ? "opacity-100" : "pointer-events-none opacity-0")}
     >
       <div className="flex h-10 shrink-0 items-center gap-2 border-b pr-3 pl-2">
         <button type="button" onClick={close} className="flex h-7 items-center gap-1 rounded-lg pr-2 pl-1 text-muted-foreground hover:bg-accent hover:text-foreground">
           <ChevronLeft className="size-4" aria-hidden />
-          戻る
+          {t("settings.back")}
           <Keys keys={["esc"]} />
         </button>
         <span className="text-muted-foreground">/</span>
-        <span className="font-medium">設定</span>
+        <span className="font-medium">{t("settings.title")}</span>
       </div>
 
       <div className="min-h-0 grow overflow-y-auto">
         <div className="mx-auto flex max-w-[640px] flex-col gap-8 px-6 py-8">
-          <Section title="セッション">
-            <Row label="新しいセッションの作業場所" detail={settings.worktree_default ? "セッション専用の worktree を切ります。元の作業ツリーは変わりません" : "リポジトリで直接作業します。ほかのセッションと変更がぶつかる可能性があります"}>
+          <Section title={t("settings.sectionSession")}>
+            <Row label={t("settings.workspace")} detail={settings.worktree_default ? t("settings.workspaceWorktree") : t("settings.workspaceInPlace")}>
               <Segmented<string>
-                label="新しいセッションの作業場所"
+                label={t("settings.workspace")}
                 value={settings.worktree_default ? "wt" : "direct"}
                 onChange={(v) => change({ worktree_default: v === "wt" })}
                 options={[
                   { value: "wt", label: <span className="px-2">worktree</span> },
-                  { value: "direct", label: <span className="px-2">直接</span> },
+                  { value: "direct", label: <span className="px-2">{t("settings.inPlace")}</span> },
                 ]}
               />
             </Row>
-            <Row label="言語" detail={settings.language === "auto" || !settings.language ? "macOS の言語に合わせます" : "画面の言葉をこの言語にします"}>
+            <Row label={t("settings.language")} detail={settings.language === "auto" || !settings.language ? t("settings.languageAuto") : t("settings.languageFixed")}>
               <Segmented<"auto" | "ja" | "en">
-                label="言語"
+                label={t("settings.language")}
                 value={settings.language ?? "auto"}
                 onChange={(v) => change({ language: v })}
                 options={[
-                  { value: "auto", label: <span className="px-2">自動</span> },
+                  { value: "auto", label: <span className="px-2">{t("settings.auto")}</span> },
                   { value: "ja", label: <span className="px-2">日本語</span> },
                   { value: "en", label: <span className="px-2">English</span> },
                 ]}
               />
             </Row>
-            <Row label="送るキー" detail={settings.send_key === "cmd_enter" ? "⌘Enter で送ります。Enter は改行です" : "Enter で送ります。改行は Shift+Enter です"}>
+            <Row label={t("settings.sendKey")} detail={settings.send_key === "cmd_enter" ? t("settings.sendCmdEnter") : t("settings.sendEnter")}>
               <Segmented<"enter" | "cmd_enter">
-                label="送るキー"
+                label={t("settings.sendKey")}
                 value={settings.send_key ?? "enter"}
                 onChange={(v) => change({ send_key: v })}
                 options={[
                   { value: "enter", aria: "Enter", label: <Keys keys={["enter"]} className="px-2" /> },
-                  { value: "cmd_enter", aria: "Command と Enter", label: <Keys keys={["cmd", "enter"]} className="px-2" /> },
+                  { value: "cmd_enter", aria: t("settings.cmdEnterAria"), label: <Keys keys={["cmd", "enter"]} className="px-2" /> },
                 ]}
               />
             </Row>
-            <Row label="無応答とみなすまで" detail="ターンの途中でこの時間なにも届かなければ、無応答として通知します">
+            <Row label={t("settings.stall")} detail={t("settings.stallDetail")}>
               <Segmented<number>
-                label="無応答とみなすまで"
+                label={t("settings.stall")}
                 value={settings.stall_seconds}
                 onChange={(v) => change({ stall_seconds: v })}
                 options={(STALL.includes(settings.stall_seconds) ? STALL : [...STALL, settings.stall_seconds].sort((a, b) => a - b)).map((v) => ({
                   value: v,
-                  label: <span className="px-1.5 font-mono tabular">{v < 60 ? `${v}秒` : `${v / 60}分`}</span>,
+                  label: <span className="px-1.5 font-mono tabular">{v < 60 ? t("settings.seconds", { count: v }) : t("settings.minutes", { count: v / 60 })}</span>,
                 }))}
               />
             </Row>
           </Section>
 
-          <Section title="差分">
-            <Row label="エディタで開く" detail={settings.editor === "auto" ? "Zed、Cursor、VS Code の順に探し、なければ Finder で開きます" : "差分の画面の「エディタで開く」で使います"}>
+          <Section title={t("settings.sectionDiff")}>
+            <Row label={t("settings.openInEditor")} detail={settings.editor === "auto" ? t("settings.editorAutoDetail") : t("settings.editorDetail")}>
               <Segmented<EditorChoice>
-                label="エディタ"
+                label={t("settings.editor")}
                 value={settings.editor}
                 onChange={(editor) => change({ editor })}
-                options={EDITORS.map((e) => ({ value: e.value, label: <span className="px-1.5">{e.label}</span> }))}
+                options={EDITORS.map((e) => ({ value: e.value, label: <span className="px-1.5">{e.label ?? t("settings.auto")}</span> }))}
               />
             </Row>
             <Row
-              label="取り込んだ後に worktree を片付ける"
+              label={t("settings.cleanup")}
               htmlFor="st-cleanup"
               detail={
                 settings.cleanup_after_merge
-                  ? "取り込みが済んだら、エージェントを止めて worktree と枝を消します。会話の記録は残り、開き直すと元のリポジトリで動きます"
-                  : "取り込んだ後も worktree と枝を残します。セッションを消すときに一緒に消せます"
+                  ? t("settings.cleanupOn")
+                  : t("settings.cleanupOff")
               }
             >
               <Switch id="st-cleanup" checked={settings.cleanup_after_merge} onCheckedChange={(v) => change({ cleanup_after_merge: v })} />
             </Row>
           </Section>
 
-          <Section title="保存場所">
-            <PathRow label="プロファイルの設定" path={paths?.config_path} onReveal={() => void api.revealPath("config")} />
-            <PathRow label="セッションの記録と worktree" path={paths?.state_dir} onReveal={() => void api.revealPath("data")} />
-            <p className="text-xs leading-relaxed text-muted-foreground">キーはここには保存せず、macOS のキーチェーン（サービス名 plyfold）に保存します。</p>
+          <Section title={t("settings.sectionStorage")}>
+            <PathRow label={t("settings.profileConfig")} path={paths?.config_path} onReveal={() => void api.revealPath("config")} />
+            <PathRow label={t("settings.stateDir")} path={paths?.state_dir} onReveal={() => void api.revealPath("data")} />
+            <p className="text-xs leading-relaxed text-muted-foreground">{t("settings.keychainNote")}</p>
           </Section>
 
-          <Section title="動き">
-            <Row label="動きの見本" detail="ばねと分離の動きを試せます。macOS の「視差効果を減らす」をオンにすると、動きはフェードに変わります">
+          <Section title={t("settings.sectionMotion")}>
+            <Row label={t("settings.motionLab")} detail={t("settings.motionLabDetail")}>
               <button type="button" onClick={() => setLabOpen(true)} className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent">
                 <Sparkles className="size-3.5" aria-hidden />
-                開く
+                {t("settings.open")}
               </button>
             </Row>
           </Section>
 
-          {error && <p className="text-xs whitespace-pre-wrap text-error">保存できませんでした: {error}</p>}
+          {error && <p className="text-xs whitespace-pre-wrap text-error">{t("settings.saveFailed", { error })}</p>}
         </div>
       </div>
     </div>
@@ -187,6 +190,7 @@ function Row({ label, detail, htmlFor, children }: { label: string; detail?: str
 }
 
 function PathRow({ label, path, onReveal }: { label: string; path?: string; onReveal: () => void }) {
+  const t = useT();
   return (
     <div className="flex items-center gap-4">
       <div className="flex min-w-0 grow flex-col gap-1">
@@ -197,7 +201,7 @@ function PathRow({ label, path, onReveal }: { label: string; path?: string; onRe
       </div>
       <button type="button" onClick={onReveal} className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent">
         <FolderOpen className="size-3.5" aria-hidden />
-        Finder で開く
+        {t("settings.revealInFinder")}
       </button>
     </div>
   );

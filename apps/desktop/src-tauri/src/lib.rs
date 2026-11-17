@@ -71,13 +71,19 @@ fn get_settings(state: State<'_, AppState>) -> SettingsView {
     }
 }
 
+/// 画面の言語に合わせて、エンジンが出す文（エラー、知らせ）の言語を切り替える
+#[tauri::command]
+fn set_ui_lang(lang: String) {
+    plyfold_i18n::set_lang(&lang);
+}
+
 #[tauri::command]
 fn save_settings(state: State<'_, AppState>, settings: AppSettings) -> CmdResult<()> {
     if !["auto", "zed", "cursor", "code", "finder"].contains(&settings.editor.as_str()) {
-        return Err(format!("エディタ '{}' は選べません", settings.editor));
+        return Err(plyfold_i18n::tr!("エディタ '{}' は選べません", "Editor '{}' is not available", settings.editor));
     }
     if !(30..=3600).contains(&settings.stall_seconds) {
-        return Err("無応答とみなすまでの時間は 30 秒から 1 時間までです".into());
+        return Err(plyfold_i18n::tr!("無応答とみなすまでの時間は 30 秒から 1 時間までです", "The no-response timeout must be between 30 seconds and 1 hour"));
     }
     let path = state.state_dir.join("settings.json");
     let tmp = path.with_extension("json.tmp");
@@ -299,7 +305,7 @@ struct ProfileDetail {
 #[tauri::command]
 fn profile_detail(state: State<'_, AppState>, name: String) -> CmdResult<ProfileDetail> {
     let cfg = state.config.read().unwrap();
-    let def = cfg.profiles.get(&name).ok_or_else(|| format!("プロファイル '{name}' はありません"))?;
+    let def = cfg.profiles.get(&name).ok_or_else(|| plyfold_i18n::tr!("プロファイル '{name}' はありません", "Profile '{name}' not found"))?;
     let form = edit::describe(&name, def);
     let account = edit::key_account(&name, def);
     let value = account.as_ref().and_then(|(_, a)| state.secrets.get(a).ok());
@@ -333,11 +339,11 @@ fn save_profile(state: State<'_, AppState>, form: ProfileForm, original: Option<
         if original.is_none() || renaming {
             edit::validate_name(&form.name, &cfg).map_err(err)?;
             if cfg.profiles.contains_key(&form.name) {
-                return Err(format!("'{}' という名前のプロファイルはもうあります", form.name));
+                return Err(plyfold_i18n::tr!("'{}' という名前のプロファイルはもうあります", "A profile named '{}' already exists", form.name));
             }
         }
         if !cfg.agents.contains_key(&form.agent) {
-            return Err(format!("エージェント '{}' はありません", form.agent));
+            return Err(plyfold_i18n::tr!("エージェント '{}' はありません", "Agent '{}' not found", form.agent));
         }
         let existing = original.as_ref().and_then(|o| cfg.profiles.get(o));
         let def = edit::to_def(&form, existing).map_err(err)?;
@@ -366,11 +372,11 @@ fn save_profile(state: State<'_, AppState>, form: ProfileForm, original: Option<
 fn set_profile_key(state: State<'_, AppState>, name: String, value: String) -> CmdResult<()> {
     let value = value.trim();
     if value.is_empty() {
-        return Err("キーが空です".into());
+        return Err(plyfold_i18n::tr!("キーが空です", "The key is empty"));
     }
     let cfg = state.config.read().unwrap();
-    let def = cfg.profiles.get(&name).ok_or_else(|| format!("プロファイル '{name}' はありません"))?;
-    let (_, account) = edit::key_account(&name, def).ok_or("このプロファイルはキーを使いません")?;
+    let def = cfg.profiles.get(&name).ok_or_else(|| plyfold_i18n::tr!("プロファイル '{name}' はありません", "Profile '{name}' not found"))?;
+    let (_, account) = edit::key_account(&name, def).ok_or_else(|| plyfold_i18n::tr!("このプロファイルはキーを使いません", "This profile does not use a key"))?;
     state.secrets.set(&account, value).map_err(err)
 }
 
@@ -379,7 +385,7 @@ fn set_profile_key(state: State<'_, AppState>, name: String, value: String) -> C
 fn delete_profile(state: State<'_, AppState>, name: String) -> CmdResult<()> {
     let own = {
         let cfg = state.config.read().unwrap();
-        let def = cfg.profiles.get(&name).ok_or_else(|| format!("プロファイル '{name}' はありません"))?;
+        let def = cfg.profiles.get(&name).ok_or_else(|| plyfold_i18n::tr!("プロファイル '{name}' はありません", "Profile '{name}' not found"))?;
         edit::key_account(&name, def).filter(|(var, a)| *a == format!("{name}/{var}"))
     };
     edit::remove_profile(&state.config_path, &name).map_err(err)?;
@@ -411,7 +417,7 @@ async fn merge_session(state: State<'_, AppState>, id: String) -> CmdResult<Merg
     let target = state.engine.merge(&id).map_err(err)?;
     let cleanup = state.settings.read().unwrap().cleanup_after_merge;
     if cleanup {
-        state.engine.cleanup_worktree(&id).await.map_err(|e| format!("{target} には取り込みましたが、片付けに失敗しました: {e}"))?;
+        state.engine.cleanup_worktree(&id).await.map_err(|e| plyfold_i18n::tr!("{target} には取り込みましたが、片付けに失敗しました: {e}", "Merged into {target}, but cleanup failed: {e}"))?;
     }
     Ok(MergeResult { target, cleaned: cleanup })
 }
@@ -427,7 +433,7 @@ async fn create_pr(state: State<'_, AppState>, id: String) -> CmdResult<String> 
 fn open_url(url: String) -> CmdResult<()> {
     let ok = ["http://", "https://", "mailto:"].iter().any(|p| url.starts_with(p));
     if !ok || url.chars().any(char::is_control) {
-        return Err("このリンクは開けません".into());
+        return Err(plyfold_i18n::tr!("このリンクは開けません", "This link cannot be opened"));
     }
     std::process::Command::new("open").arg(&url).spawn().map_err(err)?;
     Ok(())
@@ -438,7 +444,7 @@ fn open_url(url: String) -> CmdResult<()> {
 fn reveal_file(path: String) -> CmdResult<()> {
     let p = std::path::Path::new(&path);
     if !p.is_absolute() || !p.exists() {
-        return Err("ファイルが見つかりません".into());
+        return Err(plyfold_i18n::tr!("ファイルが見つかりません", "File not found"));
     }
     std::process::Command::new("open").arg("-R").arg(p).spawn().map_err(err)?;
     Ok(())
@@ -460,7 +466,7 @@ async fn discard_session_changes(state: State<'_, AppState>, id: String) -> CmdR
 fn rename_session(state: State<'_, AppState>, id: String, title: String) -> CmdResult<()> {
     let title = title.trim();
     if title.is_empty() {
-        return Err("名前が空です".into());
+        return Err(plyfold_i18n::tr!("名前が空です", "The name is empty"));
     }
     state.engine.store().rename_by_user(&id, title).map_err(err)
 }
@@ -539,6 +545,7 @@ pub fn run() {
             get_settings,
             save_settings,
             reveal_path,
+            set_ui_lang,
         ])
         .run(tauri::generate_context!())
         .expect("Plyfold を起動できません");

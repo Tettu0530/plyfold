@@ -15,10 +15,11 @@ import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 import { withChoices } from "@/state/infoCache";
 import type { Category, ProfileSummary, ProfileUsage } from "@/lib/types";
 import { isSendKey } from "@/lib/keys";
+import { useT, type MessageKey } from "@/i18n";
 
 /** 認証の種類の表記 */
-function authLabel(p: { keyed: boolean; custom_provider: boolean }) {
-  return p.custom_provider ? "カスタムプロバイダー" : p.keyed ? "公式 API" : "既存のログイン";
+function authLabel(p: { keyed: boolean; custom_provider: boolean }): MessageKey {
+  return p.custom_provider ? "draft.authCustom" : p.keyed ? "draft.authKeyed" : "draft.authLogin";
 }
 
 const profileName = (p: ProfileSummary) => (p.name === p.agent ? "default" : p.label);
@@ -34,6 +35,7 @@ function Num({ icon: Icon, title, children }: { icon: typeof Coins; title: strin
 
 /** プロファイルの 1 行: 名前と認証の種類、直近 30 日のターン数・トークン・費用 */
 function ProfileRow({ p, u, selected, onSelect }: { p: ProfileSummary; u: ProfileUsage | undefined; selected: boolean; onSelect: () => void }) {
+  const t = useT();
   const tok = u?.input != null || u?.output != null ? (u.input ?? 0) + (u.output ?? 0) : null;
   return (
     <button
@@ -50,17 +52,17 @@ function ProfileRow({ p, u, selected, onSelect }: { p: ProfileSummary; u: Profil
         <span className="truncate">{profileName(p)}</span>
         <span className="flex gap-2 overflow-hidden text-xs whitespace-nowrap text-muted-foreground">
           <span>{AGENT_NAMES[p.agent] ?? p.agent}</span>
-          <span className="truncate">{authLabel(p)}</span>
+          <span className="truncate">{t(authLabel(p))}</span>
         </span>
       </span>
       <span className="flex shrink-0 items-center gap-2.5 font-mono text-xs text-muted-foreground tabular">
         {u ? (
           <>
-            <Num icon={MessageSquare} title={`ターン ${u.turns}（セッション ${u.sessions}）`}>
+            <Num icon={MessageSquare} title={t("draft.turnsTitle", { turns: u.turns, sessions: u.sessions })}>
               {u.turns}
             </Num>
             {tok != null && (
-              <span title={`入力 ${tokens(u.input ?? 0)}、出力 ${tokens(u.output ?? 0)}`} className="hidden items-center gap-[3px] @md:flex">
+              <span title={t("draft.tokensTitle", { input: tokens(u.input ?? 0), output: tokens(u.output ?? 0) })} className="hidden items-center gap-[3px] @md:flex">
                 <ArrowUp className="size-3" aria-hidden />
                 {tokens(u.input ?? 0)}
                 <ArrowDown className="ml-1 size-3" aria-hidden />
@@ -68,13 +70,13 @@ function ProfileRow({ p, u, selected, onSelect }: { p: ProfileSummary; u: Profil
               </span>
             )}
             {u.cost != null && (
-              <Num icon={Coins} title="費用">
+              <Num icon={Coins} title={t("draft.cost")}>
                 {money(u.cost, u.currency ?? "USD")}
               </Num>
             )}
           </>
         ) : (
-          <span title="直近 30 日は使っていません">—</span>
+          <span title={t("draft.unused")}>—</span>
         )}
       </span>
       <Check className={cn("size-3.5 shrink-0", selected ? "text-foreground" : "invisible")} aria-hidden />
@@ -87,6 +89,7 @@ function ProfileRow({ p, u, selected, onSelect }: { p: ProfileSummary; u: Profil
  * 真ん中にプロファイルの一覧（直近 30 日の使用状況つき）。入力欄の上は、左にリポジトリと worktree、右に model / effort / mode
  */
 export function DraftPane({ index, id }: { index: number; id: string }) {
+  const t = useT();
   const draft = useStore((s) => s.drafts[id]);
   const profiles = useStore((s) => s.profiles);
   const { updateDraft, startDraft, closePane, focusPane } = useStore.getState();
@@ -135,14 +138,14 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   };
 
   return (
-    <section aria-label={`ペイン ${index + 1}: 新しいセッション`} onMouseDown={() => focusPane(index)} className="flex min-w-0 flex-col">
+    <section aria-label={t("draft.paneLabel", { n: index + 1 })} onMouseDown={() => focusPane(index)} className="flex min-w-0 flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b pr-1.5 pl-3">
         <Plus className="size-3.5 text-muted-foreground" aria-hidden />
-        <span className="font-medium">新しいセッション</span>
+        <span className="font-medium">{t("draft.title")}</span>
         <span className="grow" />
         <button
           type="button"
-          aria-label="閉じる"
+          aria-label={t("common.close")}
           onClick={() => closePane(index)}
           className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
         >
@@ -154,19 +157,19 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
       <div className="flex min-h-0 grow flex-col overflow-y-auto px-3 py-4">
       <div className="mx-auto my-auto w-full max-w-xl">
         <div className="mb-1 flex items-center justify-between px-2.5 text-xs text-muted-foreground">
-          <span id={`${id}-profiles`}>プロファイル</span>
-          <span>直近 30 日</span>
+          <span id={`${id}-profiles`}>{t("draft.profiles")}</span>
+          <span>{t("draft.last30Days")}</span>
         </div>
         {/* 狭いときはトークンを隠す（行の幅で決める） */}
         <div role="radiogroup" aria-labelledby={`${id}-profiles`} onKeyDown={onListKey} className="@container flex flex-col gap-0.5">
           {ordered.map((p) => (
             <ProfileRow key={p.name} p={p} u={byProfile.get(p.name)} selected={p.name === draft.profile} onSelect={() => select(p.name)} />
           ))}
-          {profiles.length === 0 && <p className="px-2.5 py-2 text-xs text-muted-foreground">プロファイルがありません。サイドバーのプロファイルから足してください</p>}
+          {profiles.length === 0 && <p className="px-2.5 py-2 text-xs text-muted-foreground">{t("draft.noProfiles")}</p>}
         </div>
         {(draft.busy || draft.error) && (
           <div className="mt-3 px-2.5 text-xs">
-            {draft.busy && <p className="text-muted-foreground">エージェントを起動しています</p>}
+            {draft.busy && <p className="text-muted-foreground">{t("draft.starting")}</p>}
             {draft.error && <p className="whitespace-pre-wrap text-error">{draft.error}</p>}
           </div>
         )}
@@ -185,7 +188,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
             <button
               ref={liquidAnchor(repoAnchor)}
               type="button"
-              aria-label="リポジトリ"
+              aria-label={t("draft.repo")}
               title={draft.repo}
               className={cn("relative flex h-6 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent data-[state=open]:bg-accent", repoRaised && "z-[57]")}
             >
@@ -198,28 +201,28 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
             type="button"
             aria-pressed={draft.worktree}
             onClick={() => updateDraft(id, { worktree: !draft.worktree })}
-            title={draft.worktree ? "セッション専用の worktree で作業します" : "リポジトリで直接作業します（ほかのセッションとぶつかる可能性があります）"}
+            title={draft.worktree ? t("draft.worktreeOn") : t("draft.worktreeOff")}
             className={cn(
               "flex h-6 items-center gap-1.5 rounded-md border px-1.5 hover:bg-accent",
               draft.worktree ? "border-border text-foreground" : "border-dashed border-border text-muted-foreground",
             )}
           >
             <GitBranch className="size-3" aria-hidden />
-            {draft.worktree ? "worktree" : "直接"}
+            {draft.worktree ? "worktree" : t("draft.inPlace")}
           </button>
           </div>
           <span className="grow" />
-          <ControlRow scope={id} agent={current?.agent ?? ""} info={info} onSet={choose} empty={draft.profile ? "model と effort は起動後に選べます" : undefined} />
+          <ControlRow scope={id} agent={current?.agent ?? ""} info={info} onSet={choose} empty={draft.profile ? t("draft.choicesAfterStart") : undefined} />
         </div>
 
         <AttachBox att={att}>
           <textarea
             ref={textRef}
-            aria-label="初期プロンプト"
+            aria-label={t("draft.firstPrompt")}
             rows={1}
             autoFocus
             value={text}
-            placeholder="初期プロンプトを入力して始める"
+            placeholder={t("draft.firstPromptPlaceholder")}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
               if (isSendKey(e, sendKey)) {
@@ -235,7 +238,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
           />
           <button
             type="button"
-            aria-label="始める"
+            aria-label={t("draft.start")}
             disabled={draft.busy || !draft.profile}
             onClick={send}
             className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40"

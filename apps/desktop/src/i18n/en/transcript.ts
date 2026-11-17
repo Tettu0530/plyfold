@@ -2,4 +2,26 @@
 import type { transcript as source } from "../ja/transcript";
 
 export const transcript: Record<keyof typeof source, string> = {
+  tokPerSecEstimated: "Output tokens per second (estimated)",
+  tokPerSec: "Output tokens per second",
+  inputTokens: "Input tokens",
+  outputTokens: "Output tokens",
+  turnCost: "Cost of this turn",
+  elapsed: "Time taken",
+  stopped: "Stopped",
+  endedAt: "Finished at",
+  thought: "Thoughts",
+  empty: "No messages yet",
+  plan: "Plan",
+  sessionCost: "Session cost {cost}",
+  toolRunning: "Running",
+  exitCode: "Exit code",
+  toolFailed: "Failed",
+  toolDone: "Done",
+  showMore: "Show {count, plural, one {{n} more line} other {{n} more lines}}",
+  noResult: "No result yet",
+  tool: "Tool",
+  newFile: "New file",
+  copyCode: "Copy code",
+  image: "Image: {alt}",
 };

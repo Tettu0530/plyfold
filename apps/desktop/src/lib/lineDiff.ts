@@ -1,4 +1,5 @@
 // 2 つの文字列の行ごとの差分（会話の中の小さな差分用。大きな差分は差分の画面で git から見る）
+import { t } from "@/i18n";
 import type { PatchLine } from "./patch";
 
 /** これより大きいと LCS の表が重いので、全部消して全部足したことにする */
@@ -68,7 +69,7 @@ export function lineDiff(oldText: string | null, newText: string, context = 3): 
   let added = 0;
   let removed = 0;
   const flush = () => {
-    if (skipped) lines.push({ kind: "note", old: null, new: null, text: `… ${skipped} 行` });
+    if (skipped) lines.push({ kind: "note", old: null, new: null, text: t("store.skippedLines", { count: skipped }) });
     skipped = 0;
   };
   for (let idx = 0; idx < ops.length; idx++) {

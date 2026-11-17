@@ -13,11 +13,11 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]
 pub enum WorktreeError {
-    #[error("git {args} に失敗しました: {stderr}")]
+    #[error("{}", plyfold_i18n::tr!("git {} に失敗しました: {}", "git {} failed: {}", .args, .stderr))]
     Git { args: String, stderr: String },
-    #[error("git を実行できません: {0}")]
+    #[error("{}", plyfold_i18n::tr!("git を実行できません: {}", "Cannot run git: {}", .0))]
     Io(#[from] std::io::Error),
-    #[error("{0} は git リポジトリではありません")]
+    #[error("{}", plyfold_i18n::tr!("{} は git リポジトリではありません", "{} is not a git repository", .0.display()))]
     NotARepo(PathBuf),
     #[error("{0}")]
     Op(String),
@@ -162,6 +162,15 @@ fn short_hash(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn errors_follow_the_language() {
+        let e = WorktreeError::NotARepo(PathBuf::from("/x"));
+        plyfold_i18n::set_lang("en");
+        assert_eq!(e.to_string(), "/x is not a git repository");
+        plyfold_i18n::set_lang("ja");
+        assert_eq!(e.to_string(), "/x は git リポジトリではありません");
+    }
 
     fn tmp(name: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("plyfold-wt-{name}-{}", std::process::id()));
