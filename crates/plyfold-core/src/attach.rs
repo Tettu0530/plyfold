@@ -53,10 +53,19 @@ fn ext_of(mime: &str) -> &'static str {
 }
 
 fn file_uri(path: &Path) -> String {
-    // Percent-encode characters not allowed in URIs so paths with spaces or non-ASCII text work
+    uri_from_path(&path.to_string_lossy(), cfg!(windows))
+}
+
+/// file:///Users/me/a.md, or on Windows file:///C:/Users/me/a.md (backslashes become slashes, the drive stays as is).
+/// Characters not allowed in URIs are percent-encoded so paths with spaces or non-ASCII text work
+fn uri_from_path(path: &str, windows: bool) -> String {
+    let path = if windows { path.replace('\\', "/") } else { path.to_string() };
+    // A Windows path starts with a drive ("C:/…"); the URI path needs a leading slash before it
+    let drive = windows && path.as_bytes().get(1) == Some(&b':') && path.as_bytes()[0].is_ascii_alphabetic();
+    let path = if drive { format!("/{path}") } else { path };
     let mut out = String::from("file://");
-    for b in path.to_string_lossy().bytes() {
-        if b.is_ascii_alphanumeric() || b"/-._~".contains(&b) {
+    for (i, b) in path.bytes().enumerate() {
+        if b.is_ascii_alphanumeric() || b"/-._~".contains(&b) || (drive && i == 2 && b == b':') {
             out.push(b as char);
         } else {
             out.push_str(&format!("%{b:02X}"));
@@ -158,6 +167,14 @@ mod tests {
         assert!(l.uri.starts_with("file://"));
         let path = std::fs::read_dir(&d).unwrap().next().unwrap().unwrap().path();
         assert_eq!(std::fs::read(path).unwrap(), b"png");
+    }
+
+    #[test]
+    fn builds_file_uris_on_both_systems() {
+        assert_eq!(uri_from_path("/Users/me/メモ a.md", false), "file:///Users/me/%E3%83%A1%E3%83%A2%20a.md");
+        assert_eq!(uri_from_path(r"C:\Users\me\メモ a.md", true), "file:///C:/Users/me/%E3%83%A1%E3%83%A2%20a.md");
+        // A UNC path has no drive
+        assert_eq!(uri_from_path(r"\\server\share\a.md", true), "file:////server/share/a.md");
     }
 
     #[test]

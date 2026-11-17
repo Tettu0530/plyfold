@@ -16,7 +16,8 @@ fn mock_agent() -> PathBuf {
         let ok = Command::new(env!("CARGO")).args(["build", "-q", "-p", "plyfold-acp", "--bin", "plyfold-mock-agent"]).status().unwrap().success();
         assert!(ok, "failed to build the mock agent");
         let target = std::env::var("CARGO_TARGET_DIR").map(PathBuf::from).unwrap_or_else(|_| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target"));
-        target.join("debug/plyfold-mock-agent").canonicalize().unwrap()
+        let exe = target.join(format!("debug/plyfold-mock-agent{}", std::env::consts::EXE_SUFFIX));
+        real(&exe)
     })
     .clone()
 }
@@ -25,7 +26,14 @@ fn tmp(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("plyfold-core-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
-    d.canonicalize().unwrap()
+    real(&d)
+}
+
+/// The path with symlinks resolved on macOS (/var → /private/var); Windows paths are used as they are, since
+/// canonicalizing there adds a \\?\ prefix that git and the agents don't expect
+fn real(p: &Path) -> PathBuf {
+    assert!(p.exists(), "{} is missing", p.display());
+    if cfg!(windows) { p.to_path_buf() } else { p.canonicalize().unwrap() }
 }
 
 fn git_repo(dir: &Path) {
@@ -40,7 +48,8 @@ fn engine(state: &Path, stall_ms: u64) -> Engine {
     let toml = format!(
         r#"
 [agents.mock]
-command = "{}"
+# A literal string, so Windows backslashes stay as they are
+command = '{}'
 
 [profiles.mock-keyed]
 agent = "mock"

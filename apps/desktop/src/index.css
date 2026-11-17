@@ -162,20 +162,20 @@
 /* Fonts for kanji and kana. The same characters have different glyphs in Japanese and Simplified Chinese (骨, 直, 誤, ...),
    so the order follows the UI language (<html lang>). In the English UI, Japanese in conversations uses Japanese glyphs */
 :root {
-  --font-cjk: "Hiragino Sans", "Hiragino Kaku Gothic ProN";
+  --font-cjk: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo";
 }
 :root:lang(zh) {
-  --font-cjk: "PingFang SC", "Hiragino Sans GB", "Heiti SC";
+  --font-cjk: "PingFang SC", "Hiragino Sans GB", "Heiti SC", "Microsoft YaHei UI";
 }
 
 /* Conversation text uses glyphs for its own language (lang is set via contentLang). Applies only to elements with the attribute;
    code inside them (the font-mono class) keeps its own font */
 [lang="ja"]:not(:root) {
-  font-family: "Geist Variable", "Hiragino Sans", "Hiragino Kaku Gothic ProN", system-ui, sans-serif;
+  font-family: "Geist Variable", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
 }
 [lang="zh-CN"]:not(:root),
 [lang="zh"]:not(:root) {
-  font-family: "Geist Variable", "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
+  font-family: "Geist Variable", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", system-ui, sans-serif;
 }
 
 /* While a pane or sidebar edge is dragged, iframes (the preview pane) must not swallow the pointer */

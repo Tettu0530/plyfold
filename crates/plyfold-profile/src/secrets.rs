@@ -1,7 +1,6 @@
 //! Where secret values (API keys) are stored
 
 use std::collections::HashMap;
-use std::process::{Command, Stdio};
 use std::sync::Mutex;
 
 use crate::ProfileError;
@@ -13,7 +12,8 @@ pub trait SecretStore: Send + Sync {
     fn delete(&self, account: &str) -> Result<(), ProfileError>;
 }
 
-/// The macOS keychain (via the `security` command)
+/// The OS's credential store: the macOS Keychain (via the `security` command) or the Windows Credential Manager.
+/// Entries are keyed by a service name ("plyfold") and an account ("<profile>/<VARIABLE>")
 pub struct KeychainStore {
     service: String,
 }
@@ -34,11 +34,32 @@ fn err(account: &str, reason: impl Into<String>) -> ProfileError {
     ProfileError::Secret { account: account.into(), reason: reason.into() }
 }
 
+fn not_found(account: &str) -> ProfileError {
+    err(account, plyfold_i18n::tr!("キーチェーンに登録されていません", "Not found in the keychain", "未在钥匙串中找到"))
+}
+
+fn save_failed(account: &str) -> ProfileError {
+    err(account, plyfold_i18n::tr!("登録に失敗しました", "Could not save to the keychain", "保存到钥匙串失败"))
+}
+
+fn delete_failed(account: &str) -> ProfileError {
+    err(
+        account,
+        plyfold_i18n::tr!(
+            "削除に失敗しました（登録されていない可能性があります）",
+            "Could not delete (it may not be in the keychain)",
+            "删除失败（可能不在钥匙串中）"
+        ),
+    )
+}
+
+#[cfg(target_os = "macos")]
 impl SecretStore for KeychainStore {
     fn get(&self, account: &str) -> Result<String, ProfileError> {
+        use std::process::{Command, Stdio};
         let out = Command::new("security").args(["find-generic-password", "-s", &self.service, "-a", account, "-w"]).stderr(Stdio::null()).output()?;
         if !out.status.success() {
-            return Err(err(account, plyfold_i18n::tr!("キーチェーンに登録されていません", "Not found in the keychain", "未在钥匙串中找到")));
+            return Err(not_found(account));
         }
         let s = String::from_utf8(out.stdout).map_err(|_| err(account, plyfold_i18n::tr!("UTF-8 ではありません", "Not valid UTF-8", "不是有效的 UTF-8")))?;
         Ok(s.trim_end_matches('\n').to_string())
@@ -47,6 +68,7 @@ impl SecretStore for KeychainStore {
     /// The value goes through stdin, not command-line arguments (so it never shows up in `ps`)
     fn set(&self, account: &str, value: &str) -> Result<(), ProfileError> {
         use std::io::Write as _;
+        use std::process::{Command, Stdio};
         // With -w last, security reads the password from stdin (twice, including confirmation)
         let mut child = Command::new("security")
             .args(["add-generic-password", "-U", "-s", &self.service, "-a", account, "-w"])
@@ -60,28 +82,55 @@ impl SecretStore for KeychainStore {
             writeln!(stdin, "{value}")?;
         }
         if !child.wait()?.success() {
-            return Err(err(account, plyfold_i18n::tr!("登録に失敗しました", "Could not save to the keychain", "保存到钥匙串失败")));
+            return Err(save_failed(account));
         }
         Ok(())
     }
 
     fn delete(&self, account: &str) -> Result<(), ProfileError> {
+        use std::process::{Command, Stdio};
         let status = Command::new("security")
             .args(["delete-generic-password", "-s", &self.service, "-a", account])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()?;
         if !status.success() {
-            return Err(err(
-                account,
-                plyfold_i18n::tr!(
-                    "削除に失敗しました（登録されていない可能性があります）",
-                    "Could not delete (it may not be in the keychain)",
-                    "删除失败（可能不在钥匙串中）"
-                ),
-            ));
+            return Err(delete_failed(account));
         }
         Ok(())
+    }
+}
+
+/// The Windows Credential Manager (generic credentials, through the keyring crate)
+#[cfg(windows)]
+impl SecretStore for KeychainStore {
+    fn get(&self, account: &str) -> Result<String, ProfileError> {
+        let entry = keyring::Entry::new(&self.service, account).map_err(|_| not_found(account))?;
+        entry.get_password().map_err(|_| not_found(account))
+    }
+
+    fn set(&self, account: &str, value: &str) -> Result<(), ProfileError> {
+        let entry = keyring::Entry::new(&self.service, account).map_err(|_| save_failed(account))?;
+        entry.set_password(value).map_err(|_| save_failed(account))
+    }
+
+    fn delete(&self, account: &str) -> Result<(), ProfileError> {
+        let entry = keyring::Entry::new(&self.service, account).map_err(|_| delete_failed(account))?;
+        entry.delete_credential().map_err(|_| delete_failed(account))
+    }
+}
+
+/// Other systems have no supported credential store yet
+#[cfg(not(any(target_os = "macos", windows)))]
+impl SecretStore for KeychainStore {
+    fn get(&self, account: &str) -> Result<String, ProfileError> {
+        Err(not_found(account))
+    }
+    fn set(&self, account: &str, _value: &str) -> Result<(), ProfileError> {
+        Err(save_failed(account))
+    }
+    fn delete(&self, account: &str) -> Result<(), ProfileError> {
+        Err(delete_failed(account))
     }
 }
 

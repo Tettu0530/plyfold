@@ -42,7 +42,11 @@ impl FileIndex {
         let mut scored: Vec<(i64, &String)> = files.iter().filter_map(|p| score(p, &q).map(|s| (s, p))).collect();
         // Higher score first; ties go to shorter paths, then alphabetical
         scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.len().cmp(&b.1.len())).then(a.1.cmp(b.1)));
-        scored.into_iter().take(limit).map(|(_, p)| FileHit { path: p.clone(), abs: root.join(p).to_string_lossy().into_owned() }).collect()
+        scored
+            .into_iter()
+            .take(limit) // The relative path uses `/`; the absolute one uses the OS's separator (`\` on Windows)
+            .map(|(_, p)| FileHit { path: p.clone(), abs: root.join(p.split('/').collect::<PathBuf>()).to_string_lossy().into_owned() })
+            .collect()
     }
 
     fn files(&self, root: &Path) -> std::sync::Arc<Vec<String>> {
@@ -59,7 +63,7 @@ impl FileIndex {
 }
 
 fn git_files(root: &Path) -> Option<Vec<String>> {
-    let out = std::process::Command::new("git").args(["ls-files", "--cached", "--others", "--exclude-standard", "-z"]).current_dir(root).output().ok()?;
+    let out = crate::platform::command("git").args(["ls-files", "--cached", "--others", "--exclude-standard", "-z"]).current_dir(root).output().ok()?;
     if !out.status.success() {
         return None;
     }
@@ -203,6 +207,6 @@ mod tests {
         assert_eq!(walk(&d), vec!["README.md".to_string(), "src/main.rs".to_string()]);
         let hits = FileIndex::default().search(&d, "main", 10);
         assert_eq!(hits[0].path, "src/main.rs");
-        assert!(hits[0].abs.ends_with("/src/main.rs"));
+        assert!(Path::new(&hits[0].abs).ends_with(Path::new("src").join("main.rs")), "{}", hits[0].abs);
     }
 }

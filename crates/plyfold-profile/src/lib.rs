@@ -178,7 +178,7 @@ impl Config {
                 if link.symlink_metadata().is_ok() {
                     std::fs::remove_file(&link)?;
                 }
-                std::os::unix::fs::symlink(dest, &link)?;
+                link_to(&dest, &link)?;
             }
             env_summary.push(format!("{var}={}", profile_dir.display()));
             env_set.push((var.clone(), profile_dir.display().to_string()));
@@ -229,14 +229,32 @@ fn safe_rel(kind: &'static str, rel: &str) -> Result<PathBuf, ProfileError> {
 
 fn expand_home(p: &str) -> PathBuf {
     match p.strip_prefix("~/") {
-        Some(rest) => PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(rest),
+        Some(rest) => dirs::home_dir().unwrap_or_default().join(rest),
         None => PathBuf::from(p),
     }
 }
 
-/// Default state directory on macOS
+/// Make `link` point at `dest` (a profile's shared file or folder). A symlink on macOS; on Windows a symlink when the
+/// system allows it (Developer Mode or an administrator), else a copy of a file
+fn link_to(dest: &Path, link: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(dest, link)
+    }
+    #[cfg(windows)]
+    {
+        let made = if dest.is_dir() { std::os::windows::fs::symlink_dir(dest, link) } else { std::os::windows::fs::symlink_file(dest, link) };
+        match made {
+            Ok(()) => Ok(()),
+            Err(_) if dest.is_file() => std::fs::copy(dest, link).map(|_| ()),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+/// Where Plyfold keeps its state: ~/Library/Application Support/plyfold on macOS, %APPDATA%\plyfold on Windows
 pub fn default_state_dir() -> PathBuf {
-    expand_home("~/Library/Application Support/plyfold")
+    dirs::data_dir().map(|d| d.join("plyfold")).unwrap_or_else(|| expand_home("~/.plyfold"))
 }
 
 #[cfg(test)]
@@ -282,7 +300,7 @@ links = { "auth.json" = "/nonexistent/auth.json" }
         let store = MemoryStore::from([("proxy/KEY", "sk-test-1234567890")]);
         let r = cfg.resolve("claude-proxy", &state, Path::new("/w"), &store).unwrap();
         let env: BTreeMap<_, _> = r.spawn.env_set.iter().cloned().collect();
-        let dir = state.join("profiles/claude-proxy");
+        let dir = state.join("profiles").join("claude-proxy");
         assert_eq!(env["CLAUDE_CONFIG_DIR"], dir.display().to_string());
         assert_eq!(env["ANTHROPIC_AUTH_TOKEN"], "sk-test-1234567890");
         assert_eq!(env["HOME_HINT"], format!("{}/x", dir.display()));
@@ -299,7 +317,7 @@ links = { "auth.json" = "/nonexistent/auth.json" }
         let cfg = Config::from_toml(TOML).unwrap();
         let store = MemoryStore::from([("codex-own/OPENAI_API_KEY", "sk-own-abcdefgh")]);
         cfg.resolve("codex-own", &state, Path::new("/w"), &store).unwrap();
-        let link = state.join("profiles/codex-own/auth.json");
+        let link = state.join("profiles").join("codex-own").join("auth.json");
         assert_eq!(std::fs::read_link(link).unwrap(), Path::new("/nonexistent/auth.json"));
     }
 

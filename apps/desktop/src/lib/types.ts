@@ -157,6 +157,8 @@ export interface AppInfo {
   license: string;
   repository: string;
   tauri: string;
+  /** "macOS" / "Windows" */
+  os_name: string;
   os: string | null;
   arch: string;
   agents: { id: string; command: string }[];

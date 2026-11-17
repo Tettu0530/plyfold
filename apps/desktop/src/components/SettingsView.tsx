@@ -453,7 +453,7 @@ function InfoSection() {
     [t("settings.infoVersion"), info?.version ?? "—"],
     [t("settings.infoLicense"), info?.license ?? "—"],
     ["Tauri", info?.tauri ?? "—"],
-    ["macOS", info?.os ? `${info.os} (${info.arch})` : "—"],
+    [info?.os_name ?? "OS", info?.os ? `${info.os} (${info.arch})` : "—"],
   ];
   return (
     <>

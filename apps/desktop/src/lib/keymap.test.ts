@@ -13,12 +13,12 @@ const ev = (code: string, mods: Partial<{ metaKey: boolean; ctrlKey: boolean; al
 
 describe("keymap", () => {
   it("reads combos from physical keys in a fixed modifier order", () => {
-    expect(comboOf(ev("KeyK", { metaKey: true }))).toBe("cmd+k");
-    expect(comboOf(ev("Backslash", { metaKey: true, shiftKey: true }))).toBe("cmd+shift+\\");
+    expect(comboOf(ev("KeyK", { metaKey: true }), true)).toBe("cmd+k");
+    expect(comboOf(ev("Backslash", { metaKey: true, shiftKey: true }), true)).toBe("cmd+shift+\\");
     // The ¥ key on Japanese keyboards is the same as backslash
-    expect(comboOf(ev("IntlYen", { metaKey: true }))).toBe("cmd+\\");
-    expect(comboOf(ev("KeyP", { shiftKey: true, altKey: true, metaKey: true, ctrlKey: true }))).toBe("cmd+ctrl+option+shift+p");
-    expect(comboOf(ev("MetaLeft", { metaKey: true }))).toBeNull();
+    expect(comboOf(ev("IntlYen", { metaKey: true }), true)).toBe("cmd+\\");
+    expect(comboOf(ev("KeyP", { shiftKey: true, altKey: true, metaKey: true, ctrlKey: true }), true)).toBe("cmd+ctrl+option+shift+p");
+    expect(comboOf(ev("MetaLeft", { metaKey: true }), true)).toBeNull();
   });
 
   it("splits combos into keys, including a plus-like last key", () => {
@@ -33,8 +33,8 @@ describe("keymap", () => {
     expect(b.stop).toBe("");
     expect(b.settings).toBe(DEFAULT_BINDINGS.settings);
     expect(b.newSession).toBe(DEFAULT_BINDINGS.newSession);
-    expect(actionFor(ev("KeyP", { metaKey: true }), b)).toBe("search");
-    expect(actionFor(ev("KeyK", { metaKey: true }), b)).toBeNull();
+    expect(actionFor(ev("KeyP", { metaKey: true }), b, true)).toBe("search");
+    expect(actionFor(ev("KeyK", { metaKey: true }), b, true)).toBeNull();
   });
 
   it("rejects combos that typing or macOS would hit", () => {
@@ -52,5 +52,15 @@ describe("keymap", () => {
     expect(r.overrides).toEqual({ evenLayout: "cmd+k", search: "" });
     // Setting an action back to its default drops the override
     expect(rebind({ search: "cmd+p" }, "search", "cmd+k").overrides).toEqual({});
+  });
+
+  it("uses Ctrl as the primary modifier on Windows", () => {
+    expect(comboOf(ev("KeyK", { ctrlKey: true }), false)).toBe("cmd+k");
+    // The Windows key is not a modifier there
+    expect(comboOf(ev("KeyK", { metaKey: true }), false)).toBe("k");
+    expect(comboOf(ev("Backslash", { ctrlKey: true, shiftKey: true }), false)).toBe("cmd+shift+\\");
+    expect(actionFor(ev("KeyK", { ctrlKey: true }), bindingsOf({}), false)).toBe("search");
+    // On macOS Ctrl+K is a different combo
+    expect(actionFor(ev("KeyK", { ctrlKey: true }), bindingsOf({}), true)).toBeNull();
   });
 });

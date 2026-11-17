@@ -7,9 +7,13 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+dirs = "7"
 plyfold-acp = { version = "0.1.0", path = "../plyfold-acp" }
 plyfold-i18n = { version = "0.1.0", path = "../plyfold-i18n" }
 serde = { version = "1.0.229", features = ["derive"] }
 thiserror = "2.0.21"
 toml = "1.2.1"
 toml_edit = { version = "0.25.19", features = ["serde"] }
+
+[target."cfg(windows)".dependencies]
+keyring = { version = "3", features = ["windows-native"] }
