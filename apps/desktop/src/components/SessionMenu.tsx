@@ -6,10 +6,28 @@ import { useT } from "@/i18n";
 import type { SessionRecord } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
+import { Keys } from "./Keys";
 import { useLiquidMenu } from "./liquid/stage";
 
 const ITEM =
   "flex h-7 cursor-default items-center gap-2 rounded-md px-2 text-sm outline-none select-none data-[disabled]:opacity-40 data-[highlighted]:bg-accent";
+
+/** Single-letter shortcut shown at the right of a menu item */
+const Shortcut = ({ k }: { k: string }) => <Keys keys={[k]} className="ml-auto pl-4 opacity-70" />;
+
+/**
+ * Keys that pick menu items while the menu is open: R rename, S stop, D delete; in the delete options W also removes the
+ * worktree, D deletes the record only (pressing D twice keeps the worktree) and esc goes back. A key clicks the item
+ * marked with data-key, so it behaves exactly like choosing it with the pointer
+ */
+function pickByKey(e: React.KeyboardEvent<HTMLDivElement>) {
+  if (e.metaKey || e.ctrlKey || e.altKey || e.key.length !== 1) return;
+  const item = e.currentTarget.querySelector<HTMLElement>(`[data-key="${e.key.toLowerCase()}"]:not([data-disabled])`);
+  if (!item) return;
+  // Stop Radix's type-ahead from also moving the highlight
+  e.preventDefault();
+  item.click();
+}
 
 /** Context menu for sidebar rows: rename, stop, delete (with a choice to keep the worktree) */
 export function SessionMenu({ record, onRename, children }: { record: SessionRecord; onRename: () => void; children: React.ReactNode }) {
@@ -38,19 +56,31 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
           ref={menu.ref as React.Ref<HTMLDivElement>}
           style={menu.style}
           className={cn("z-[80] flex min-w-52 flex-col gap-0.5 rounded-[10px] border bg-popover p-1 text-popover-foreground shadow-[0_8px_24px_rgba(0,0,0,.45)]", menu.moving && "opacity-0")}
+          onKeyDown={(e) => {
+            // esc in the delete options goes back to the first menu instead of closing it
+            if (confirm && e.key === "Escape") {
+              e.preventDefault();
+              setConfirm(false);
+              return;
+            }
+            pickByKey(e);
+          }}
         >
           {!confirm ? (
             <>
-              <ContextMenu.Item className={ITEM} onSelect={onRename}>
+              <ContextMenu.Item data-key="r" className={ITEM} onSelect={onRename}>
                 <Pencil className="size-3.5 text-muted-foreground" aria-hidden />
                 {t("sessionMenu.rename")}
+                <Shortcut k="r" />
               </ContextMenu.Item>
-              <ContextMenu.Item className={ITEM} disabled={!running} onSelect={() => run(() => stopSession(record.id))}>
+              <ContextMenu.Item data-key="s" className={ITEM} disabled={!running} onSelect={() => run(() => stopSession(record.id))}>
                 <Square className="size-3.5 text-muted-foreground" aria-hidden />
                 {t("sessionMenu.stop")}
+                <Shortcut k="s" />
               </ContextMenu.Item>
               <ContextMenu.Separator className="my-0.5 h-px bg-border" />
               <ContextMenu.Item
+                data-key="d"
                 className={cn(ITEM, "text-error data-[highlighted]:bg-error/10")}
                 onSelect={(e) => {
                   // Go to the delete options without closing the menu
@@ -60,20 +90,23 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
               >
                 <Trash2 className="size-3.5" aria-hidden />
                 {t("sessionMenu.delete")}
+                <Shortcut k="d" />
               </ContextMenu.Item>
             </>
           ) : (
             <>
               <ContextMenu.Label className="px-2 pt-1 pb-1.5 text-xs text-muted-foreground">{t("sessionMenu.confirmDelete", { title: record.title })}</ContextMenu.Label>
               {record.worktree_path && (
-                <ContextMenu.Item className={cn(ITEM, "text-error data-[highlighted]:bg-error/10")} onSelect={() => run(() => removeSession(record.id, true))}>
+                <ContextMenu.Item data-key="w" className={cn(ITEM, "text-error data-[highlighted]:bg-error/10")} onSelect={() => run(() => removeSession(record.id, true))}>
                   <Trash2 className="size-3.5" aria-hidden />
                   {t("sessionMenu.deleteWithWorktree")}
+                  <Shortcut k="w" />
                 </ContextMenu.Item>
               )}
-              <ContextMenu.Item className={cn(ITEM, "text-error data-[highlighted]:bg-error/10")} onSelect={() => run(() => removeSession(record.id, false))}>
+              <ContextMenu.Item data-key="d" className={cn(ITEM, "text-error data-[highlighted]:bg-error/10")} onSelect={() => run(() => removeSession(record.id, false))}>
                 <Trash2 className="size-3.5" aria-hidden />
                 {record.worktree_path ? t("sessionMenu.deleteRecordOnly") : t("sessionMenu.deleteRecord")}
+                <Shortcut k="d" />
               </ContextMenu.Item>
               <ContextMenu.Item
                 className={ITEM}
@@ -83,6 +116,7 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
                 }}
               >
                 {t("sessionMenu.cancel")}
+                <Shortcut k="esc" />
               </ContextMenu.Item>
             </>
           )}

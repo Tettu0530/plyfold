@@ -32,4 +32,6 @@ export const pane: Record<keyof typeof source, string> = {
   resizeWidth: "Pane width",
   resizeHeight: "Pane height",
   resizeHint: "Drag to resize. Double-click to split evenly.",
+  renameLabel: "Session name",
+  renameHint: "Double-click to rename",
 };

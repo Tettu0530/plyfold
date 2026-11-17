@@ -32,4 +32,6 @@ export const pane: Record<keyof typeof source, string> = {
   resizeWidth: "窗格宽度",
   resizeHeight: "窗格高度",
   resizeHint: "拖动以调整大小，双击恢复均分。",
+  renameLabel: "会话名称",
+  renameHint: "双击以重命名",
 };

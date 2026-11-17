@@ -1,9 +1,10 @@
 import { Square, TriangleAlert, X } from "lucide-react";
 import { AnimatePresence } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useT } from "@/i18n";
 import { api } from "@/lib/api";
+import { isImeKey } from "@/lib/keys";
 import { cn } from "@/lib/utils";
 import { isDraft, useStore } from "@/state/store";
 import { liquidAnchor } from "../liquid/liquid";
@@ -88,7 +89,7 @@ function SessionPane({ index }: { index: number }) {
     >
       <div className="flex h-9 shrink-0 items-center gap-2 border-b pr-1.5 pl-3">
         <StatusIcon status={r.status} />
-        <span className="truncate font-medium">{r.title}</span>
+        <PaneTitle id={id} title={r.title} />
         <span title={t("pane.profileTitle", { agent: r.agent, profile: r.profile })} className="flex items-center gap-1 text-xs whitespace-nowrap text-muted-foreground">
           <ProviderLogo agent={r.agent} className="size-3" />
           {r.profile === r.agent ? "default" : r.profile}
@@ -177,5 +178,58 @@ function SessionPane({ index }: { index: number }) {
         onSet={(c, v) => void setCategory(id, c, v)}
       />
     </section>
+  );
+}
+
+/**
+ * The session name in the pane header. Double-click (or focus it and press ⏎) to rename it in place:
+ * ⏎ or leaving the field saves, esc cancels. Renaming here also stops the agent's title from replacing it
+ */
+function PaneTitle({ id, title }: { id: string; title: string }) {
+  const t = useT();
+  const [editing, setEditing] = useState(false);
+  const renameSession = useStore((s) => s.renameSession);
+  const done = useRef(false);
+  const save = (value: string) => {
+    if (done.current) return;
+    done.current = true;
+    setEditing(false);
+    const v = value.trim();
+    if (v && v !== title) void renameSession(id, v);
+  };
+  if (editing)
+    return (
+      <input
+        aria-label={t("pane.renameLabel")}
+        defaultValue={title}
+        autoFocus
+        onFocus={(e) => {
+          done.current = false;
+          e.currentTarget.select();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !isImeKey(e)) save(e.currentTarget.value);
+          else if (e.key === "Escape") {
+            done.current = true;
+            setEditing(false);
+          }
+        }}
+        onBlur={(e) => save(e.currentTarget.value)}
+        className="h-6 min-w-0 flex-1 rounded-md bg-background px-1.5 font-medium outline outline-ring"
+      />
+    );
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      title={t("pane.renameHint")}
+      onDoubleClick={() => setEditing(true)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && !isImeKey(e)) setEditing(true);
+      }}
+      className="cursor-text truncate rounded-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {title}
+    </span>
   );
 }

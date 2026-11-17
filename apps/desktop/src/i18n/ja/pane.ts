@@ -30,4 +30,6 @@ export const pane = {
   resizeWidth: "ペインの幅",
   resizeHeight: "ペインの高さ",
   resizeHint: "ドラッグで大きさを変える。ダブルクリックで等分に戻す",
+  renameLabel: "セッションの名前",
+  renameHint: "ダブルクリックで名前を変える",
 } satisfies Record<string, string>;

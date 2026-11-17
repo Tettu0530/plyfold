@@ -1,7 +1,7 @@
 // SessionMenu.tsx (row context menu)
 export const sessionMenu = {
   rename: "名前を変える",
-  stop: "止める",
+  stop: "停止",
   delete: "削除…",
   confirmDelete: "「{title}」を消します",
   deleteWithWorktree: "worktree と枝も消す",
