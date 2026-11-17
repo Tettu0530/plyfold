@@ -16,6 +16,7 @@ import { useLiquidMenu } from "./liquid/stage";
 import { liquidAnchor } from "./liquid/liquid";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SCALES } from "@/lib/scale";
+import { PlyfoldMark } from "./Logo";
 
 // The label for auto is resolved at render time (the language can change)
 const EDITORS: { value: EditorChoice; label: string | null }[] = [
@@ -456,9 +457,12 @@ function InfoSection() {
   ];
   return (
     <>
-      <div className="flex flex-col gap-1">
-        <span className="font-medium">Plyfold</span>
-        <span className="text-xs leading-relaxed text-muted-foreground">{t("settings.infoTagline")}</span>
+      <div className="flex items-center gap-4">
+        <PlyfoldMark className="size-12 shrink-0" />
+        <div className="flex flex-col gap-1">
+          <span className="font-medium">Plyfold</span>
+          <span className="text-xs leading-relaxed text-muted-foreground">{t("settings.infoTagline")}</span>
+        </div>
       </div>
       <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">
         {facts.map(([k, v]) => (

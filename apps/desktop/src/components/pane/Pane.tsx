@@ -21,6 +21,7 @@ import { PaneTools } from "./PaneTools";
 import { startDrag } from "./dnd";
 import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
 import { useKeys } from "@/state/keys";
+import { PlyfoldMark } from "../Logo";
 
 function EmptyPane({ index }: { index: number }) {
   const t = useT();
@@ -49,6 +50,8 @@ function EmptyPane({ index }: { index: number }) {
             <X className="size-3.5" aria-hidden />
           </button>
         )}
+        {/* A faint mark, so an empty pane reads as part of the app rather than a blank area */}
+        <PlyfoldMark className="mb-2 size-10 text-foreground/15" />
         <p>{t("pane.emptyHint")}</p>
         <button
           type="button"

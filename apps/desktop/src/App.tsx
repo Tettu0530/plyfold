@@ -25,6 +25,7 @@ import { actionFor, type Action } from "./lib/keymap";
 import { currentBindings } from "./state/keys";
 import { nextScale } from "./lib/scale";
 import { BrowserButton } from "./components/BrowserButton";
+import { PlyfoldMark } from "./components/Logo";
 
 function useShortcuts() {
   useEffect(() => {
@@ -109,7 +110,9 @@ export default function App() {
             >
               <PanelLeft className="size-4" aria-hidden />
             </button>
-            <span data-tauri-drag-region className="font-medium">
+            {/* The repository of the focused session, or the app's name and mark when there is none */}
+            <span data-tauri-drag-region className="flex items-center gap-1.5 font-medium">
+              {!focusedRepo && <PlyfoldMark className="size-4" />}
               {focusedRepo ? repoName(focusedRepo) : "Plyfold"}
             </span>
             <span data-tauri-drag-region className="grow" />
