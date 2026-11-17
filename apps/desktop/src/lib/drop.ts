@@ -1,12 +1,12 @@
-// Tauri の窓にファイルを落としたとき、落とした場所の上にある受け手（ペインの入力欄）へ渡す。
-// Tauri はファイルの落下を自分で受けるので、HTML の drop は使えない（パスも取れない）
+// When files are dropped on the Tauri window, hand them to the receiver under the drop point (a pane's input box).
+// Tauri handles file drops itself, so HTML drop events don't work (and wouldn't give paths)
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 
 import { inTauri } from "./api";
 
 export interface DropTarget {
   el: () => HTMLElement | null;
-  /** 上にファイルを持ってきている（true）、離れた（false） */
+  /** Files are hovering over it (true) or have left (false) */
   onOver: (over: boolean) => void;
   onDrop: (paths: string[]) => void;
 }
@@ -36,7 +36,7 @@ function start() {
   void getCurrentWebview().onDragDropEvent((e) => {
     const p = e.payload;
     if (p.type === "leave") return hover(null);
-    // 位置は物理 px。CSS の px に直す
+    // Position is in physical px; convert to CSS px
     const x = p.position.x / window.devicePixelRatio;
     const y = p.position.y / window.devicePixelRatio;
     const t = hit(x, y);
@@ -49,7 +49,7 @@ function start() {
   });
 }
 
-/** 受け手を登録する。返り値を呼ぶと外す */
+/** Register a receiver. Call the returned function to unregister */
 export function addDropTarget(t: DropTarget): () => void {
   start();
   targets.add(t);

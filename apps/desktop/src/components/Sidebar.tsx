@@ -26,22 +26,22 @@ export function Sidebar() {
   const settingsOpen = useStore((s) => !!s.settingsView);
   const openProfiles = useStore((s) => s.openProfiles);
   const profilesOpen = useStore((s) => !!s.profilesView);
-  // 実体は出発点（ボタンや行）だけの裏から出る。実体はサイドバーの地より上（55）、出発点はその上（57）
+  // The blob emerges from behind its anchor (button or row) only. Blob sits above the sidebar background (55), the anchor above that (57)
   const searchLayer = useStore((s) => s.searchLayerActive);
   const unread = useStore((s) => s.unread);
   const active = useLiquidActiveAnchors();
-  // 右クリックのメニューは途中で行を実体の下へ下げる。下げても、動いているあいだは選択中の色で残す
+  // The context menu lowers the row beneath the blob midway. Even then it keeps the selected color while animating
   const moving = useLiquidMovingAnchors();
   // Compact: one line per session; profile and age move to the row's tooltip
   const compact = useStore((s) => s.settings.sidebar_density === "compact");
   const sidebarWidth = useStore((s) => s.sidebarWidth);
   const searchOpen = useStore((s) => s.searchOpen);
   const [closed, setClosed] = useState<Record<string, boolean>>({});
-  // 名前を変えている行
+  // Row being renamed
   const [renaming, setRenaming] = useState<string | null>(null);
   const renameSession = useStore((s) => s.renameSession);
 
-  // リポジトリごとにまとめ、新しく更新されたものから
+  // Grouped by repository, most recently updated first
   const groups = useMemo(() => {
     const byRepo = new Map<string, typeof list>();
     const list = Object.values(sessions).sort((a, b) => b.record.updated_at - a.record.updated_at);
@@ -79,7 +79,7 @@ export function Sidebar() {
           onClick={() => setSearchOpen(true)}
           aria-haspopup="dialog"
           aria-expanded={searchOpen}
-          // 出発点: 押すとぽんと膨らみ、開いているあいだは暗くせず選択中の色で残す（どこから出たかを示す）
+          // Anchor: pops up when pressed and stays in the selected color (not dimmed) while open, to show where it came from
           animate={searchOpen ? { scale: [1, 1.06, 1] } : { scale: 1 }}
           transition={snappy}
           className={cn(

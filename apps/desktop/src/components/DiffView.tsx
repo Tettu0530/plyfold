@@ -23,7 +23,7 @@ const BADGE: Record<FilePatch["status"], { letter: string; className: string; la
   renamed: { letter: "R", className: "text-muted-foreground", label: "diff.badgeRenamed" },
 };
 
-/** 差分の画面。サイドバーとペインの上に重なり、ペインの差分の数から飛び出して広がる */
+/** Diff screen. Overlays the sidebar and panes, expanding out of the pane's diff count */
 export function DiffView() {
   const t = useT();
   const diff = useStore((s) => s.diff);
@@ -69,7 +69,7 @@ export function DiffView() {
   const files = useMemo(() => {
     if (!data) return [];
     const parsed = parsePatch(data.patch);
-    // 数はエンジンの集計（--numstat）を使い、行はパッチから引く
+    // Counts come from the engine (--numstat); lines come from the patch
     return data.files.map((f) => ({ stat: f, patch: parsed.find((p) => p.path === f.path) }));
   }, [data]);
   const total = files.reduce((a, f) => ({ add: a.add + f.stat.added, del: a.del + f.stat.removed }), { add: 0, del: 0 });
@@ -208,7 +208,7 @@ export function DiffView() {
   );
 }
 
-/** 差分の画面の下の操作: コミット、取り込み、破棄 */
+/** Actions at the bottom of the diff screen: commit, merge, discard */
 function Actions({ id, title, status, busy, onDone }: { id: string; title: string; status: WtStatus; busy: boolean; onDone: () => Promise<void> }) {
   const t = useT();
   const [composing, setComposing] = useState(false);

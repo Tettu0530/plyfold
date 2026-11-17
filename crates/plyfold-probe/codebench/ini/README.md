@@ -1,6 +1,6 @@
 # ini
 
-INI 形式のパーサーを `src/lib.rs` に実装してください。
+Implement a parser for the INI format in `src/lib.rs`.
 
 ```rust
 pub fn parse(src: &str) -> Result<Ini, ParseError>;
@@ -17,22 +17,22 @@ pub struct ParseError { pub line: usize, pub kind: ErrorKind }
 pub enum ErrorKind { MissingEquals, BadSection, EmptyKey, UnterminatedQuote, BadEscape, TrailingGarbage }
 ```
 
-## 仕様
+## Spec
 
-- 行は `\n` 区切り（`\r\n` も受け付け、行末の `\r` は取り除く）。行番号は 1 から数える
-- 前後の空白を取り除いて、空になる行は無視する。`;` か `#` で始まる行はコメントとして無視する
-- `[name]`：セクションの開始。`name` は前後の空白を取り除く
-  - 閉じる `]` がない、`name` が空、`]` の後に空白以外がある → `BadSection`
-- `key = value`：最初の `=` で分ける。キーと値はそれぞれ前後の空白を取り除く
-  - `=` がない → `MissingEquals`。キーが空 → `EmptyKey`
-  - 最初のセクションより前のキーは、名前が `""` のセクションに入る
-  - 同じセクションで同じキーが 2 回出たら、後のものが勝つ
-- 値が `"` で始まるときは、引用符付きの値として読む
-  - 使えるエスケープは `\"` `\\` `\n` `\t` だけ。それ以外の `\x` → `BadEscape`
-  - 閉じる `"` がない → `UnterminatedQuote`。閉じる `"` の後に空白以外がある → `TrailingGarbage`
-  - 引用符の中の空白はそのまま残す
-- 値の途中のコメントには対応しない（`a = b ; c` の値は `b ; c`）
-- `sections()` は、セクションが最初に現れた順に名前を返す。`""` のセクションは、キーが 1 つ以上あるときだけ先頭に含める。
-  同じ名前のセクションが 2 回出たら、1 つにまとめる（キーは合算する）
-- 名前とキーは大文字と小文字を区別する
-- 外部クレートは使わない
+- Lines are separated by `\n` (`\r\n` is accepted too; a trailing `\r` is removed). Line numbers start at 1
+- Lines that are empty after trimming surrounding whitespace are ignored. Lines starting with `;` or `#` are comments and are ignored
+- `[name]`: starts a section. Surrounding whitespace is trimmed from `name`
+  - No closing `]`, an empty `name`, or anything other than whitespace after `]` → `BadSection`
+- `key = value`: split at the first `=`. Surrounding whitespace is trimmed from both key and value
+  - No `=` → `MissingEquals`. Empty key → `EmptyKey`
+  - Keys before the first section go into a section named `""`
+  - If the same key appears twice in the same section, the later one wins
+- A value starting with `"` is read as a quoted value
+  - The only allowed escapes are `\"` `\\` `\n` `\t`. Any other `\x` → `BadEscape`
+  - No closing `"` → `UnterminatedQuote`. Anything other than whitespace after the closing `"` → `TrailingGarbage`
+  - Whitespace inside the quotes is kept as is
+- Inline comments are not supported (the value of `a = b ; c` is `b ; c`)
+- `sections()` returns section names in order of first appearance. The `""` section is included first only if it has at least one key.
+  If a section with the same name appears twice, merge them into one (keys are combined)
+- Names and keys are case-sensitive
+- Do not use external crates

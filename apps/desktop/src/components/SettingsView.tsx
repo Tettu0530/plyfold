@@ -11,7 +11,7 @@ import { Keys } from "./Keys";
 import { useLiquidClip, useLiquidRevealed } from "./liquid/stage";
 import { Segmented } from "./Segmented";
 
-// auto の名前は描くときに引く（言語が途中で変わるため）
+// The label for auto is resolved at render time (the language can change)
 const EDITORS: { value: EditorChoice; label: string | null }[] = [
   { value: "auto", label: null },
   { value: "zed", label: "Zed" },
@@ -21,7 +21,7 @@ const EDITORS: { value: EditorChoice; label: string | null }[] = [
 ];
 const STALL = [60, 120, 300, 600];
 
-/** 設定の画面。サイドバーの「設定」から飛び出して広がる。変えたらすぐ保存する */
+/** Settings screen. Expands out of the sidebar's Settings item. Changes are saved immediately */
 export function SettingsView() {
   const t = useT();
   const view = useStore((s) => s.settingsView);
@@ -91,7 +91,7 @@ export function SettingsView() {
                 label={t("settings.language")}
                 value={settings.language ?? "auto"}
                 onChange={(v) => change({ language: v })}
-                // 言語の名前は、その言語自身の表記で出す（どの画面でも同じ）
+                // Language names are shown in their own script (the same in every UI language)
                 options={[{ value: "auto" as const, label: <span className="px-2">{t("settings.auto")}</span> }, ...LANGS.map((l) => ({ value: l.value, label: <span className="px-2">{l.label}</span> }))]}
               />
             </Row>

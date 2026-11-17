@@ -5,7 +5,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* shadcn/ui neutral（ダーク）＋ Plyfold の状態色。決まりは .claude/skills/no-ai-slop-ui */
+/* shadcn/ui neutral (dark) + Plyfold's status colors. Rules live in .claude/skills/no-ai-slop-ui */
 :root {
   --radius: 0.625rem;
   --background: #0a0a0a;
@@ -37,7 +37,7 @@
 }
 
 @theme inline {
-  /* 漢字やかなは言語ごとのフォントに回す（--font-cjk。:root:lang() で切り替える） */
+  /* Kanji and kana fall through to a per-language font (--font-cjk, switched via :root:lang()) */
   --font-sans: "Geist Variable", var(--font-cjk), system-ui, sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, var(--font-cjk), monospace;
   --radius-sm: calc(var(--radius) - 4px);
@@ -100,8 +100,8 @@
   }
 }
 
-/* 生成中の文字のきらめき（Claude の「考えています」と同じ: 明るい帯が文字の上を左から右へ流れる）。
-   作業中を示す印なので、飾りのループの禁止の例外（回る輪と同じ扱い）。色は本文と補足のトークンだけ */
+/* Shimmer on text while generating (like Claude's "Thinking": a bright band sweeps left to right).
+   It signals work in progress, so it is exempt from the no-decorative-loops rule (same as a spinner). Uses only the text and muted tokens */
 @layer components {
   .shimmer {
     background-image: linear-gradient(90deg, var(--muted-foreground) 0%, var(--muted-foreground) 40%, var(--foreground) 50%, var(--muted-foreground) 60%, var(--muted-foreground) 100%);
@@ -128,7 +128,7 @@
   }
 }
 
-/* Markdown の本文を書いているあいだの印（最後の段落・見出し・項目の後ろに、文字の続きとして出す） */
+/* Marker while Markdown is still streaming (shown inline after the last paragraph, heading or list item) */
 @layer components {
   .md-streaming > :is(p, h3, h4, h5, h6):last-child::after,
   .md-streaming > :is(ul, ol):last-child > li:last-child::after {
@@ -143,8 +143,8 @@
   }
 }
 
-/* 漢字とかなのフォント。同じ漢字でも日本語と中国語（簡体）で字形が違う（「骨」「直」「誤」など）ので、
-   画面の言語（<html lang>）で並びを替える。英語の画面では、会話に出る日本語を日本語の字形で出す */
+/* Fonts for kanji and kana. The same characters have different glyphs in Japanese and Simplified Chinese (骨, 直, 誤, ...),
+   so the order follows the UI language (<html lang>). In the English UI, Japanese in conversations uses Japanese glyphs */
 :root {
   --font-cjk: "Hiragino Sans", "Hiragino Kaku Gothic ProN";
 }
@@ -152,8 +152,8 @@
   --font-cjk: "PingFang SC", "Hiragino Sans GB", "Heiti SC";
 }
 
-/* 会話の本文は、本文の言語の字形で描く（lang は contentLang で付ける）。属性の付いた要素だけに効かせ、
-   中のコード（font-mono のクラス）は自分のフォントのまま */
+/* Conversation text uses glyphs for its own language (lang is set via contentLang). Applies only to elements with the attribute;
+   code inside them (the font-mono class) keeps its own font */
 [lang="ja"]:not(:root) {
   font-family: "Geist Variable", "Hiragino Sans", "Hiragino Kaku Gothic ProN", system-ui, sans-serif;
 }

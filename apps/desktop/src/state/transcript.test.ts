@@ -122,7 +122,7 @@ describe("transcript", () => {
       ev(4, "frame_in", { jsonrpc: "2.0", method: "session/update", params: { update: chunk("agent_message_chunk", "echo: hi") } }),
       ev(5, "frame_in", { jsonrpc: "2.0", id: 1, result: { stopReason: "end_turn", usage: { inputTokens: 100, outputTokens: 4 } } }),
       ev(6, "note", "session/load で開き直しました"),
-      // 開き直しで再送された履歴（ターンの外なので user も出す）
+      // History replayed on reload (outside a turn, so user messages are shown too)
       ev(7, "frame_in", { jsonrpc: "2.0", method: "session/update", params: { update: chunk("user_message_chunk", "old") } }),
     ];
     const t = fromHistory(events);

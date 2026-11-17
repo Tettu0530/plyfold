@@ -1,5 +1,5 @@
-"""プローブの記録（JSON Lines）から、ある値の軌跡を取り出し、SwiftUI のばね（duration, bounce）と遅れを当てはめる。
-numpy を使わず、格子探索 → 細かい格子探索で最小二乗を解く。
+"""Extract one value's trajectory from a probe recording (JSON Lines) and fit a SwiftUI spring (duration, bounce) plus a lag.
+No numpy: least squares via a coarse grid search followed by a finer one.
 
     python3 fit.py <record.jsonl> <layer-path> <field: x|y|w|h|r|b> [t0 t1]
 """
@@ -32,7 +32,7 @@ def fit(pts):
     span = v1 - v0
     if abs(span) < 1e-6: return None
     norm = [(t, (v - v0) / span) for t, v in pts]
-    # 動き始めの時刻（最初に 0.5% 動いたフレームの 1 つ前）を起点の目安にする
+    # use the start of motion (the frame before the first 0.5% move) as a rough origin
     start = next(t for t, y in norm if abs(y) > 0.005)
     def err(d, b, lag):
         return sum((spring_pos(d, b, t - lag) - y) ** 2 for t, y in norm)

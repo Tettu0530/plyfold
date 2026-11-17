@@ -18,25 +18,25 @@ interface Item {
   reason: string;
   color: string;
   at: number;
-  /** 手を貸す必要がある（権限確認・無応答・エラー） */
+  /** Needs attention (permission request, unresponsive agent, error) */
   urgent: boolean;
 }
 
-// 理由は辞書のキーで持ち、描くときに今の言語で引く
+// Reasons are stored as dictionary keys and resolved in the current language at render time
 const URGENT: Partial<Record<SessionStatus, { reasonKey: MessageKey; color: string }>> = {
   awaiting_permission: { reasonKey: "notifications.awaitingPermission", color: "text-permission" },
   stalled: { reasonKey: "notifications.stalled", color: "text-stalled" },
   error: { reasonKey: "notifications.stoppedWithError", color: "text-error" },
 };
 
-/** 見出しのベル: 手を貸す必要があるセッションと、見ていないあいだに終わったターン */
+/** Header bell: sessions that need attention and turns that finished while you weren't looking */
 export function Notifications() {
   const t = useT();
   const sessions = useStore((s) => s.sessions);
   const unread = useStore((s) => s.unread);
   const openInPane = useStore((s) => s.openInPane);
   const [open, setOpen] = useState(false);
-  // 通知の欄は、ベルから飛び出して広がり、閉じるとベルへ戻る
+  // The notification panel expands out of the bell and shrinks back into it on close
   const menu = useLiquidMenu("menu:notifications", "notifications");
   const raised = useLiquidActiveAnchors().has("notifications");
   const toggle = (o: boolean) => {
@@ -44,7 +44,7 @@ export function Notifications() {
     setOpen(o);
   };
 
-  // アプリに戻ってきたら、ペインに出ているセッションの通知は読んだことにする
+  // When the app regains focus, mark notifications for sessions shown in panes as read
   useEffect(() => {
     const onFocus = () => {
       const s = useStore.getState();

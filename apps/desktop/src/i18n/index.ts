@@ -1,10 +1,10 @@
-// 画面の文言の多言語化（日本語、英語。中国語と韓国語は辞書を足すだけで増やせる）
+// UI string localization (Japanese, English, Simplified Chinese; more languages only need a dictionary)
 //
 //   const t = useT();  t("sidebar.newSession")  t("diff.files", { count: 3 })
 //
-// - 辞書は名前空間ごとのファイル（i18n/ja/*.ts が元。ほかの言語は同じキーを型で強いる）
-// - 差し込み: "{name}"。複数形: "{count, plural, one {# file} other {# files}}"（Intl.PluralRules。# は数）
-// - 言語は設定の language（auto なら macOS の言語）。決め方とキーの決まりは docs/i18n.md
+// - Dictionaries are one file per namespace (i18n/ja/*.ts is the source; other languages are type-checked to have the same keys)
+// - Interpolation: "{name}". Plurals: "{count, plural, one {# file} other {# files}}" (Intl.PluralRules; # is the count)
+// - The language comes from the language setting (auto follows macOS). Resolution and key conventions are in docs/i18n.md
 import { create } from "zustand";
 
 import { en } from "./en";
@@ -20,17 +20,17 @@ export const LANGS: { value: Lang; label: string }[] = [
   { value: "zh", label: "简体中文" },
 ];
 
-/** <html lang> に入れる値（WebKit が漢字の字形とフォントを選ぶ手がかりになる） */
+/** Value for <html lang> (WebKit uses it to pick CJK glyphs and fonts) */
 const HTML_LANG: Record<Lang, string> = { ja: "ja", en: "en", zh: "zh-CN" };
 
 type Dict = typeof ja;
-/** "名前空間.キー" の一覧（型でキーの打ち間違いを防ぐ） */
+/** All "namespace.key" names (the type catches key typos) */
 export type MessageKey = { [N in keyof Dict]: `${N & string}.${keyof Dict[N] & string}` }[keyof Dict];
 export type Params = Record<string, string | number>;
 
 const DICTS: Record<Lang, Record<string, Record<string, string>>> = { ja, en, zh };
 
-/** macOS（WebView）の言語から決める。分からなければ英語。中国語は簡体字だけ（繁体字の地域はまだないので次の候補へ） */
+/** Pick from the macOS (WebView) language, falling back to English. Chinese means Simplified only (Traditional locales aren't supported yet, so move on to the next candidate) */
 export function detectLang(): Lang {
   const langs = typeof navigator === "undefined" ? [] : [...(navigator.languages ?? []), navigator.language];
   for (const l of langs) {
@@ -46,7 +46,7 @@ export const resolveLang = (s: LangSetting | undefined | null): Lang => (s === "
 
 const useLangStore = create<{ lang: Lang }>(() => ({ lang: detectLang() }));
 
-/** 今の言語を変える（設定を読んだとき、変えたとき） */
+/** Change the current language (when settings load or change) */
 export function setLang(lang: Lang) {
   useLangStore.setState({ lang });
   if (typeof document !== "undefined") document.documentElement.lang = HTML_LANG[lang];
@@ -54,9 +54,9 @@ export function setLang(lang: Lang) {
 
 export const currentLang = () => useLangStore.getState().lang;
 
-// ---- 書式
+// ---- Formatting
 
-/** {count, plural, one {...} other {...}} の中を、言語の複数形の規則で選ぶ */
+/** Pick the branch of {count, plural, one {...} other {...}} using the language's plural rules */
 function plural(lang: Lang, n: number, body: string): string {
   const forms: Record<string, string> = {};
   const re = /(=\d+|zero|one|two|few|many|other)\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g;
@@ -68,14 +68,14 @@ function plural(lang: Lang, n: number, body: string): string {
 export function format(lang: Lang, template: string, params?: Params): string {
   let s = template;
   if (params) {
-    // 複数形を先に（中に {name} を含められる）
+    // Plurals first (they can contain {name})
     s = s.replace(/\{(\w+),\s*plural,\s*((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}/g, (_, k: string, body: string) => plural(lang, Number(params[k] ?? 0), body));
     s = s.replace(/\{(\w+)\}/g, (all, k: string) => (k in params ? String(params[k]) : all));
   }
   return s;
 }
 
-/** 今の言語で引く。辞書にない言語やキーは日本語に戻る（それもなければキーをそのまま） */
+/** Look up in the current language. Missing languages or keys fall back to Japanese (and then to the key itself) */
 export function t(key: MessageKey, params?: Params, lang: Lang = currentLang()): string {
   const [ns, k] = key.split(".") as [string, string];
   const template = DICTS[lang]?.[ns]?.[k] ?? DICTS.ja[ns]?.[k] ?? key;
@@ -84,7 +84,7 @@ export function t(key: MessageKey, params?: Params, lang: Lang = currentLang()):
 
 export type T = (key: MessageKey, params?: Params) => string;
 
-/** 部品の中で使う。言語が変わると描き直す */
+/** For use in components. Re-renders when the language changes */
 export function useT(): T {
   const lang = useLangStore((s) => s.lang);
   return (key, params) => t(key, params, lang);
@@ -95,8 +95,8 @@ export function useLang(): Lang {
 }
 
 /**
- * 会話の本文（エージェントの出力や自分の発言）の言語の見当。画面の言語とは別に、本文の字形を正しくするため lang に入れる
- * （中国語の画面で日本語の本文を中国語の字形で描かない）。かなを含めば日本語、ハングルなら韓国語、ほかは決めない
+ * Guess the language of conversation text (agent output or your own messages). Set as lang, separately from the UI language, to get the right glyphs
+ * (so Japanese text isn't drawn with Chinese glyphs in the Chinese UI). Kana means Japanese, Hangul means Korean, otherwise undetermined
  */
 export function contentLang(text: string): string | undefined {
   if (/[\u3040-\u30ff]/.test(text)) return "ja";

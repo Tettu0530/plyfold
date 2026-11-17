@@ -215,7 +215,7 @@ impl Config {
             } else {
                 return Err(ProfileError::BadKeySource(source.clone()));
             };
-            env_summary.push(format!("{var}=***（{} 文字）", value.chars().count()));
+            env_summary.push(format!("{var}=*** ({} chars)", value.chars().count()));
             secret_values.push(value.clone());
             env_set.push((var.clone(), value));
         }

@@ -1,23 +1,23 @@
-// 2 つの文字列の行ごとの差分（会話の中の小さな差分用。大きな差分は差分の画面で git から見る）
+// Line diff of two strings (for small inline diffs in conversations; large diffs come from git in the diff screen)
 import { t } from "@/i18n";
 import type { PatchLine } from "./patch";
 
-/** これより大きいと LCS の表が重いので、全部消して全部足したことにする */
+/** Above this the LCS table gets too heavy, so treat it as delete-all plus add-all */
 const MAX_CELLS = 4_000_000;
 
 function split(text: string | null): string[] {
   if (!text) return [];
   const lines = text.split("\n");
-  // 末尾の改行は行を増やさない
+  // A trailing newline doesn't add a line
   if (lines[lines.length - 1] === "") lines.pop();
   return lines;
 }
 
-/** 行の差分。見出しの行は作らず、変わっていない行は context 行だけ前後に残して「… N 行」でつなぐ */
+/** Line diff. No header lines; unchanged lines keep only `context` lines on each side and the rest collapse into "… N lines" */
 export function lineDiff(oldText: string | null, newText: string, context = 3): { lines: PatchLine[]; added: number; removed: number } {
   const a = split(oldText);
   const b = split(newText);
-  // 前後の同じ行を先に外す（表を小さくする）
+  // Strip common leading and trailing lines first (keeps the table small)
   let pre = 0;
   while (pre < a.length && pre < b.length && a[pre] === b[pre]) pre++;
   let suf = 0;
@@ -31,7 +31,7 @@ export function lineDiff(oldText: string | null, newText: string, context = 3): 
     for (const t of am) mid.push({ k: "del", text: t });
     for (const t of bm) mid.push({ k: "add", text: t });
   } else {
-    // LCS の長さの表（後ろから）
+    // LCS length table (built from the end)
     const n = am.length;
     const m = bm.length;
     const w = m + 1;
@@ -47,7 +47,7 @@ export function lineDiff(oldText: string | null, newText: string, context = 3): 
         i++;
         j++;
       } else if (i < n && (j === m || dp[(i + 1) * w + j] >= dp[i * w + j + 1])) {
-        // 同点なら削除を先に（git と同じ並び）
+        // On a tie, deletions come first (same order as git)
         mid.push({ k: "del", text: am[i++] });
       } else {
         mid.push({ k: "add", text: bm[j++] });
@@ -56,7 +56,7 @@ export function lineDiff(oldText: string | null, newText: string, context = 3): 
   }
   const ops: Op[] = [...a.slice(0, pre).map((t) => ({ k: "ctx" as const, text: t })), ...mid, ...a.slice(a.length - suf).map((t) => ({ k: "ctx" as const, text: t }))];
 
-  // 行番号を振り、変わった行から context 行より遠い同じ行は畳む
+  // Number the lines and collapse unchanged lines more than `context` lines from a change
   const near = new Array<boolean>(ops.length).fill(false);
   ops.forEach((o, idx) => {
     if (o.k === "ctx") return;

@@ -1,19 +1,19 @@
-// プロンプトに添えるもの（画像、ファイル）。送るときの形（エンジンの Attachment と同じ）と、画面に出す見本を持つ
+// Prompt attachments (images, files): the wire format (same as the engine's Attachment) and the preview shown in the UI
 
-/** エンジンへ送る形（crates/plyfold-core/src/attach.rs の Attachment） */
+/** Shape sent to the engine (Attachment in crates/plyfold-core/src/attach.rs) */
 export type AttachmentWire = { kind: "image"; data: string; mime: string; name: string | null } | { kind: "file"; path: string };
 
-/** 画面に出す見本。画像は src（data: の URL）で縮小して見せる */
+/** Preview shown in the UI. Images are shown as thumbnails via src (a data: URL) */
 export interface AttachmentPreview {
   kind: "image" | "file";
   name: string;
   src?: string;
-  /** 落としたファイルのパス（送り直すときに使う） */
+  /** Path of a dropped file (used when resending) */
   path?: string;
 }
 
 export interface Attached {
-  /** 並べるときのキー */
+  /** Key for rendering lists */
   key: string;
   wire: AttachmentWire;
   preview: AttachmentPreview;
@@ -23,7 +23,7 @@ let seq = 0;
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp)$/i;
 export const baseName = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
 
-/** 貼り付けた画像（クリップボードのファイル）を読む */
+/** Read a pasted image (a file from the clipboard) */
 export function readImage(file: File): Promise<Attached> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -38,12 +38,12 @@ export function readImage(file: File): Promise<Attached> {
   });
 }
 
-/** 落としたファイル。画像のファイルは、見本の画像を Tauri の asset から読めないので名前だけ出す */
+/** A dropped file. Image files show only their name, since previews can't be loaded from Tauri assets */
 export function fromPath(path: string): Attached {
   return { key: `a${++seq}`, wire: { kind: "file", path }, preview: { kind: IMAGE_EXT.test(path) ? "image" : "file", name: baseName(path), path } };
 }
 
-/** 送った session/prompt の塊から、見本を作り直す（記録から会話を組み立てるとき） */
+/** Rebuild previews from sent session/prompt blocks (when rebuilding a conversation from the log) */
 export function previewsOfPrompt(blocks: unknown[]): AttachmentPreview[] {
   const out: AttachmentPreview[] = [];
   for (const b of blocks) {
@@ -58,7 +58,7 @@ export function previewsOfPrompt(blocks: unknown[]): AttachmentPreview[] {
   return out;
 }
 
-/** 送った発言の見本から、送り直せる形に戻す（画像は data: の URL から、ファイルはパスから。どちらもなければ外す） */
+/** Turn previews of a sent message back into resendable attachments (images from the data: URL, files from the path; dropped if neither exists) */
 export function resendable(previews: AttachmentPreview[]): Attached[] {
   const out: Attached[] = [];
   for (const p of previews) {

@@ -1,12 +1,12 @@
-// unified diff（git diff の出力）を、ファイルごとの行に分ける
+// Split a unified diff (git diff output) into per-file lines
 
 export type LineKind = "ctx" | "add" | "del" | "hunk" | "note";
 
 export interface PatchLine {
   kind: LineKind;
-  /** 元の行番号（追加・見出しは null） */
+  /** Old line number (null for additions and headers) */
   old: number | null;
-  /** 新しい行番号（削除・見出しは null） */
+  /** New line number (null for deletions and headers) */
   new: number | null;
   text: string;
 }
@@ -34,7 +34,7 @@ export function parsePatch(patch: string): FilePatch[] {
 
   for (const line of patch.split("\n")) {
     if (line.startsWith("diff --git ")) {
-      // 仮の名前（--- / +++ が来たら置き換える）
+      // Placeholder name (replaced once --- / +++ arrive)
       const m = /^diff --git a\/(.+) b\/(.+)$/.exec(line);
       cur = { path: m ? m[2] : line.slice(11), status: "modified", binary: false, lines: [] };
       files.push(cur);
@@ -82,7 +82,7 @@ export interface SplitRow {
   right: PatchLine | null;
 }
 
-/** 左右の表示: 続けて消した行と足した行を、横に並べる */
+/** Side-by-side view: pair consecutive deleted and added lines */
 export function toSplit(lines: PatchLine[]): SplitRow[] {
   const rows: SplitRow[] = [];
   let dels: PatchLine[] = [];

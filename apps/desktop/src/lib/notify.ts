@@ -1,4 +1,4 @@
-// macOS の通知。アプリを見ていないあいだに、手を貸す必要があるとき・ターンが終わったときだけ出す
+// macOS notifications. Shown only while the app is in the background, when a session needs attention or a turn finishes
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 
 import { inTauri } from "./api";

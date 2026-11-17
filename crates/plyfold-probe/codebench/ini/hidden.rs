@@ -1,7 +1,7 @@
 use ini::{parse, ErrorKind, ParseError};
 
 fn err(src: &str) -> (usize, ErrorKind) {
-    let ParseError { line, kind } = parse(src).err().expect("エラーになるはず");
+    let ParseError { line, kind } = parse(src).err().expect("should be an error");
     (line, kind)
 }
 
@@ -57,6 +57,6 @@ fn h_errors() {
 #[test]
 fn h_unicode() {
     let ini = parse("[日本]\nキー = 値　\n").unwrap();
-    // 全角空白も前後の空白として取り除く（str::trim と同じ）
+    // full-width spaces are trimmed as surrounding whitespace too (same as str::trim)
     assert_eq!(ini.get("日本", "キー"), Some("値"));
 }

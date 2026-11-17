@@ -1,6 +1,6 @@
 # calc
 
-整数の四則演算の式を評価する関数 `eval` を `src/lib.rs` に実装してください。
+Implement `eval`, a function that evaluates integer arithmetic expressions, in `src/lib.rs`.
 
 ```rust
 pub fn eval(expr: &str) -> Result<i64, CalcError>;
@@ -9,15 +9,15 @@ pub fn eval(expr: &str) -> Result<i64, CalcError>;
 pub enum CalcError { DivisionByZero, Overflow, Parse }
 ```
 
-## 仕様
+## Spec
 
-- 使えるもの：10 進の整数リテラル、`+ - * / %`、括弧 `( )`、単項マイナス、空白（無視する）
-- 優先順位：単項マイナス ＞ `* / %` ＞ `+ -`。二項演算子は左結合
-  - 例：`-2*3` = -6、`2--3` = 5、`-(2+3)` = -5、`2*-3` = -6
-- 計算は `i64` で行う。`/` と `%` は Rust の `i64` と同じ（0 方向への切り捨て。`7 % -3` = 1）
-- エラー
-  - 0 で割る（`/` と `%` の両方）→ `DivisionByZero`
-  - 途中の計算や結果が `i64` に収まらない → `Overflow`
-  - 整数リテラルそのものが `i64` に収まらない → `Overflow`（`-9223372036854775808` も、リテラル `9223372036854775808` が収まらないので `Overflow`）
-  - それ以外の不正な入力（空の式、括弧の対応の誤り、知らない文字、`1 2` のように演算子がない、など）→ `Parse`
-- 外部クレートは使わない
+- Allowed: decimal integer literals, `+ - * / %`, parentheses `( )`, unary minus, whitespace (ignored)
+- Precedence: unary minus > `* / %` > `+ -`. Binary operators are left-associative
+  - Examples: `-2*3` = -6, `2--3` = 5, `-(2+3)` = -5, `2*-3` = -6
+- Compute in `i64`. `/` and `%` behave like Rust's `i64` (truncation toward zero; `7 % -3` = 1)
+- Errors
+  - Division by zero (both `/` and `%`) → `DivisionByZero`
+  - An intermediate or final value does not fit in `i64` → `Overflow`
+  - An integer literal itself does not fit in `i64` → `Overflow` (`-9223372036854775808` is also `Overflow`, since the literal `9223372036854775808` does not fit)
+  - Any other invalid input (empty expression, mismatched parentheses, unknown characters, a missing operator as in `1 2`, etc.) → `Parse`
+- Do not use external crates

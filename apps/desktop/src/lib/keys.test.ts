@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { isSendKey } from "./keys";
 
-// テストは node で動くので、キーの出来事は形だけの値で作る
+// Tests run in node, so key events are plain objects of the right shape
 const key = (o: Partial<KeyboardEvent>) => ({ key: "Enter", isComposing: false, keyCode: 13, shiftKey: false, metaKey: false, ctrlKey: false, ...o }) as KeyboardEvent;
 
 describe("keys", () => {
   it("treats the Enter that commits Japanese input as IME, not send", () => {
     expect(isSendKey(key({ isComposing: true }), "enter")).toBe(false);
-    // WebKit: 確定の Enter は isComposing が false で、keyCode が 229
+    // WebKit: the Enter that commits composition has isComposing false and keyCode 229
     expect(isSendKey(key({ keyCode: 229 }), "enter")).toBe(false);
   });
 

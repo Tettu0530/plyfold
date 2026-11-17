@@ -1,11 +1,11 @@
-// Apple の動きの再現（.claude/skills/no-ai-slop-ui の 4. 動き）
+// Recreating Apple's motion (.claude/skills/no-ai-slop-ui, section 4: motion)
 //
-// SwiftUI のばねは「duration（体感の長さ）」と「bounce（跳ね返り）」で表す。
-// WWDC23「Animate with springs」で公開されている換算（質量 1）:
+// SwiftUI springs are described by duration (perceived length) and bounce.
+// Conversion published in WWDC23 "Animate with springs" (mass 1):
 //   stiffness = (2π / duration)²
-//   damping   = 4π(1 − bounce) / duration        （bounce ≥ 0）
-//   damping   = 4π / (duration × (1 + bounce))    （bounce < 0、過減衰）
-// これを Motion に硬さ・減衰として直接渡すので、SwiftUI と同じ式のばねになる。
+//   damping   = 4π(1 − bounce) / duration        (bounce ≥ 0)
+//   damping   = 4π / (duration × (1 + bounce))    (bounce < 0, overdamped)
+// These are passed to Motion directly as stiffness and damping, so the springs match SwiftUI's.
 import type { Transition } from "motion/react";
 
 export interface SpringParams {
@@ -23,26 +23,26 @@ export function appleSpring(p: SpringParams, velocity?: number): Transition {
   return { type: "spring", ...springConstants(p), ...(velocity !== undefined ? { velocity } : {}) };
 }
 
-// Plyfold の標準のばね（2026-11-16 に決定: duration 0.35、bounce 0.3）。
-// SwiftUI の API の既定（0.5 秒）はシステムの部品より遅く感じたため短くしている
+// Plyfold's standard spring (decided 2026-11-16: duration 0.35, bounce 0.3).
+// Shorter than SwiftUI's API default (0.5s), which felt slower than system components
 export const SMOOTH: SpringParams = { duration: 0.35, bounce: 0 };
 export const SNAPPY: SpringParams = { duration: 0.35, bounce: 0.3 };
 export const BOUNCY: SpringParams = { duration: 0.35, bounce: 0.3 };
-/** 指に追従しているあいだ（SwiftUI の interactiveSpring: response 0.15、dampingFraction 0.86） */
+/** While tracking the pointer (SwiftUI's interactiveSpring: response 0.15, dampingFraction 0.86) */
 export const INTERACTIVE: SpringParams = { duration: 0.15, bounce: 0.14 };
 
-/** 画面やペインの移動、出現と消滅 */
+/** Moving screens and panes, appearing and disappearing */
 export const smooth = appleSpring(SMOOTH);
-/** 切り替えの印、スイッチ、矢印の回転 */
+/** Selection indicators, switches, chevron rotation */
 export const snappy = appleSpring(SNAPPY);
-/** 小さく目を引くもの（権限確認の滴、通知） */
+/** Small attention-grabbing things (permission droplet, notifications) */
 export const bouncy = appleSpring(BOUNCY);
 export const interactive = appleSpring(INTERACTIVE);
 
-/** 互換のための別名（切り替えの印など） */
+/** Alias kept for compatibility (selection indicators, etc.) */
 export const spring = snappy;
 
-/** ばねの位置 x(t)（0 → 1）を解析的に解く */
+/** Solve the spring position x(t) (0 -> 1) analytically */
 export function springPosition({ stiffness, damping, mass }: { stiffness: number; damping: number; mass: number }, t: number): number {
   const w0 = Math.sqrt(stiffness / mass);
   const zeta = damping / (2 * Math.sqrt(stiffness * mass));
@@ -56,11 +56,11 @@ export function springPosition({ stiffness, damping, mass }: { stiffness: number
   return 1 - (r2 * Math.exp(r1 * t) - r1 * Math.exp(r2 * t)) / (r2 - r1);
 }
 
-/** CSS の transition に使う linear() の曲線と、落ち着くまでの時間 */
+/** linear() easing curve for CSS transitions, plus the time to settle */
 export function springToCss(p: SpringParams, samples = 48): { easing: string; ms: number } {
   const k = springConstants(p);
   let settle = p.duration;
-  // 1/1000 以内に収まり続ける時刻を探す（上限 3 秒）
+  // Find when it stays within 1/1000 for good (capped at 3s)
   for (let t = 0; t < 3; t += 0.005) {
     let ok = true;
     for (let u = t; u < t + 0.2; u += 0.02) if (Math.abs(1 - springPosition(k, u)) > 0.001) ok = false;
@@ -77,7 +77,7 @@ export function springToCss(p: SpringParams, samples = 48): { easing: string; ms
   return { easing: `linear(${pts.join(", ")})`, ms: Math.round(settle * 1000) };
 }
 
-/** CSS 変数 --ease-NAME と --dur-NAME を配る（shadcn の部品の CSS のトランジション用） */
+/** Expose CSS variables --ease-NAME and --dur-NAME (for CSS transitions in shadcn components) */
 export function installCssSprings(root: HTMLElement = document.documentElement) {
   for (const [name, p] of [["smooth", SMOOTH], ["snappy", SNAPPY], ["bouncy", BOUNCY]] as const) {
     const { easing, ms } = springToCss(p);
@@ -86,13 +86,13 @@ export function installCssSprings(root: HTMLElement = document.documentElement) 
   }
 }
 
-/** 押しているあいだ少し膨らむ（Liquid Glass のボタン）。離すとばねで戻る */
+/** Grows slightly while pressed (Liquid Glass buttons). Springs back on release */
 export const press = {
   whileTap: { scale: 1.06 },
   transition: interactive,
 };
 
-/** 権限確認の滴: 状態の点の方から落ちて広がる */
+/** Permission droplet: drops from the status dot and expands */
 export const dropIn = {
   initial: { opacity: 0, scale: 0.05, y: -28 },
   animate: { opacity: 1, scale: 1, y: 0, transition: bouncy },
@@ -100,15 +100,15 @@ export const dropIn = {
 };
 
 /**
- * 指を離した後の行き先を、Apple の慣性（UIScrollView の減速率 0.998/ms）で予測する。
- * WWDC18「Designing Fluid Interfaces」の project(initialVelocity:decelerationRate:) と同じ式
+ * Predict where a fling ends using Apple's inertia (UIScrollView deceleration rate 0.998/ms).
+ * Same formula as project(initialVelocity:decelerationRate:) from WWDC18 "Designing Fluid Interfaces"
  */
 export function project(position: number, velocityPerSec: number, decelerationRate = 0.998): number {
   const vPerMs = velocityPerSec / 1000;
   return position + (vPerMs * decelerationRate) / (1 - decelerationRate);
 }
 
-/** 端を越えたときのゴムの伸び（UIScrollView と同じ式。c = 0.55） */
+/** Rubber banding past an edge (same formula as UIScrollView, c = 0.55) */
 export function rubberBand(overshoot: number, dimension: number, c = 0.55): number {
   const sign = Math.sign(overshoot);
   const x = Math.abs(overshoot);

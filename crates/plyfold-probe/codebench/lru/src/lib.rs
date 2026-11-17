@@ -5,7 +5,7 @@ pub struct LruCache<K, V> {
 impl<K: std::hash::Hash + Eq + Clone, V> LruCache<K, V> {
     pub fn new(capacity: usize) -> Self {
         let _ = capacity;
-        todo!("README.md の仕様どおりに実装する")
+        todo!("implement as specified in README.md")
     }
     pub fn get(&mut self, key: &K) -> Option<&V> {
         let _ = key;

@@ -113,7 +113,7 @@ crates/
   plyfold-worktree     Per-session worktrees, diffs, commit / merge / PR / discard
   plyfold-core         The engine: ties the crates above together and emits events to the UI
   plyfold-i18n         Engine messages in Japanese, English and Simplified Chinese
-  plyfold-cli          Development CLI (plyfold start / resume / sessions / log / diff / rm / keys)
+  plyfold-cli          Development CLI (plyfold profiles / sessions / start / resume / log / diff / rm / keys)
   plyfold-probe        ACP checks and benchmarks across agents
 docs/                  Design notes, i18n rules, probe findings, screenshots
 tools/liquid-probe/    Measures Apple's Liquid Glass motion to tune the animations

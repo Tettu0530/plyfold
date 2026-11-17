@@ -2,7 +2,7 @@ import { ArrowBigUp, ArrowDown, ArrowLeft, ArrowRight, ArrowRightToLine, ArrowUp
 
 import { cn } from "@/lib/utils";
 
-// キーの組み合わせはアイコンで見せる（.claude/skills/no-ai-slop-ui の 6. 文言）
+// Show key combinations as icons (.claude/skills/no-ai-slop-ui, section 6: copy)
 const ICONS: Record<string, { Icon: LucideIcon; label: string }> = {
   cmd: { Icon: Command, label: "Command" },
   shift: { Icon: ArrowBigUp, label: "Shift" },
@@ -18,7 +18,7 @@ const ICONS: Record<string, { Icon: LucideIcon; label: string }> = {
 
 const TEXT: Record<string, string> = { esc: "esc", ",": ",", ".": "." };
 
-/** 例: <Keys keys={["cmd", "k"]} /> */
+/** e.g. <Keys keys={["cmd", "k"]} /> */
 export function Keys({ keys, className, onPrimary }: { keys: string[]; className?: string; onPrimary?: boolean }) {
   const label = keys.map((k) => ICONS[k]?.label ?? (TEXT[k] ?? k).toUpperCase()).join("+");
   return (

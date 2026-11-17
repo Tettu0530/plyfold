@@ -1,5 +1,5 @@
-// ヘッドレスの Chrome を DevTools のプロトコルで動かし、仮想時間を 1 コマずつ進めて画面を撮る
-//   node drive.mjs <port> <url> <操作の JS> <切り取り x,y,w,h> <コマ数> <出力 png>
+// Drives headless Chrome over the DevTools protocol, advancing virtual time one frame at a time and capturing the screen
+//   node drive.mjs <port> <url> <action JS> <crop x,y,w,h> <frames> <output png>
 import { writeFileSync } from "node:fs";
 const [port, url, action, clipS, nS, out] = process.argv.slice(2);
 const [cx, cy, cw, chh] = clipS.split(",").map(Number);
@@ -23,13 +23,13 @@ await send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, dev
 await send("Page.navigate", { url });
 await waitEvent("Page.loadEventFired");
 await new Promise((r) => setTimeout(r, 1500));
-// 準備の操作（環境変数 PRE）: 時間を止める前に実行して、落ち着くまで待つ
+// Setup action (env PRE): run before freezing time, then wait for things to settle
 if (process.env.PRE) {
   const r = await send("Runtime.evaluate", { expression: process.env.PRE, awaitPromise: true });
   if (r.result?.exceptionDetails) console.log("pre error", JSON.stringify(r.result.exceptionDetails).slice(0, 300));
   await new Promise((r2) => setTimeout(r2, Number(process.env.PRE_WAIT ?? 1500)));
 }
-// LAST=1: 動きが落ち着いた画面を 1 枚だけ撮る。仮想時間は使わない（止まりやすいため）
+// LAST=1: capture a single frame once motion has settled. No virtual time (it tends to stall)
 if (process.env.LAST) {
   const r = await send("Runtime.evaluate", { expression: action, awaitPromise: true });
   if (r.result?.exceptionDetails) console.log("action error", JSON.stringify(r.result.exceptionDetails).slice(0, 300));
@@ -49,8 +49,8 @@ const shots = [];
 for (let i = 0; i < n; i++) {
   await send("Emulation.setVirtualTimePolicy", { policy: "advance", budget: 16.667 });
   await waitEvent("Emulation.virtualTimeBudgetExpired");
-  // 時間を止めたままだと、撮影に要る描画のコマが来ずに返事が止まることがある。
-  // 3 秒待って返事がなければ、仮想時間を 1ms だけ進めてコマを出させる（何度でも）
+  // With time frozen, the frame needed for the capture may never arrive and the reply stalls.
+  // If there is no reply within 3 s, advance virtual time by 1ms to force a frame (repeatedly)
   const pending = send("Page.captureScreenshot", { format: "png", clip: { x: cx, y: cy, width: cw, height: chh, scale: 1 } });
   let s = null;
   while (!s) {
@@ -61,13 +61,13 @@ for (let i = 0; i < n; i++) {
     }
   }
   shots.push(s.result.data);
-  // PROBE: コマごとに評価して出す（実体の形などを数値で見る）
+  // PROBE: evaluate and print per frame (to inspect the shape etc. numerically)
   if (process.env.PROBE) {
     const pr = await send("Runtime.evaluate", { expression: process.env.PROBE });
     console.log(`${Math.round((i + 1) * 16.7)}ms`, pr.result?.result?.value ?? JSON.stringify(pr.result?.exceptionDetails ?? "").slice(0, 200));
   }
 }
-// コマを並べた 1 枚にする
+// tile the frames into a single image
 await send("Emulation.setVirtualTimePolicy", { policy: "advance", budget: 100000 });
 const cols = Number(process.env.COLS ?? 4);
 const html = `<body style="margin:0;background:#000;display:grid;grid-template-columns:repeat(${cols},${cw}px);gap:4px">${shots.map((d, i) => `<div style="position:relative"><img src="data:image/png;base64,${d}" style="display:block"><span style="position:absolute;left:4px;top:2px;color:#f0f;font:11px Menlo">${Math.round((i + 1) * 16.7)}ms</span></div>`).join("")}</body>`;

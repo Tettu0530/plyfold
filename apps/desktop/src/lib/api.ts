@@ -4,7 +4,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type { Category, CheckResult, Diff, EngineEvent, EventRecord, ProfileDetail, DirCandidate, ProfileForm, ProfileSummary, ProfileUsage, SessionInfo, SessionRecord, SettingsView, WtStatus, AppSettings } from "./types";
 
-// Tauri のコマンド（src-tauri/src/lib.rs）の薄い包み。引数名は Rust 側の camelCase 変換に合わせる
+// Thin wrappers around the Tauri commands (src-tauri/src/lib.rs). Argument names follow the Rust side's camelCase conversion
 export const api = {
   listProfiles: () => invoke<ProfileSummary[]>("list_profiles"),
   listSessions: () => invoke<SessionRecord[]>("list_sessions"),
@@ -48,5 +48,5 @@ export function onEngineEvent(handler: (e: EngineEvent) => void): Promise<Unlist
   return listen<EngineEvent>("engine", (msg) => handler(msg.payload));
 }
 
-/** Tauri の外（ブラウザでの開発）では invoke が使えない */
+/** invoke isn't available outside Tauri (when developing in a browser) */
 export const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;

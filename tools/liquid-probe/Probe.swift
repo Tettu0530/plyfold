@@ -1,6 +1,6 @@
-// Liquid Glass の動きを数値で測る。
-// 本物の SwiftUI の Liquid Glass で変形を起こし、毎フレーム、ウィンドウ内の全レイヤーの
-// presentation（画面に描かれている途中の値）の位置・大きさ・角の丸みを JSON Lines で書き出す。
+// Measures Liquid Glass motion numerically.
+// Triggers a morph with real SwiftUI Liquid Glass and, every frame, writes the position, size and corner
+// radius of every layer's presentation (the in-flight on-screen values) in the window as JSON Lines.
 //
 //   swiftc -O -parse-as-library -target arm64-apple-macos26.0 Probe.swift -o probe
 //   ./probe <scenario> <animation> <out.jsonl>
@@ -10,7 +10,7 @@ import AppKit
 import QuartzCore
 import SwiftUI
 
-// MARK: - 場面
+// MARK: - Scenes
 
 final class Trigger: ObservableObject {
     @Published var on = false
@@ -70,7 +70,7 @@ struct PressScene: View {
     }
 }
 
-// MARK: - 記録
+// MARK: - Recording
 
 struct LayerSample: Encodable {
     let path: String
@@ -83,7 +83,7 @@ struct LayerSample: Encodable {
     let props: [String: String]
 }
 
-/// SDF 系のレイヤーの ObjC プロパティを全部読む（非公開の形の値を探すため）
+/// Reads every ObjC property of SDF-related layers (to find private shape values)
 func sdfProps(_ layer: CALayer) -> [String: String] {
     let name = String(describing: type(of: layer))
     guard name.contains("SDF") else { return [:] }
@@ -189,7 +189,7 @@ final class Recorder: NSObject {
 
     func walk(_ layer: CALayer, path: String, into: inout [LayerSample], rootLayer: CALayer) {
         let p = layer.presentation() ?? layer
-        // 画面（ルート）座標での外接矩形
+        // bounding rect in screen (root) coordinates
         let r = rootLayer.convert(p.bounds, from: p)
         let t = p.transform
         into.append(LayerSample(
@@ -202,7 +202,7 @@ final class Recorder: NSObject {
     }
 }
 
-// MARK: - 起動
+// MARK: - Launch
 
 @main
 struct ProbeMain {
@@ -231,7 +231,7 @@ struct ProbeMain {
         let rec = Recorder(window: window, path: outPath)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             rec.begin()
-            // 少し記録してから変形を起こす（t ≈ 0.2 秒）
+            // record briefly, then trigger the morph (t ≈ 0.2 s)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 let anim: Animation? = switch animName {
                 case "smooth": .smooth
@@ -241,7 +241,7 @@ struct ProbeMain {
                 }
                 withAnimation(anim) { trigger.on.toggle() }
             }
-            // 開いて、少し待って、閉じる
+            // open, wait a moment, close
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
                 withAnimation(animName == "default" ? .default : nil) { trigger.on.toggle() }
             }

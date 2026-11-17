@@ -1,4 +1,4 @@
-// セッションの会話を、エンジンのイベント（または保存した記録）から組み立てる。副作用のない関数だけ
+// Builds a session's conversation from engine events (or the saved log). Pure functions only
 
 import { previewsOfPrompt, type AttachmentPreview } from "@/lib/attachments";
 import type { AcpUpdate, EventRecord, PermissionChoice, TurnStats } from "@/lib/types";
@@ -18,7 +18,7 @@ export type TranscriptItem =
   | { kind: "stats"; stats: TurnStats | null; stopReason: string | null; error: string | null; endedAt: number | null }
   | { kind: "notice"; text: string };
 
-/** ツールの呼び出し。エージェントごとに出し方が違うので、見せるものだけを取り出して持つ */
+/** A tool call. Agents report these differently, so keep only what we display */
 export interface ToolCall {
   kind: "tool";
   id: string;
@@ -26,24 +26,24 @@ export interface ToolCall {
   toolKind: string;
   status: string;
   diffs: DiffPreview[];
-  /** 実行したコマンド（execute） */
+  /** Command that was run (execute) */
   command: string | null;
-  /** 触ったファイル */
+  /** Files touched */
   path: string | null;
-  /** エージェントが添えた説明（Claude の description） */
+  /** Description supplied by the agent (Claude's description) */
   note: string | null;
-  /** 端末の出力を少しずつ受け取ったもの（Codex の terminal_output_delta） */
+  /** Terminal output received incrementally (Codex's terminal_output_delta) */
   stream: string;
-  /** 結果の文字（rawOutput、または content の文字） */
+  /** Result text (rawOutput, or the text in content) */
   result: string;
   exitCode: number | null;
-  /** ツールの名前（Claude の Bash、TaskOutput など。分からなければ null） */
+  /** Tool name (Claude's Bash, TaskOutput, etc.; null if unknown) */
   toolName: string | null;
-  /** バックグラウンドで動かした（Claude の Bash の run_in_background） */
+  /** Run in the background (run_in_background on Claude's Bash) */
   background: boolean;
-  /** 入力で指しているバックグラウンドの ID（shell_id、bash_id、task_id） */
+  /** Background ID referenced in the input (shell_id, bash_id, task_id) */
   refs: string[];
-  /** 初めて届いた時刻と、終わった（completed / failed になった）時刻（ms） */
+  /** When it first arrived and when it finished (became completed / failed), in ms */
   startedAt: number | null;
   endedAt: number | null;
 }
@@ -57,7 +57,7 @@ export interface PendingPermission {
 
 export interface Transcript {
   items: TranscriptItem[];
-  /** ターンの途中か（UI が送ったプロンプトの再掲を除くため） */
+  /** Whether a turn is in progress (to skip echoes of prompts the UI sent) */
   inTurn: boolean;
 }
 
@@ -68,7 +68,7 @@ function text(update: AcpUpdate): string {
   return c && c.type === "text" && typeof c.text === "string" ? c.text : "";
 }
 
-/** 連続する同じ種類の文字の塊はつなげる */
+/** Merge consecutive text chunks of the same kind */
 function appendText(items: TranscriptItem[], kind: "user" | "agent" | "thought", t: string): TranscriptItem[] {
   if (!t) return items;
   const last = items[items.length - 1];
@@ -90,7 +90,7 @@ function diffsOf(update: AcpUpdate): DiffPreview[] {
 
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
 
-/** `/bin/zsh -lc 'cat a'` のような包みを外す */
+/** Strip wrappers like `/bin/zsh -lc 'cat a'` */
 export function unwrapShell(cmd: string): string {
   const m = cmd.match(/^\/bin\/(?:ba|z)?sh -l?c '([\s\S]*)'$/);
   return m ? m[1].replace(/'\\''/g, "'") : cmd;
@@ -100,7 +100,7 @@ function commandOf(input: Record<string, unknown>): string | null {
   const c = input.command ?? input.cmd;
   if (typeof c === "string" && c) return unwrapShell(c);
   if (Array.isArray(c) && c.every((x) => typeof x === "string")) {
-    // ["bash", "-lc", "…"] の形
+    // The ["bash", "-lc", "…"] form
     const a = c as string[];
     if (a.length === 3 && /sh$/.test(a[0]) && /^-l?c$/.test(a[1])) return a[2];
     return a.join(" ");
@@ -108,7 +108,7 @@ function commandOf(input: Record<string, unknown>): string | null {
   return null;
 }
 
-/** content の文字の塊。Claude は ```console … ``` で包んで返す */
+/** Text chunks in content. Claude wraps them in ```console … ``` */
 function contentText(content: unknown): string | null {
   if (!Array.isArray(content)) return null;
   const texts = content
@@ -128,7 +128,7 @@ function resultOf(raw: unknown): string | null {
   return null;
 }
 
-/** tool_call と tool_call_update の中身を、今の状態に重ねる（ACP の決まりどおり、来た欄だけ置き換える） */
+/** Overlay a tool_call or tool_call_update onto the current state (per ACP, only the fields present are replaced) */
 function mergeTool(prev: ToolCall | null, update: AcpUpdate, now: number | null): ToolCall {
   const base: ToolCall = prev ?? {
     kind: "tool",
@@ -168,10 +168,10 @@ function mergeTool(prev: ToolCall | null, update: AcpUpdate, now: number | null)
   if (locs.length && str(locs[0]?.path)) next.path = locs[0].path as string;
   if (Array.isArray(update.content)) {
     const diffs = diffsOf(update);
-    // 差分はあとの更新で content が置き換わっても残す（Claude は最後に結果の文字だけを送る）
+    // Keep diffs even if a later update replaces content (Claude sends only the result text at the end)
     if (diffs.length) next.diffs = diffs;
     const text = contentText(update.content);
-    // 説明と同じ文字は結果にしない
+    // Don't use text identical to the description as the result
     if (text && text !== next.note) next.result = text;
   }
   const raw = resultOf(update.rawOutput);
@@ -183,12 +183,12 @@ function mergeTool(prev: ToolCall | null, update: AcpUpdate, now: number | null)
   return next;
 }
 
-/** now は出来事の時刻（ms）。記録から組み立てるときは記録の時刻を渡す */
+/** now is the event time (ms). When rebuilding from the log, pass the logged time */
 export function applyUpdate(t: Transcript, update: AcpUpdate, now: number | null = Date.now()): Transcript {
   const kind = update.sessionUpdate;
   switch (kind) {
     case "user_message_chunk":
-      // ターン中に送り返される自分の発言は、送ったときに入れてあるので出さない
+      // Skip your own messages echoed back during a turn; they were added when sent
       if (t.inTurn) return t;
       return { ...t, items: appendText(t.items, "user", text(update)) };
     case "agent_message_chunk":
@@ -198,7 +198,7 @@ export function applyUpdate(t: Transcript, update: AcpUpdate, now: number | null
     case "tool_call":
     case "tool_call_update": {
       const id = String(update.toolCallId ?? "");
-      // 同じ id の tool_call が 2 度来ることがある（開き直したときの履歴の再送など）。そのときは重ねる
+      // The same tool_call id can arrive twice (e.g. history replayed on reload); merge in that case
       const at = t.items.findIndex((it) => it.kind === "tool" && it.id === id);
       if (at < 0) {
         if (kind === "tool_call_update" && !id) return t;
@@ -213,7 +213,7 @@ export function applyUpdate(t: Transcript, update: AcpUpdate, now: number | null
         content: String((e as { content?: unknown }).content ?? ""),
         status: String((e as { status?: unknown }).status ?? "pending"),
       }));
-      // 計画は 1 つだけ持ち、更新されたら置き換える
+      // Keep a single plan and replace it on update
       const rest = t.items.filter((it) => it.kind !== "plan");
       return { ...t, items: [...rest, { kind: "plan", entries }] };
     }
@@ -235,12 +235,12 @@ export function addNotice(t: Transcript, message: string): Transcript {
   return { ...t, items: [...t.items, { kind: "notice", text: message }] };
 }
 
-/** 保存した ACP の送受信から、会話を組み立て直す（エージェントが止まっていても読める） */
+/** Rebuild the conversation from the saved ACP traffic (readable even when the agent is stopped) */
 export function fromHistory(events: EventRecord[]): Transcript {
   let t = emptyTranscript();
   for (const e of events) {
     if (e.kind === "note") {
-      // 起動の記録など、毎回出るものは省く
+      // Skip boilerplate like the startup note
       if (!e.payload.startsWith("起動:")) t = addNotice(t, e.payload);
       continue;
     }

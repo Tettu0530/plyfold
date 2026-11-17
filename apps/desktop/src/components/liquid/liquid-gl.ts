@@ -1,10 +1,10 @@
-// 液体の融合を GPU で描く。画面全体に 1 枚の WebGL2 のキャンバスを重ね（クリックは素通し）、
-// 動いている分離アニメーションごとに、出発点と実体の距離場を smin で 1 つにして塗る（式は sdf.ts と同じ）。
+// Draws liquid merging on the GPU. One full-window WebGL2 canvas sits on top (clicks pass through), and
+// for each running separation animation the anchor and blob distance fields are merged with smin and filled (same math as sdf.ts).
 //
-//   - 塗り・枠線・影は、smin の混ざり具合で出発点の見た目と実体の見た目を混ぜる
-//   - 出発点（本物のボタン）の中は塗らない（本物の上に重ねない。出発点から生えて見える）。
-//     ただし over（0〜1）のぶんだけ、実体だけの形を出発点の上に重ねて塗る（メニューは開いている途中から上に乗る）
-//   - 縁は 1 デバイス px で滑らかにする
+//   - Fill, border and shadow blend the anchor's and blob's looks by the smin mix factor
+//   - Nothing is painted inside the anchor (the real button), so the blob appears to grow out of it.
+//     Except: by `over` (0..1), the blob-only shape is painted on top of the anchor (menus move on top midway through opening)
+//   - Edges are antialiased over 1 device px
 
 export interface Rgba {
   r: number;
@@ -14,11 +14,11 @@ export interface Rgba {
 }
 
 export interface BlobFrame {
-  /** 出発点の箱（CSS px） */
+  /** Anchor box (CSS px) */
   a: { l: number; t: number; r: number; b: number; radius: number };
-  /** 実体の箱（CSS px） */
+  /** Blob box (CSS px) */
   s: { l: number; t: number; r: number; b: number; radius: number };
-  /** つながる幅（px） */
+  /** Merge distance (px) */
   k: number;
   fillA: Rgba;
   fillS: Rgba;
@@ -26,18 +26,18 @@ export interface BlobFrame {
   lineS: Rgba;
   shadow: { x: number; y: number; blur: number; color: Rgba };
   opacity: number;
-  /** 出発点の上に実体を重ねる量（0 = 出発点の裏、1 = 出発点の上）。出発点は手前に出さずに描くこと */
+  /** How much the blob is drawn over the anchor (0 = behind, 1 = on top). The anchor must not be raised in front */
   over: number;
 }
 
 export interface Blob {
-  /** 毎フレーム呼ぶ。null なら今は描かない */
+  /** Called every frame. null means draw nothing for now */
   frame(dt: number): BlobFrame | null;
 }
 
 const VERT = `#version 300 es
-uniform vec4 uRect;   // 描く範囲 l, t, r, b（CSS px）
-uniform vec2 uView;   // 画面の大きさ（CSS px）
+uniform vec4 uRect;   // Draw area l, t, r, b (CSS px)
+uniform vec2 uView;   // Viewport size (CSS px)
 void main() {
   vec2 c = vec2((gl_VertexID & 1) == 0 ? uRect.x : uRect.z, (gl_VertexID & 2) == 0 ? uRect.y : uRect.w);
   gl_Position = vec4(c.x / uView.x * 2.0 - 1.0, 1.0 - c.y / uView.y * 2.0, 0.0, 1.0);
@@ -47,12 +47,12 @@ const FRAG = `#version 300 es
 precision highp float;
 uniform vec2 uView;
 uniform float uDpr;
-uniform vec4 uA; uniform float uAr;   // 出発点: 中心 xy、半分の幅・高さ zw、角の丸み
-uniform vec4 uS; uniform float uSr;   // 実体
+uniform vec4 uA; uniform float uAr;   // Anchor: center xy, half width/height zw, corner radius
+uniform vec4 uS; uniform float uSr;   // blob
 uniform float uK;
 uniform vec4 uFillA; uniform vec4 uFillS;
 uniform vec4 uLineA; uniform vec4 uLineS;
-uniform vec4 uShadow; uniform vec3 uShadowGeo;   // 色、ずれ x・y とぼかし
+uniform vec4 uShadow; uniform vec3 uShadowGeo;   // color, x/y offset and blur
 uniform float uOpacity;
 uniform float uOver;
 out vec4 outColor;
@@ -61,7 +61,7 @@ float sdBox(vec2 p, vec4 b, float r) {
   vec2 q = abs(p - b.xy) - b.zw + r;
   return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
 }
-// iq の 2 次の smin。y は「実体の割合」
+// iq's quadratic smin. y is the blob's share
 vec2 smin(float a, float b, float k) {
   if (k <= 0.0) return a < b ? vec2(a, 0.0) : vec2(b, 1.0);
   float h = max(k - abs(a - b), 0.0) / k;
@@ -76,24 +76,24 @@ void main() {
   vec2 u = smin(dA, dS, uK);
   float px = 1.0 / uDpr;
   float cov = clamp(0.5 - u.x / px, 0.0, 1.0);
-  // 枠線: 縁から内側 1px の帯（CSS の border と同じ位置）
+  // Border: a 1px band inside the edge (same position as a CSS border)
   float band = cov - clamp(0.5 - (u.x + 1.0) / px, 0.0, 1.0);
   vec4 fill = mix(uFillA, uFillS, u.y);
   vec4 line = mix(uLineA, uLineS, u.y);
-  // 影: ずらした位置の融合した形から、ぼかして落とす（実体の側だけ）
+  // Shadow: blurred from the merged shape at an offset (blob side only)
   vec2 ps = p - uShadowGeo.xy;
   vec2 us = smin(sdBox(ps, uA, uAr), sdBox(ps, uS, uSr), uK);
   float sig = max(uShadowGeo.z * 0.5, 0.5);
   float sh = uShadow.a * us.y * (1.0 - smoothstep(-sig, sig * 2.0, us.x));
-  // 重ねる（乗算済みの色）: 影 → 塗り → 枠線
+  // Composite (premultiplied): shadow -> fill -> border
   float fa = fill.a * cov;
   vec4 c = vec4(uShadow.rgb * sh, sh) * (1.0 - fa) + vec4(fill.rgb * fa, fa);
   float la = line.a * band;
   c = vec4(line.rgb * la, la) + c * (1.0 - la);
-  // 出発点の中は塗らない
+  // Don't paint inside the anchor
   float inA = clamp(0.5 - dA / px, 0.0, 1.0);
   c *= 1.0 - inA;
-  // 出発点の上に乗るぶん: 出発点の中に、実体だけの形（影・塗り・枠線）を重ねる
+  // The part on top of the anchor: paint the blob-only shape (shadow, fill, border) inside the anchor
   if (uOver > 0.0) {
     float covS = clamp(0.5 - dS / px, 0.0, 1.0);
     float bandS = covS - clamp(0.5 - (dS + 1.0) / px, 0.0, 1.0);
@@ -147,12 +147,12 @@ function createScene(): Scene | null {
     document.body.appendChild(canvas);
     return { canvas, gl, prog, loc, blobs: new Set(), raf: 0, last: 0 };
   } catch (e) {
-    console.warn("液体の描画（WebGL）を使えません", e);
+    console.warn("Liquid rendering (WebGL) is unavailable", e);
     return null;
   }
 }
 
-/** 共有のキャンバス。WebGL2 が使えなければ null（呼び出し側は DOM の描画に戻す） */
+/** Shared canvas. null if WebGL2 is unavailable (callers fall back to DOM rendering) */
 function scene(): Scene | null {
   if (g.__plyfoldLiquidScene === undefined) g.__plyfoldLiquidScene = createScene();
   return g.__plyfoldLiquidScene;
@@ -163,7 +163,7 @@ export function liquidGlSupported(): boolean {
 }
 
 function render(sc: Scene) {
-  // 時刻は performance.now（motion と同じ時計）
+  // Time comes from performance.now (same clock as motion)
   const now = performance.now();
   const { gl, canvas, loc } = sc;
   const dt = sc.last ? Math.min(1 / 30, (now - sc.last) / 1000) : 1 / 60;
@@ -209,7 +209,7 @@ function render(sc: Scene) {
     gl.uniform3f(loc.uShadowGeo, f.shadow.x, f.shadow.y, f.shadow.blur);
     gl.uniform1f(loc.uOpacity, f.opacity);
     gl.uniform1f(loc.uOver, f.over);
-    // 描く範囲: 2 つの箱と、融合のふくらみ（k/4）と影
+    // Draw area: both boxes plus the merge bulge (k/4) and the shadow
     const pad = f.k / 4 + f.shadow.blur * 1.5 + Math.max(Math.abs(f.shadow.x), Math.abs(f.shadow.y)) + 2;
     gl.uniform4f(loc.uRect, Math.min(f.a.l, f.s.l) - pad, Math.min(f.a.t, f.s.t) - pad, Math.max(f.a.r, f.s.r) + pad, Math.max(f.a.b, f.s.b) + pad);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -231,7 +231,7 @@ function loop(sc: Scene) {
   if (!sc.raf) sc.raf = requestAnimationFrame(tick);
 }
 
-/** 描くものを足す。返り値を呼ぶと外す */
+/** Add something to draw. Call the returned function to remove it */
 export function addBlob(blob: Blob): () => void {
   const sc = scene();
   if (!sc) return () => {};
@@ -242,7 +242,7 @@ export function addBlob(blob: Blob): () => void {
   };
 }
 
-// ---- 色と影の文字列を読む（motion が混ぜた "rgba(…)" をそのまま受け取る）
+// ---- Parse color and shadow strings (takes the "rgba(…)" strings motion interpolates as-is)
 
 export function parseColor(s: string): Rgba {
   const m = s.match(/rgba?\(([^)]+)\)/);
@@ -258,7 +258,7 @@ export function parseColor(s: string): Rgba {
   return { r: 0, g: 0, b: 0, a: 0 };
 }
 
-/** "0px 16px 48px rgba(0,0,0,.55)" の最初の影 */
+/** First shadow of e.g. "0px 16px 48px rgba(0,0,0,.55)" */
 export function parseShadow(s: string): BlobFrame["shadow"] {
   const color = parseColor(s);
   const nums = s.replace(/rgba?\([^)]*\)/, "").match(/-?[\d.]+px/g)?.map((v) => parseFloat(v)) ?? [];

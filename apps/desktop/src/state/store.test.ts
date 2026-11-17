@@ -47,7 +47,7 @@ describe("reduceEvent", () => {
     s = reduceEvent(s, { type: "permission_resolved", session_id: "s1", permission_id: "p1", option_id: "allow" });
     expect(s.s1.permission).toBeNull();
     s = reduceEvent(s, { type: "update", session_id: "s1", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "ok" } } });
-    // Info はターン終了より先に届く。ターン終了の数値はそれを使う
+    // Info arrives before the turn ends; the turn-end numbers use it
     s = reduceEvent(s, { type: "info", session_id: "s1", info: info(42) });
     s = reduceEvent(s, { type: "turn_ended", session_id: "s1", stop_reason: "end_turn", error: null });
     const last = s.s1.transcript.items[s.s1.transcript.items.length - 1];

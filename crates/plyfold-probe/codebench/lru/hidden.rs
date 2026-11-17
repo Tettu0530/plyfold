@@ -8,7 +8,7 @@ fn h_update_moves_to_front() {
     c.put("b", 2);
     assert_eq!(c.put("a", 10), Some(1));
     assert_eq!(c.len(), 2);
-    c.put("c", 3); // b が追い出される
+    c.put("c", 3); // b is evicted
     assert_eq!(c.peek(&"b"), None);
     assert_eq!(c.peek(&"a"), Some(&10));
     assert_eq!(c.peek(&"c"), Some(&3));
@@ -20,7 +20,7 @@ fn h_peek_does_not_touch() {
     c.put(1, 1);
     c.put(2, 2);
     assert_eq!(c.peek(&1), Some(&1));
-    c.put(3, 3); // peek しても 1 は古いまま
+    c.put(3, 3); // peek leaves 1 as least recent
     assert_eq!(c.peek(&1), None);
     assert_eq!(c.peek(&2), Some(&2));
 }
@@ -33,7 +33,7 @@ fn h_remove_and_reuse() {
     assert_eq!(c.remove(&1), None);
     assert_eq!(c.len(), 2);
     c.put(5, 50);
-    c.put(6, 60); // 0 が追い出される
+    c.put(6, 60); // 0 is evicted
     assert_eq!(c.peek(&0), None);
     assert_eq!(c.peek(&2), Some(&20));
     assert_eq!(c.len(), 3);
@@ -65,9 +65,9 @@ fn h_capacity_one() {
 
 #[test]
 fn h_against_model() {
-    // 単純な実装と、疑似乱数の操作列で突き合わせる
+    // compare against a naive model over a pseudo-random sequence of operations
     let mut c = LruCache::new(7);
-    let mut model: Vec<(u32, u32)> = Vec::new(); // 先頭が最近
+    let mut model: Vec<(u32, u32)> = Vec::new(); // front is most recent
     let mut x: u64 = 12345;
     for step in 0..5000u32 {
         x ^= x << 13; x ^= x >> 7; x ^= x << 17;
@@ -108,5 +108,5 @@ fn h_performance() {
         if i % 5 == 0 && i > 0 { c.remove(&(i - 1)); }
     }
     assert!(c.len() <= cap);
-    assert!(start.elapsed().as_secs_f64() < 5.0, "遅すぎる: {:?}", start.elapsed());
+    assert!(start.elapsed().as_secs_f64() < 5.0, "too slow: {:?}", start.elapsed());
 }

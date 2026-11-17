@@ -21,7 +21,7 @@ interface Entry {
   run: () => void;
 }
 
-/** ⌘K の検索カード。サイドバーの「検索」から実体が水滴のように分かれ、移動してきて広がる */
+/** The ⌘K search card. A blob splits off the sidebar's Search item like a droplet, travels over and expands */
 export function SearchCard() {
   const t = useT();
   const open = useStore((s) => s.searchOpen);

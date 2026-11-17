@@ -1,12 +1,12 @@
-// 分離アニメーションの共通部品（.claude/skills/no-ai-slop-ui の 4. 動き）
+// Shared building blocks for separation animations (.claude/skills/no-ai-slop-ui, section 4: motion)
 //
-// 押した場所（出発点）から別の面（行き先）が開くときの動き。形は上下左右の 4 つの端で表し、
-// 端ごとに別のばねで動かす（先に伸びる端と、遅れてついてくる端を作るため）。型は 3 つ:
-//   morph   : 出発点の形のまま、行き先側の端が先に伸び、反対側が遅れてついてきて収まる（Apple のメニューに近い）
-//   tear    : 出発点にくっついたまま引き伸ばされ、限界でちぎれて、勢いで行き先の形まで飛ぶ
-//   droplet : 丸い滴に縮んで離れ、移動してから広がる
-//   pop     : 出発点の裏から滑り出て、そのまま 1 本のばねで行き先の形へ（標準。出発点の面より下に描く）
-// 測定（tools/liquid-probe）では、Apple の変形は外枠が 1 本のばねで動く。どの型も段ごとに 1 本のばねで動かす
+// Motion for a surface (the target) opening out of what was pressed (the anchor). The shape is four edges,
+// each driven by its own spring (so some edges lead and others trail). Styles:
+//   morph   : keeps the anchor's shape; the target-side edge stretches first and the far edge follows (close to Apple's menus)
+//   tear    : stretches while stuck to the anchor, tears off at the limit and flies into the target shape
+//   droplet : shrinks into a round droplet, detaches, travels, then expands
+//   pop     : slides out from behind the anchor into the target shape on one spring (default; drawn below the anchor's surface)
+// Measurements (tools/liquid-probe) show Apple's morphs move the outer frame on a single spring. Every style uses one spring per stage
 import { animate, motion, motionValue, useMotionValue, useReducedMotion, useTransform, useVelocity, type MotionValue } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -20,12 +20,12 @@ const rectGap = (a: Rect, s: Rect) => Math.hypot(Math.max(0, s.l - a.r, a.l - s.
 
 export type LiquidStyle = "pop" | "morph" | "tear" | "droplet";
 
-// ---- 出発点の登録（名前 → 要素）
-// 開発中の部分的な差し替え（HMR）でこのファイルが 2 つ読み込まれても、登録簿は 1 つに保つ
+// ---- Anchor registry (name -> element)
+// Keep a single registry even if HMR loads this module twice during development
 const g = globalThis as { __plyfoldAnchors?: Map<string, HTMLElement> };
 const anchors = (g.__plyfoldAnchors ??= new Map<string, HTMLElement>());
 
-/** 分離の出発点にする要素を登録する ref を返す */
+/** Returns a ref that registers the element as a separation anchor */
 export function liquidAnchor(name: string) {
   return (el: HTMLElement | null) => {
     if (el) anchors.set(name, el);
@@ -33,14 +33,14 @@ export function liquidAnchor(name: string) {
   };
 }
 
-/** 登録した出発点の要素 */
+/** A registered anchor element */
 export function liquidAnchorElement(name: string): HTMLElement | undefined {
   return anchors.get(name);
 }
 
 const GOO_ID = "plyfold-goo";
 
-/** goo フィルタの定義（アプリに 1 つ置く） */
+/** goo filter definition (mount one per app) */
 export function GooDefs() {
   return (
     <svg width="0" height="0" aria-hidden style={{ position: "absolute" }}>
@@ -70,7 +70,7 @@ function edgesOf(el: Element | null | undefined, radius: number): Edges | null {
 
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 
-/** 切れた瞬間に、出発点を実体の向きへ少し引っぱってから、ばねで戻す */
+/** At the moment of separation, tug the anchor slightly toward the blob, then spring it back */
 function wobble(el: HTMLElement | undefined, dir: { x: number; y: number }) {
   if (!el?.animate) return;
   const { easing, ms } = springToCss({ duration: 0.45, bounce: 0.45 });
@@ -89,29 +89,29 @@ const drop = (cx: number, cy: number, d = 30): Edges => ({ l: cx - d / 2, t: cy 
 type Phase = "closed" | "opening" | "open" | "closing";
 
 interface Options {
-  /** 出発点の名前（liquidAnchor で登録したもの） */
+  /** Anchor name (registered with liquidAnchor) */
   anchor: string;
-  /** 行き先の要素（本物の面）。見えない状態でも大きさを測れるように描いておくこと */
+  /** Target element (the real surface). Keep it rendered, even when hidden, so it can be measured */
   target: React.RefObject<HTMLElement | null>;
   radius: number;
   anchorRadius?: number;
-  /** 実体の色（行き先の面に近い色） */
+  /** Blob color (close to the target surface) */
   color?: string;
   style?: LiquidStyle;
-  /** 実体を描く重なり順。出発点の面（サイドバーなど）より小さくすると、その裏から出てくる */
+  /** z-index for the blob. Below the anchor's surface (e.g. the sidebar) it emerges from behind it */
   zIndex?: number;
-  /** pop の型で、大きさの変化を位置の変化より遅らせる秒数（0 なら 1 段階、大きいほど 2 段階に近い） */
+  /** pop style: seconds the size change lags the position change (0 = single stage; larger approaches two stages) */
   sizeLag?: number;
-  /** pop の型で、出発点と行き先の見た目。大きさの広がりに合わせて色・枠線・影・ぼかしが変わる */
+  /** pop style: anchor and target looks. Color, border, shadow and blur change as the size grows */
   fromLook?: Look;
   toLook?: Look;
-  /** true なら「開いた状態」から始める（すでに表示中の面を、閉じる動きで出発点へ戻すとき） */
+  /** If true, start open (for sending an already visible surface back to its anchor with a close animation) */
   initiallyOpen?: boolean;
-  /** 出発点の上に実体を重ねる量（0〜1、GPU の描画だけ）。0 より大きいあいだ、出発点は手前に出さないこと */
+  /** How much the blob is drawn over the anchor (0..1, GPU rendering only). While above 0, don't raise the anchor in front */
   over?: MotionValue<number>;
   /**
-   * 開いたあとも実体を消さず、本物の枠として描き続ける（メニュー。GPU の描画だけ）。
-   * 本物の地・枠線・影と入れ替えないので、ばねの跳ね返りで枠と実体がずれない。行き先の大きさが変われば追う
+   * Keep drawing the blob as the real surface's frame after opening (menus, GPU rendering only).
+   * Since it never swaps with the real background/border/shadow, spring overshoot can't misalign them. Follows target size changes
    */
   hold?: boolean;
 }
@@ -126,7 +126,7 @@ export interface Look {
 const DEFAULT_FROM: Look = { background: "rgba(38, 38, 38, 1)", border: "rgba(255, 255, 255, 0)", shadow: "0px 0px 0px rgba(0, 0, 0, 0)", blur: 0 };
 const DEFAULT_TO: Look = { background: "rgba(23, 23, 23, 0.85)", border: "rgba(255, 255, 255, 0.1)", shadow: "0px 16px 48px rgba(0, 0, 0, 0.55)", blur: 40 };
 
-/** 飛んでいるあいだの角の丸み（px）。行き先の丸みへは最後の 25% で変える */
+/** Corner radius in flight (px). Switches to the target's radius over the last 25% */
 const FLIGHT_RADIUS = 16;
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -137,8 +137,8 @@ const LEAD = appleSpring({ duration: 0.3, bounce: 0.3 });
 const TRAIL = appleSpring({ duration: 0.45, bounce: 0.2 });
 
 /**
- * 分離アニメーション。`revealed` が true のあいだ本物を見せ、`layer` をどこかに描く。
- * `mounted` は本物を DOM に置いておくべきか（動いているあいだも置いて大きさを測る）
+ * Separation animation. Show the real surface while `revealed` is true, and render `layer` somewhere.
+ * `mounted` says whether the real surface should be in the DOM (it stays mounted while animating so it can be measured)
  */
 export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRadius = 8, color = "#262626", style = "pop", zIndex = 60, sizeLag = 0.12, fromLook = DEFAULT_FROM, toLook = DEFAULT_TO, initiallyOpen = false, over, hold = false }: Options) {
   const reduced = useReducedMotion();
@@ -151,13 +151,13 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
   const opacity = useMotionValue(0);
   const ghostOpacity = useMotionValue(0);
   const ghostScale = useMotionValue(1);
-  /** 見た目の進み具合（0 = 出発点、1 = 行き先） */
+  /** Visual progress (0 = anchor, 1 = target) */
   const look = useMotionValue(initiallyOpen ? 1 : 0);
   const [ghost, setGhost] = useState<Edges | null>(null);
-  // 液体の融合（pop の型）: GPU で出発点と実体を smin で 1 つの形にして描く（liquid-gl.ts）。
-  // 使えなければ DOM の面で描く（融合はしない）
+  // Liquid merging (pop style): the GPU merges anchor and blob into one shape with smin (liquid-gl.ts).
+  // Without it, draw a DOM surface instead (no merging)
   const rawRef = useRef<Rect | null>(null);
-  /** 引き留める量（apply がこれを読んで実体の位置をずらす） */
+  /** Hold-back amount (apply reads it to offset the blob) */
   const tension = useMotionValue(0);
   const blobOff = useRef<(() => void) | null>(null);
   const gl = useMemo(() => liquidGlSupported(), []);
@@ -170,14 +170,14 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
     blobOff.current?.();
     blobOff.current = null;
   };
-  /** 出だしが柔らかいばねで mv を 0 → 1 へ（つながっているあいだはゆっくり剥がれ、離れてから加速する） */
+  /** Drive mv 0 -> 1 with a soft-start spring (peels off slowly while connected, then accelerates) */
   const peel = (mv: MotionValue<number>) =>
     new Promise<void>((resolve) => {
       const sp = new PeelSpring(0.35, 0.3);
       sp.x = mv.get();
       let last = 0;
       let raf = 0;
-      // 時刻は performance.now（motion と同じ時計）。requestAnimationFrame の引数は使わない
+      // Time comes from performance.now (same clock as motion), not the requestAnimationFrame argument
       const tick = () => {
         const now = performance.now();
         const dt = last ? Math.min(1 / 30, (now - last) / 1000) : 1 / 60;
@@ -210,7 +210,7 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
     B.set(e.b);
     rad.set(e.radius);
   };
-  /** 端ごとに、先に伸びる側（lead）と遅れる側（trail）のばねを使い分ける */
+  /** Each edge uses either the leading (lead) or trailing (trail) spring */
   const moveEdges = (to: Edges, lead: object, trail: object) => {
     const cx = (L.get() + R.get()) / 2;
     const cy = (T.get() + B.get()) / 2;
@@ -234,12 +234,12 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
       const alive = () => run.current === id;
       stopAll();
       const src = edgesOf(anchors.get(anchor), anchorRadius);
-      // 行き先が描かれるまで待つ（開いた直後はまだ DOM にないことがある）
+      // Wait until the target is rendered (it may not be in the DOM right after opening)
       for (let i = 0; i < 10 && !target.current; i++) {
         await new Promise((r) => requestAnimationFrame(r));
         if (!alive()) return;
       }
-      // メニューなどは、出た直後に位置が決まる。位置が落ち着くまで待ってから測る
+      // Menus and such get positioned right after mounting. Wait for the position to settle before measuring
       if (opening) {
         let last = "";
         for (let i = 0; i < 8 && target.current; i++) {
@@ -259,19 +259,19 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
       setGhost(src);
       const from = opening ? src : dst;
       const to = opening ? dst : src;
-      // 途中で向きが変わったときは、今の形から続ける
+      // If the direction reverses midway, continue from the current shape
       if (opacity.get() === 0) set(from);
       opacity.set(1);
       setPhase(opening ? "opening" : "closing");
 
       if (style === "pop") {
-        // 1 段階と 2 段階の中間: 位置は先に動き、大きさは少し遅れて長めのばねで広がる（閉じるときは逆）
+        // Between one and two stages: position moves first, size follows slightly later on a longer spring (reversed when closing)
         ghostOpacity.set(0);
         const a = { l: L.get(), t: T.get(), r: R.get(), b: B.get(), radius: rad.get() };
         const ac = { x: (a.l + a.r) / 2, y: (a.t + a.b) / 2, w: a.r - a.l, h: a.b - a.t };
         let bc = { x: (to.l + to.r) / 2, y: (to.t + to.b) / 2, w: to.r - to.l, h: to.b - to.t };
-        // 開くときは、行き先を毎フレーム測り直して追う（メニューは出た後も数フレーム大きさが決まり続け、
-        // 最初に測った大きさのままだと、本物の枠と実体がずれる）
+        // When opening, re-measure the target every frame (menus keep resizing for a few frames after mounting,
+        // and sticking with the first measurement misaligns the real frame and the blob)
         let toLive = to;
         const track = () => {
           if (!opening) return;
@@ -282,8 +282,8 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
         };
         const p = motionValueOf(0);
         const q = motionValueOf(0);
-        // 液体の融合: 出発点と実体を smin で 1 つの形にする。開くときは、首でつながっているあいだ
-        // 実体を少し引き留め（粘り）、首が切れたらばねで放す。k は広がりきる前に 0 へ絞って、必ず別々にする
+        // Liquid merging: anchor and blob become one shape via smin. When opening, hold the blob back slightly
+        // while the neck connects them (adhesion) and spring it free once the neck breaks. k drops to 0 before full size so they always separate
         const anchorC = { x: (src.l + src.r) / 2, y: (src.t + src.b) / 2 };
         const kMax = mergeWidth(Math.min(src.r - src.l, src.b - src.t));
         const adh = new Adhesion(opening);
@@ -311,9 +311,9 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
               const sy = popScaleY.get();
               const cx = (L.get() + R.get()) / 2;
               const cy = (T.get() + B.get()) / 2;
-              // 重なっているあいだは融合させない（ぴったり重なると全体がふくらみ、出発点より大きく見える）
+              // Don't merge while overlapping (exact overlap bulges the whole shape, making it look larger than the anchor)
               const sep = separation(Math.hypot(cx - (a.l + a.r) / 2, cy - (a.t + a.b) / 2), Math.min(a.r - a.l, a.b - a.t));
-              // 閉じるときは、戻ってくるにつれてつながる幅を広げる（吸い込まれる）
+              // When closing, widen the merge distance as it returns (gets sucked back in)
               const k = (opening ? mergeAt(kMax, grown) : kMax * Math.min(1, Math.max(0, (grown - 0.25) / 0.5))) * sep;
               const pull = adh.update(dt, rectGap(a, raw), k);
               if (opening) tension.set(pull);
@@ -354,7 +354,7 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
           T.set(cy - h / 2 - oy);
           B.set(cy + h / 2 - oy);
           const k = Math.min(1, Math.max(0, qv));
-          // 角の丸み: 出だしで飛ぶときの丸みになり、途中はそのまま、最後の方でだけ行き先の丸みへ変える
+          // Corner radius: takes the flight radius at the start, holds it, and only switches to the target's radius near the end
           const travel = Math.min(1, Math.max(0, pv));
           const flight = FLIGHT_RADIUS;
           const r =
@@ -370,7 +370,7 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
         const posSpring = snappy;
         const sizeSpring = appleSpring({ duration: 0.42, bounce: 0.3 });
         await Promise.all([
-          // 開くときの位置は、出だしの柔らかいばね（融合しているあいだゆっくり剥がれる）
+          // Position while opening uses the soft-start spring (peels off slowly while merged)
           opening && gl ? peel(p) : go(p, 1, opening ? { ...posSpring } : { ...posSpring, delay: sizeLag }),
           go(q, 1, opening ? { ...sizeSpring, delay: sizeLag } : { ...snappy }),
         ]);
@@ -378,7 +378,7 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
         offQ();
         offT();
         if (opening && hold && gl && alive()) {
-          // 実体がそのまま枠になる: 止まった後も行き先を追い、閉じる（別の動きに替わる）まで描き続ける
+          // The blob becomes the frame: it keeps tracking the target after settling and is drawn until closed (replaced by another animation)
           setPhase("open");
           let raf = 0;
           const follow = () => {
@@ -390,7 +390,7 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
           running.current.push({ stop: () => cancelAnimationFrame(raf) });
           return;
         }
-        // ここからは本物の面が同じ場所に出る（途中で向きが変わったときは、新しい動きの位置を上書きしない）
+        // From here the real surface appears in the same place (if reversed midway, don't overwrite the new animation's position)
         if (alive()) {
           track();
           set({ ...toLive, radius: rad.get() });
@@ -399,7 +399,7 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
         if (!opening) ghostOpacity.set(0);
         await moveEdges(to, LEAD, TRAIL);
       } else if (style === "tear") {
-        // 出発点にくっついたまま、行き先の方へ引き伸ばす（離れる側の端はまだ動かさない）
+        // Stretch toward the target while stuck to the anchor (the trailing edge stays put for now)
         ghostOpacity.set(1);
         ghostScale.set(1);
         const stretched = opening
@@ -407,7 +407,7 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
           : { ...dst, l: Math.min(dst.l, lerp(dst.l, src.r, 0.55)), t: lerp(dst.t, (src.t + src.b) / 2, 0.25), b: lerp(dst.b, src.b, 0.4) };
         await Promise.all([go(R, stretched.r, interactive), go(B, stretched.b, interactive), go(L, stretched.l, interactive), go(T, stretched.t, interactive)]);
         if (!alive()) return;
-        // ちぎれる: 出発点側が縮んで離れ、本体は勢いで行き先の形へ
+        // Tear: the anchor side shrinks away and the body carries on into the target shape
         go(ghostScale, 0.6, smooth);
         go(ghostOpacity, 0, { duration: 0.14 });
         await moveEdges(to, LEAD, bouncy);
@@ -428,7 +428,7 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
         setPhase("open");
         await go(opacity, 0, { duration: 0.12 });
       } else {
-        // 出発点に融合して消える
+        // Merge into the anchor and disappear
         ghostOpacity.set(0);
         await go(opacity, 0, { duration: 0.12 });
         if (alive()) setPhase("closed");
@@ -445,7 +445,7 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
   useEffect(() => {
     if (open && (phase === "closed" || phase === "closing")) {
       setPhase("opening");
-      // 行き先を測れるよう、先に描いてから動かす
+      // Render first so the target can be measured, then animate
       requestAnimationFrame(() => void play(true));
     } else if (!open && (phase === "open" || phase === "opening")) {
       void play(false);
@@ -460,7 +460,7 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
   const y = useTransform(T, (v) => v);
   const w = useTransform([L, R], ([l, r]: number[]) => Math.max(0, r - l));
   const h = useTransform([T, B], ([t, b]: number[]) => Math.max(0, b - t));
-  // 水滴の型だけ、速さの向きに伸ばす
+  // Only the droplet style stretches along its velocity
   const vx = useVelocity(L);
   const vy = useVelocity(T);
   const stretch = useTransform<number, string>([vx, vy], ([a, b]) => {
@@ -474,16 +474,16 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
   const borderColor = useTransform(look, [0, 1], [fromLook.border, toLook.border]);
   const boxShadow = useTransform(look, [0, 1], [fromLook.shadow, toLook.shadow]);
   const backdrop = useTransform(look, (v) => `blur(${lerp(fromLook.blur, toLook.blur, v)}px) saturate(${lerp(100, 150, v)}%)`);
-  // pop: 縁をすり抜けるときの速さで横に伸び、縦に細くなる（止まれば元の形）
+  // pop: stretches horizontally and thins vertically with speed as it slips past the edge (back to normal at rest)
   const popScaleX = useTransform(vx, (v) => 1 + Math.min(Math.abs(v) / 9000, 0.18));
   const popScaleY = useTransform(popScaleX, (s) => 1 / Math.sqrt(s));
 
   const animating = phase === "opening" || phase === "closing";
-  // look は開き具合（0 = 出発点、1 = 行き先。閉じるときは 1 から 0 へ）
+  // look is the open amount (0 = anchor, 1 = target; goes 1 -> 0 when closing)
   const edgesRef = useMemo(() => ({ L, T, R, B, rad, look }), [L, T, R, B, rad, look]);
   if (style === "pop") {
-    // GPU が使えるときは、出発点と融合した形を liquid-gl のキャンバスに描く（DOM の面は出さない）。
-    // 使えなければ、枠線と影の付いた DOM の面だけを描く（融合はしない）
+    // With the GPU, draw the shape merged with the anchor on the liquid-gl canvas (no DOM surface).
+    // Otherwise draw just a DOM surface with border and shadow (no merging)
     const surface = animating && !gl
       ? createPortal(
           <>
@@ -514,11 +514,11 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
     return {
       revealed: phase === "open",
       mounted: phase !== "closed",
-      /** 開いた後も実体が枠として残っている（stage は登録を外さない） */
+      /** The blob remains as the frame after opening (stage keeps it registered) */
       holding: hold && gl && phase === "open",
       layer: surface,
       edges: edgesRef,
-      /** 開いた後も、まだ何かが動いている（今は使っていない。stage の lingering の受け口） */
+      /** Something is still moving after opening (currently unused; hook for stage's lingering) */
       settling: false,
     };
   }

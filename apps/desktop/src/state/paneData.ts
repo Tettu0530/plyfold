@@ -1,17 +1,17 @@
-// ペインの見出しのボタン（ファイル、バックグラウンド、計画）に出すものを、会話から組み立てる。副作用のない関数だけ
+// Builds the contents of the pane header buttons (files, background, plan) from the conversation. Pure functions only
 import type { ToolCall, TranscriptItem } from "./transcript";
 
 const tools = (items: TranscriptItem[]) => items.filter((i): i is ToolCall => i.kind === "tool");
 
 export interface TouchedFile {
   path: string;
-  /** 編集したか（差分か edit のツール）。読んだだけなら false */
+  /** Whether it was edited (a diff or an edit tool). false if only read */
   edited: boolean;
   count: number;
   last: number;
 }
 
-/** エージェントが読んだり書いたりしたファイル。最近触ったものから */
+/** Files the agent read or wrote, most recently touched first */
 export function touchedFiles(items: TranscriptItem[]): TouchedFile[] {
   const by = new Map<string, TouchedFile>();
   tools(items).forEach((t, i) => {
@@ -36,19 +36,19 @@ export interface BackgroundShell {
   id: string | null;
   command: string;
   state: ShellState;
-  /** 最後に見た出力（TaskOutput / BashOutput の結果） */
+  /** Last seen output (result of TaskOutput / BashOutput) */
   output: string;
   startedAt: number | null;
 }
 
-/** バックグラウンドの ID を結果の文から拾う（「Command running in background with ID: bash_1」など） */
+/** Extract the background ID from result text (e.g. "Command running in background with ID: bash_1") */
 export function backgroundId(result: string): string | null {
   return /\bID\b[:：]?\s*`?([A-Za-z0-9_-]{3,})/i.exec(result)?.[1] ?? null;
 }
 
 /**
- * バックグラウンドで動かしたシェル。alive はエージェントが動いているか（止まっていれば、動いていたものも終わっている）
- * 状態は、後から同じ ID を指したツールで分かる: Kill / Stop なら停止、出力の確認の結果に status があればそれ
+ * Shells run in the background. alive is whether the agent is running (if it stopped, its shells are gone too).
+ * Status comes from later tools referencing the same ID: Kill / Stop means stopped; otherwise the status in an output check, if any
  */
 export function backgroundShells(items: TranscriptItem[], alive: boolean): BackgroundShell[] {
   const all = tools(items);
@@ -84,7 +84,7 @@ export interface PlanEntry {
   status: string;
 }
 
-/** 今の計画（最後に届いた plan） */
+/** Current plan (the last plan received) */
 export function currentPlan(items: TranscriptItem[]): PlanEntry[] {
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];

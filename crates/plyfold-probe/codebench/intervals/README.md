@@ -1,14 +1,14 @@
 # intervals
 
-`src/lib.rs` には閉区間 `[start, end]`（両端を含む整数の区間）を扱う関数があります。
-いくつかバグがあり、`cargo test` が失敗します。仕様どおりに動くよう直してください。
+`src/lib.rs` contains functions that work with closed intervals `[start, end]` (integer intervals including both ends).
+There are a few bugs and `cargo test` fails. Fix them so the functions behave as specified.
 
-## 仕様
+## Spec
 
-- 区間は `(i64, i64)`。`start > end` の区間は、両端を入れ替えたものとして扱う
-- `merge(v)`：重なる区間と、隣り合う区間（`[1,3]` と `[4,6]` のように間がない）をまとめ、`start` の昇順に並べて返す
-- `total_len(v)`：区間が覆う整数の個数（重なりは 1 回だけ数える）。`[1,3]` は 3 個
-- `subtract(a, b)`：`a` が覆う範囲から `b` が覆う範囲を除いた残りを、`merge` と同じ形で返す
-- 値は `i64` の全範囲を取りうる（`i64::MIN` や `i64::MAX` を含む区間でもパニックやオーバーフローをしないこと）。
-  `total_len` の戻り値は `u128`
-- 関数のシグネチャは変えない
+- An interval is `(i64, i64)`. An interval with `start > end` is treated as if its ends were swapped
+- `merge(v)`: merges overlapping intervals and adjacent intervals (no gap between them, like `[1,3]` and `[4,6]`), returned in ascending order of `start`
+- `total_len(v)`: the number of integers covered by the intervals (overlaps counted once). `[1,3]` covers 3
+- `subtract(a, b)`: the part covered by `a` minus the part covered by `b`, returned in the same form as `merge`
+- Values may span the full `i64` range (intervals containing `i64::MIN` or `i64::MAX` must not panic or overflow).
+  `total_len` returns `u128`
+- Do not change the function signatures

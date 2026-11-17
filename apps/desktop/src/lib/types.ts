@@ -1,4 +1,4 @@
-// Rust 側（plyfold-core / plyfold-store）の serde の形に合わせた型
+// Types matching the serde shapes on the Rust side (plyfold-core / plyfold-store)
 
 export type SessionStatus =
   | "starting"
@@ -82,7 +82,7 @@ export interface PermissionChoice {
   kind: "allow_once" | "allow_always" | "reject_once" | "reject_always" | string;
 }
 
-// session/update の update 部分（生の JSON）
+// The update part of session/update (raw JSON)
 export type AcpUpdate = { sessionUpdate: string } & Record<string, unknown>;
 
 export type EngineEvent =
@@ -126,9 +126,9 @@ export interface AppSettings {
   cleanup_after_merge: boolean;
   stall_seconds: number;
   worktree_default: boolean;
-  /** 入力欄で送るキー */
+  /** Key that sends from the input box */
   send_key: "enter" | "cmd_enter";
-  /** 画面の言語（auto なら macOS の言語） */
+  /** UI language (auto follows macOS) */
   language: "auto" | "ja" | "en" | "zh";
   /** Sidebar density */
   sidebar_density: "comfortable" | "compact";
@@ -194,7 +194,7 @@ export interface ProfileSummary {
   custom_provider: boolean;
 }
 
-/** プロファイルごとの使用状況（crates/plyfold-core/src/usage.rs） */
+/** Per-profile usage (crates/plyfold-core/src/usage.rs) */
 export interface ProfileUsage {
   profile: string;
   agent: string;
@@ -207,7 +207,7 @@ export interface ProfileUsage {
   last_used: number | null;
 }
 
-/** リポジトリを選ぶ欄の補完の候補（apps/desktop/src-tauri/src/dirs.rs） */
+/** Completion candidates for the repository picker (apps/desktop/src-tauri/src/dirs.rs) */
 export interface DirCandidate {
   path: string;
   name: string;

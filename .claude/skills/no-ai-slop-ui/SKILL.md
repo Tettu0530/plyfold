@@ -129,7 +129,7 @@ English:
 
 Japanese (the `ja` dictionary):
 
-- Short and concrete; the polite 「です・ます」 form only in explanatory text, never on buttons. Buttons end with a verb (「許可」「止める」「取り込む」)
+- Short and concrete; the polite 「です・ます」 form only in explanatory text, never on buttons. Buttons end with a verb or a short verbal noun (「許可」「停止」「取り込む」)
 - Avoid mixing in too much English and katakana. But model / effort / mode, ACP terms and commands stay as they are
 - **Don't join words with 「・」 or 「 · 」**
 - Prefer short, established terms over descriptive phrasing: use 「初期プロンプト」「ベース URL」「置換」「テスト」「停止」「カスタムプロバイダー」「通知」, not 「最初の指示」「接続先 URL」「置き換える」「確かめる」「止める」「独自の接続先」「知らせ」

@@ -11,7 +11,7 @@ import { useLiquidMenu } from "./liquid/stage";
 const ITEM =
   "flex h-7 cursor-default items-center gap-2 rounded-md px-2 text-sm outline-none select-none data-[disabled]:opacity-40 data-[highlighted]:bg-accent";
 
-/** サイドバーの行の右クリックメニュー: 名前を変える・止める・削除（worktree を残すか選ぶ） */
+/** Context menu for sidebar rows: rename, stop, delete (with a choice to keep the worktree) */
 export function SessionMenu({ record, onRename, children }: { record: SessionRecord; onRename: () => void; children: React.ReactNode }) {
   const t = useT();
   const { stopSession, removeSession } = useStore.getState();
@@ -19,7 +19,7 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
   const [error, setError] = useState<string | null>(null);
   const running = record.status !== "closed" && record.status !== "error";
   const run = (f: () => Promise<void>) => void f().catch((e) => setError(String(e)));
-  // メニューは、右クリックした行から飛び出して広がり、閉じると行へ戻る
+  // The menu expands out of the right-clicked row and shrinks back into it on close
   const menu = useLiquidMenu(`menu:session:${record.id}`, `session:${record.id}`);
 
   return (
@@ -53,7 +53,7 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
               <ContextMenu.Item
                 className={cn(ITEM, "text-error data-[highlighted]:bg-error/10")}
                 onSelect={(e) => {
-                  // メニューを閉じずに、消し方の選択へ
+                  // Go to the delete options without closing the menu
                   e.preventDefault();
                   setConfirm(true);
                 }}

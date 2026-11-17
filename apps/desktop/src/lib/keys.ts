@@ -1,7 +1,7 @@
-// 入力欄のキーの判定（日本語入力の確定と、送るキーの設定）
+// Key handling for input boxes (IME composition commits and the send-key setting)
 //
-// WebKit（Safari と Tauri）では、変換を確定する Enter の keydown が compositionend の後に届き、
-// isComposing が false になる。keyCode 229（IME が処理中）と、compositionend の直後かも見る
+// In WebKit (Safari and Tauri), the keydown for the Enter that commits an IME conversion arrives after compositionend
+// with isComposing false. So also check keyCode 229 (IME processing) and whether compositionend just fired
 let lastCompositionEnd = Number.NEGATIVE_INFINITY;
 if (typeof window !== "undefined") {
   window.addEventListener("compositionend", () => (lastCompositionEnd = performance.now()), true);
@@ -10,7 +10,7 @@ if (typeof window !== "undefined") {
 type AnyKeyEvent = React.KeyboardEvent | KeyboardEvent;
 const native = (e: AnyKeyEvent): KeyboardEvent => ("nativeEvent" in e ? e.nativeEvent : e);
 
-/** 日本語入力などの変換中、または確定したばかりのキーか */
+/** Whether the key is part of an IME composition or the one that just committed it */
 export function isImeKey(e: AnyKeyEvent): boolean {
   const n = native(e);
   return n.isComposing || n.keyCode === 229 || performance.now() - lastCompositionEnd < 80;
@@ -19,8 +19,8 @@ export function isImeKey(e: AnyKeyEvent): boolean {
 export type SendKey = "enter" | "cmd_enter";
 
 /**
- * 送るキーか。enter: Enter で送り、Shift+Enter で改行（⌘Enter でも送る）。
- * cmd_enter: ⌘Enter（Ctrl+Enter）で送り、Enter は改行
+ * Whether the key sends. enter: Enter sends, Shift+Enter inserts a newline (⌘Enter also sends).
+ * cmd_enter: ⌘Enter (Ctrl+Enter) sends, Enter inserts a newline
  */
 export function isSendKey(e: AnyKeyEvent, mode: SendKey): boolean {
   const n = native(e);
@@ -29,5 +29,5 @@ export function isSendKey(e: AnyKeyEvent, mode: SendKey): boolean {
   return mode === "enter" && !n.shiftKey;
 }
 
-/** 送るキーの見せ方（Keys に渡す） */
+/** How to display the send key (passed to Keys) */
 export const sendKeys = (mode: SendKey) => (mode === "cmd_enter" ? ["cmd", "enter"] : ["enter"]);

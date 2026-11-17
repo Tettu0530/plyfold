@@ -1,4 +1,4 @@
-// 差分の行の描き方（差分の画面と、会話の中の差分で同じものを使う）
+// Rendering of diff lines (shared by the diff screen and inline diffs in conversations)
 import type { PatchLine } from "@/lib/patch";
 import { cn } from "@/lib/utils";
 

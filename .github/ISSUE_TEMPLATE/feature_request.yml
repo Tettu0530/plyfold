@@ -1,0 +1,44 @@
+name: Feature request
+description: Suggest a new feature or a change to an existing one
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. Plyfold has a few fixed directions: macOS only, an ACP client that drives existing agent CLIs rather than its own agent loop, multiple keys per CLI, and a custom UI. See [DESIGN.md](https://github.com/Tettu0530/plyfold/blob/main/DESIGN.md) before proposing changes to these.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What you would like Plyfold to do. Sketches or screenshots are welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Workarounds or other approaches you have considered.
+  - type: dropdown
+    id: agents
+    attributes:
+      label: Agents this concerns
+      multiple: true
+      options:
+        - All agents
+        - Claude Code
+        - Codex
+        - OpenCode
+        - Gemini CLI
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contributing
+      options:
+        - label: I would like to work on this myself

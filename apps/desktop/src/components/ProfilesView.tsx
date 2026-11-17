@@ -22,7 +22,7 @@ const AUTH_DETAIL: Record<AuthKind, MessageKey> = {
   custom: "profiles.authCustomDetail",
 };
 
-// plyfold-profile の edit.rs と同じ対応（保存前の表示用。保存後はエンジンの値を使う）
+// Same mapping as plyfold-profile's edit.rs (for display before saving; after saving the engine's value is used)
 const KEY_VAR: Record<string, Partial<Record<AuthKind, string>>> = {
   claude: { api: "ANTHROPIC_API_KEY", custom: "ANTHROPIC_AUTH_TOKEN" },
   codex: { api: "OPENAI_API_KEY", custom: "PLYFOLD_PROVIDER_KEY" },
@@ -38,7 +38,7 @@ function summaryAuth(p: ProfileSummary): AuthKind {
   return p.custom_provider ? "custom" : p.keyed ? "api" : "login";
 }
 
-/** プロファイルの画面。サイドバーの「プロファイル」から飛び出して広がる */
+/** Profiles screen. Expands out of the sidebar's Profiles item */
 export function ProfilesView() {
   const t = useT();
   const view = useStore((s) => s.profilesView);
@@ -50,7 +50,7 @@ export function ProfilesView() {
   const moving = useLiquidClip("profiles", surface);
   const agents = useMemo(() => profiles.filter((p) => p.name === p.agent && (p.agent !== "mock" || import.meta.env.DEV)).map((p) => p.agent), [profiles]);
   const [agent, setAgent] = useState<string>("claude");
-  // 選んでいるプロファイル。null は新規
+  // Selected profile. null means a new one
   const [selected, setSelected] = useState<string | null>("claude");
   const [checks, setChecks] = useState<Record<string, CheckResult>>({});
 
@@ -198,7 +198,7 @@ function Field({ label, htmlFor, hint, children }: { label: string; htmlFor?: st
 
 interface EditorProps {
   agent: string;
-  /** null は新規 */
+  /** null means a new one */
   name: string | null;
   sessions: number;
   check?: CheckResult;
@@ -274,7 +274,7 @@ function Editor({ agent, name, sessions, check, onCheck, onSaved, onDeleted }: E
     }
   };
 
-  // キーチェーンの名前だけ等幅にするため、訳した文を {account} の位置で割って差し込む
+  // Split the translated text at {account} and insert the keychain name there so only it is monospaced
   const keyHint =
     keyVar &&
     (() => {

@@ -1,5 +1,5 @@
-// 距離場の融合（sdf.ts）をコマ送りの PNG にする。描画は GPU と同じ式を CPU で 1 画素ずつ計算する
-//   node tools/liquid-probe/sdf-film.mjs <sdf.ts の絶対パス> <row|far|chip> <out.png> [tail]
+// Renders the distance-field merge (sdf.ts) as a frame-by-frame PNG, evaluating the GPU formula per pixel on the CPU
+//   node tools/liquid-probe/sdf-film.mjs <absolute path to sdf.ts> <row|far|chip> <out.png> [tail]
 import { writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 const { boxOf, sdBox, smin, mergeWidth, mergeAt, Adhesion, PeelSpring } = await import(process.argv[2]);
@@ -7,7 +7,7 @@ const rectGap = (a, b) => Math.hypot(Math.max(0, b[0] - a[2], a[0] - b[2]), Math
 const scenario = process.argv[3] ?? "row";
 const out = process.argv[4];
 const withTail = process.argv[5] === "tail";
-// zoom: 最初の 12 コマを 1/60 秒ごと・等倍で、つなぎ目のまわりだけ見る
+// zoom: the first 12 frames at 1/60 s steps, at 1x, around the seam only
 const zoom = process.argv[5] === "zoom" || process.argv[6] === "zoom";
 
 const S = (d, b) => ({ k: (2 * Math.PI / d) ** 2, c: (4 * Math.PI * (1 - b)) / d, x: 0, v: 0 });
@@ -25,7 +25,7 @@ const ac = { x: A.cx, y: A.cy, w: ar - al, h: ab - at };
 const [tl, tt, trr, tb] = scen.T;
 const bc = { x: (tl + trr) / 2, y: (tt + tb) / 2, w: trr - tl, h: tb - tt };
 
-// 色（0〜1）
+// colors (0–1)
 const SIDEBAR = [0x17, 0x17, 0x17], MAIN = [0x0a, 0x0a, 0x0a], ACCENT = [0x26, 0x26, 0x26];
 const SURF = scenario === "chip" ? [0x17, 0x17, 0x17] : [0x0a, 0x0a, 0x0a];
 const BORDER = [255, 255, 255, 0.1];
@@ -63,7 +63,7 @@ const mix = (a, b, m) => a.map((v, i) => v + (b[i] - v) * m);
 pick.forEach((fr, idx) => {
   const ox = (idx % cols) * (cw + gap), oy = Math.floor(idx / cols) * (ch + gap);
   const surfCol = mix(ACCENT, SURF, fr.look);
-  // 尾: 実体の中心に遅れてついてくる丸（Fizzy の drop と同じ考え方）。速く動くほど離れ、涙の形に伸びる
+  // tail: a circle that trails the body's center (same idea as Fizzy's drop). Faster motion pulls it further out into a teardrop
   const tr = Math.min(fr.S.hw, fr.S.hh, Math.min(ac.w, ac.h) * 0.5);
   const tail = boxOf(fr.tail.x - tr, fr.tail.y - tr, fr.tail.x + tr, fr.tail.y + tr, tr);
   for (let py = 0; py < ch; py++) for (let px = 0; px < cw; px++) {
@@ -73,24 +73,24 @@ pick.forEach((fr, idx) => {
     let dS = sdBox(x, y, fr.S);
     if (withTail) dS = smin(dS, sdBox(x, y, tail), k * 0.8).d;
     const u = smin(dA, dS, fr.k);
-    // 1 画面 px ぶんで縁をなめらかに（縮小しているので 1/sc）
+    // antialias the edge over one screen px (1/sc, since the image is scaled down)
     const aa = 1 / sc;
     const cov = Math.min(1, Math.max(0, 0.5 - u.d / aa));
     const covA = Math.min(1, Math.max(0, 0.5 - dA / aa));
     if (cov > 0) {
       const fill = mix(ACCENT, surfCol, u.m);
       col = mix(col, fill, cov);
-      // 縁の線: 実体の枠線の色。出発点の側（m が小さい）では消える
+      // edge line: the body's border color. Fades out on the origin side (small m)
       const line = Math.exp(-Math.max(0, -u.d) / 0.9) * cov * BORDER[3] * fr.look * u.m;
       col = mix(col, BORDER.slice(0, 3), line);
     }
-    // 出発点（本物のボタン）は上に描かれている
+    // the origin (the real button) is drawn on top
     if (covA > 0) col = mix(col, ACCENT, covA);
     const o = ((oy + py) * W + ox + px) * 3;
     img[o] = col[0]; img[o + 1] = col[1]; img[o + 2] = col[2];
   }
 });
-// PNG に書く
+// write the PNG
 const crcT = new Int32Array(256).map((_, n) => { let c = n; for (let j = 0; j < 8; j++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c; });
 const crc = (buf) => { let c = -1; for (const b of buf) c = crcT[(c ^ b) & 255] ^ (c >>> 8); return (c ^ -1) >>> 0; };
 const chunk = (type, data) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type), data]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([len, td, c]); };

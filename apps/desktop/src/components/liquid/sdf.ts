@@ -1,20 +1,20 @@
-// 距離場（SDF）による液体の融合。Liquid Glass と同じ考え方: 形ごとの距離場を「滑らかな最小値（smin）」で
-// ひとつにすると、近づいた形の縁が互いへ寄り、さらに近づくと首でつながり、離れると首がくびれて切れる。
+// Liquid merging with signed distance fields (SDF), the same idea as Liquid Glass: combining each shape's field with a smooth minimum (smin)
+// makes nearby edges pull toward each other, connect with a neck when closer, and pinch off when they move apart.
 //
-//   - 角丸の箱の距離場: iq の sdRoundBox
-//   - 融合: iq の 2 次の smin。k は「どこまで離れてもつながるか」の幅（spacing に当たる）。
-//     すきまが k/2 より狭いとつながり、k より狭いと縁が寄る（GlassEffectContainer の spacing の実測と一致）
-//   - 色: smin の混ざり具合 m で、2 つの形の色を混ぜる
+//   - Rounded box distance field: iq's sdRoundBox
+//   - Merging: iq's quadratic smin. k is how far apart shapes can be and still connect (like spacing).
+//     Gaps under k/2 connect, gaps under k pull the edges together (matches measured GlassEffectContainer spacing)
+//   - Color: blend the two shapes' colors by the smin mix factor m
 //
-// GPU の描画（liquid-gl.ts のシェーダー）と同じ式を、確認用（テストとコマ送りの絵）に JS でも持つ。外部に頼らない
+// The same math as the GPU renderer (the liquid-gl.ts shader), kept in JS for checks (tests and frame-by-frame images). No dependencies
 
 export interface Box {
-  /** 中心と、半分の幅・高さ（px） */
+  /** Center and half width/height (px) */
   cx: number;
   cy: number;
   hw: number;
   hh: number;
-  /** 角の丸み（px） */
+  /** Corner radius (px) */
   r: number;
 }
 
@@ -24,14 +24,14 @@ export function boxOf(l: number, t: number, r: number, b: number, radius: number
   return { cx: (l + r) / 2, cy: (t + b) / 2, hw, hh, r: Math.max(0, Math.min(radius, hw, hh)) };
 }
 
-/** 角丸の箱までの符号付き距離（中が負） */
+/** Signed distance to a rounded box (negative inside) */
 export function sdBox(x: number, y: number, b: Box): number {
   const qx = Math.abs(x - b.cx) - b.hw + b.r;
   const qy = Math.abs(y - b.cy) - b.hh + b.r;
   return Math.min(Math.max(qx, qy), 0) + Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) - b.r;
 }
 
-/** 2 次の滑らかな最小値。m は「b の割合」（0 = a だけ、1 = b だけ） */
+/** Quadratic smooth minimum. m is b's share (0 = only a, 1 = only b) */
 export function smin(a: number, b: number, k: number): { d: number; m: number } {
   if (k <= 0) return a < b ? { d: a, m: 0 } : { d: b, m: 1 };
   const h = Math.max(k - Math.abs(a - b), 0) / k;
@@ -40,9 +40,9 @@ export function smin(a: number, b: number, k: number): { d: number; m: number } 
   return { d, m };
 }
 
-/** 2 つの形がつながる幅 k を、出発点の太さから決める（太い出発点ほど遠くまでつながる） */
+/** Derive the merge distance k from the anchor's thickness (thicker anchors connect from farther away) */
 export function mergeWidth(anchorThickness: number): number {
-  // 細いボタン（24〜28px）でも首が見えるように、太さに下駄を履かせる
+  // Pad the thickness so a neck is visible even for thin buttons (24-28px)
   return Math.max(40, Math.min(72, anchorThickness * 1.2 + 16));
 }
 
@@ -52,23 +52,23 @@ const smoothstep = (a: number, b: number, x: number) => {
 };
 
 /**
- * 重なりぐあいで k を弱める: smin は 2 つの形がぴったり重なると全体を k/4 ふくらませる（出だしと戻り際に、
- * 出発点より大きな塊になる）。中心どうしが離れていないうちは 0、出発点の太さ 1 つぶん離れたら 1
+ * Scale k down by overlap: smin bulges two exactly overlapping shapes by k/4 (producing a lump larger than
+ * the anchor at the start and end). 0 while the centers coincide, 1 once they're one anchor thickness apart
  */
 export function separation(centerDist: number, anchorThickness: number): number {
   return smoothstep(0, Math.max(1, anchorThickness), centerDist);
 }
 
 /**
- * 動きの途中の k。広がりきる前に 0 へ絞り、最後は必ず別々の形にする
- * （行き先が出発点のすぐ隣でも、くっついたまま止まらない）。grown は大きさの広がりの進み具合
+ * k during the animation. Tapers to 0 before full size so the shapes always end up separate
+ * (even when the target sits right next to the anchor, they don't stay stuck). grown is the size progress
  */
 export function mergeAt(k: number, grown: number): number {
   return k * (1 - smoothstep(0.45, 0.9, grown));
 }
 
-// ---- 粘り: つながっているあいだ（首があるあいだ）は実体を出発点の側へ引き留め、切れたらばねで放す。
-// 速い動きでも首が数コマかけて細くなり、くびれて切れるのが見えるようにする
+// ---- Adhesion: while connected (a neck exists), hold the blob back toward the anchor; release it on a spring once it breaks.
+// Even in fast motion the neck visibly thins over a few frames and pinches off
 
 class Spring {
   x = 0;
@@ -90,26 +90,26 @@ class Spring {
   }
 }
 
-/** 粘りの強さ: すきまのこの割合だけ引き留める。上限は k × CAP */
+/** Adhesion strength: hold back by this fraction of the gap, capped at k × CAP */
 const HOLD = 0.6;
 const CAP = 0.8;
 
 export class Adhesion {
-  /** 首でつながっている */
+  /** Connected by a neck */
   connected: boolean;
-  /** 引き留める量（px。負なら放されて前へ跳ねている） */
+  /** Hold-back amount (px; negative means released and springing forward) */
   pull = 0;
   private release = new Spring(0.45, 0.4);
-  /** 切れた瞬間に呼ぶ */
+  /** Called at the moment of separation */
   onSnap?: () => void;
   constructor(connected: boolean) {
     this.connected = connected;
   }
-  /** raw: 引き留める前のすきま、k: いまのつながる幅 */
+  /** raw: gap before holding back, k: current merge distance */
   update(dt: number, raw: number, k: number): number {
     if (this.connected) {
       const hold = Math.min(raw * HOLD, k * CAP);
-      // 画面上のすきまが k/2 を越えると首が切れる（2 次の smin の性質）
+      // The neck breaks once the on-screen gap exceeds k/2 (a property of quadratic smin)
       if (raw - hold >= k / 2 || k <= 0.5) {
         this.connected = false;
         this.release.x = hold;
@@ -126,8 +126,8 @@ export class Adhesion {
 }
 
 /**
- * 出だしが柔らかいばね: 最初は剛性を FROM 倍にして、RAMP 秒かけて本来の剛性へ上げる（減衰は剛性の平方根に合わせる）。
- * つながっているあいだはゆっくり剥がれ、離れてから加速する。終わりの揺れ方は元のばねと同じ
+ * Soft-start spring: stiffness starts at FROM times normal and ramps up over RAMP seconds (damping tracks the square root of stiffness).
+ * Peels off slowly while connected and accelerates once free. The final oscillation matches the original spring
  */
 export class PeelSpring {
   x = 0;

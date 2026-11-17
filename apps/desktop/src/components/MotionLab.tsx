@@ -23,7 +23,7 @@ import {
 import { Segmented } from "./Segmented";
 import { liquidAnchor, useLiquidMorph, type LiquidStyle } from "./liquid/liquid";
 
-/** requestAnimationFrame の間隔から、実際に描いている頻度を測る */
+/** Measure the actual frame rate from requestAnimationFrame intervals */
 function useFrameRate() {
   const [hz, setHz] = useState<number | null>(null);
   useEffect(() => {
@@ -83,7 +83,7 @@ const CORNERS = (w: number, h: number) => [
   { x: w, y: h },
 ];
 
-/** 投げると、Apple と同じ減速率で行き先を予測して四隅に吸い付く。枠の外ではゴムのように伸びる */
+/** When flung, predicts the landing point with Apple's deceleration rate and snaps to a corner. Rubber-bands past the edges */
 function ThrowCard({ p }: { p: SpringParams }) {
   const t = useT();
   const area = useRef<HTMLDivElement>(null);
@@ -124,7 +124,7 @@ function ThrowCard({ p }: { p: SpringParams }) {
           const px = project(x.get(), info.velocity.x);
           const py = project(y.get(), info.velocity.y);
           const target = CORNERS(w, h).reduce((best, c) => (Math.hypot(c.x - px, c.y - py) < Math.hypot(best.x - px, best.y - py) ? c : best));
-          // 指の勢いをそのまま引き継いで、ばねで吸い付く
+          // Carry over the pointer velocity and snap with a spring
           animate(x, target.x, appleSpring(p, info.velocity.x));
           animate(y, target.y, appleSpring(p, info.velocity.y));
         }}
@@ -133,7 +133,7 @@ function ThrowCard({ p }: { p: SpringParams }) {
   );
 }
 
-// 名前と説明は辞書のキー（言語が途中で変わるため、描くときに引く）
+// Names and descriptions are dictionary keys (resolved at render time, since the language can change)
 const STYLES: { value: LiquidStyle; label: MessageKey; note: MessageKey }[] = [
   { value: "pop", label: "motionLab.stylePop", note: "motionLab.stylePopNote" },
   { value: "morph", label: "motionLab.styleMorph", note: "motionLab.styleMorphNote" },
@@ -141,7 +141,7 @@ const STYLES: { value: LiquidStyle; label: MessageKey; note: MessageKey }[] = [
   { value: "droplet", label: "motionLab.styleDroplet", note: "motionLab.styleDropletNote" },
 ];
 
-/** 分離アニメーションの見本。選んだ型は検索カード（⌘K）にも使われる */
+/** Samples of the separation animations. The chosen style is also used by the search card (⌘K) */
 function SeparationDemo() {
   const t = useT();
   const style = useStore((s) => s.liquidStyle);

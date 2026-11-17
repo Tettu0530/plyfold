@@ -1,0 +1,81 @@
+name: Bug report
+description: Something in Plyfold does not work as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please check the existing issues first.
+
+        Do not paste API keys, tokens or Keychain contents. Check logs and screenshots for secrets before posting. Security issues go through [SECURITY.md](https://github.com/Tettu0530/plyfold/blob/main/SECURITY.md), not this form.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Create a session with ...
+        2. Ask the agent to ...
+        3. Open the Changes view and ...
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Plyfold commit
+      description: Output of `git rev-parse --short HEAD` in your checkout.
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: e.g. macOS 26.1
+    validations:
+      required: true
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Agent
+      multiple: true
+      options:
+        - Claude Code
+        - Codex
+        - OpenCode
+        - Gemini CLI
+        - Mock agent
+        - Custom agent from config.toml
+        - Not agent-specific
+    validations:
+      required: true
+  - type: dropdown
+    id: profile-kind
+    attributes:
+      label: Profile authentication
+      options:
+        - Existing login
+        - Official API key
+        - Custom provider (base URL and key)
+        - Not relevant
+  - type: input
+    id: adapter-version
+    attributes:
+      label: Agent CLI or adapter version
+      description: Only if you changed the built-in command in config.toml or use OpenCode.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant output from the terminal running `npm run tauri dev`, or error notices shown in the pane. Remove any secrets.
+      render: text
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or recordings
+      description: Helpful for UI and animation issues.

@@ -1,5 +1,5 @@
-// プロファイルごとに、前回のセッションの設定項目（model / effort / mode の候補と値）とコンテキストの大きさを覚えておく。
-// 新しいセッションの下書きで、起動する前から同じ操作を出すため。この端末の中だけの便利機能なので localStorage に置く
+// Remember, per profile, the last session's config options (model / effort / mode choices and values) and context size,
+// so a new session draft can show the same controls before the agent starts. A local convenience only, so it lives in localStorage
 import type { SessionInfo } from "@/lib/types";
 
 const KEY = "plyfold.infoCache.v1";
@@ -19,11 +19,11 @@ export function saveInfoCache(cache: InfoCache) {
   try {
     localStorage.setItem(KEY, JSON.stringify(cache));
   } catch {
-    // 保存できなくても動く（次の下書きで候補が出ないだけ）
+    // Works even if saving fails (the next draft just won't show options)
   }
 }
 
-/** 覚えておく形: 設定項目と大きさだけ。使用量や途中経過は捨てる */
+/** What gets stored: config options and size only. Usage and progress are dropped */
 export function snapshot(info: SessionInfo): SessionInfo {
   return {
     config: info.config,
@@ -39,7 +39,7 @@ export function snapshot(info: SessionInfo): SessionInfo {
   };
 }
 
-/** 下書きで選んだ値を、覚えている設定項目に重ねる */
+/** Overlay values chosen in the draft onto the remembered config options */
 export function withChoices(info: SessionInfo, choices: Partial<Record<string, string>>): SessionInfo {
   return {
     ...info,

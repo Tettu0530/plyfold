@@ -12,7 +12,7 @@ interface Props<T extends string | number> {
   className?: string;
 }
 
-/** 液体の切り替え: 選択の印がばねで流れ、着くと潰れてぽよんと戻る */
+/** Liquid segmented control: the selection indicator flows on a spring, squashes on arrival and bounces back */
 export function Segmented<T extends string | number>({ label, value, options, onChange, className }: Props<T>) {
   const id = useId();
   return (

@@ -5,7 +5,7 @@ import { setLang } from "@/i18n";
 import { lineDiff } from "./lineDiff";
 
 describe("lineDiff", () => {
-  // 省略の行の文は言語で変わる。期待値は日本語で書いてある
+  // The collapsed-lines text depends on the language; expected values are in Japanese
   beforeAll(() => setLang("ja"));
   it("marks changed lines and keeps nearby context", () => {
     const old = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"].join("\n") + "\n";

@@ -1,4 +1,4 @@
-// 画面の状態。エンジンのイベントをここで受けて、セッションごとの表示用の形にする
+// UI state. Engine events are received here and turned into a per-session view model
 
 import { create } from "zustand";
 
@@ -26,21 +26,21 @@ export interface SessionView {
   info: SessionInfo | null;
   transcript: Transcript;
   permission: PendingPermission | null;
-  /** 記録から会話を読み込んだか */
+  /** Whether the conversation has been loaded from the log */
   historyLoaded: boolean;
   lastError: string | null;
-  /** エージェントが動いていないあいだに選んだ model / effort / mode（次に起動した直後に設定する） */
+  /** model / effort / mode chosen while the agent wasn't running (applied right after the next start) */
   pending: Partial<Record<Category, string>>;
 }
 
 export type PaneCount = 1 | 2 | 4;
 
-/** まだ始めていないセッション（ペインに空の状態で開く） */
+/** A session not started yet (opens empty in a pane) */
 export interface Draft {
   profile: string | null;
   repo: string;
   worktree: boolean;
-  /** 起動前に選んだ model / effort / mode（起動した直後に設定する） */
+  /** model / effort / mode chosen before starting (applied right after start) */
   choices: Partial<Record<Category, string>>;
   busy: boolean;
   error: string | null;
@@ -48,7 +48,7 @@ export interface Draft {
 
 export const isDraft = (id: string | null | undefined): id is string => !!id && id.startsWith("draft:");
 
-/** ペインの見た目（分離アニメーションの行き先） */
+/** Pane appearance (the target of separation animations) */
 const PANE_LOOK: Look = { background: "rgba(10, 10, 10, 1)", border: "rgba(255, 255, 255, 0.1)", shadow: "0px 0px 0px rgba(0, 0, 0, 0)", blur: 0 };
 const settingsEl = () => document.querySelector<HTMLElement>("[data-settings-view]");
 const profilesEl = () => document.querySelector<HTMLElement>("[data-profiles-view]");
@@ -64,14 +64,14 @@ function lastRepo(): string {
   }
 }
 
-/** 画面の言語を決め、エンジン（エラーや知らせの文）にも同じ言語を伝える */
+/** Set the UI language and tell the engine to use it too (for error and notice text) */
 function applyLang(setting: AppSettings["language"] | undefined) {
   const lang = resolveLang(setting);
   setLang(lang);
   if (inTauri) void api.setUiLang(lang).catch(() => {});
 }
 
-/** ターンの途中に送った指示 */
+/** Instruction sent mid-turn */
 export interface Queued {
   key: string;
   text: string;
@@ -79,11 +79,11 @@ export interface Queued {
 }
 let queueSeq = 0;
 
-/** エンジンの出来事の受け口（開発中に store が読み直されても、窓に 1 つだけにする） */
+/** Engine event listener (only one per window, even if the store is reloaded during development) */
 const engineListener = ((globalThis as { __plyfoldEngineListener?: { current: Promise<() => void> | null } }).__plyfoldEngineListener ??= { current: null });
 let initStarted = false;
 
-// ペインの並べ方と、ペインに出していたセッション（起動したときに戻す）
+// Pane layout and the sessions shown in panes (restored at launch)
 const LAYOUT_KEY = "plyfold.layout";
 export interface Layout {
   panes: (string | null)[];
@@ -108,7 +108,7 @@ export interface Split {
 export const EVEN_SPLIT: Split = { x: 0.5, y: 0.5 };
 const clampSplit = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.min(0.85, Math.max(0.15, v)) : 0.5);
 
-/** 覚えておいた並べ方を、今あるセッションに合わせて戻す（消えたセッションと下書きは空のペインにする） */
+/** Restore the saved layout against current sessions (deleted sessions and drafts become empty panes) */
 export function restoreLayout(saved: unknown, exists: (id: string) => boolean): Layout | null {
   if (!saved || typeof saved !== "object") return null;
   const o = saved as Partial<Layout>;
@@ -142,11 +142,11 @@ interface State {
   focusedPane: number;
   searchOpen: boolean;
   labOpen: boolean;
-  /** 分離アニメーションの型（動きの調整で選ぶ） */
+  /** Separation animation style (chosen in the motion lab) */
   liquidStyle: LiquidStyle;
-  /** 検索カードの分離アニメーションが動いているか（サイドバーを実体より手前に出す） */
+  /** Whether the search card's separation animation is running (raises the sidebar above the blob) */
   searchLayerActive: boolean;
-  /** 分離アニメーションの「大きさの遅れ」（秒） */
+  /** Separation animation size lag (seconds) */
   liquidLag: number;
   ready: boolean;
 
@@ -161,30 +161,30 @@ interface State {
   setSidebarWidth: (px: number) => void;
   /** True while the sidebar edge is being dragged (the width follows the pointer instead of springing) */
   sidebarResizing: boolean;
-  /** from を渡すと、その出発点から分離アニメーションで開く */
+  /** With from, opens with a separation animation from that anchor */
   openInPane: (id: string, pane?: number, from?: string) => Promise<void>;
-  /** 新しいセッションの下書きを、空いているペインに開く */
+  /** Open a new session draft in a free pane */
   newDraft: () => void;
-  /** 直近 30 日の、プロファイルごとの使用状況（新しいセッションの画面に出す）。未取得なら null */
+  /** Per-profile usage over the last 30 days (shown on the new session screen). null until fetched */
   usage: ProfileUsage[] | null;
   loadUsage: () => Promise<void>;
   updateDraft: (id: string, patch: Partial<Draft>) => void;
-  /** 下書きを本物のセッションとして始める（同じペインのまま入れ替わる） */
+  /** Start a draft as a real session (swapped in place in the same pane) */
   startDraft: (id: string, prompt: string, attachments?: Attached[]) => Promise<void>;
   closePane: (pane: number) => void;
-  /** 差分の画面。closing のあいだは、縮む動きのために画面を残しておく */
+  /** Diff screen. Kept mounted while closing so it can shrink away */
   diff: { id: string; closing: boolean } | null;
   openDiff: (id: string) => void;
-  /** worktree を操作したら増やす（ペインの差分の数を取り直すため） */
+  /** Bumped after worktree operations (so panes refetch their diff counts) */
   diffVersion: number;
   bumpDiff: () => void;
   closeDiff: () => void;
-  /** プロファイルの画面（差分と同じく、閉じる動きのあいだは残す） */
+  /** Profiles screen (kept mounted during the close animation, like the diff screen) */
   profilesView: { closing: boolean } | null;
   settingsView: { closing: boolean } | null;
-  /** プロファイルごとの、前回のセッションの設定項目（下書きで使う） */
+  /** Per-profile config options from the last session (used by drafts) */
   infoCache: InfoCache;
-  /** 見ていないあいだにターンが終わったセッション（ペインで開くと消える）。値は終わった時刻 */
+  /** Sessions whose turn finished while unseen (cleared when opened in a pane). Value is the finish time */
   unread: Record<string, { at: number; error: boolean }>;
   openSettings: () => void;
   closeSettings: () => void;
@@ -202,20 +202,20 @@ interface State {
   setLiquidLag: (v: number) => void;
   startSession: (args: { profile: string; repo: string; title: string; worktree: boolean; prompt?: string }) => Promise<void>;
   sendPrompt: (id: string, text: string, attachments?: Attached[]) => Promise<void>;
-  /** ターンの途中に送った指示（ターンが終わったら先頭から順に送る） */
+  /** Instructions sent mid-turn (sent in order once the turn ends) */
   queues: Record<string, Queued[]>;
   enqueue: (id: string, text: string, attachments: Attached[]) => void;
   unqueue: (id: string, key: string) => void;
-  /** キューの先頭を今すぐ送る（ターンの途中なら何もしない） */
+  /** Send the head of the queue now (no-op mid-turn) */
   sendQueued: (id: string) => void;
   cancel: (id: string) => Promise<void>;
   respondPermission: (id: string, optionId: string | null) => Promise<void>;
   setCategory: (id: string, category: Category, value: string) => Promise<void>;
   reopen: (id: string) => Promise<void>;
   renameSession: (id: string, title: string) => Promise<void>;
-  /** エージェントを止める（記録と worktree は残る） */
+  /** Stop the agent (the log and worktree remain) */
   stopSession: (id: string) => Promise<void>;
-  /** 記録ごと消す。removeWorktree なら worktree と枝も消す */
+  /** Delete along with the log. With removeWorktree, also delete the worktree and branch */
   removeSession: (id: string, removeWorktree: boolean) => Promise<void>;
 }
 
@@ -229,7 +229,7 @@ const newView = (record: SessionRecord): SessionView => ({
   pending: {},
 });
 
-/** 起動した直後に、選んでおいた model / effort / mode を設定する（同じ値なら送らない） */
+/** Right after start, apply the preselected model / effort / mode (skipped if unchanged) */
 async function applyChoices(id: string, choices: Partial<Record<Category, string>>) {
   const wanted = Object.entries(choices) as [Category, string][];
   if (wanted.length === 0) return;
@@ -239,14 +239,14 @@ async function applyChoices(id: string, choices: Partial<Record<Category, string
     const cur = cat === "mode" ? (opt?.current ?? info?.current_mode) : opt?.current;
     if (cur === value) continue;
     await api.setByCategory(id, cat, value).catch(() => {
-      // 候補が変わっていた場合などは、エージェントの既定のまま始める
+      // If the options changed, start with the agent's defaults
     });
   }
 }
 
 const RUNNING: SessionStatus[] = ["idle", "working", "awaiting_permission", "stalled"];
 
-/** エンジンのイベントを状態に反映する（副作用なし） */
+/** Apply an engine event to the state (pure) */
 export function reduceEvent(sessions: Record<string, SessionView>, e: EngineEvent): Record<string, SessionView> {
   if (e.type === "session_created") {
     return { ...sessions, [e.session.id]: { ...newView(e.session), historyLoaded: true } };
@@ -312,22 +312,22 @@ export const useStore = create<State>((set, get) => ({
   ready: false,
 
   init: async () => {
-    // StrictMode は開発中に効果を 2 回走らせる。ready は読み込みの後に立つので、始めた時点で印を付ける
+    // StrictMode runs effects twice in development. ready is set only after loading, so mark it as started up front
     if (!inTauri || get().ready || initStarted) return;
     initStarted = true;
-    // 受け口は窓に 1 つだけ。開発中に store が読み直されたら、前の受け口を外す
-    // （2 つあると、同じ出来事が 2 回入り、発言の文字が 2 重になる）
+    // Only one listener per window. If the store is reloaded during development, remove the old one
+    // (with two, every event arrives twice and message text gets doubled)
     const prev = engineListener.current;
     const next = onEngineEvent((e) => {
-      // ターンが終わったら、積んでおいた指示を送る（中断やエラーで終わったときは送らず、待たせたままにする）
+      // When a turn ends, send queued instructions (not after a cancel or error; they stay queued)
       if (e.type === "turn_ended" && !e.error && e.stop_reason !== "cancelled") queueMicrotask(() => get().sendQueued(e.session_id));
       set((s) => {
         const sessions = reduceEvent(s.sessions, e);
-        // アプリを見ていないときは、macOS の通知も出す
+        // Also post a macOS notification when the app isn't in focus
         const title = s.sessions[(e as { session_id?: string }).session_id ?? ""]?.record.title ?? t("store.fallbackTitle");
         if (e.type === "permission_requested") notify(title, t("store.notifyPermission"));
         if (e.type === "turn_ended") notify(title, e.error ? t("store.notifyError", { error: e.error }) : t("store.notifyTurnEnded"));
-        // 画面に出ていないセッション（またはアプリを見ていないとき）のターンの終わりは、通知に残す
+        // Record turn ends as notifications for sessions not on screen (or when the app isn't in focus)
         if (e.type === "turn_ended") {
           const shown = s.panes.slice(0, s.paneCount).includes(e.session_id) && document.hasFocus();
           if (!shown) return { sessions, unread: { ...s.unread, [e.session_id]: { at: Date.now(), error: !!e.error } } };
@@ -341,7 +341,7 @@ export const useStore = create<State>((set, get) => ({
     const [profiles, records, sv] = await Promise.all([api.listProfiles(), api.listSessions(), api.getSettings()]);
     const sessions: Record<string, SessionView> = {};
     for (const r of records) sessions[r.id] = newView(r);
-    // 前回の並べ方と、ペインに出していたセッションを戻す（分離アニメーションは付けない）
+    // Restore the previous layout and the sessions shown in panes (without separation animations)
     const layout = restoreLayout(readLayout(), (id) => !!sessions[id]);
     applyLang(sv.settings.language);
     set({ profiles, sessions, settings: sv.settings, ready: true, ...(layout ?? {}) });
@@ -368,9 +368,9 @@ export const useStore = create<State>((set, get) => ({
       const panes = [...s.panes];
       const displaced = panes[target];
       panes[target] = id;
-      // 入れ替えられたセッションは、ペインから縮んで元の場所（サイドバーの行）の裏へ戻る
+      // A replaced session shrinks out of the pane back behind where it came from (its sidebar row)
       if (displaced) liquidCloseFrom(`pane-${target}-out`, { anchor: anchorOf(displaced), target: () => paneEl(target), toLook: PANE_LOOK });
-      // 入れ替えのときは、戻る動きが出たのを見てから飛び出す（すれ違いを少しずらす）
+      // When replacing, wait for the return animation to start before emerging (staggers the crossover slightly)
       if (from) liquidOpen(`pane-${target}`, { anchor: from, target: () => paneEl(target), toLook: PANE_LOOK, delay: displaced ? 140 : 0 });
       const drafts = { ...s.drafts };
       if (isDraft(displaced)) delete drafts[displaced!];
@@ -381,7 +381,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   openDiff: (id) => {
-    // 差分の画面は、ペインの差分の数（+12 −3）から飛び出して広がる
+    // The diff screen expands out of the pane's diff count (+12 −3)
     liquidOpen("diff", { cover: true, anchor: `diff:${id}`, target: diffEl, toLook: PANE_LOOK });
     set({ diff: { id, closing: false } });
   },
@@ -448,7 +448,7 @@ export const useStore = create<State>((set, get) => ({
 
   closePane: (pane) => {
     const id = get().panes[pane];
-    // 閉じるときは、ペインから縮んで出発点（サイドバーの行）の裏へ戻る
+    // On close, shrink out of the pane back behind the anchor (the sidebar row)
     if (id) liquidCloseFrom(`pane-${pane}`, { anchor: anchorOf(id), target: () => paneEl(pane), toLook: PANE_LOOK });
     set((s) => {
       const panes = [...s.panes];
@@ -477,7 +477,7 @@ export const useStore = create<State>((set, get) => ({
     try {
       set({ usage: await api.usageSummary(30) });
     } catch {
-      // 数えられなくても、新しいセッションは始められる
+      // New sessions can start even if counting fails
     }
   },
 
@@ -499,11 +499,11 @@ export const useStore = create<State>((set, get) => ({
       try {
         localStorage.setItem(LAST_REPO_KEY, d.repo);
       } catch {
-        // 保存できなくても続ける
+        // Continue even if saving fails
       }
       const title = prompt.trim().split("\n")[0].slice(0, 40) || t("store.newSessionTitle");
       const rec = await api.startSession({ profile: d.profile, repo: d.repo, title, worktree: d.worktree });
-      // 下書きで選んだ model / effort / mode を、最初のプロンプトの前に設定する
+      // Apply the model / effort / mode chosen in the draft before the first prompt
       await applyChoices(rec.id, d.choices);
       set((s) => {
         const panes = s.panes.map((p) => (p === id ? rec.id : p));
@@ -538,7 +538,7 @@ export const useStore = create<State>((set, get) => ({
       return { sessions: { ...s.sessions, [id]: { ...v, transcript: beginTurn(v.transcript, text, previews), lastError: null } } };
     });
     try {
-      // 止まっているセッションは、送る前に開き直す
+      // Reopen a stopped session before sending
       const status = get().sessions[id]?.record.status;
       if (status === "closed" || status === "error") {
         await api.reopenSession(id);
@@ -572,7 +572,7 @@ export const useStore = create<State>((set, get) => ({
 
   setCategory: async (id, category, value) => {
     const v = get().sessions[id];
-    // 動いていなければ覚えておき、次に起動した直後に設定する
+    // If not running, remember it and apply right after the next start
     if (v && !RUNNING.includes(v.record.status)) {
       set((s) => ({ sessions: { ...s.sessions, [id]: { ...s.sessions[id], pending: { ...s.sessions[id].pending, [category]: value } } } }));
       return;
@@ -596,7 +596,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   removeSession: async (id, removeWorktree) => {
-    // 開いているペインからは、閉じる動きで外す
+    // Remove it from any open pane with a close animation
     const pane = get().panes.slice(0, get().paneCount).indexOf(id);
     if (pane >= 0) get().closePane(pane);
     await api.deleteSession(id, removeWorktree);
@@ -610,7 +610,7 @@ export const useStore = create<State>((set, get) => ({
   },
 }));
 
-/** 止まっているセッションは、記録から会話を読み込む。設定項目もまだなら取りにいく */
+/** For a stopped session, load the conversation from the log, and fetch config options if missing */
 async function loadSession(id: string) {
   const v = useStore.getState().sessions[id];
   if (!v) return;
@@ -626,7 +626,7 @@ async function loadSession(id: string) {
   }
 }
 
-// 並べ方が変わったら覚えておく（下書きは残さない）
+// Persist the layout when it changes (drafts aren't kept)
 useStore.subscribe((st, prev) => {
   if (
     !st.ready ||
@@ -644,7 +644,7 @@ useStore.subscribe((st, prev) => {
   try {
     localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
   } catch {
-    // 保存できなくても動きには困らない
+    // Failing to save doesn't affect behavior
   }
 });
 
@@ -653,7 +653,7 @@ function firstFreePane(panes: (string | null)[], count: number, focused: number)
   return free >= 0 ? free : focused;
 }
 
-// セッションの設定項目が変わったら、プロファイルごとに覚えておく
+// When a session's config options change, remember them per profile
 useStore.subscribe((st, prev) => {
   if (st.sessions === prev.sessions) return;
   let next: InfoCache | null = null;

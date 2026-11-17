@@ -15,13 +15,13 @@ pub enum ErrorKind {
 }
 
 pub struct Ini {
-    // 自由に定義してよい
+    // define as you like
 }
 
 impl Ini {
     pub fn get(&self, section: &str, key: &str) -> Option<&str> {
         let _ = (section, key);
-        todo!("README.md の仕様どおりに実装する")
+        todo!("implement as specified in README.md")
     }
 
     pub fn sections(&self) -> Vec<&str> {

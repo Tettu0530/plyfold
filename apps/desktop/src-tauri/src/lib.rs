@@ -41,7 +41,7 @@ struct AppSettings {
     worktree_default: bool,
     /// Send key in the composer: "enter" (Enter sends, Shift+Enter inserts a newline) / "cmd_enter" (⌘Enter sends, Enter inserts a newline)
     send_key: String,
-    /// UI language: "auto" (the macOS language) / "ja" / "en"
+    /// UI language: "auto" (the macOS language) / "ja" / "en" / "zh"
     language: String,
     /// Sidebar density: "comfortable" (two lines per session) / "compact" (one line)
     sidebar_density: String,

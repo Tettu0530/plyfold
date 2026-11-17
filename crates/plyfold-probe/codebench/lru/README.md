@@ -1,14 +1,14 @@
 # lru
 
-LRU キャッシュ `LruCache` を `src/lib.rs` に実装してください。
+Implement an LRU cache, `LruCache`, in `src/lib.rs`.
 
 ```rust
-pub struct LruCache<K, V> { /* 自由 */ }
+pub struct LruCache<K, V> { /* up to you */ }
 
 impl<K: std::hash::Hash + Eq + Clone, V> LruCache<K, V> {
     pub fn new(capacity: usize) -> Self;
-    pub fn get(&mut self, key: &K) -> Option<&V>;     // 見つかったら「最近使った」扱いにする
-    pub fn peek(&self, key: &K) -> Option<&V>;        // 順序を変えない
+    pub fn get(&mut self, key: &K) -> Option<&V>;     // if found, mark it as most recently used
+    pub fn peek(&self, key: &K) -> Option<&V>;        // does not change the order
     pub fn put(&mut self, key: K, value: V) -> Option<V>;
     pub fn remove(&mut self, key: &K) -> Option<V>;
     pub fn len(&self) -> usize;
@@ -16,11 +16,11 @@ impl<K: std::hash::Hash + Eq + Clone, V> LruCache<K, V> {
 }
 ```
 
-## 仕様
+## Spec
 
 - `put`
-  - キーがすでにあれば、値を置き換えて古い値を返し、そのキーを「最近使った」扱いにする（件数は変わらない）
-  - キーがなければ追加して `None` を返す。容量を超える場合は、一番使われていないものを先に追い出す
-- `capacity` が 0 のときは何も保持しない（`put` は常に `None` を返し、`len` は 0）
-- `get`、`put`、`remove` は平均 O(1) にすること（大きな容量で大量の操作をするテストがある）
-- 外部クレートは使わない
+  - If the key already exists, replace the value, return the old value, and mark the key as most recently used (the count does not change)
+  - If the key does not exist, insert it and return `None`. If this would exceed the capacity, evict the least recently used entry first
+- With a `capacity` of 0, nothing is stored (`put` always returns `None` and `len` is 0)
+- `get`, `put` and `remove` must be O(1) on average (a test performs many operations with a large capacity)
+- Do not use external crates
