@@ -2,7 +2,7 @@
 // against its upstream, the commits on it, and the pull request. Fetch / push / pull and creating a PR from here.
 // The info refreshes when the pane opens, when a turn ends and after each action; opening the menu also fetches from the
 // remote if that hasn't happened for a while
-import { ArrowDown, ArrowUp, Check, CircleDot, ExternalLink, GitBranch, GitMerge, GitPullRequest, LoaderCircle, RefreshCw, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, CircleDot, ExternalLink, GitBranch, GitCompare, GitMerge, GitPullRequest, LoaderCircle, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useT } from "@/i18n";
@@ -57,7 +57,21 @@ export type GitState = ReturnType<typeof useGitInfo>;
 
 type Action = "fetch" | "push" | "pull" | "pr";
 
-export function GitPanel({ id, git, busy, worktree, title }: { id: string; git: GitState; busy: boolean; worktree: boolean; title: string }) {
+export function GitPanel({
+  id,
+  git,
+  busy,
+  worktree,
+  title,
+  onOpenDiff,
+}: {
+  id: string;
+  git: GitState;
+  busy: boolean;
+  worktree: boolean;
+  title: string;
+  onOpenDiff?: () => void;
+}) {
   const t = useT();
   const [running, setRunning] = useState<Action | null>(null);
   const [note, setNote] = useState<{ error: boolean; text: string } | null>(null);
@@ -152,6 +166,14 @@ export function GitPanel({ id, git, busy, worktree, title }: { id: string; git: 
         </span>
         {info.changed > 0 && <span className="text-xs text-muted-foreground">{t("pane.gitChanged", { count: info.changed })}</span>}
       </div>
+
+      {/* The worktree's changes (commit, merge and discard live there) */}
+      {worktree && onOpenDiff && (
+        <button type="button" onClick={onOpenDiff} className="flex h-7 w-fit items-center gap-1.5 rounded-md border border-input px-2 text-xs hover:bg-accent">
+          <GitCompare className="size-3.5" aria-hidden />
+          {t("pane.viewChanges")}
+        </button>
+      )}
 
       {/* Remote actions */}
       {info.remote_url && (

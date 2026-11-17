@@ -1,4 +1,4 @@
-import { Equal, KeyRound, ListChecks, PanelBottom, PanelRight, Plus, Search, Settings, Square } from "lucide-react";
+import { Equal, GitCompare, KeyRound, ListChecks, PanelBottom, PanelRight, Plus, Search, Settings, Square } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -85,6 +85,18 @@ export function SearchCard() {
         icon: <Square className="size-3.5" />,
         run: () => focusedId && void cancel(focusedId),
       },
+      // The focused session's changes (worktree sessions only)
+      ...(focusedId && sessions[focusedId]?.record.worktree_path
+        ? [
+            {
+              key: "diff",
+              label: t("pane.viewChanges"),
+              keys: keysOf(bindings.openDiff),
+              icon: <GitCompare className="size-3.5" />,
+              run: () => useStore.getState().openDiff(focusedId),
+            },
+          ]
+        : []),
       {
         key: "splitRight",
         label: t("pane.splitRight"),

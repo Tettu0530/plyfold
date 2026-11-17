@@ -1,4 +1,4 @@
-import { Square, TriangleAlert, X } from "lucide-react";
+import { GitCompare, Square, TriangleAlert, X } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
@@ -94,14 +94,27 @@ function SessionPane({ index }: { index: number }) {
   const cached = useStore((s) => (view ? s.infoCache[view.record.profile] : undefined));
 
   const status = view?.record.status;
-  // Refetch the worktree's diff count after every turn
+  // The worktree's change count: on every status change and after worktree actions, when the window comes back,
+  // and every few seconds while the agent works (it edits files mid-turn)
+  const hasWorktree = !!view?.record.worktree_path;
+  const busyNow = status === "working" || status === "awaiting_permission" || status === "stalled";
   useEffect(() => {
-    if (!id || !view?.record.worktree_path || (status !== "idle" && status !== "closed")) return;
-    api
-      .sessionDiff(id)
-      .then((d) => setDiffStat({ added: d.files.reduce((a, f) => a + f.added, 0), removed: d.files.reduce((a, f) => a + f.removed, 0) }))
-      .catch(() => setDiffStat(null));
-  }, [id, status, view?.record.worktree_path, diffVersion]);
+    if (!id || !hasWorktree) return;
+    let alive = true;
+    const refresh = () =>
+      api
+        .sessionDiff(id)
+        .then((d) => alive && setDiffStat({ added: d.files.reduce((a, f) => a + f.added, 0), removed: d.files.reduce((a, f) => a + f.removed, 0) }))
+        .catch(() => alive && setDiffStat(null));
+    void refresh();
+    window.addEventListener("focus", refresh);
+    const timer = busyNow ? setInterval(refresh, 5000) : undefined;
+    return () => {
+      alive = false;
+      window.removeEventListener("focus", refresh);
+      if (timer) clearInterval(timer);
+    };
+  }, [id, status, hasWorktree, busyNow, diffVersion]);
 
   if (!id || !view) return <EmptyPane index={index} />;
   const r = view.record;
@@ -155,10 +168,12 @@ function SessionPane({ index }: { index: number }) {
               title={r.title}
             />
           </span>
-          {diffStat && diffStat.added + diffStat.removed > 0 && (
+          {/* Changes view: always here for a worktree session; shows +added −removed once there are changes */}
+          {r.worktree_path && (
             <button
               ref={liquidAnchor(`diff:${id}`)}
               type="button"
+              aria-label={t("pane.openDiff", { branch: r.branch ?? "" })}
               title={t("pane.openDiff", { branch: r.branch ?? "" })}
               onClick={() => openDiff(id)}
               className={cn(
@@ -167,8 +182,14 @@ function SessionPane({ index }: { index: number }) {
                 diffActive && "z-[57]",
               )}
             >
-              <span className="text-working">+{diffStat.added}</span>
-              <span className="text-error">−{diffStat.removed}</span>
+              {diffStat && diffStat.added + diffStat.removed > 0 ? (
+                <>
+                  <span className="text-working">+{diffStat.added}</span>
+                  <span className="text-error">−{diffStat.removed}</span>
+                </>
+              ) : (
+                <GitCompare className="size-3.5 text-muted-foreground" aria-hidden />
+              )}
             </button>
           )}
           {working && (

@@ -91,4 +91,5 @@ export const pane: Record<keyof typeof source, string> = {
   gitUnpushed: "尚未推送",
   previewNew: "新建浏览器",
   previewStart: "在上方输入 URL 即可打开",
+  viewChanges: "查看更改",
 };

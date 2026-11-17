@@ -69,6 +69,11 @@ function useShortcuts() {
         zoomIn: () => zoom(1),
         zoomOut: () => zoom(-1),
         zoomReset: () => void s.saveSettings({ ui_scale: 100 }).catch(() => {}),
+        // The focused session's changes (worktree sessions only)
+        openDiff: () => {
+          const id = s.panes[s.focusedPane];
+          if (id && s.sessions[id]?.record.worktree_path) s.openDiff(id);
+        },
       };
       run[action]();
     };

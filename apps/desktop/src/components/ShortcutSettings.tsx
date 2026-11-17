@@ -26,6 +26,7 @@ const LABEL: Record<Action, MessageKey> = {
   zoomIn: "settings.kbZoomIn",
   zoomOut: "settings.kbZoomOut",
   zoomReset: "settings.kbZoomReset",
+  openDiff: "settings.kbOpenDiff",
 };
 
 export function ShortcutSettings({ onError }: { onError: (e: string) => void }) {

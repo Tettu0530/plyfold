@@ -255,9 +255,23 @@ export function PaneTools({
           }
           width="w-[26rem]"
         >
-          <GitPanel id={scope} git={git} busy={busy} worktree={isWorktree} title={title} />
+          <GitPanelInMenu id={scope} git={git} busy={busy} worktree={isWorktree} title={title} />
         </ToolButton>
       )}
     </>
+  );
+}
+
+/** The Git panel inside its menu: "View changes" closes the menu, then opens the changes view */
+function GitPanelInMenu(props: Omit<React.ComponentProps<typeof GitPanel>, "onOpenDiff">) {
+  const close = useContext(CloseMenu);
+  return (
+    <GitPanel
+      {...props}
+      onOpenDiff={() => {
+        close();
+        useStore.getState().openDiff(props.id);
+      }}
+    />
   );
 }

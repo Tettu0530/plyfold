@@ -89,4 +89,5 @@ export const pane = {
   gitUnpushed: "まだ push していません",
   previewNew: "新しいブラウザ",
   previewStart: "上の欄に URL を入れると開きます",
+  viewChanges: "変更を見る",
 } satisfies Record<string, string>;

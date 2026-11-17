@@ -106,4 +106,5 @@ export const settings: Record<keyof typeof source, string> = {
   infoIssues: "Report an issue",
   infoAgents: "Agents",
   infoAgentsDetail: "Each agent runs as an ACP server started with the command below. You can change them in the profile config file",
+  kbOpenDiff: "View changes",
 };

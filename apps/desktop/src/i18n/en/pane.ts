@@ -91,4 +91,5 @@ export const pane: Record<keyof typeof source, string> = {
   gitUnpushed: "Not pushed yet",
   previewNew: "New browser",
   previewStart: "Type a URL in the field above to open it",
+  viewChanges: "View changes",
 };
