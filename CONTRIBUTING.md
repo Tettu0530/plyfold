@@ -123,7 +123,7 @@ It also works inside `#[error(...)]` for `thiserror`. Developer-only output (log
 - Follow [.claude/skills/no-ai-slop-ui/SKILL.md](.claude/skills/no-ai-slop-ui/SKILL.md): shadcn/ui tokens only, color only for status and diffs, lucide icons, no emoji, no gradients or glow, numbers in tabular figures. It ends with a checklist; go through it before submitting UI changes.
 - Status is never shown by color alone. Pair it with its icon and a word.
 - Animations use the springs in [apps/desktop/src/components/motion.ts](apps/desktop/src/components/motion.ts) and the separation components in [apps/desktop/src/components/liquid/](apps/desktop/src/components/liquid/). Don't add ad hoc spring values or easing curves. Everything has to respect Reduce motion.
-- The Motion lab (Settings, Motion) is the place to try animation changes.
+- The Motion lab (Settings, Motion; only in development builds, `npm run tauri dev`) is the place to try animation changes.
 
 ### Rust
 

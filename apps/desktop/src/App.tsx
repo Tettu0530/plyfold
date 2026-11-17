@@ -1,6 +1,6 @@
 import { PanelLeft } from "lucide-react";
 import { motion, MotionConfig } from "motion/react";
-import { useEffect } from "react";
+import { Suspense, lazy, useEffect } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { GooDefs } from "./components/liquid/liquid";
@@ -10,7 +10,6 @@ import { ImagePreview } from "./components/ImagePreview";
 import { ProfilesView } from "./components/ProfilesView";
 import { Notifications } from "./components/Notifications";
 import { SettingsView } from "./components/SettingsView";
-import { MotionLab } from "./components/MotionLab";
 import { PaneGrid } from "./components/pane/PaneGrid";
 import { SearchCard } from "./components/SearchCard";
 import { Sidebar } from "./components/Sidebar";
@@ -28,6 +27,10 @@ import { BrowserButton } from "./components/BrowserButton";
 import { PlyfoldMark } from "./components/Logo";
 import { isMac, primaryKey } from "./lib/platform";
 import { cn } from "./lib/utils";
+
+// The Motion lab (tuning springs and the liquid motion) is a development tool: only in `npm run tauri dev` builds,
+// and left out of release bundles entirely
+const MotionLab = import.meta.env.DEV ? lazy(() => import("./components/MotionLab").then((m) => ({ default: m.MotionLab }))) : null;
 
 function useShortcuts() {
   useEffect(() => {
@@ -156,7 +159,11 @@ export default function App() {
         <SearchCard />
         <ImagePreview />
         <DragLayer />
-        <MotionLab />
+        {MotionLab && (
+          <Suspense fallback={null}>
+            <MotionLab />
+          </Suspense>
+        )}
       </TooltipProvider>
     </MotionConfig>
   );
