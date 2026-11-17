@@ -23,8 +23,22 @@ function EmptyPane({ index }: { index: number }) {
   const t = useT();
   const newDraft = useStore((s) => s.newDraft);
   const focusPane = useStore((s) => s.focusPane);
+  const removePane = useStore((s) => s.removePane);
+  // The last pane can't be removed (there is always at least one)
+  const removable = useStore((s) => s.paneCount > 1);
   return (
-    <section aria-label={t("pane.emptyLabel", { n: index + 1 })} className="flex min-w-0 flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
+    <section aria-label={t("pane.emptyLabel", { n: index + 1 })} onMouseDown={() => focusPane(index)} className="relative flex min-w-0 flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
+      {removable && (
+        <button
+          type="button"
+          aria-label={t("pane.removePane")}
+          title={t("pane.removePane")}
+          onClick={() => removePane(index)}
+          className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-md hover:bg-accent hover:text-foreground"
+        >
+          <X className="size-3.5" aria-hidden />
+        </button>
+      )}
       <p>{t("pane.emptyHint")}</p>
       <button
         type="button"
@@ -86,12 +100,13 @@ function SessionPane({ index }: { index: number }) {
     <section
       aria-label={t("pane.label", { n: index + 1, title: r.title })}
       onMouseDown={() => focusPane(index)}
-      className={cn("flex min-w-0 flex-col", focused && "bg-white/[0.01]")}
+      // A container, so the header can drop its tool buttons when the pane is narrow
+      className={cn("@container flex min-w-0 flex-col", focused && "bg-white/[0.01]")}
     >
       <div className="flex h-9 shrink-0 items-center gap-2 border-b pr-1.5 pl-3">
         <StatusIcon status={r.status} />
         <PaneTitle id={id} title={r.title} />
-        <span title={t("pane.profileTitle", { agent: r.agent, profile: r.profile })} className="flex items-center gap-1 text-xs whitespace-nowrap text-muted-foreground">
+        <span title={t("pane.profileTitle", { agent: r.agent, profile: r.profile })} className="hidden items-center gap-1 text-xs whitespace-nowrap text-muted-foreground @[22rem]:flex">
           <ProviderLogo agent={r.agent} className="size-3" />
           {r.profile === r.agent ? "default" : r.profile}
         </span>
@@ -102,7 +117,9 @@ function SessionPane({ index }: { index: number }) {
           </span>
         )}
         <span className="grow" />
-        <PaneTools scope={id} items={view.transcript.items} worktree={r.worktree_path ?? r.repo_path} alive={r.status !== "closed" && r.status !== "error"} />
+        <span className="hidden items-center gap-2 @[30rem]:flex">
+          <PaneTools scope={id} items={view.transcript.items} worktree={r.worktree_path ?? r.repo_path} alive={r.status !== "closed" && r.status !== "error"} />
+        </span>
         {diffStat && diffStat.added + diffStat.removed > 0 && (
           <button
             ref={liquidAnchor(`diff:${id}`)}

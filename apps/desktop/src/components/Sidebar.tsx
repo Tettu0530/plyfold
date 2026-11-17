@@ -5,7 +5,7 @@ import { useMemo, useRef, useState } from "react";
 import { age, repoName } from "@/lib/format";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
-import { SIDEBAR_DEFAULT, SIDEBAR_MIN, useStore } from "@/state/store";
+import { SIDEBAR_DEFAULT, SIDEBAR_MIN, useStore, visibleSessions } from "@/state/store";
 import { ProviderLogo, STATUS, StatusIcon } from "./icons";
 import { Keys } from "./Keys";
 import { SessionMenu } from "./SessionMenu";
@@ -18,7 +18,7 @@ export function Sidebar() {
   const t = useT();
   const sessions = useStore((s) => s.sessions);
   const panes = useStore((s) => s.panes);
-  const paneCount = useStore((s) => s.paneCount);
+  const layout = useStore((s) => s.layout);
   const openInPane = useStore((s) => s.openInPane);
   const setSearchOpen = useStore((s) => s.setSearchOpen);
   const newDraft = useStore((s) => s.newDraft);
@@ -52,7 +52,7 @@ export function Sidebar() {
     return [...byRepo.entries()];
   }, [sessions]);
 
-  const open = new Set(panes.slice(0, paneCount).filter(Boolean));
+  const open = new Set(visibleSessions({ panes, layout }).filter(Boolean));
 
   return (
     <nav aria-label={t("sidebar.label")} style={{ width: sidebarWidth }} className="relative flex shrink-0 flex-col border-r bg-sidebar">

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { SessionInfo, SessionRecord } from "@/lib/types";
+import { preset } from "./layout";
 import { reduceEvent, restoreLayout, type SessionView } from "./store";
 
 const record: SessionRecord = {
@@ -68,19 +69,22 @@ describe("reduceEvent", () => {
 
 describe("restoreLayout", () => {
   it("keeps sessions that still exist and drops drafts and removed ones", () => {
-    const l = restoreLayout({ panes: ["a", "gone", "draft:1", "b"], paneCount: 4, focusedPane: 3 }, (id) => id === "a" || id === "b");
-    expect(l).toEqual({ panes: ["a", null, null, "b"], paneCount: 4, focusedPane: 3, split: { x: 0.5, y: 0.5 }, sidebarOpen: true, sidebarWidth: 240 });
+    const l = restoreLayout({ panes: ["a", "gone", "draft:1", "b"], layout: preset(4), focusedPane: 3 }, (id) => id === "a" || id === "b");
+    expect(l?.panes).toEqual(["a", null, null, "b"]);
+    expect(l?.layout).toEqual(preset(4));
+    expect(l?.focusedPane).toBe(3);
+    expect(l?.sidebarOpen).toBe(true);
   });
 
-  it("rejects broken data and clamps the focused pane", () => {
+  it("reads older saves with a pane count, and rejects broken data", () => {
+    const old = restoreLayout({ panes: ["a", "b"], paneCount: 2, focusedPane: 1, sidebarOpen: false, sidebarWidth: 9999 }, () => true);
+    expect(old?.layout).toEqual(preset(2));
+    expect(old?.sidebarOpen).toBe(false);
+    expect(old?.sidebarWidth).toBe(420);
     expect(restoreLayout(null, () => true)).toBeNull();
     expect(restoreLayout({ panes: [], paneCount: 3 }, () => true)).toBeNull();
-    expect(restoreLayout({ panes: ["a"], paneCount: 1, focusedPane: 2 }, () => true)?.focusedPane).toBe(0);
-    // Split ratios are kept within bounds; a closed sidebar stays closed
-    const l = restoreLayout({ panes: [], paneCount: 2, split: { x: 0.99, y: "x" }, sidebarOpen: false }, () => true);
-    expect(l?.split).toEqual({ x: 0.85, y: 0.5 });
-    expect(l?.sidebarOpen).toBe(false);
-    expect(restoreLayout({ panes: [], paneCount: 2, sidebarWidth: 9999 }, () => true)?.sidebarWidth).toBe(420);
+    // A focused slot that is not shown falls back to the first pane
+    expect(restoreLayout({ panes: ["a"], layout: preset(1), focusedPane: 2 }, () => true)?.focusedPane).toBe(0);
   });
 });
 

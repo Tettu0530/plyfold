@@ -5,6 +5,7 @@ import { create } from "zustand";
 import type { Look, LiquidStyle } from "@/components/liquid/liquid";
 import { liquidCloseFrom, liquidOpen } from "@/components/liquid/stage";
 import type { Attached } from "@/lib/attachments";
+import { freeSlot, leaves, moveSlot, preset, removeSlot, setSizes, splitAt, swapSlots, validLayout, type Edge, type LayoutNode } from "./layout";
 import { resolveLang, setLang, t } from "@/i18n";
 import { api, inTauri, onEngineEvent } from "@/lib/api";
 import { notify } from "@/lib/notify";
@@ -95,11 +96,12 @@ let initStarted = false;
 // Pane layout and the sessions shown in panes (restored at launch)
 const LAYOUT_KEY = "plyfold.layout";
 export interface Layout {
+  /** Pane slots: what each slot shows (a session id), indexed by the leaves of `layout` */
   panes: (string | null)[];
-  paneCount: PaneCount;
+  /** The split tree (state/layout.ts) */
+  layout: LayoutNode;
+  /** The focused slot */
   focusedPane: number;
-  /** Where the panes are split: x is the left/right boundary, y the top/bottom one (0..1 of the pane area) */
-  split: Split;
   sidebarOpen: boolean;
   sidebarWidth: number;
 }
@@ -110,27 +112,26 @@ export const SIDEBAR_MAX = 420;
 export const SIDEBAR_DEFAULT = 240;
 const clampSidebar = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.round(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, v))) : SIDEBAR_DEFAULT);
 
-export interface Split {
-  x: number;
-  y: number;
-}
-export const EVEN_SPLIT: Split = { x: 0.5, y: 0.5 };
-const clampSplit = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.min(0.85, Math.max(0.15, v)) : 0.5);
+
 
 /** Restore the saved layout against current sessions (deleted sessions and drafts become empty panes) */
 export function restoreLayout(saved: unknown, exists: (id: string) => boolean): Layout | null {
   if (!saved || typeof saved !== "object") return null;
-  const o = saved as Partial<Layout>;
-  const paneCount = o.paneCount === 1 || o.paneCount === 2 || o.paneCount === 4 ? o.paneCount : null;
-  if (!paneCount || !Array.isArray(o.panes)) return null;
-  const panes = [0, 1, 2, 3].map((i) => {
+  const o = saved as Partial<Layout> & { paneCount?: unknown };
+  if (!Array.isArray(o.panes)) return null;
+  // Older saves had a pane count (1 / 2 / 4) instead of a tree
+  const legacy = o.paneCount === 1 || o.paneCount === 2 || o.paneCount === 4 ? preset(o.paneCount) : null;
+  const layout = validLayout(o.layout) ?? legacy;
+  if (!layout) return null;
+  const size = Math.max(4, ...leaves(layout).map((i) => i + 1));
+  const panes = Array.from({ length: size }, (_, i) => {
     const id = o.panes![i];
-    return typeof id === "string" && !isDraft(id) && exists(id) ? id : null;
+    return typeof id === "string" && !isDraft(id) && !isPreview(id) && exists(id) ? id : null;
   });
-  const focusedPane = typeof o.focusedPane === "number" && o.focusedPane >= 0 && o.focusedPane < paneCount ? o.focusedPane : 0;
-  const split = { x: clampSplit(o.split?.x), y: clampSplit(o.split?.y) };
+  const visible = leaves(layout);
+  const focusedPane = typeof o.focusedPane === "number" && visible.includes(o.focusedPane) ? o.focusedPane : visible[0];
   const sidebarOpen = o.sidebarOpen !== false;
-  return { panes, paneCount, focusedPane, split, sidebarOpen, sidebarWidth: clampSidebar(o.sidebarWidth) };
+  return { panes, layout, focusedPane, sidebarOpen, sidebarWidth: clampSidebar(o.sidebarWidth) };
 }
 
 function readLayout(): unknown {
@@ -151,7 +152,8 @@ interface State {
   setPreviewUrl: (id: string, url: string) => void;
   profiles: ProfileSummary[];
   panes: (string | null)[];
-  paneCount: PaneCount;
+  /** Number of panes the layout shows */
+  paneCount: number;
   focusedPane: number;
   searchOpen: boolean;
   labOpen: boolean;
@@ -165,9 +167,16 @@ interface State {
 
   init: () => Promise<void>;
   setPaneCount: (n: PaneCount) => void;
-  /** Pane split ratios (dragging the boundary between panes) */
-  split: Split;
-  setSplit: (patch: Partial<Split>) => void;
+  /** The pane layout (split tree); paneCount is the number of panes it shows */
+  layout: LayoutNode;
+  /** Resize the split at `path` (dragging a divider) */
+  setSplitSizes: (path: number[], sizes: number[]) => void;
+  /** Put a session (or nothing) in a new pane next to `target`. Returns the new slot */
+  splitPane: (target: number, edge: Edge, id: string | null, from?: string) => number;
+  /** Move a pane next to another one, or swap the two (edge "center") */
+  movePane: (slot: number, target: number, edge: Edge | "center") => void;
+  /** Remove a pane from the layout (its session stays in the sidebar) */
+  removePane: (slot: number) => void;
   sidebarOpen: boolean;
   toggleSidebar: () => void;
   sidebarWidth: number;
@@ -306,24 +315,21 @@ export const useStore = create<State>((set, get) => ({
     const s = get();
     const id = `preview:${Date.now()}`;
     set({ previews: { ...s.previews, [id]: { url, anchor } } });
-    // A free pane if there is one; otherwise one more pane (1 → 2 → 4); with four panes, the one after the focused pane
-    // Missing entries count as free too (the panes array may be shorter than the pane count)
-    const freeIn = (panes: (string | null)[], n: number) => Array.from({ length: n }, (_, i) => i).find((i) => !panes[i]) ?? -1;
-    let count = s.paneCount;
-    let target = freeIn(s.panes, count);
-    if (target < 0 && count < 4) {
-      count = count === 1 ? 2 : 4;
-      set({ paneCount: count });
-      target = freeIn(get().panes, count);
+    // An empty pane if there is one; otherwise a new pane to the right of the focused one
+    const empty = leaves(s.layout).find((i) => !s.panes[i]);
+    if (empty !== undefined) {
+      void get().openInPane(id, empty, anchor);
+      return;
     }
-    if (target < 0) target = (s.focusedPane + 1) % count;
-    void get().openInPane(id, target, anchor);
+    get().splitPane(s.focusedPane, "right", null);
+    const slot = leaves(get().layout).find((i) => !get().panes[i]);
+    if (slot !== undefined) void get().openInPane(id, slot, anchor);
   },
   setPreviewUrl: (id, url) => set((s) => (s.previews[id] ? { previews: { ...s.previews, [id]: { ...s.previews[id], url } } } : s)),
   profiles: [],
   panes: [null, null, null, null],
   paneCount: 2,
-  split: EVEN_SPLIT,
+  layout: preset(2),
   sidebarOpen: true,
   sidebarWidth: SIDEBAR_DEFAULT,
   sidebarResizing: false,
@@ -361,7 +367,7 @@ export const useStore = create<State>((set, get) => ({
         if (e.type === "turn_ended") notify(title, e.error ? t("store.notifyError", { error: e.error }) : t("store.notifyTurnEnded"));
         // Record turn ends as notifications for sessions not on screen (or when the app isn't in focus)
         if (e.type === "turn_ended") {
-          const shown = s.panes.slice(0, s.paneCount).includes(e.session_id) && document.hasFocus();
+          const shown = visibleSessions(s).includes(e.session_id) && document.hasFocus();
           if (!shown) return { sessions, unread: { ...s.unread, [e.session_id]: { at: Date.now(), error: !!e.error } } };
         }
         return { sessions };
@@ -376,12 +382,55 @@ export const useStore = create<State>((set, get) => ({
     // Restore the previous layout and the sessions shown in panes (without separation animations)
     const layout = restoreLayout(readLayout(), (id) => !!sessions[id]);
     applyLang(sv.settings.language);
-    set({ profiles, sessions, settings: sv.settings, ready: true, ...(layout ?? {}) });
+    set({ profiles, sessions, settings: sv.settings, ready: true, ...(layout ? { ...layout, paneCount: leaves(layout.layout).length } : {}) });
     for (const id of layout?.panes ?? []) if (id) void loadSession(id);
   },
 
-  setPaneCount: (paneCount) => set((s) => ({ paneCount, focusedPane: Math.min(s.focusedPane, paneCount - 1) })),
-  setSplit: (patch) => set((s) => ({ split: { x: clampSplit(patch.x ?? s.split.x), y: clampSplit(patch.y ?? s.split.y) } })),
+  // The 1 / 2 / 4 buttons: rebuild the layout as that preset, keeping the panes shown now (in order) first
+  setPaneCount: (paneCount) =>
+    set((s) => {
+      const shown = leaves(s.layout);
+      const others = s.panes.map((_, i) => i).filter((i) => !shown.includes(i));
+      while (shown.length + others.length < paneCount) others.push(shown.length + others.length);
+      const slots = [...shown, ...others].slice(0, paneCount);
+      const layout = preset(paneCount, slots);
+      const panes = [...s.panes];
+      while (panes.length <= Math.max(...slots)) panes.push(null);
+      return { layout, panes, paneCount, focusedPane: slots.includes(s.focusedPane) ? s.focusedPane : slots[0] };
+    }),
+  setSplitSizes: (path, sizes) => set((s) => ({ layout: setSizes(s.layout, path, sizes) })),
+  splitPane: (target, edge, id, from) => {
+    const s = get();
+    const slot = freeSlot(s.layout);
+    const panes = [...s.panes];
+    while (panes.length <= slot) panes.push(null);
+    // A slot that is not shown may still hold something from an earlier layout; it is replaced
+    panes[slot] = null;
+    const layout = splitAt(s.layout, target, edge, slot);
+    set({ layout, panes, paneCount: leaves(layout).length });
+    if (id) void get().openInPane(id, slot, from);
+    return slot;
+  },
+  movePane: (slot, target, edge) =>
+    set((s) => {
+      if (slot === target) return s;
+      const layout = edge === "center" ? swapSlots(s.layout, slot, target) : moveSlot(s.layout, slot, target, edge);
+      return { layout, paneCount: leaves(layout).length, focusedPane: slot };
+    }),
+  removePane: (slot) =>
+    set((s) => {
+      const layout = removeSlot(s.layout, slot);
+      if (!layout) return s;
+      const panes = [...s.panes];
+      const gone = panes[slot];
+      panes[slot] = null;
+      const drafts = { ...s.drafts };
+      if (isDraft(gone)) delete drafts[gone];
+      const previews = { ...s.previews };
+      if (isPreview(gone)) delete previews[gone];
+      const shown = leaves(layout);
+      return { layout, panes, drafts, previews, paneCount: shown.length, focusedPane: shown.includes(s.focusedPane) ? s.focusedPane : shown[0] };
+    }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setSidebarWidth: (px) => set({ sidebarWidth: clampSidebar(px) }),
 
@@ -392,12 +441,15 @@ export const useStore = create<State>((set, get) => ({
       set({ unread });
     }
     const s = get();
-    const already = s.panes.slice(0, s.paneCount).indexOf(id);
-    if (already >= 0) {
+    const already = leaves(s.layout).find((i) => s.panes[i] === id);
+    if (already !== undefined && (pane === undefined || pane === already)) {
       set({ focusedPane: already });
     } else {
-      const target = pane ?? firstFreePane(s.panes, s.paneCount, s.focusedPane);
-      const panes = [...s.panes];
+      // Moving a session that is already shown to another pane leaves its old pane empty
+      const base = already !== undefined ? s.panes.map((p, i) => (i === already ? null : p)) : s.panes;
+      const target = pane ?? firstFreePane(base, leaves(s.layout), s.focusedPane);
+      const panes = [...base];
+      while (panes.length <= target) panes.push(null);
       const displaced = panes[target];
       panes[target] = id;
       // A replaced session shrinks out of the pane back behind where it came from (its sidebar row)
@@ -633,8 +685,8 @@ export const useStore = create<State>((set, get) => ({
 
   removeSession: async (id, removeWorktree) => {
     // Remove it from any open pane with a close animation
-    const pane = get().panes.slice(0, get().paneCount).indexOf(id);
-    if (pane >= 0) get().closePane(pane);
+    const pane = leaves(get().layout).find((i) => get().panes[i] === id);
+    if (pane !== undefined) get().closePane(pane);
     await api.deleteSession(id, removeWorktree);
     set((s) => {
       const sessions = { ...s.sessions };
@@ -666,15 +718,14 @@ async function loadSession(id: string) {
 useStore.subscribe((st, prev) => {
   if (
     !st.ready ||
-    (st.panes === prev.panes && st.paneCount === prev.paneCount && st.focusedPane === prev.focusedPane && st.split === prev.split && st.sidebarOpen === prev.sidebarOpen && st.sidebarWidth === prev.sidebarWidth)
+    (st.panes === prev.panes && st.layout === prev.layout && st.focusedPane === prev.focusedPane && st.sidebarOpen === prev.sidebarOpen && st.sidebarWidth === prev.sidebarWidth)
   )
     return;
   const layout: Layout = {
     // Drafts and previews are not restored on the next launch
     panes: st.panes.map((p) => (isDraft(p) || isPreview(p) ? null : p)),
-    paneCount: st.paneCount,
+    layout: st.layout,
     focusedPane: st.focusedPane,
-    split: st.split,
     sidebarOpen: st.sidebarOpen,
     sidebarWidth: st.sidebarWidth,
   };
@@ -685,10 +736,13 @@ useStore.subscribe((st, prev) => {
   }
 });
 
-function firstFreePane(panes: (string | null)[], count: number, focused: number): number {
-  const free = panes.slice(0, count).indexOf(null);
-  return free >= 0 ? free : focused;
+/** The first empty pane in layout order, or the focused one */
+function firstFreePane(panes: (string | null)[], shown: number[], focused: number): number {
+  return shown.find((i) => !panes[i]) ?? focused;
 }
+
+/** Session ids shown in panes right now */
+export const visibleSessions = (s: { panes: (string | null)[]; layout: LayoutNode }) => leaves(s.layout).map((i) => s.panes[i]);
 
 // When a session's config options change, remember them per profile
 useStore.subscribe((st, prev) => {

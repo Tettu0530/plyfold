@@ -1,167 +1,160 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
-import { EVEN_SPLIT, useStore, type PaneCount, type Split } from "@/state/store";
-import { interactive, smooth } from "../motion";
+import { leaves, type LayoutNode } from "@/state/layout";
+import { useStore } from "@/state/store";
+import { smooth } from "../motion";
 import { Pane } from "./Pane";
 
-/** Panes never get narrower or shorter than this while dragging a boundary (px) */
-const MIN_WIDTH = 280;
-const MIN_HEIGHT = 200;
+/** Panes never get narrower or shorter than this while dragging a divider (px) */
+const MIN_WIDTH = 240;
+const MIN_HEIGHT = 160;
 
-interface Rect {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
-/** Layout per pane count (%), split at the given ratios */
-function rects(count: PaneCount, split: Split): Rect[] {
-  const x = split.x * 100;
-  const y = split.y * 100;
-  if (count === 1) return [{ left: 0, top: 0, width: 100, height: 100 }];
-  if (count === 2)
-    return [
-      { left: 0, top: 0, width: x, height: 100 },
-      { left: x, top: 0, width: 100 - x, height: 100 },
-    ];
-  return [
-    { left: 0, top: 0, width: x, height: y },
-    { left: x, top: 0, width: 100 - x, height: y },
-    { left: 0, top: y, width: x, height: 100 - y },
-    { left: x, top: y, width: 100 - x, height: 100 - y },
-  ];
-}
+/** Stable key for a child: its first slot (so a pane keeps its component while the tree around it changes) */
+const keyOf = (n: LayoutNode) => (n.kind === "leaf" ? `leaf-${n.slot}` : `split-${leaves(n)[0]}`);
 
 /**
- * The boundary between panes. Drag it to resize (the panes follow the pointer), double-click it to split evenly again,
- * or focus it and use the arrow keys
+ * The divider between children i-1 and i of a split. Drag it to move the boundary (only these two children change),
+ * double-click or press Enter to make them equal, or focus it and use the arrow keys
  */
-function Divider({ axis, value, area, onDragging }: { axis: "x" | "y"; value: number; area: React.RefObject<HTMLElement | null>; onDragging: (d: boolean) => void }) {
+function Divider({ path, index, axis, sizes, container, onDragging }: { path: number[]; index: number; axis: "row" | "column"; sizes: number[]; container: React.RefObject<HTMLElement | null>; onDragging: (d: boolean) => void }) {
   const t = useT();
-  const setSplit = useStore((s) => s.setSplit);
+  const setSplitSizes = useStore((s) => s.setSplitSizes);
   const [active, setActive] = useState(false);
-  // The drag flag is a ref so a move right after the press sees it (state would only update on the next render)
+  // A ref so a move right after the press sees it (state only updates on the next render)
   const dragging = useRef(false);
-  const vertical = axis === "x";
-  // Ratio from the pointer position, keeping both sides at least their minimum size
-  const ratioAt = (e: React.PointerEvent) => {
-    const r = area.current?.getBoundingClientRect();
-    if (!r) return value;
-    const size = vertical ? r.width : r.height;
-    const min = Math.min(0.45, (vertical ? MIN_WIDTH : MIN_HEIGHT) / size);
-    const v = ((vertical ? e.clientX - r.left : e.clientY - r.top) / size);
-    return Math.min(1 - min, Math.max(min, v));
+  const vertical = axis === "row";
+  const pair = sizes[index - 1] + sizes[index];
+  const setFirst = (first: number) => {
+    const next = [...sizes];
+    next[index - 1] = first;
+    next[index] = pair - first;
+    setSplitSizes(path, next);
   };
-  const pos = `${value * 100}%`;
+  const minFraction = () => {
+    const r = container.current?.getBoundingClientRect();
+    const size = r ? (vertical ? r.width : r.height) : 1000;
+    return Math.min(pair / 2, (vertical ? MIN_WIDTH : MIN_HEIGHT) / size);
+  };
+  const ratioAt = (e: React.PointerEvent) => {
+    const r = container.current?.getBoundingClientRect();
+    if (!r) return sizes[index - 1];
+    const size = vertical ? r.width : r.height;
+    const before = sizes.slice(0, index - 1).reduce((a, b) => a + b, 0);
+    const v = ((vertical ? e.clientX - r.left : e.clientY - r.top) / size) - before;
+    const min = minFraction();
+    return Math.min(pair - min, Math.max(min, v));
+  };
+  const end = () => {
+    dragging.current = false;
+    document.body.classList.remove("resizing");
+    setActive(false);
+    onDragging(false);
+  };
   return (
-    <motion.div
-      role="separator"
-      aria-orientation={vertical ? "vertical" : "horizontal"}
-      aria-label={t(vertical ? "pane.resizeWidth" : "pane.resizeHeight")}
-      aria-valuenow={Math.round(value * 100)}
-      aria-valuemin={15}
-      aria-valuemax={85}
-      title={t("pane.resizeHint")}
-      tabIndex={0}
-      animate={vertical ? { left: pos } : { top: pos }}
-      transition={active ? { duration: 0 } : smooth}
-      onPointerDown={(e) => {
-        // Don't start a text selection (it would select the panes' text while dragging)
-        e.preventDefault();
-        try {
-          e.currentTarget.setPointerCapture(e.pointerId);
-        } catch {
-          // Synthetic events have no capturable pointer; dragging still works while the pointer stays over the boundary
-        }
-        dragging.current = true;
-        document.body.classList.add("resizing");
-        setActive(true);
-        onDragging(true);
-      }}
-      onPointerMove={(e) => {
-        if (dragging.current) setSplit({ [axis]: ratioAt(e) });
-      }}
-      onPointerUp={() => {
-        dragging.current = false;
-        document.body.classList.remove("resizing");
-        setActive(false);
-        onDragging(false);
-      }}
-      onPointerCancel={() => {
-        dragging.current = false;
-        document.body.classList.remove("resizing");
-        setActive(false);
-        onDragging(false);
-      }}
-      onDoubleClick={() => setSplit({ [axis]: EVEN_SPLIT[axis] })}
-      onKeyDown={(e) => {
-        const step = e.shiftKey ? 0.1 : 0.02;
-        const dir: Record<string, number> = vertical ? { ArrowLeft: -1, ArrowRight: 1 } : { ArrowUp: -1, ArrowDown: 1 };
-        const d = dir[e.key];
-        if (d) {
+    <div className={cn("relative z-10 shrink-0", vertical ? "w-0" : "h-0")}>
+      <div
+        role="separator"
+        aria-orientation={vertical ? "vertical" : "horizontal"}
+        aria-label={t(vertical ? "pane.resizeWidth" : "pane.resizeHeight")}
+        aria-valuenow={Math.round((sizes[index - 1] / pair) * 100)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        title={t("pane.resizeHint")}
+        tabIndex={0}
+        onPointerDown={(e) => {
+          // Don't start a text selection (it would select the panes' text while dragging)
           e.preventDefault();
-          setSplit({ [axis]: value + d * step });
-        } else if (e.key === "Enter") setSplit({ [axis]: EVEN_SPLIT[axis] });
-      }}
-      className={cn(
-        "group absolute z-10 flex items-center justify-center outline-none",
-        vertical ? "top-0 bottom-0 -ml-1 w-2 cursor-col-resize" : "right-0 left-0 -mt-1 h-2 cursor-row-resize",
-      )}
-    >
-      {/* A thin line that shows on hover, focus and while dragging (the pane borders draw the resting line) */}
-      <span
-        aria-hidden
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {
+            // Synthetic events have no capturable pointer
+          }
+          dragging.current = true;
+          document.body.classList.add("resizing");
+          setActive(true);
+          onDragging(true);
+        }}
+        onPointerMove={(e) => {
+          if (dragging.current) setFirst(ratioAt(e));
+        }}
+        onPointerUp={end}
+        onPointerCancel={end}
+        onDoubleClick={() => setFirst(pair / 2)}
+        onKeyDown={(e) => {
+          const step = (e.shiftKey ? 0.1 : 0.02) * pair;
+          const dir: Record<string, number> = vertical ? { ArrowLeft: -1, ArrowRight: 1 } : { ArrowUp: -1, ArrowDown: 1 };
+          const d = dir[e.key];
+          if (d) {
+            e.preventDefault();
+            const min = minFraction();
+            setFirst(Math.min(pair - min, Math.max(min, sizes[index - 1] + d * step)));
+          } else if (e.key === "Enter") setFirst(pair / 2);
+        }}
         className={cn(
-          "rounded-full bg-foreground/25 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100",
-          vertical ? "h-full w-0.5" : "h-0.5 w-full",
-          active && "opacity-100",
+          "group absolute flex items-center justify-center outline-none",
+          vertical ? "inset-y-0 -left-1 w-2 cursor-col-resize" : "inset-x-0 -top-1 h-2 cursor-row-resize",
         )}
-      />
-    </motion.div>
+      >
+        {/* A thin line that shows on hover, focus and while dragging (the pane borders draw the resting line) */}
+        <span
+          aria-hidden
+          className={cn(
+            "rounded-full bg-foreground/25 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100",
+            vertical ? "h-full w-0.5" : "h-0.5 w-full",
+            active && "opacity-100",
+          )}
+        />
+      </div>
+    </div>
   );
 }
 
-/** Shape before appearing / after disappearing. Top row shrinks to the right edge, bottom row to the bottom edge */
-const collapsed = (r: Rect): Rect => (r.top > 0 ? { ...r, top: 100, height: 0 } : { ...r, left: 100, width: 0 });
-
-const pct = (r: Rect) => ({ left: `${r.left}%`, top: `${r.top}%`, width: `${r.width}%`, height: `${r.height}%` });
-
 /**
- * Like Apple's Split View, panes animate their actual width and height rather than scaling.
- * The content is relaid out at that width every frame, so text never gets stretched
- * (scaling with transform distorts the content, so this is the one place that animates width and height directly)
+ * One node of the layout tree. Like Apple's Split View, panes animate their actual size (flex-grow) rather than
+ * scaling, so their content is laid out at the real width every frame and text never stretches
  */
-export function PaneGrid({ count }: { count: PaneCount }) {
-  const split = useStore((s) => s.split);
-  const layout = rects(count, split);
-  const area = useRef<HTMLElement>(null);
-  // While a boundary is dragged, panes follow the pointer instead of springing to it
-  const [dragging, setDragging] = useState(false);
+function Node({ node, path, dragging, setDragging }: { node: LayoutNode; path: number[]; dragging: boolean; setDragging: (d: boolean) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  if (node.kind === "leaf")
+    return (
+      <div data-pane-index={node.slot} className="relative flex min-h-0 min-w-0 grow overflow-hidden border-r border-b [&>div>section]:min-w-0 [&>div>section]:grow" style={{ contain: "layout paint" }}>
+        <Pane index={node.slot} />
+      </div>
+    );
   return (
-    <main ref={area} className="relative min-w-0 grow overflow-hidden">
+    <div ref={ref} className={cn("flex min-h-0 min-w-0 grow", node.axis === "row" ? "flex-row" : "flex-col")}>
       <AnimatePresence initial={false}>
-        {layout.map((r, i) => (
-          <motion.div
-            key={i}
-            // A new pane appears from the right edge (bottom edge for the lower row) at zero width and expands; a removed one shrinks back there
-            initial={{ ...pct(collapsed(r)), opacity: 0 }}
-            animate={{ ...pct(r), opacity: 1 }}
-            exit={{ ...pct(collapsed(r)), opacity: 0 }}
-            transition={dragging ? interactive : smooth}
-            data-pane-index={i}
-            className="absolute flex overflow-hidden border-r border-b [&>div>section]:min-w-[280px] [&>div>section]:grow"
-            style={{ contain: "layout paint" }}
-          >
-            <Pane index={i} />
-          </motion.div>
+        {node.children.map((child, i) => (
+          <Fragment key={keyOf(child)}>
+            {i > 0 && <Divider path={path} index={i} axis={node.axis} sizes={node.sizes} container={ref} onDragging={setDragging} />}
+            <motion.div
+              // A new pane grows from nothing; a removed one shrinks away
+              initial={{ flexGrow: 0, opacity: 0 }}
+              animate={{ flexGrow: node.sizes[i], opacity: 1 }}
+              exit={{ flexGrow: 0, opacity: 0 }}
+              transition={dragging ? { duration: 0 } : smooth}
+              style={{ flexBasis: 0 }}
+              className="flex min-h-0 min-w-0 overflow-hidden"
+            >
+              <Node node={child} path={[...path, i]} dragging={dragging} setDragging={setDragging} />
+            </motion.div>
+          </Fragment>
         ))}
       </AnimatePresence>
-      {count > 1 && <Divider axis="x" value={split.x} area={area} onDragging={setDragging} />}
-      {count === 4 && <Divider axis="y" value={split.y} area={area} onDragging={setDragging} />}
+    </div>
+  );
+}
+
+export function PaneGrid() {
+  const layout = useStore((s) => s.layout);
+  // While a divider is dragged, panes follow the pointer instead of springing to it
+  const [dragging, setDragging] = useState(false);
+  return (
+    <main className="relative flex min-w-0 grow overflow-hidden">
+      <Node node={layout} path={[]} dragging={dragging} setDragging={setDragging} />
     </main>
   );
 }

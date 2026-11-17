@@ -45,4 +45,5 @@ export const pane: Record<keyof typeof source, string> = {
   previewOpen: "打开",
   previewPlaceholder: "localhost:3000",
   previewFound: "输出中的 URL",
+  removePane: "关闭窗格",
 };

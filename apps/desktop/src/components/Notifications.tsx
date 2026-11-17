@@ -6,7 +6,7 @@ import { useT, type MessageKey } from "@/i18n";
 import { age } from "@/lib/format";
 import type { SessionStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useStore } from "@/state/store";
+import { useStore, visibleSessions } from "@/state/store";
 import { StatusIcon } from "./icons";
 import { liquidAnchor } from "./liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidMenu } from "./liquid/stage";
@@ -48,7 +48,7 @@ export function Notifications() {
   useEffect(() => {
     const onFocus = () => {
       const s = useStore.getState();
-      const shown = s.panes.slice(0, s.paneCount).filter((id): id is string => !!id && !!s.unread[id]);
+      const shown = visibleSessions(s).filter((id): id is string => !!id && !!s.unread[id]);
       if (shown.length === 0) return;
       const next = { ...s.unread };
       for (const id of shown) delete next[id];

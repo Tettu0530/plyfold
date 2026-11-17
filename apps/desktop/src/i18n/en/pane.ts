@@ -45,4 +45,5 @@ export const pane: Record<keyof typeof source, string> = {
   previewOpen: "Open",
   previewPlaceholder: "localhost:3000",
   previewFound: "URLs in the output",
+  removePane: "Close pane",
 };

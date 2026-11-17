@@ -43,4 +43,5 @@ export const pane = {
   previewOpen: "開く",
   previewPlaceholder: "localhost:3000",
   previewFound: "出力に出た URL",
+  removePane: "ペインを閉じる",
 } satisfies Record<string, string>;
