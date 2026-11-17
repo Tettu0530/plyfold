@@ -268,7 +268,7 @@ export const useStore = create<State>((set, get) => ({
         const title = s.sessions[(e as { session_id?: string }).session_id ?? ""]?.record.title ?? "セッション";
         if (e.type === "permission_requested") notify(title, "権限確認待ちです");
         if (e.type === "turn_ended") notify(title, e.error ? `エラーで止まりました: ${e.error}` : "ターンが終わりました");
-        // 画面に出ていないセッション（またはアプリを見ていないとき）のターンの終わりは、知らせに残す
+        // 画面に出ていないセッション（またはアプリを見ていないとき）のターンの終わりは、通知に残す
         if (e.type === "turn_ended") {
           const shown = s.panes.slice(0, s.paneCount).includes(e.session_id) && document.hasFocus();
           if (!shown) return { sessions, unread: { ...s.unread, [e.session_id]: { at: Date.now(), error: !!e.error } } };

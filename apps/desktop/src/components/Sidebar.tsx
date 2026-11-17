@@ -159,7 +159,7 @@ export function Sidebar() {
                         ) : (
                           <span className="min-w-0 grow truncate">{r.title}</span>
                         )}
-                        {unread[r.id] && <span role="img" aria-label="見ていない知らせがあります" className={cn("size-1.5 shrink-0 rounded-full", unread[r.id].error ? "bg-error" : "bg-foreground")} />}
+                        {unread[r.id] && <span role="img" aria-label="見ていない通知があります" className={cn("size-1.5 shrink-0 rounded-full", unread[r.id].error ? "bg-error" : "bg-foreground")} />}
                         <span className={cn("flex shrink-0 items-center gap-1 text-xs", quiet ? "text-muted-foreground" : st.color)}>
                           <StatusIcon status={r.status} className="size-3" />
                           {st.label}

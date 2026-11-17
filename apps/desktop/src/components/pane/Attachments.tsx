@@ -1,12 +1,18 @@
 // 入力欄に添えるもの: 画像は貼り付け（⌘V）、ファイルはペインに落とす。送る前に並べて見せ、× で外せる
-import { FileText, ImageIcon, X } from "lucide-react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { FileText, ImageIcon, Paperclip, Plus, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { DropdownMenu } from "radix-ui";
+import { useEffect, useId, useRef, useState } from "react";
 
+import { inTauri } from "@/lib/api";
 import { fromPath, readImage, type Attached } from "@/lib/attachments";
 import { addDropTarget } from "@/lib/drop";
 import { cn } from "@/lib/utils";
 import { bouncy, smooth } from "../motion";
+import { Keys } from "../Keys";
+import { liquidAnchor } from "../liquid/liquid";
+import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 
 export function useAttachments() {
   const [items, setItems] = useState<Attached[]>([]);
@@ -29,11 +35,24 @@ export function useAttachments() {
     if (!e.clipboardData.types.includes("text/plain")) e.preventDefault();
     void Promise.all(images.map(readImage)).then((read) => setItems((a) => [...a, ...read]));
   };
+  /** macOS のファイルの選択を開いて添える（パスで渡すので、落としたときと同じ扱い） */
+  const pick = async (kind: "file" | "image") => {
+    if (!inTauri) return;
+    const picked = await openDialog({
+      multiple: true,
+      directory: false,
+      title: kind === "image" ? "添える画像" : "添えるファイル",
+      ...(kind === "image" ? { filters: [{ name: "画像", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }] } : {}),
+    });
+    const paths = picked == null ? [] : Array.isArray(picked) ? picked : [picked];
+    if (paths.length) setItems((a) => [...a, ...paths.map(fromPath)]);
+  };
   return {
     items,
     over,
     boxRef,
     onPaste,
+    pick,
     remove: (key: string) => setItems((a) => a.filter((x) => x.key !== key)),
     clear: () => setItems([]),
   };
@@ -69,6 +88,56 @@ function Chip({ a, onRemove }: { a: Attached; onRemove: () => void }) {
   );
 }
 
+const MENU_ITEM = "flex h-8 cursor-default items-center gap-2 rounded-md px-2 text-sm outline-none select-none data-[highlighted]:bg-accent";
+
+/** 入力欄の左の + : 添えるもののメニュー（ほかのメニューと同じ分離アニメーションで開く） */
+function AddMenu({ att }: { att: AttachmentsState }) {
+  const anchor = `add:${useId()}`;
+  const menu = useLiquidMenu(`menu:${anchor}`, anchor);
+  const raised = useLiquidActiveAnchors().has(anchor);
+  return (
+    <DropdownMenu.Root onOpenChange={menu.onOpenChange}>
+      <DropdownMenu.Trigger asChild>
+        <button
+          ref={liquidAnchor(anchor)}
+          type="button"
+          aria-label="添える"
+          className={cn(
+            "relative flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground",
+            raised && "z-[57]",
+          )}
+        >
+          <Plus className="size-4" aria-hidden />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          ref={menu.ref as React.Ref<HTMLDivElement>}
+          style={menu.style}
+          side="top"
+          align="start"
+          sideOffset={6}
+          className={cn("z-[58] flex min-w-56 flex-col gap-0.5 rounded-[10px] border bg-popover p-1 text-popover-foreground", menu.moving && "opacity-0")}
+        >
+          <DropdownMenu.Item className={MENU_ITEM} onSelect={() => void att.pick("file")}>
+            <Paperclip className="size-3.5 text-muted-foreground" aria-hidden />
+            ファイルを添える
+          </DropdownMenu.Item>
+          <DropdownMenu.Item className={MENU_ITEM} onSelect={() => void att.pick("image")}>
+            <ImageIcon className="size-3.5 text-muted-foreground" aria-hidden />
+            画像を添える
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator className="my-0.5 h-px bg-border" />
+          <p className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-muted-foreground">
+            <Keys keys={["cmd", "v"]} />
+            で画像を貼り付け。ペインに落としても添えられます
+          </p>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
 /** 入力欄の枠。添えたものを上に並べ、ファイルを持ってくると枠を明るくする */
 export function AttachBox({ att, children }: { att: AttachmentsState; children: React.ReactNode }) {
   return (
@@ -92,7 +161,10 @@ export function AttachBox({ att, children }: { att: AttachmentsState; children: 
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="flex items-end gap-2 py-1.5 pr-1.5 pl-3">{children}</div>
+      <div className="flex items-end gap-1.5 py-1.5 pr-1.5 pl-1.5">
+        <AddMenu att={att} />
+        {children}
+      </div>
     </div>
   );
 }

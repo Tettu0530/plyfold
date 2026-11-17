@@ -33,7 +33,7 @@ export function Notifications() {
   const unread = useStore((s) => s.unread);
   const openInPane = useStore((s) => s.openInPane);
   const [open, setOpen] = useState(false);
-  // 知らせの欄は、ベルから飛び出して広がり、閉じるとベルへ戻る
+  // 通知の欄は、ベルから飛び出して広がり、閉じるとベルへ戻る
   const menu = useLiquidMenu("menu:notifications", "notifications");
   const raised = useLiquidActiveAnchors().has("notifications");
   const toggle = (o: boolean) => {
@@ -41,7 +41,7 @@ export function Notifications() {
     setOpen(o);
   };
 
-  // アプリに戻ってきたら、ペインに出ているセッションの知らせは読んだことにする
+  // アプリに戻ってきたら、ペインに出ているセッションの通知は読んだことにする
   useEffect(() => {
     const onFocus = () => {
       const s = useStore.getState();
@@ -74,7 +74,7 @@ export function Notifications() {
   }
   items.sort((a, b) => Number(b.urgent) - Number(a.urgent) || b.at - a.at);
   const urgent = items.filter((i) => i.urgent).length;
-  const label = urgent ? `手を貸す必要があるセッション ${urgent} 件` : items.length ? `新しい知らせ ${items.length} 件` : "知らせ";
+  const label = urgent ? `手を貸す必要があるセッション ${urgent} 件` : items.length ? `新しい通知 ${items.length} 件` : "通知";
 
   return (
     <Popover open={open} onOpenChange={toggle}>
@@ -98,8 +98,8 @@ export function Notifications() {
         sideOffset={6}
         className={cn("z-[58] flex w-80 flex-col gap-0.5 p-1.5", menu.moving && "opacity-0")}
       >
-        <div className="px-2 pt-1 pb-1.5 text-xs font-medium text-muted-foreground">知らせ</div>
-        {items.length === 0 && <p className="px-2 pb-2 text-xs text-muted-foreground">新しい知らせはありません</p>}
+        <div className="px-2 pt-1 pb-1.5 text-xs font-medium text-muted-foreground">通知</div>
+        {items.length === 0 && <p className="px-2 pb-2 text-xs text-muted-foreground">新しい通知はありません</p>}
         {items.map((i) => (
           <button
             key={i.id}

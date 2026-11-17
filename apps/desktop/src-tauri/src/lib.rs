@@ -460,6 +460,7 @@ async fn check_profile(state: State<'_, AppState>, name: String) -> CmdResult<pl
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let state_dir = default_state_dir();
             let config_path = state_dir.join("config.toml");

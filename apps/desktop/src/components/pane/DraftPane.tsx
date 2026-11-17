@@ -8,6 +8,7 @@ import { useStore } from "@/state/store";
 import { AGENT_NAMES, ProviderLogo } from "../icons";
 import { ControlRow } from "./Composer";
 import { AttachBox, useAttachments } from "./Attachments";
+import { useAutoGrow } from "./autoGrow";
 import { RepoPicker } from "./RepoPicker";
 import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
@@ -92,6 +93,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const [text, setText] = useState("");
   const att = useAttachments();
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
+  const textRef = useAutoGrow(text);
   const [repoOpen, setRepoOpen] = useState(false);
   // リポジトリの選択も、ボタンから飛び出して広がり、閉じるとボタンへ戻る（ほかのメニューと同じ分離アニメーション）
   const repoAnchor = `${id}:repo`;
@@ -212,8 +214,9 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
 
         <AttachBox att={att}>
           <textarea
+            ref={textRef}
             aria-label="初期プロンプト"
-            rows={2}
+            rows={1}
             autoFocus
             value={text}
             placeholder="初期プロンプトを入力して始める"

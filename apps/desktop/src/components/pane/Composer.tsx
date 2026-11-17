@@ -16,6 +16,7 @@ import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 import type { Attached } from "@/lib/attachments";
 import { AttachBox, useAttachments } from "./Attachments";
+import { useAutoGrow } from "./autoGrow";
 import { isSendKey } from "@/lib/keys";
 import { useStore } from "@/state/store";
 
@@ -211,6 +212,7 @@ export function Composer({
   const [text, setText] = useState("");
   const att = useAttachments();
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
+  const textRef = useAutoGrow(text);
   const canSend = !disabled && (!!text.trim() || att.items.length > 0);
   const send = () => {
     if (!canSend) return;
@@ -226,8 +228,9 @@ export function Composer({
       <ControlRow scope={scope} agent={agent} info={info} onSet={onSet} />
       <AttachBox att={att}>
         <textarea
+          ref={textRef}
           aria-label="指示"
-          rows={2}
+          rows={1}
           value={text}
           placeholder={placeholder}
           onChange={(e) => setText(e.target.value)}

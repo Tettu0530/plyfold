@@ -94,7 +94,7 @@ export function SettingsView() {
                 ]}
               />
             </Row>
-            <Row label="無応答とみなすまで" detail="ターンの途中でこの時間なにも届かなければ、無応答として知らせます">
+            <Row label="無応答とみなすまで" detail="ターンの途中でこの時間なにも届かなければ、無応答として通知します">
               <Segmented<number>
                 label="無応答とみなすまで"
                 value={settings.stall_seconds}
