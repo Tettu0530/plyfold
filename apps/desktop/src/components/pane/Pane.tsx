@@ -171,8 +171,8 @@ function SessionPane({ index }: { index: number }) {
               alive={r.status !== "closed" && r.status !== "error"}
             />
           </span>
-          {/* Git and the changes, one view: here for any session in a git repository. Shows +added −removed once there
-              are changes, else the commits not pushed yet, else a branch */}
+          {/* Git and the changes, one view: here for any session in a git repository. The Git mark, then +added −removed
+              once there are changes, and the commits not pushed yet */}
           {(r.worktree_path || git.info) && (
             <button
               ref={liquidAnchor(`diff:${id}`)}
@@ -186,18 +186,18 @@ function SessionPane({ index }: { index: number }) {
                 diffActive && "z-[57]",
               )}
             >
-              {diffStat && diffStat.added + diffStat.removed > 0 ? (
+              <GitBranch className="size-3.5 text-muted-foreground" aria-hidden />
+              {diffStat && diffStat.added + diffStat.removed > 0 && (
                 <>
                   <span className="text-working">+{diffStat.added}</span>
                   <span className="text-error">−{diffStat.removed}</span>
                 </>
-              ) : git.info && unpushed(git.info) > 0 ? (
-                <span className="flex items-center text-muted-foreground">
+              )}
+              {git.info && unpushed(git.info) > 0 && (
+                <span className="flex items-center text-muted-foreground" title={t("pane.gitUnpushed")}>
                   <ArrowUp className="size-3" aria-hidden />
                   {unpushed(git.info)}
                 </span>
-              ) : (
-                <GitBranch className="size-3.5 text-muted-foreground" aria-hidden />
               )}
             </button>
           )}
