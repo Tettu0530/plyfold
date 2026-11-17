@@ -62,11 +62,7 @@ pub struct Transcript {
 
 impl Transcript {
     fn new(path: &Path, secrets: Vec<String>) -> Result<Self> {
-        Ok(Self {
-            file: Mutex::new(std::fs::File::create(path)?),
-            start: Instant::now(),
-            secrets,
-        })
+        Ok(Self { file: Mutex::new(std::fs::File::create(path)?), start: Instant::now(), secrets })
     }
 
     pub fn redact(&self, s: &str) -> String {
@@ -101,29 +97,18 @@ pub struct Conn {
 }
 
 impl Conn {
-    pub async fn spawn(
-        launch: &Launch,
-        cwd: &Path,
-        run_dir: &Path,
-    ) -> Result<(Arc<Self>, mpsc::UnboundedReceiver<Incoming>)> {
+    pub async fn spawn(launch: &Launch, cwd: &Path, run_dir: &Path) -> Result<(Arc<Self>, mpsc::UnboundedReceiver<Incoming>)> {
         let transcript = Arc::new(Transcript::new(&run_dir.join("transcript.jsonl"), launch.secrets.clone())?);
 
         let mut cmd = Command::new(&launch.command);
-        cmd.args(&launch.args)
-            .current_dir(cwd)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true);
+        cmd.args(&launch.args).current_dir(cwd).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
         for var in &launch.env_remove {
             cmd.env_remove(var);
         }
         for (k, v) in &launch.env_set {
             cmd.env(k, v);
         }
-        let mut child = cmd
-            .spawn()
-            .with_context(|| format!("cannot start: {} {}", launch.command, launch.args.join(" ")))?;
+        let mut child = cmd.spawn().with_context(|| format!("cannot start: {} {}", launch.command, launch.args.join(" ")))?;
 
         let stdin = child.stdin.take().expect("stdin");
         let stdout = child.stdout.take().expect("stdout");
@@ -191,13 +176,8 @@ impl Conn {
             });
         }
 
-        let conn = Arc::new(Self {
-            stdin: tokio::sync::Mutex::new(stdin),
-            next_id: AtomicU64::new(0),
-            pending,
-            transcript,
-            child: tokio::sync::Mutex::new(child),
-        });
+        let conn =
+            Arc::new(Self { stdin: tokio::sync::Mutex::new(stdin), next_id: AtomicU64::new(0), pending, transcript, child: tokio::sync::Mutex::new(child) });
         Ok((conn, rx))
     }
 
@@ -205,10 +185,7 @@ impl Conn {
         let line = msg.to_string();
         self.transcript.log("out", &line);
         let mut stdin = self.stdin.lock().await;
-        stdin
-            .write_all(format!("{line}\n").as_bytes())
-            .await
-            .map_err(|e| RpcError::transport(format!("write failed: {e}")))?;
+        stdin.write_all(format!("{line}\n").as_bytes()).await.map_err(|e| RpcError::transport(format!("write failed: {e}")))?;
         stdin.flush().await.map_err(|e| RpcError::transport(format!("flush failed: {e}")))
     }
 
@@ -236,9 +213,7 @@ impl Conn {
     }
 
     pub async fn respond_error(&self, id: Value, code: i64, message: &str) {
-        let _ = self
-            .send(json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}}))
-            .await;
+        let _ = self.send(json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}})).await;
     }
 
     pub async fn shutdown(&self) {

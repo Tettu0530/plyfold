@@ -88,12 +88,7 @@ fn make_tasks(trial: u64) -> Vec<Task> {
     let k = r.range(150, 250) as u32;
     let s: String = (0..200).map(|_| b"rnmvwu"[r.range(0, 5) as usize] as char).collect();
     vec![
-        Task {
-            id: "mul",
-            name: "15 digits × 15 digits",
-            prompt: format!("Compute {a} × {b} exactly."),
-            answer: (a as u128 * b as u128).to_string(),
-        },
+        Task { id: "mul", name: "15 digits × 15 digits", prompt: format!("Compute {a} × {b} exactly."), answer: (a as u128 * b as u128).to_string() },
         Task {
             id: "modpow",
             name: "modular exponentiation",
@@ -119,11 +114,11 @@ fn make_tasks(trial: u64) -> Vec<Task> {
 fn filler() -> String {
     let mut s = String::new();
     for i in 0..12 {
-        let _ = write!(
+        let _ = writeln!(
             s,
             "Paragraph {i}: The quick brown fox jumps over the lazy dog while counting prime numbers. \
              第{i}段落：吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。\
-             fn step_{i}(x: u64) -> u64 {{ x.wrapping_mul(6364136223846793005).rotate_left({i}) }}\n"
+             fn step_{i}(x: u64) -> u64 {{ x.wrapping_mul(6364136223846793005).rotate_left({i}) }}"
         );
     }
     s
@@ -132,10 +127,7 @@ fn filler() -> String {
 fn extract_answer(text: &str) -> Option<String> {
     let idx = text.rfind("ANSWER:")?;
     let line = text[idx + "ANSWER:".len()..].lines().next().unwrap_or("");
-    let cleaned: String = line
-        .chars()
-        .filter(|c| !matches!(c, '*' | '`' | ',' | ' ' | '　' | '.' | '。' | '_'))
-        .collect();
+    let cleaned: String = line.chars().filter(|c| !matches!(c, '*' | '`' | ',' | ' ' | '　' | '.' | '。' | '_')).collect();
     Some(cleaned)
 }
 
@@ -168,10 +160,7 @@ async fn open(s: &Session) -> Result<(String, Value)> {
     let new = s.new_session().await?;
     let sid = new["sessionId"].as_str().context("missing sessionId")?.to_string();
     if s.launch.agent == "codex" {
-        let _ = s
-            .conn
-            .request_timeout("session/set_mode", json!({ "sessionId": sid, "modeId": "read-only" }), PROMPT_TIMEOUT)
-            .await;
+        let _ = s.conn.request_timeout("session/set_mode", json!({ "sessionId": sid, "modeId": "read-only" }), PROMPT_TIMEOUT).await;
     }
     Ok((sid, new))
 }
@@ -180,13 +169,7 @@ async fn open(s: &Session) -> Result<(String, Value)> {
 async fn ask_in(s: &Session, sid: &str, text: &str) -> Result<(Turn, u128, Option<u128>)> {
     s.shared.reset_turn();
     let t0 = Instant::now();
-    s.conn
-        .request_timeout(
-            "session/prompt",
-            json!({ "sessionId": sid, "prompt": [{ "type": "text", "text": text }] }),
-            PROMPT_TIMEOUT,
-        )
-        .await?;
+    s.conn.request_timeout("session/prompt", json!({ "sessionId": sid, "prompt": [{ "type": "text", "text": text }] }), PROMPT_TIMEOUT).await?;
     let total = t0.elapsed().as_millis();
     // usage_update may arrive right after the turn ends
     tokio::time::sleep(Duration::from_millis(300)).await;
@@ -197,11 +180,7 @@ async fn ask_in(s: &Session, sid: &str, text: &str) -> Result<(Turn, u128, Optio
 
 fn setting_of(new_session: &Value) -> String {
     let opts = new_session["configOptions"].as_array().cloned().unwrap_or_default();
-    let get = |ids: &[&str]| {
-        opts.iter()
-            .find(|o| ids.contains(&o["id"].as_str().unwrap_or("")))
-            .and_then(|o| o["currentValue"].as_str().map(str::to_string))
-    };
+    let get = |ids: &[&str]| opts.iter().find(|o| ids.contains(&o["id"].as_str().unwrap_or(""))).and_then(|o| o["currentValue"].as_str().map(str::to_string));
     let model = get(&["model"]).unwrap_or_else(|| "?".into());
     match get(&["effort", "reasoning_effort"]) {
         Some(e) => format!("{model} / {e}"),
@@ -211,11 +190,7 @@ fn setting_of(new_session: &Value) -> String {
 
 async fn bench_target(cfg: &Config, target: &str, opts: &Opts, trials: u64) -> Result<TargetResult> {
     let s = scenario::start(cfg, target, opts, "bench").await?;
-    let mut out = TargetResult {
-        target: target.to_string(),
-        agent: s.launch.agent.clone(),
-        ..Default::default()
-    };
+    let mut out = TargetResult { target: target.to_string(), agent: s.launch.agent.clone(), ..Default::default() };
 
     // 1. Tokenizer fingerprint
     let short = "Reply with just OK.";
@@ -320,10 +295,7 @@ pub async fn bench(cfg: Arc<Config>, targets: Vec<String>, opts: Opts, trials: u
     let _ = writeln!(md, "| item | {} |", targets.join(" | "));
     let _ = writeln!(md, "|---|{}", "---|".repeat(targets.len()));
     let row = |md: &mut String, name: &str, f: &dyn Fn(&TargetResult) -> String| {
-        let cells: Vec<String> = results
-            .iter()
-            .map(|r| if r.error.is_some() && r.results.is_empty() { "-".into() } else { f(r) })
-            .collect();
+        let cells: Vec<String> = results.iter().map(|r| if r.error.is_some() && r.results.is_empty() { "-".into() } else { f(r) }).collect();
         let _ = writeln!(md, "| {name} | {} |", cells.join(" | "));
     };
     row(&mut md, "configured model", &|r| r.model_setting.clone());
@@ -339,14 +311,10 @@ pub async fn bench(cfg: Arc<Config>, targets: Vec<String>, opts: Opts, trials: u
     }
     row(&mut md, "**total correct**", &|r| format!("**{}/{}**", r.results.iter().filter(|x| x.ok).count(), r.results.len()));
     row(&mut md, "time to first character (median)", &|r| {
-        median(r.results.iter().filter_map(|x| x.ttft_ms).collect())
-            .map(|m| format!("{:.1}s", m as f64 / 1000.0))
-            .unwrap_or("-".into())
+        median(r.results.iter().filter_map(|x| x.ttft_ms).collect()).map(|m| format!("{:.1}s", m as f64 / 1000.0)).unwrap_or("-".into())
     });
     row(&mut md, "total time (median)", &|r| {
-        median(r.results.iter().map(|x| x.total_ms).collect())
-            .map(|m| format!("{:.1}s", m as f64 / 1000.0))
-            .unwrap_or("-".into())
+        median(r.results.iter().map(|x| x.total_ms).collect()).map(|m| format!("{:.1}s", m as f64 / 1000.0)).unwrap_or("-".into())
     });
 
     let _ = writeln!(md, "\n## Wrong answers and errors\n");
@@ -368,10 +336,7 @@ pub async fn bench(cfg: Arc<Config>, targets: Vec<String>, opts: Opts, trials: u
         }
     }
 
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let dir = opts.root.join("probe-runs");
     let path = dir.join(format!("bench-{stamp}.md"));
     std::fs::write(&path, &md)?;

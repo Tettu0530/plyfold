@@ -61,15 +61,7 @@ pub struct Turn {
 
 impl Shared {
     pub fn new(label: String, policy: Policy, cwd: PathBuf, quiet: bool) -> Arc<Self> {
-        Arc::new(Self {
-            label,
-            policy,
-            cwd,
-            quiet,
-            cancelled: AtomicBool::new(false),
-            stats: Mutex::new(Stats::default()),
-            turn: Mutex::new(Turn::default()),
-        })
+        Arc::new(Self { label, policy, cwd, quiet, cancelled: AtomicBool::new(false), stats: Mutex::new(Stats::default()), turn: Mutex::new(Turn::default()) })
     }
 
     pub fn reset_turn(&self) {
@@ -150,9 +142,10 @@ fn on_update(shared: &Shared, params: &Value) {
                     if let Some(t) = item["type"].as_str() {
                         stats.tool_content_types.insert(t.to_string());
                         if t == "diff"
-                            && let Some(p) = item["path"].as_str() {
-                                stats.diff_paths.insert(p.to_string());
-                            }
+                            && let Some(p) = item["path"].as_str()
+                        {
+                            stats.diff_paths.insert(p.to_string());
+                        }
                     }
                 }
             }
@@ -169,11 +162,7 @@ fn on_update(shared: &Shared, params: &Value) {
         "plan" => {
             let entries: Vec<String> = update["entries"]
                 .as_array()
-                .map(|a| {
-                    a.iter()
-                        .map(|e| format!("  - [{}] {}", e["status"].as_str().unwrap_or("?"), e["content"].as_str().unwrap_or("")))
-                        .collect()
-                })
+                .map(|a| a.iter().map(|e| format!("  - [{}] {}", e["status"].as_str().unwrap_or("?"), e["content"].as_str().unwrap_or(""))).collect())
                 .unwrap_or_default();
             drop(stats);
             shared.event(&format!("[plan]\n{}", entries.join("\n")));
@@ -247,11 +236,7 @@ async fn permission(shared: &Shared, params: &Value) -> Value {
     }
 
     let pick = |prefer: &str, fallback: &str| {
-        options
-            .iter()
-            .find(|o| o.2 == prefer)
-            .or_else(|| options.iter().find(|o| o.2.starts_with(fallback)))
-            .map(|o| o.0.clone())
+        options.iter().find(|o| o.2 == prefer).or_else(|| options.iter().find(|o| o.2.starts_with(fallback))).map(|o| o.0.clone())
     };
 
     let chosen = match shared.policy {

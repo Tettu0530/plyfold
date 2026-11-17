@@ -7,11 +7,7 @@ use plyfold_acp::{AcpClient, AgentMessage, SpawnSpec};
 use tokio::sync::mpsc::UnboundedReceiver;
 
 fn spec(cwd: &std::path::Path) -> SpawnSpec {
-    SpawnSpec {
-        command: env!("CARGO_BIN_EXE_plyfold-mock-agent").into(),
-        cwd: cwd.to_path_buf(),
-        ..Default::default()
-    }
+    SpawnSpec { command: env!("CARGO_BIN_EXE_plyfold-mock-agent").into(), cwd: cwd.to_path_buf(), ..Default::default() }
 }
 
 fn tempdir(name: &str) -> std::path::PathBuf {

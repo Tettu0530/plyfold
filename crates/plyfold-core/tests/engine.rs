@@ -13,15 +13,9 @@ use tokio::sync::broadcast::Receiver;
 fn mock_agent() -> PathBuf {
     static PATH: OnceLock<PathBuf> = OnceLock::new();
     PATH.get_or_init(|| {
-        let ok = Command::new(env!("CARGO"))
-            .args(["build", "-q", "-p", "plyfold-acp", "--bin", "plyfold-mock-agent"])
-            .status()
-            .unwrap()
-            .success();
+        let ok = Command::new(env!("CARGO")).args(["build", "-q", "-p", "plyfold-acp", "--bin", "plyfold-mock-agent"]).status().unwrap().success();
         assert!(ok, "failed to build the mock agent");
-        let target = std::env::var("CARGO_TARGET_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target"));
+        let target = std::env::var("CARGO_TARGET_DIR").map(PathBuf::from).unwrap_or_else(|_| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target"));
         target.join("debug/plyfold-mock-agent").canonicalize().unwrap()
     })
     .clone()
@@ -35,10 +29,9 @@ fn tmp(name: &str) -> PathBuf {
 }
 
 fn git_repo(dir: &Path) {
-    for args in [
-        vec!["init", "-q", "-b", "main"],
-        vec!["-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "--allow-empty", "-m", "init"],
-    ] {
+    for args in
+        [vec!["init", "-q", "-b", "main"], vec!["-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "--allow-empty", "-m", "init"]]
+    {
         assert!(Command::new("git").args(&args).current_dir(dir).status().unwrap().success());
     }
 }
@@ -90,10 +83,7 @@ async fn worktree_session_with_permission_and_diff() {
     let eng = engine(&base.join("state"), 60_000);
     let mut rx = eng.subscribe();
 
-    let s = eng
-        .start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: repo.clone(), worktree: true })
-        .await
-        .unwrap();
+    let s = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: repo.clone(), worktree: true }).await.unwrap();
     assert_eq!(s.status, Status::Idle);
     let wt = PathBuf::from(s.worktree_path.clone().unwrap());
     assert!(wt.exists() && wt != repo);
@@ -137,10 +127,7 @@ async fn cancel_resolves_pending_permission_and_stops_turn() {
     let base = tmp("cancel");
     let eng = engine(&base.join("state"), 60_000);
     let mut rx = eng.subscribe();
-    let s = eng
-        .start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.clone(), worktree: false })
-        .await
-        .unwrap();
+    let s = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.clone(), worktree: false }).await.unwrap();
 
     eng.prompt(&s.id, "hang").unwrap();
     assert!(matches!(eng.prompt(&s.id, "again"), Err(plyfold_core::CoreError::Busy(_))));
@@ -168,10 +155,7 @@ async fn stall_detection_and_recovery() {
     let base = tmp("stall");
     let eng = engine(&base.join("state"), 500);
     let mut rx = eng.subscribe();
-    let s = eng
-        .start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.clone(), worktree: false })
-        .await
-        .unwrap();
+    let s = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.clone(), worktree: false }).await.unwrap();
     eng.prompt(&s.id, "silent").unwrap(); // stays silent for 3 s
     wait_for(&mut rx, |e| is_status(e, Status::Stalled)).await;
     wait_for(&mut rx, |e| is_status(e, Status::Working)).await; // recovers once something arrives
@@ -186,10 +170,7 @@ async fn reopen_after_close_and_restart_uses_session_load() {
     let id = {
         let eng = engine(&state, 60_000);
         let mut rx = eng.subscribe();
-        let s = eng
-            .start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.clone(), worktree: false })
-            .await
-            .unwrap();
+        let s = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.clone(), worktree: false }).await.unwrap();
         eng.prompt(&s.id, "remember me").unwrap();
         wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { .. })).await;
         s.id
@@ -220,10 +201,7 @@ async fn keyed_profile_secret_is_redacted_in_log_and_launch_failure_is_reported(
     let base = tmp("keyed");
     let eng = engine(&base.join("state"), 60_000);
     let mut rx = eng.subscribe();
-    let s = eng
-        .start_session(StartSession { profile: "mock-keyed".into(), title: "t".into(), repo: base.clone(), worktree: false })
-        .await
-        .unwrap();
+    let s = eng.start_session(StartSession { profile: "mock-keyed".into(), title: "t".into(), repo: base.clone(), worktree: false }).await.unwrap();
     eng.prompt(&s.id, "echo sk-mock-secret-123456").unwrap();
     wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { .. })).await;
     let all: String = eng.store().events(&s.id, None, 10_000).unwrap().into_iter().map(|e| e.payload).collect();
@@ -232,9 +210,7 @@ async fn keyed_profile_secret_is_redacted_in_log_and_launch_failure_is_reported(
     eng.close_session(&s.id).await.unwrap();
 
     // Worktree requested but not a git repository → recorded as Error
-    let err = eng
-        .start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.join("nope"), worktree: true })
-        .await;
+    let err = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.join("nope"), worktree: true }).await;
     assert!(err.is_err());
     let failed = eng.store().list_sessions().unwrap().into_iter().find(|r| r.status == Status::Error).unwrap();
     assert!(eng.store().events(&failed.id, None, 100).unwrap().iter().any(|e| e.payload.contains("作業場所を用意できません")));
@@ -245,10 +221,7 @@ async fn turn_end_is_delivered_after_all_updates_of_the_turn() {
     let base = tmp("order");
     let eng = engine(&base.join("state"), 60_000);
     let mut rx = eng.subscribe();
-    let s = eng
-        .start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.clone(), worktree: false })
-        .await
-        .unwrap();
+    let s = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.clone(), worktree: false }).await.unwrap();
     for i in 0..30 {
         let text = format!("turn-{i}");
         eng.prompt(&s.id, &text).unwrap();
@@ -274,10 +247,7 @@ async fn session_info_config_switching_and_usage() {
     let base = tmp("info");
     let eng = engine(&base.join("state"), 60_000);
     let mut rx = eng.subscribe();
-    let s = eng
-        .start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.clone(), worktree: false })
-        .await
-        .unwrap();
+    let s = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.clone(), worktree: false }).await.unwrap();
 
     let info = eng.session_info(&s.id).unwrap();
     assert_eq!(info.option(Category::Model).unwrap().current.as_deref(), Some("mock-large"));
@@ -336,10 +306,7 @@ async fn reopen_falls_back_to_new_session_when_agent_lost_the_transcript() {
     let state = base.join("state");
     let eng = engine(&state, 60_000);
     let mut rx = eng.subscribe();
-    let s = eng
-        .start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.clone(), worktree: false })
-        .await
-        .unwrap();
+    let s = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.clone(), worktree: false }).await.unwrap();
     eng.prompt(&s.id, "hello").unwrap();
     wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { .. })).await;
     let old_sid = eng.store().get_session(&s.id).unwrap().acp_session_id.unwrap();

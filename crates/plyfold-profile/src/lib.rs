@@ -120,18 +120,9 @@ pub fn builtin_agents() -> BTreeMap<String, AgentDef> {
                 &["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN"],
             ),
         ),
-        (
-            "codex".into(),
-            a("npx", &["-y", "@agentclientprotocol/codex-acp@2.6.0"], Some("CODEX_HOME"), &["OPENAI_API_KEY", "CODEX_API_KEY"]),
-        ),
-        (
-            "opencode".into(),
-            a("opencode", &["acp"], Some("XDG_DATA_HOME"), &["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"]),
-        ),
-        (
-            "gemini".into(),
-            a("npx", &["-y", "@google/gemini-cli@0.68.0", "--experimental-acp"], None, &["GEMINI_API_KEY", "GOOGLE_API_KEY"]),
-        ),
+        ("codex".into(), a("npx", &["-y", "@agentclientprotocol/codex-acp@2.6.0"], Some("CODEX_HOME"), &["OPENAI_API_KEY", "CODEX_API_KEY"])),
+        ("opencode".into(), a("opencode", &["acp"], Some("XDG_DATA_HOME"), &["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"])),
+        ("gemini".into(), a("npx", &["-y", "@google/gemini-cli@0.68.0", "--experimental-acp"], None, &["GEMINI_API_KEY", "GOOGLE_API_KEY"])),
         ("mock".into(), a("plyfold-mock-agent", &[], None, &[])),
     ])
 }
@@ -156,22 +147,13 @@ impl Config {
     }
 
     /// `target` is a profile or agent name (an agent name means the default profile, which overrides nothing)
-    pub fn resolve(
-        &self,
-        target: &str,
-        state_dir: &Path,
-        cwd: &Path,
-        secrets: &dyn SecretStore,
-    ) -> Result<Resolved, ProfileError> {
+    pub fn resolve(&self, target: &str, state_dir: &Path, cwd: &Path, secrets: &dyn SecretStore) -> Result<Resolved, ProfileError> {
         let profile = match self.profiles.get(target) {
             Some(p) => p.clone(),
             None if self.agents.contains_key(target) => ProfileDef { agent: target.into(), ..Default::default() },
             None => return Err(ProfileError::UnknownTarget(target.into())),
         };
-        let agent = self
-            .agents
-            .get(&profile.agent)
-            .ok_or_else(|| ProfileError::UnknownAgent { profile: target.into(), agent: profile.agent.clone() })?;
+        let agent = self.agents.get(&profile.agent).ok_or_else(|| ProfileError::UnknownAgent { profile: target.into(), agent: profile.agent.clone() })?;
 
         let is_default = profile.keys.is_empty() && !profile.isolate && profile.files.is_empty() && profile.links.is_empty();
         let mut env_set: Vec<(String, String)> = agent.env.clone().into_iter().collect();
@@ -230,14 +212,7 @@ impl Config {
             profile: target.into(),
             agent: profile.agent.clone(),
             label: profile.label.clone().unwrap_or_else(|| target.to_string()),
-            spawn: SpawnSpec {
-                command: agent.command.clone(),
-                args: agent.args.clone(),
-                cwd: cwd.to_path_buf(),
-                env_set,
-                env_remove,
-                secrets: secret_values,
-            },
+            spawn: SpawnSpec { command: agent.command.clone(), args: agent.args.clone(), cwd: cwd.to_path_buf(), env_set, env_remove, secrets: secret_values },
             default_mode: profile.default_mode.clone(),
             env_summary,
         })
@@ -353,9 +328,6 @@ files = { "../evil" = "x" }
     #[test]
     fn unknown_target() {
         let cfg = Config::from_toml("").unwrap();
-        assert!(matches!(
-            cfg.resolve("nope", &tmp("u"), Path::new("/w"), &MemoryStore::default()),
-            Err(ProfileError::UnknownTarget(_))
-        ));
+        assert!(matches!(cfg.resolve("nope", &tmp("u"), Path::new("/w"), &MemoryStore::default()), Err(ProfileError::UnknownTarget(_))));
     }
 }

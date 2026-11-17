@@ -129,10 +129,8 @@ pub fn web_url(remote: &str) -> Option<String> {
         let rest = rest.rsplit_once('@').map_or(rest, |(_, h)| h);
         let (host, path) = rest.split_once('/')?;
         (host.split(':').next().unwrap_or(host), path)
-    } else if let Some(rest) = r.strip_prefix("https://").or_else(|| r.strip_prefix("http://")) {
-        rest.split_once('/')?
     } else {
-        return None;
+        r.strip_prefix("https://").or_else(|| r.strip_prefix("http://"))?.split_once('/')?
     };
     let path = path.trim_end_matches('/').trim_end_matches(".git");
     (!host.is_empty() && path.contains('/')).then(|| format!("https://{host}/{path}"))
@@ -200,13 +198,26 @@ pub fn info(dir: &Path, base: Option<&str>) -> Result<GitInfo, WorktreeError> {
         let modified = std::fs::metadata(d.join("FETCH_HEAD")).ok()?.modified().ok()?;
         Some(modified.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs() as i64)
     });
-    Ok(GitInfo { branch, base: base.map(str::to_string), ahead_base, behind_base, upstream, ahead, behind, changed, commits, remote_url, web_url: web, fetched_at })
+    Ok(GitInfo {
+        branch,
+        base: base.map(str::to_string),
+        ahead_base,
+        behind_base,
+        upstream,
+        ahead,
+        behind,
+        changed,
+        commits,
+        remote_url,
+        web_url: web,
+        fetched_at,
+    })
 }
 
 fn need_origin(dir: &Path) -> Result<(), WorktreeError> {
-    git(dir, &["remote", "get-url", "origin"])
-        .map(|_| ())
-        .map_err(|_| WorktreeError::Op(plyfold_i18n::tr!("このリポジトリには origin がありません", "This repository has no origin remote", "此仓库没有 origin")))
+    git(dir, &["remote", "get-url", "origin"]).map(|_| ()).map_err(|_| {
+        WorktreeError::Op(plyfold_i18n::tr!("このリポジトリには origin がありません", "This repository has no origin remote", "此仓库没有 origin"))
+    })
 }
 
 /// Fetch from origin (updates ahead / behind)
@@ -315,7 +326,16 @@ mod tests {
     }
 
     fn temp(name: &str) -> std::path::PathBuf {
-        let d = std::env::temp_dir().join(format!("plyfold-remote-{name}-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let d = std::env::temp_dir().join(format!(
+            "plyfold-remote-{name}-{}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
+            {
+                // The clock is only microsecond-precise on macOS, so tests running in parallel need a counter too
+                static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+                N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            }
+        ));
         std::fs::create_dir_all(&d).unwrap();
         d
     }
@@ -340,7 +360,12 @@ mod tests {
         let work = root.join("work");
         sh(&root, "git init -q --bare -b main origin.git && git init -q -b main work");
         sh(&work, &format!("git remote add origin {} && echo a > a && git add a && {ID} commit -qm first && git push -q -u origin main", origin.display()));
-        sh(&work, &format!("git switch -q -c topic && echo b > b && git add b && {ID} commit -qm second && echo c > c && git add c && {ID} commit -qm third && echo x > x"));
+        sh(
+            &work,
+            &format!(
+                "git switch -q -c topic && echo b > b && git add b && {ID} commit -qm second && echo c > c && git add c && {ID} commit -qm third && echo x > x"
+            ),
+        );
 
         let i = info(&work, Some("main")).unwrap();
         assert_eq!(i.branch.as_deref(), Some("topic"));

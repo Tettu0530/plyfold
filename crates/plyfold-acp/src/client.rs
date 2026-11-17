@@ -6,9 +6,8 @@ use std::time::Duration;
 
 use agent_client_protocol_schema::ProtocolVersion;
 use agent_client_protocol_schema::v1::{
-    CancelNotification, ClientCapabilities, ContentBlock, FileSystemCapabilities, Implementation,
-    InitializeRequest, InitializeResponse, LoadSessionRequest, NewSessionRequest, NewSessionResponse,
-    PromptRequest, PromptResponse, RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
+    CancelNotification, ClientCapabilities, ContentBlock, FileSystemCapabilities, Implementation, InitializeRequest, InitializeResponse, LoadSessionRequest,
+    NewSessionRequest, NewSessionResponse, PromptRequest, PromptResponse, RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
     SelectedPermissionOutcome, SessionId, SessionNotification, SessionUpdate, SetSessionModeRequest, TextContent,
 };
 use serde_json::Value;
@@ -50,10 +49,7 @@ pub struct AcpClient {
 
 impl AcpClient {
     /// Spawns the agent and completes initialize
-    pub async fn connect(
-        spec: &SpawnSpec,
-        sink: Option<FrameSink>,
-    ) -> Result<(Self, mpsc::UnboundedReceiver<AgentMessage>), AcpError> {
+    pub async fn connect(spec: &SpawnSpec, sink: Option<FrameSink>) -> Result<(Self, mpsc::UnboundedReceiver<AgentMessage>), AcpError> {
         let (conn, raw_rx) = Connection::spawn(spec, sink).await?;
         let (tx, rx) = mpsc::unbounded_channel();
         tokio::spawn(translate(raw_rx, tx));
@@ -90,10 +86,7 @@ impl AcpClient {
     }
 
     pub async fn authenticate(&self, method_id: &str) -> Result<(), AcpError> {
-        self.conn
-            .request_raw("authenticate", serde_json::json!({ "methodId": method_id }), Some(SESSION_TIMEOUT))
-            .await
-            .map(|_| ())
+        self.conn.request_raw("authenticate", serde_json::json!({ "methodId": method_id }), Some(SESSION_TIMEOUT)).await.map(|_| ())
     }
 
     pub async fn new_session(&self, cwd: &Path) -> Result<NewSessionResponse, AcpError> {
@@ -129,8 +122,7 @@ impl AcpClient {
         self.conn
             .request_raw(
                 "session/set_mode",
-                serde_json::to_value(SetSessionModeRequest::new(SessionId::new(session_id), mode_id.to_string()))
-                    .expect("serialize"),
+                serde_json::to_value(SetSessionModeRequest::new(SessionId::new(session_id), mode_id.to_string())).expect("serialize"),
                 Some(SESSION_TIMEOUT),
             )
             .await
@@ -149,8 +141,7 @@ impl AcpClient {
         let req = PromptRequest::new(SessionId::new(session_id), blocks);
         let params = serde_json::to_value(req).expect("serialize");
         let (v, barrier) = self.conn.request_with_barrier("session/prompt", params, None).await?;
-        let response = serde_json::from_value(v.clone())
-            .map_err(|source| AcpError::Decode { method: "session/prompt".into(), source })?;
+        let response = serde_json::from_value(v.clone()).map_err(|source| AcpError::Decode { method: "session/prompt".into(), source })?;
         Ok(TurnResult { response, raw: v, barrier })
     }
 

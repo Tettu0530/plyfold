@@ -175,10 +175,7 @@ fn keys(cmd: &KeysCmd) -> Result<()> {
             }
             eprintln!("Enter the value for {account} (twice, to confirm)");
             // Never pass the value as an argument; `security` reads it without echoing
-            let ok = Command::new("security")
-                .args(["add-generic-password", "-U", "-s", KEYCHAIN_SERVICE, "-a", account, "-w"])
-                .status()?
-                .success();
+            let ok = Command::new("security").args(["add-generic-password", "-U", "-s", KEYCHAIN_SERVICE, "-a", account, "-w"]).status()?.success();
             if !ok {
                 bail!("Failed to store the key");
             }
@@ -210,12 +207,7 @@ struct PendingPermission {
     options: Vec<PermissionChoice>,
 }
 
-async fn repl(
-    engine: &Engine,
-    sid: &str,
-    mut rx: tokio::sync::broadcast::Receiver<EngineEvent>,
-    first: Option<String>,
-) -> Result<()> {
+async fn repl(engine: &Engine, sid: &str, mut rx: tokio::sync::broadcast::Receiver<EngineEvent>, first: Option<String>) -> Result<()> {
     println!("Type to send a prompt. /model /effort /mode [value] (bare /mode cycles to the next mode) /config /cancel /diff /quit");
     let mut info: SessionInfo = engine.session_info(sid).unwrap_or_default();
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
@@ -432,12 +424,7 @@ fn print_log(engine: &Engine, sid: &str) -> Result<()> {
                     let Ok(v) = serde_json::from_str::<Value>(&e.payload) else { continue };
                     if v["method"] == "session/prompt" {
                         in_prompt = true;
-                        let text: String = v["params"]["prompt"]
-                            .as_array()
-                            .into_iter()
-                            .flatten()
-                            .filter_map(|b| b["text"].as_str())
-                            .collect();
+                        let text: String = v["params"]["prompt"].as_array().into_iter().flatten().filter_map(|b| b["text"].as_str()).collect();
                         print!("\n\x1b[36m> {text}\x1b[0m\n");
                     }
                 }
@@ -502,9 +489,5 @@ fn status_line(info: &SessionInfo) -> String {
     if let Some(c) = &info.cost {
         parts.push(format!("{} {:.4}", c.currency, c.amount));
     }
-    if parts.is_empty() {
-        String::new()
-    } else {
-        format!("\n\x1b[2m[{}]\x1b[0m", parts.join(" · "))
-    }
+    if parts.is_empty() { String::new() } else { format!("\n\x1b[2m[{}]\x1b[0m", parts.join(" · ")) }
 }

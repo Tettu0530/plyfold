@@ -26,11 +26,7 @@ pub fn status(wt: &Worktree) -> Result<WtStatus, WorktreeError> {
     let target = git(&wt.repo, &["symbolic-ref", "--quiet", "--short", "HEAD"]).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
     let merged = commits > 0
         && target.as_ref().is_some_and(|t| {
-            std::process::Command::new("git")
-                .args(["merge-base", "--is-ancestor", &wt.branch, t])
-                .current_dir(&wt.repo)
-                .status()
-                .is_ok_and(|s| s.success())
+            std::process::Command::new("git").args(["merge-base", "--is-ancestor", &wt.branch, t]).current_dir(&wt.repo).status().is_ok_and(|s| s.success())
         });
     Ok(WtStatus { dirty, commits, target, merged })
 }
@@ -54,16 +50,22 @@ pub fn commit(wt: &Worktree, message: &str) -> Result<String, WorktreeError> {
 pub fn merge(wt: &Worktree) -> Result<String, WorktreeError> {
     let st = status(wt)?;
     if st.dirty {
-        return Err(fail(plyfold_i18n::tr!("コミットしていない変更があります。先にコミットしてください", "There are uncommitted changes. Commit them first", "有未提交的更改。请先提交")));
+        return Err(fail(plyfold_i18n::tr!(
+            "コミットしていない変更があります。先にコミットしてください",
+            "There are uncommitted changes. Commit them first",
+            "有未提交的更改。请先提交"
+        )));
     }
     if st.commits == 0 {
         return Err(fail(plyfold_i18n::tr!("取り込むコミットがありません", "No commits to merge", "没有可合并的提交")));
     }
-    let target = st.target.ok_or_else(|| fail(plyfold_i18n::tr!(
-        "元のリポジトリの HEAD が枝を指していないので、取り込み先が決まりません",
-        "The original repository's HEAD is not on a branch, so there is no merge target",
-        "原仓库的 HEAD 不在分支上，无法确定合并目标"
-    )))?;
+    let target = st.target.ok_or_else(|| {
+        fail(plyfold_i18n::tr!(
+            "元のリポジトリの HEAD が枝を指していないので、取り込み先が決まりません",
+            "The original repository's HEAD is not on a branch, so there is no merge target",
+            "原仓库的 HEAD 不在分支上，无法确定合并目标"
+        ))
+    })?;
     if st.merged {
         return Err(fail(plyfold_i18n::tr!("{target} にはもう取り込んであります", "Already merged into {target}", "已合并到 {target}")));
     }
@@ -87,7 +89,11 @@ fn has(cmd: &str) -> bool {
 pub fn create_pr(wt: &Worktree, title: &str) -> Result<String, WorktreeError> {
     let st = status(wt)?;
     if st.dirty {
-        return Err(fail(plyfold_i18n::tr!("コミットしていない変更があります。先にコミットしてください", "There are uncommitted changes. Commit them first", "有未提交的更改。请先提交")));
+        return Err(fail(plyfold_i18n::tr!(
+            "コミットしていない変更があります。先にコミットしてください",
+            "There are uncommitted changes. Commit them first",
+            "有未提交的更改。请先提交"
+        )));
     }
     if st.commits == 0 {
         return Err(fail(plyfold_i18n::tr!("PR にするコミットがありません", "No commits for a PR", "没有可用于创建 PR 的提交")));
@@ -169,13 +175,7 @@ mod tests {
     }
 
     fn g(dir: &Path, args: &[&str]) {
-        let ok = Command::new("git")
-            .args(["-c", "user.name=t", "-c", "user.email=t@example.invalid"])
-            .args(args)
-            .current_dir(dir)
-            .status()
-            .unwrap()
-            .success();
+        let ok = Command::new("git").args(["-c", "user.name=t", "-c", "user.email=t@example.invalid"]).args(args).current_dir(dir).status().unwrap().success();
         assert!(ok, "git {args:?}");
     }
 

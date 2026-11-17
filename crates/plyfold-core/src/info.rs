@@ -149,10 +149,7 @@ impl SessionInfo {
                 .as_array()
                 .into_iter()
                 .flatten()
-                .map(|m| Choice {
-                    value: m["id"].as_str().unwrap_or_default().into(),
-                    name: m["name"].as_str().unwrap_or_default().into(),
-                })
+                .map(|m| Choice { value: m["id"].as_str().unwrap_or_default().into(), name: m["name"].as_str().unwrap_or_default().into() })
                 .collect();
             self.current_mode = modes["currentModeId"].as_str().map(str::to_string);
         }

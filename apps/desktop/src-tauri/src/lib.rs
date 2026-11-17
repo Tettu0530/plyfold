@@ -66,7 +66,23 @@ struct AppSettings {
 
 impl Default for AppSettings {
     fn default() -> Self {
-        Self { editor: "auto".into(), cleanup_after_merge: false, stall_seconds: 120, worktree_default: true, send_key: "enter".into(), language: "auto".into(), sidebar_density: "comfortable".into(), notify_turn_end: true, notify_permission: true, keybindings: Default::default(), ui_scale: 100, reduce_motion: "system".into(), thoughts_expanded: false, restore_panes: true, default_profile: String::new() }
+        Self {
+            editor: "auto".into(),
+            cleanup_after_merge: false,
+            stall_seconds: 120,
+            worktree_default: true,
+            send_key: "enter".into(),
+            language: "auto".into(),
+            sidebar_density: "comfortable".into(),
+            notify_turn_end: true,
+            notify_permission: true,
+            keybindings: Default::default(),
+            ui_scale: 100,
+            reduce_motion: "system".into(),
+            thoughts_expanded: false,
+            restore_panes: true,
+            default_profile: String::new(),
+        }
     }
 }
 
@@ -113,14 +129,22 @@ struct AppInfo {
 /// For Settings → Info
 #[tauri::command]
 fn app_info(state: State<'_, AppState>) -> AppInfo {
-    let os = std::process::Command::new("sw_vers").arg("-productVersion").output().ok().filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+    let os = std::process::Command::new("sw_vers")
+        .arg("-productVersion")
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
     let cfg = state.config.read().unwrap();
     let agents = cfg
         .agents
         .iter()
         // The mock agent is for tests only
         .filter(|(id, _)| id.as_str() != "mock")
-        .map(|(id, a)| AgentLaunch { id: id.clone(), command: std::iter::once(a.command.as_str()).chain(a.args.iter().map(String::as_str)).collect::<Vec<_>>().join(" ") })
+        .map(|(id, a)| AgentLaunch {
+            id: id.clone(),
+            command: std::iter::once(a.command.as_str()).chain(a.args.iter().map(String::as_str)).collect::<Vec<_>>().join(" "),
+        })
         .collect();
     AppInfo {
         version: env!("CARGO_PKG_VERSION").into(),
@@ -144,10 +168,18 @@ fn save_settings(state: State<'_, AppState>, settings: AppSettings) -> CmdResult
         return Err(plyfold_i18n::tr!("エディタ '{}' は選べません", "Editor '{}' is not available", "无法选择编辑器 '{}'", settings.editor));
     }
     if !(30..=3600).contains(&settings.stall_seconds) {
-        return Err(plyfold_i18n::tr!("無応答とみなすまでの時間は 30 秒から 1 時間までです", "The no-response timeout must be between 30 seconds and 1 hour", "判定为无响应的时间须在 30 秒到 1 小时之间"));
+        return Err(plyfold_i18n::tr!(
+            "無応答とみなすまでの時間は 30 秒から 1 時間までです",
+            "The no-response timeout must be between 30 seconds and 1 hour",
+            "判定为无响应的时间须在 30 秒到 1 小时之间"
+        ));
     }
     if !(80..=150).contains(&settings.ui_scale) {
-        return Err(plyfold_i18n::tr!("表示の大きさは 80% から 150% までです", "The display size must be between 80% and 150%", "显示大小须在 80% 到 150% 之间"));
+        return Err(plyfold_i18n::tr!(
+            "表示の大きさは 80% から 150% までです",
+            "The display size must be between 80% and 150%",
+            "显示大小须在 80% 到 150% 之间"
+        ));
     }
     if !["system", "reduce"].contains(&settings.reduce_motion.as_str()) || settings.default_profile.len() > 128 {
         return Err(plyfold_i18n::tr!("設定の値が正しくありません", "A setting has an invalid value", "某项设置的值无效"));
@@ -225,14 +257,7 @@ fn list_profiles(state: State<'_, AppState>) -> Vec<ProfileSummary> {
         .collect();
     // A bare agent name can also be chosen, as a default profile that uses the existing login
     for agent in cfg.agents.keys() {
-        out.push(ProfileSummary {
-            name: agent.clone(),
-            agent: agent.clone(),
-            label: "default".into(),
-            isolate: false,
-            keyed: false,
-            custom_provider: false,
-        });
+        out.push(ProfileSummary { name: agent.clone(), agent: agent.clone(), label: "default".into(), isolate: false, keyed: false, custom_provider: false });
     }
     out
 }
@@ -263,19 +288,9 @@ fn session_history(state: State<'_, AppState>, id: String) -> CmdResult<Vec<Even
 }
 
 #[tauri::command]
-async fn start_session(
-    state: State<'_, AppState>,
-    profile: String,
-    repo: String,
-    title: String,
-    worktree: bool,
-) -> CmdResult<SessionRecord> {
+async fn start_session(state: State<'_, AppState>, profile: String, repo: String, title: String, worktree: bool) -> CmdResult<SessionRecord> {
     let repo = PathBuf::from(expand_home(&repo));
-    state
-        .engine
-        .start_session(StartSession { profile, title, repo, worktree })
-        .await
-        .map_err(err)
+    state.engine.start_session(StartSession { profile, title, repo, worktree }).await.map_err(err)
 }
 
 #[tauri::command]
@@ -304,12 +319,7 @@ async fn cancel(state: State<'_, AppState>, id: String) -> CmdResult<()> {
 }
 
 #[tauri::command]
-async fn respond_permission(
-    state: State<'_, AppState>,
-    id: String,
-    permission_id: String,
-    option_id: Option<String>,
-) -> CmdResult<()> {
+async fn respond_permission(state: State<'_, AppState>, id: String, permission_id: String, option_id: Option<String>) -> CmdResult<()> {
     state.engine.respond_permission(&id, &permission_id, option_id.as_deref()).await.map_err(err)
 }
 
@@ -410,17 +420,15 @@ struct ProfileDetail {
 #[tauri::command]
 fn profile_detail(state: State<'_, AppState>, name: String) -> CmdResult<ProfileDetail> {
     let cfg = state.config.read().unwrap();
-    let def = cfg.profiles.get(&name).ok_or_else(|| plyfold_i18n::tr!("プロファイル '{name}' はありません", "Profile '{name}' not found", "配置 '{name}' 不存在"))?;
+    let def =
+        cfg.profiles.get(&name).ok_or_else(|| plyfold_i18n::tr!("プロファイル '{name}' はありません", "Profile '{name}' not found", "配置 '{name}' 不存在"))?;
     let form = edit::describe(&name, def);
     let account = edit::key_account(&name, def);
     let value = account.as_ref().and_then(|(_, a)| state.secrets.get(a).ok());
     let shared_with = match &account {
-        Some((_, a)) => cfg
-            .profiles
-            .iter()
-            .filter(|(n, d)| **n != name && edit::key_account(n, d).is_some_and(|(_, b)| &b == a))
-            .map(|(n, _)| n.clone())
-            .collect(),
+        Some((_, a)) => {
+            cfg.profiles.iter().filter(|(n, d)| **n != name && edit::key_account(n, d).is_some_and(|(_, b)| &b == a)).map(|(n, _)| n.clone()).collect()
+        }
         None => Vec::new(),
     };
     Ok(ProfileDetail {
@@ -444,7 +452,12 @@ fn save_profile(state: State<'_, AppState>, form: ProfileForm, original: Option<
         if original.is_none() || renaming {
             edit::validate_name(&form.name, &cfg).map_err(err)?;
             if cfg.profiles.contains_key(&form.name) {
-                return Err(plyfold_i18n::tr!("'{}' という名前のプロファイルはもうあります", "A profile named '{}' already exists", "名为 '{}' 的配置已存在", form.name));
+                return Err(plyfold_i18n::tr!(
+                    "'{}' という名前のプロファイルはもうあります",
+                    "A profile named '{}' already exists",
+                    "名为 '{}' 的配置已存在",
+                    form.name
+                ));
             }
         }
         if !cfg.agents.contains_key(&form.agent) {
@@ -480,8 +493,10 @@ fn set_profile_key(state: State<'_, AppState>, name: String, value: String) -> C
         return Err(plyfold_i18n::tr!("キーが空です", "The key is empty", "密钥为空"));
     }
     let cfg = state.config.read().unwrap();
-    let def = cfg.profiles.get(&name).ok_or_else(|| plyfold_i18n::tr!("プロファイル '{name}' はありません", "Profile '{name}' not found", "配置 '{name}' 不存在"))?;
-    let (_, account) = edit::key_account(&name, def).ok_or_else(|| plyfold_i18n::tr!("このプロファイルはキーを使いません", "This profile does not use a key", "此配置不使用密钥"))?;
+    let def =
+        cfg.profiles.get(&name).ok_or_else(|| plyfold_i18n::tr!("プロファイル '{name}' はありません", "Profile '{name}' not found", "配置 '{name}' 不存在"))?;
+    let (_, account) = edit::key_account(&name, def)
+        .ok_or_else(|| plyfold_i18n::tr!("このプロファイルはキーを使いません", "This profile does not use a key", "此配置不使用密钥"))?;
     state.secrets.set(&account, value).map_err(err)
 }
 
@@ -490,7 +505,10 @@ fn set_profile_key(state: State<'_, AppState>, name: String, value: String) -> C
 fn delete_profile(state: State<'_, AppState>, name: String) -> CmdResult<()> {
     let own = {
         let cfg = state.config.read().unwrap();
-        let def = cfg.profiles.get(&name).ok_or_else(|| plyfold_i18n::tr!("プロファイル '{name}' はありません", "Profile '{name}' not found", "配置 '{name}' 不存在"))?;
+        let def = cfg
+            .profiles
+            .get(&name)
+            .ok_or_else(|| plyfold_i18n::tr!("プロファイル '{name}' はありません", "Profile '{name}' not found", "配置 '{name}' 不存在"))?;
         edit::key_account(&name, def).filter(|(var, a)| *a == format!("{name}/{var}"))
     };
     edit::remove_profile(&state.config_path, &name).map_err(err)?;
@@ -522,13 +540,22 @@ async fn merge_session(state: State<'_, AppState>, id: String) -> CmdResult<Merg
     let target = state.engine.merge(&id).map_err(err)?;
     let cleanup = state.settings.read().unwrap().cleanup_after_merge;
     if cleanup {
-        state.engine.cleanup_worktree(&id).await.map_err(|e| plyfold_i18n::tr!("{target} には取り込みましたが、片付けに失敗しました: {e}", "Merged into {target}, but cleanup failed: {e}", "已合并到 {target}，但清理失败：{e}"))?;
+        state.engine.cleanup_worktree(&id).await.map_err(|e| {
+            plyfold_i18n::tr!(
+                "{target} には取り込みましたが、片付けに失敗しました: {e}",
+                "Merged into {target}, but cleanup failed: {e}",
+                "已合并到 {target}，但清理失败：{e}"
+            )
+        })?;
     }
     Ok(MergeResult { target, cleaned: cleanup })
 }
 
 /// Git commands run git (and the network for fetch / push / pull / gh) synchronously, so keep them off the async workers
-async fn blocking<T: Send + 'static>(state: &AppState, f: impl FnOnce(&plyfold_core::Engine) -> Result<T, plyfold_core::CoreError> + Send + 'static) -> CmdResult<T> {
+async fn blocking<T: Send + 'static>(
+    state: &AppState,
+    f: impl FnOnce(&plyfold_core::Engine) -> Result<T, plyfold_core::CoreError> + Send + 'static,
+) -> CmdResult<T> {
     let engine = state.engine.clone();
     tauri::async_runtime::spawn_blocking(move || f(&engine)).await.map_err(err)?.map_err(err)
 }

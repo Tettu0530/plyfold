@@ -54,10 +54,7 @@ pub struct Diff {
 fn git(dir: &Path, args: &[&str]) -> Result<String, WorktreeError> {
     let out = Command::new("git").args(args).current_dir(dir).output()?;
     if !out.status.success() {
-        return Err(WorktreeError::Git {
-            args: args.join(" "),
-            stderr: String::from_utf8_lossy(&out.stderr).trim().to_string(),
-        });
+        return Err(WorktreeError::Git { args: args.join(" "), stderr: String::from_utf8_lossy(&out.stderr).trim().to_string() });
     }
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
@@ -67,17 +64,12 @@ fn git_diff_ok(dir: &Path, args: &[&str]) -> Result<String, WorktreeError> {
     let out = Command::new("git").args(args).current_dir(dir).output()?;
     match out.status.code() {
         Some(0) | Some(1) => Ok(String::from_utf8_lossy(&out.stdout).to_string()),
-        _ => Err(WorktreeError::Git {
-            args: args.join(" "),
-            stderr: String::from_utf8_lossy(&out.stderr).trim().to_string(),
-        }),
+        _ => Err(WorktreeError::Git { args: args.join(" "), stderr: String::from_utf8_lossy(&out.stderr).trim().to_string() }),
     }
 }
 
 pub fn repo_root(dir: &Path) -> Result<PathBuf, WorktreeError> {
-    git(dir, &["rev-parse", "--show-toplevel"])
-        .map(|s| PathBuf::from(s.trim()))
-        .map_err(|_| WorktreeError::NotARepo(dir.to_path_buf()))
+    git(dir, &["rev-parse", "--show-toplevel"]).map(|s| PathBuf::from(s.trim())).map_err(|_| WorktreeError::NotARepo(dir.to_path_buf()))
 }
 
 /// Manages where worktrees are placed
@@ -93,9 +85,7 @@ impl Worktrees {
     /// Without `base`, branches off the current HEAD
     pub fn create(&self, repo: &Path, session_id: &str, base: Option<&str>) -> Result<Worktree, WorktreeError> {
         let repo = repo_root(repo)?;
-        let base = git(&repo, &["rev-parse", "--verify", &format!("{}^{{commit}}", base.unwrap_or("HEAD"))])?
-            .trim()
-            .to_string();
+        let base = git(&repo, &["rev-parse", "--verify", &format!("{}^{{commit}}", base.unwrap_or("HEAD"))])?.trim().to_string();
         let name = repo.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "repo".into());
         let path = self.root.join(format!("{name}-{}", short_hash(&repo.display().to_string()))).join(session_id);
         std::fs::create_dir_all(path.parent().unwrap())?;
@@ -122,13 +112,7 @@ pub fn diff(wt: &Worktree) -> Result<Diff, WorktreeError> {
     for line in git(dir, &["diff", "--numstat", &wt.base])?.lines() {
         let mut parts = line.splitn(3, '\t');
         let (a, r, p) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""), parts.next().unwrap_or(""));
-        out.files.push(FileStat {
-            path: p.to_string(),
-            added: a.parse().unwrap_or(0),
-            removed: r.parse().unwrap_or(0),
-            untracked: false,
-            binary: a == "-",
-        });
+        out.files.push(FileStat { path: p.to_string(), added: a.parse().unwrap_or(0), removed: r.parse().unwrap_or(0), untracked: false, binary: a == "-" });
     }
     out.patch = git(dir, &["diff", &wt.base])?;
 
@@ -137,13 +121,7 @@ pub fn diff(wt: &Worktree) -> Result<Diff, WorktreeError> {
         let patch = git_diff_ok(dir, &["diff", "--no-index", "--", "/dev/null", p])?;
         let numstat = git_diff_ok(dir, &["diff", "--no-index", "--numstat", "--", "/dev/null", p])?;
         let added = numstat.split('\t').next().unwrap_or("");
-        out.files.push(FileStat {
-            path: p.to_string(),
-            added: added.parse().unwrap_or(0),
-            removed: 0,
-            untracked: true,
-            binary: added == "-",
-        });
+        out.files.push(FileStat { path: p.to_string(), added: added.parse().unwrap_or(0), removed: 0, untracked: true, binary: added == "-" });
         out.patch.push_str(&patch);
     }
     out.files.sort_by(|a, b| a.path.cmp(&b.path));

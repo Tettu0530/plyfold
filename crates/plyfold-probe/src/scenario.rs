@@ -85,9 +85,7 @@ pub async fn start(cfg: &Config, target: &str, opts: &Opts, kind: &str) -> Resul
         .with_context(|| format!("initialize failed (stderr: {})", run_dir.join("stderr.log").display()))?;
 
     if let Some(method) = &opts.auth {
-        conn.request_timeout("authenticate", json!({ "methodId": method }), SESSION_TIMEOUT)
-            .await
-            .context("authenticate failed")?;
+        conn.request_timeout("authenticate", json!({ "methodId": method }), SESSION_TIMEOUT).await.context("authenticate failed")?;
     }
 
     Ok(Session { conn, shared, init, run_dir, launch, cwd, mode: opts.mode.clone() })
@@ -95,15 +93,13 @@ pub async fn start(cfg: &Config, target: &str, opts: &Opts, kind: &str) -> Resul
 
 impl Session {
     pub async fn new_session(&self) -> Result<Value, RpcError> {
-        let r = self
-            .conn
-            .request_timeout("session/new", json!({ "cwd": self.cwd, "mcpServers": [] }), SESSION_TIMEOUT)
-            .await;
+        let r = self.conn.request_timeout("session/new", json!({ "cwd": self.cwd, "mcpServers": [] }), SESSION_TIMEOUT).await;
         if let Err(e) = &r
-            && e.code == RpcError::AUTH_REQUIRED {
-                let methods: Vec<String> = auth_methods(&self.init);
-                eprintln!("Authentication required. Available methods: {} (choose with --auth <id>)", methods.join(", "));
-            }
+            && e.code == RpcError::AUTH_REQUIRED
+        {
+            let methods: Vec<String> = auth_methods(&self.init);
+            eprintln!("Authentication required. Available methods: {} (choose with --auth <id>)", methods.join(", "));
+        }
         r
     }
 
@@ -122,13 +118,7 @@ impl Session {
             bail!("this agent supports neither session/load nor session/resume");
         };
         let before = self.total_updates();
-        self.conn
-            .request_timeout(
-                method,
-                json!({ "sessionId": session_id, "cwd": self.cwd, "mcpServers": [] }),
-                SESSION_TIMEOUT,
-            )
-            .await?;
+        self.conn.request_timeout(method, json!({ "sessionId": session_id, "cwd": self.cwd, "mcpServers": [] }), SESSION_TIMEOUT).await?;
         // Wait briefly for the replayed history notifications to arrive
         tokio::time::sleep(Duration::from_millis(500)).await;
         Ok((method.to_string(), self.total_updates() - before))
@@ -150,21 +140,15 @@ fn auth_methods(init: &Value) -> Vec<String> {
 }
 
 fn object_keys(v: &Value) -> Vec<String> {
-    v.as_object()
-        .map(|o| o.iter().filter(|(k, v)| !v.is_null() && *k != "_meta").map(|(k, _)| k.clone()).collect())
-        .unwrap_or_default()
+    v.as_object().map(|o| o.iter().filter(|(k, v)| !v.is_null() && *k != "_meta").map(|(k, _)| k.clone()).collect()).unwrap_or_default()
 }
 
 fn true_keys(v: &Value) -> Vec<String> {
-    v.as_object()
-        .map(|o| o.iter().filter(|(_, v)| v.as_bool() == Some(true)).map(|(k, _)| k.clone()).collect())
-        .unwrap_or_default()
+    v.as_object().map(|o| o.iter().filter(|(_, v)| v.as_bool() == Some(true)).map(|(k, _)| k.clone()).collect()).unwrap_or_default()
 }
 
 fn ids(v: &Value, id_field: &str) -> Vec<String> {
-    v.as_array()
-        .map(|a| a.iter().filter_map(|x| x[id_field].as_str().map(str::to_string)).collect())
-        .unwrap_or_default()
+    v.as_array().map(|a| a.iter().filter_map(|x| x[id_field].as_str().map(str::to_string)).collect()).unwrap_or_default()
 }
 
 // ---------------------------------------------------------------- caps
@@ -193,11 +177,7 @@ pub async fn caps(cfg: &Config, target: &str, opts: &Opts) -> Result<CapsRow> {
     let ac = &init["agentCapabilities"];
     let mut row = CapsRow {
         target: target.to_string(),
-        agent_info: format!(
-            "{} {}",
-            init["agentInfo"]["name"].as_str().unwrap_or("?"),
-            init["agentInfo"]["version"].as_str().unwrap_or("")
-        ),
+        agent_info: format!("{} {}", init["agentInfo"]["name"].as_str().unwrap_or("?"), init["agentInfo"]["version"].as_str().unwrap_or("")),
         protocol: init["protocolVersion"].to_string(),
         load_session: ac["loadSession"].as_bool().unwrap_or(false),
         session_caps: object_keys(&ac["sessionCapabilities"]),
@@ -280,14 +260,7 @@ pub struct RunSummary {
     pub run_dir: PathBuf,
 }
 
-pub async fn run(
-    cfg: &Config,
-    target: &str,
-    opts: &Opts,
-    prompt: Option<String>,
-    cancel_after: Option<u64>,
-    session_id: Option<String>,
-) -> Result<RunSummary> {
+pub async fn run(cfg: &Config, target: &str, opts: &Opts, prompt: Option<String>, cancel_after: Option<u64>, session_id: Option<String>) -> Result<RunSummary> {
     let s = start(cfg, target, opts, "run").await?;
     let started = Instant::now();
     let mut summary = RunSummary {
@@ -322,13 +295,7 @@ pub async fn run(
     Ok(summary)
 }
 
-async fn run_inner(
-    s: &Session,
-    summary: &mut RunSummary,
-    prompt: Option<String>,
-    cancel_after: Option<u64>,
-    session_id: Option<String>,
-) -> Result<()> {
+async fn run_inner(s: &Session, summary: &mut RunSummary, prompt: Option<String>, cancel_after: Option<u64>, session_id: Option<String>) -> Result<()> {
     let sid = match session_id {
         Some(id) => {
             let (method, replayed) = s.reopen(&id).await?;
@@ -345,9 +312,7 @@ async fn run_inner(
     summary.session_id = Some(sid.clone());
 
     if let Some(mode) = &s.mode {
-        s.conn
-            .request_timeout("session/set_mode", json!({ "sessionId": sid, "modeId": mode }), SESSION_TIMEOUT)
-            .await?;
+        s.conn.request_timeout("session/set_mode", json!({ "sessionId": sid, "modeId": mode }), SESSION_TIMEOUT).await?;
         s.shared.note(format!("switched mode to {mode}"));
     }
 
@@ -391,10 +356,7 @@ async fn run_inner(
         })
     });
 
-    let r = s
-        .conn
-        .request("session/prompt", json!({ "sessionId": sid, "prompt": [{ "type": "text", "text": prompt }] }))
-        .await;
+    let r = s.conn.request("session/prompt", json!({ "sessionId": sid, "prompt": [{ "type": "text", "text": prompt }] })).await;
 
     for t in [timer, ctrl_c].into_iter().flatten() {
         t.abort();
@@ -457,7 +419,8 @@ pub async fn matrix(cfg: &Config, targets: Vec<String>, opts: &Opts) -> Result<P
         rows.push(row);
     }
 
-    let fields: [(&str, fn(&CapsRow) -> String); 12] = [
+    type Field = (&'static str, fn(&CapsRow) -> String);
+    let fields: [Field; 12] = [
         ("agent", |r| r.agent_info.clone()),
         ("protocol", |r| r.protocol.clone()),
         ("session/load", |r| if r.load_session { "○".into() } else { "×".into() }),
@@ -476,10 +439,7 @@ pub async fn matrix(cfg: &Config, targets: Vec<String>, opts: &Opts) -> Result<P
     md += &format!("| item | {} |\n", targets.join(" | "));
     md += &format!("|---|{}\n", "---|".repeat(targets.len()));
     for (name, f) in fields {
-        let cells: Vec<String> = rows
-            .iter()
-            .map(|r| if r.error.is_some() { "-".into() } else { f(r).replace('|', "\\|") })
-            .collect();
+        let cells: Vec<String> = rows.iter().map(|r| if r.error.is_some() { "-".into() } else { f(r).replace('|', "\\|") }).collect();
         md += &format!("| {name} | {} |\n", cells.join(" | "));
     }
     let errors: Vec<&CapsRow> = rows.iter().filter(|r| r.error.is_some()).collect();
@@ -515,9 +475,5 @@ fn summarize_models(models: &[String]) -> String {
 }
 
 pub fn root_of(config_path: &Path) -> PathBuf {
-    config_path
-        .canonicalize()
-        .ok()
-        .and_then(|p| p.parent().map(Path::to_path_buf))
-        .unwrap_or_else(|| PathBuf::from("."))
+    config_path.canonicalize().ok().and_then(|p| p.parent().map(Path::to_path_buf)).unwrap_or_else(|| PathBuf::from("."))
 }

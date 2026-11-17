@@ -173,8 +173,7 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS events_by_session ON events(session_id, id);
 ";
 
-const SESSION_COLS: &str =
-    "id, title, profile, agent, repo_path, worktree_path, branch, base_ref, acp_session_id, status, created_at, updated_at";
+const SESSION_COLS: &str = "id, title, profile, agent, repo_path, worktree_path, branch, base_ref, acp_session_id, status, created_at, updated_at";
 
 fn row_to_session(r: &rusqlite::Row) -> rusqlite::Result<SessionRecord> {
     Ok(SessionRecord {
@@ -211,9 +210,7 @@ impl Store {
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.execute_batch(SCHEMA)?;
         // Columns added later (missing from older records)
-        let has_lock: bool = conn
-            .prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'title_locked'")?
-            .exists([])?;
+        let has_lock: bool = conn.prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'title_locked'")?.exists([])?;
         if !has_lock {
             conn.execute_batch("ALTER TABLE sessions ADD COLUMN title_locked INTEGER NOT NULL DEFAULT 0")?;
         }
@@ -274,10 +271,8 @@ impl Store {
     }
 
     fn update(&self, id: &str, column: &str, value: &dyn rusqlite::ToSql) -> Result<(), StoreError> {
-        let n = self.conn.lock().unwrap().execute(
-            &format!("UPDATE sessions SET {column} = ?1, updated_at = ?2 WHERE id = ?3"),
-            params![value, now_ms(), id],
-        )?;
+        let n =
+            self.conn.lock().unwrap().execute(&format!("UPDATE sessions SET {column} = ?1, updated_at = ?2 WHERE id = ?3"), params![value, now_ms(), id])?;
         if n == 0 {
             return Err(StoreError::NotFound(id.into()));
         }
@@ -332,11 +327,7 @@ impl Store {
 
     /// A title from the agent. Applied unless the user has renamed the session (sort order is unchanged). Returns true if applied
     pub fn set_title_from_agent(&self, id: &str, title: &str) -> Result<bool, StoreError> {
-        let n = self
-            .conn
-            .lock()
-            .unwrap()
-            .execute("UPDATE sessions SET title = ?1 WHERE id = ?2 AND title_locked = 0 AND title <> ?1", params![title, id])?;
+        let n = self.conn.lock().unwrap().execute("UPDATE sessions SET title = ?1 WHERE id = ?2 AND title_locked = 0 AND title <> ?1", params![title, id])?;
         Ok(n > 0)
     }
 
@@ -348,28 +339,17 @@ impl Store {
 
     pub fn append_event(&self, session_id: &str, kind: EventKind, payload: &str) -> Result<i64, StoreError> {
         let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "INSERT INTO events (session_id, ts, kind, payload) VALUES (?1, ?2, ?3, ?4)",
-            params![session_id, now_ms(), kind.as_str(), payload],
-        )?;
+        conn.execute("INSERT INTO events (session_id, ts, kind, payload) VALUES (?1, ?2, ?3, ?4)", params![session_id, now_ms(), kind.as_str(), payload])?;
         Ok(conn.last_insert_rowid())
     }
 
     /// Events after `after`, oldest first (from the start if `after` is None)
     pub fn events(&self, session_id: &str, after: Option<i64>, limit: usize) -> Result<Vec<EventRecord>, StoreError> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, session_id, ts, kind, payload FROM events WHERE session_id = ?1 AND id > ?2 ORDER BY id LIMIT ?3",
-        )?;
+        let mut stmt = conn.prepare("SELECT id, session_id, ts, kind, payload FROM events WHERE session_id = ?1 AND id > ?2 ORDER BY id LIMIT ?3")?;
         let rows = stmt
             .query_map(params![session_id, after.unwrap_or(0), limit as i64], |r| {
-                Ok(EventRecord {
-                    id: r.get(0)?,
-                    session_id: r.get(1)?,
-                    ts: r.get(2)?,
-                    kind: EventKind::parse(&r.get::<_, String>(3)?),
-                    payload: r.get(4)?,
-                })
+                Ok(EventRecord { id: r.get(0)?, session_id: r.get(1)?, ts: r.get(2)?, kind: EventKind::parse(&r.get::<_, String>(3)?), payload: r.get(4)? })
             })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
@@ -420,9 +400,7 @@ mod tests {
     use super::*;
 
     fn new(store: &Store, title: &str) -> SessionRecord {
-        store
-            .create_session(NewSession { title: title.into(), profile: "p".into(), agent: "mock".into(), ..Default::default() })
-            .unwrap()
+        store.create_session(NewSession { title: title.into(), profile: "p".into(), agent: "mock".into(), ..Default::default() }).unwrap()
     }
 
     #[test]

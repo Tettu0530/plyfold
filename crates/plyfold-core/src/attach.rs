@@ -125,7 +125,16 @@ mod tests {
     use super::*;
 
     fn tmp() -> PathBuf {
-        let d = std::env::temp_dir().join(format!("plyfold-attach-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let d = std::env::temp_dir().join(format!(
+            "plyfold-attach-{}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
+            {
+                // The clock is only microsecond-precise on macOS, so tests running in parallel need a counter too
+                static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+                N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            }
+        ));
         std::fs::create_dir_all(&d).unwrap();
         d
     }
@@ -141,7 +150,9 @@ mod tests {
     #[test]
     fn image_becomes_a_saved_file_link_when_not_supported() {
         let d = tmp();
-        let blocks = prompt_blocks("", &[Attachment::Image { data: B64.encode(b"png"), mime: "image/png".into(), name: Some("スクショ.png".into()) }], false, &d).unwrap();
+        let blocks =
+            prompt_blocks("", &[Attachment::Image { data: B64.encode(b"png"), mime: "image/png".into(), name: Some("スクショ.png".into()) }], false, &d)
+                .unwrap();
         assert_eq!(blocks.len(), 1);
         let ContentBlock::ResourceLink(l) = &blocks[0] else { panic!("link expected") };
         assert!(l.uri.starts_with("file://"));

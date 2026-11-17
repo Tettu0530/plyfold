@@ -97,10 +97,7 @@ fn text_chunk(kind: &str, text: &str) -> Value {
 async fn prompt(st: Arc<State>, id: Value, params: Value) {
     let sid = params["sessionId"].as_str().unwrap_or_default().to_string();
     st.cancelled.lock().unwrap().remove(&sid);
-    let text: String = params["prompt"]
-        .as_array()
-        .map(|a| a.iter().filter_map(|b| b["text"].as_str()).collect::<Vec<_>>().join(""))
-        .unwrap_or_default();
+    let text: String = params["prompt"].as_array().map(|a| a.iter().filter_map(|b| b["text"].as_str()).collect::<Vec<_>>().join("")).unwrap_or_default();
     st.update(&sid, text_chunk("user_message_chunk", &text));
 
     let stop = if text.contains("permission") {
@@ -138,10 +135,7 @@ async fn permission_flow(st: &State, sid: &str) -> &'static str {
     let tool_id = format!("mock-tool-{n}");
     let cwd = st.cwds.lock().unwrap().get(sid).cloned().unwrap_or_else(|| PathBuf::from("."));
     let path = cwd.join("mock-output.txt");
-    st.update(
-        sid,
-        json!({"sessionUpdate": "tool_call", "toolCallId": tool_id, "title": "Write mock-output.txt", "kind": "edit", "status": "pending"}),
-    );
+    st.update(sid, json!({"sessionUpdate": "tool_call", "toolCallId": tool_id, "title": "Write mock-output.txt", "kind": "edit", "status": "pending"}));
     let resp = st
         .request(
             "session/request_permission",

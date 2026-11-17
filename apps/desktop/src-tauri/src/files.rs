@@ -26,9 +26,12 @@ pub struct FileHit {
     pub abs: String,
 }
 
+/// A directory's file list and when it was read
+type Listing = (Instant, std::sync::Arc<Vec<String>>);
+
 #[derive(Default)]
 pub struct FileIndex {
-    cache: Mutex<HashMap<PathBuf, (Instant, std::sync::Arc<Vec<String>>)>>,
+    cache: Mutex<HashMap<PathBuf, Listing>>,
 }
 
 impl FileIndex {
@@ -39,11 +42,7 @@ impl FileIndex {
         let mut scored: Vec<(i64, &String)> = files.iter().filter_map(|p| score(p, &q).map(|s| (s, p))).collect();
         // Higher score first; ties go to shorter paths, then alphabetical
         scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.len().cmp(&b.1.len())).then(a.1.cmp(b.1)));
-        scored
-            .into_iter()
-            .take(limit)
-            .map(|(_, p)| FileHit { path: p.clone(), abs: root.join(p).to_string_lossy().into_owned() })
-            .collect()
+        scored.into_iter().take(limit).map(|(_, p)| FileHit { path: p.clone(), abs: root.join(p).to_string_lossy().into_owned() }).collect()
     }
 
     fn files(&self, root: &Path) -> std::sync::Arc<Vec<String>> {
@@ -60,11 +59,7 @@ impl FileIndex {
 }
 
 fn git_files(root: &Path) -> Option<Vec<String>> {
-    let out = std::process::Command::new("git")
-        .args(["ls-files", "--cached", "--others", "--exclude-standard", "-z"])
-        .current_dir(root)
-        .output()
-        .ok()?;
+    let out = std::process::Command::new("git").args(["ls-files", "--cached", "--others", "--exclude-standard", "-z"]).current_dir(root).output().ok()?;
     if !out.status.success() {
         return None;
     }
@@ -161,7 +156,7 @@ mod tests {
     #[test]
     fn ranks_file_name_matches_first() {
         let q = "lib";
-        let mut paths = vec!["docs/library-notes.md", "src/lib.rs", "crates/x/src/lib.rs", "apps/a/bundle/l_i_b.txt"];
+        let mut paths = ["docs/library-notes.md", "src/lib.rs", "crates/x/src/lib.rs", "apps/a/bundle/l_i_b.txt"];
         paths.sort_by_key(|p| std::cmp::Reverse(score(p, q).unwrap_or(i64::MIN)));
         assert_eq!(paths[0], "src/lib.rs");
         assert_eq!(paths[1], "crates/x/src/lib.rs");
@@ -190,7 +185,16 @@ mod tests {
 
     #[test]
     fn walks_plain_folders_without_hidden_or_dependency_dirs() {
-        let d = std::env::temp_dir().join(format!("plyfold-files-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let d = std::env::temp_dir().join(format!(
+            "plyfold-files-{}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
+            {
+                // The clock is only microsecond-precise on macOS, so tests running in parallel need a counter too
+                static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+                N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            }
+        ));
         for p in ["src/main.rs", "node_modules/x/index.js", ".hidden/a.txt", "README.md"] {
             let f = d.join(p);
             std::fs::create_dir_all(f.parent().unwrap()).unwrap();

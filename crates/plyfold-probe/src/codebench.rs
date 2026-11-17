@@ -156,18 +156,8 @@ async fn run_task(cfg: &Config, target: &str, opts: &Opts, task: &TaskDef, root:
         let new = s.new_session().await?;
         let sid = new["sessionId"].as_str().context("missing sessionId")?.to_string();
         let mode = if s.launch.agent == "codex" { "workspace-write" } else { "default" };
-        let _ = s
-            .conn
-            .request_timeout("session/set_mode", json!({ "sessionId": sid, "modeId": mode }), Duration::from_secs(30))
-            .await;
-        let r = s
-            .conn
-            .request_timeout(
-                "session/prompt",
-                json!({ "sessionId": sid, "prompt": [{ "type": "text", "text": PROMPT }] }),
-                AGENT_TIMEOUT,
-            )
-            .await;
+        let _ = s.conn.request_timeout("session/set_mode", json!({ "sessionId": sid, "modeId": mode }), Duration::from_secs(30)).await;
+        let r = s.conn.request_timeout("session/prompt", json!({ "sessionId": sid, "prompt": [{ "type": "text", "text": PROMPT }] }), AGENT_TIMEOUT).await;
         {
             let stats = s.shared.stats.lock().unwrap();
             res.tool_calls = stats.updates.get("tool_call").copied().unwrap_or(0);
@@ -250,14 +240,7 @@ fn report(targets: &[String], routes: &[RouteResult], root: &Path) -> String {
             .iter()
             .map(|r| {
                 let x = &r.results[i];
-                format!(
-                    "{} {}/{} ({:.0}s, {} tools)",
-                    if x.solved { "○" } else { "×" },
-                    x.passed,
-                    x.total,
-                    x.elapsed_ms as f64 / 1000.0,
-                    x.tool_calls
-                )
+                format!("{} {}/{} ({:.0}s, {} tools)", if x.solved { "○" } else { "×" }, x.passed, x.total, x.elapsed_ms as f64 / 1000.0, x.tool_calls)
             })
             .collect();
         let _ = writeln!(md, "| {} | {} |", task.id, cells.join(" | "));

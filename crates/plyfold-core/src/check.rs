@@ -39,7 +39,14 @@ pub async fn check_profile(config: &Config, profile: &str, state_dir: &Path, sec
     match result {
         Ok(Ok(())) => out.ok = true,
         Ok(Err(e)) => out.error = Some(e),
-        Err(_) => out.error = Some(plyfold_i18n::tr!("{} 秒たっても応答が終わりません", "The response did not finish within {} seconds", "{} 秒后响应仍未结束", TIMEOUT.as_secs())),
+        Err(_) => {
+            out.error = Some(plyfold_i18n::tr!(
+                "{} 秒たっても応答が終わりません",
+                "The response did not finish within {} seconds",
+                "{} 秒后响应仍未结束",
+                TIMEOUT.as_secs()
+            ))
+        }
     }
     out.total_ms = started.elapsed().as_millis() as u64;
     out.at = now();

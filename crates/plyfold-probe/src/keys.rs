@@ -17,10 +17,7 @@ pub fn get(profile: &str, var: &str) -> Result<String> {
         .output()
         .context("cannot run the security command")?;
     if !out.status.success() {
-        bail!(
-            "{} is not in the Keychain; store it with `plyfold-probe keys set {profile} {var}`",
-            account(profile, var)
-        );
+        bail!("{} is not in the Keychain; store it with `plyfold-probe keys set {profile} {var}`", account(profile, var));
     }
     Ok(String::from_utf8(out.stdout)?.trim_end_matches('\n').to_string())
 }
@@ -28,9 +25,7 @@ pub fn get(profile: &str, var: &str) -> Result<String> {
 /// The value is never a command-line argument; `security` prompts for it
 pub fn set(profile: &str, var: &str) -> Result<()> {
     eprintln!("Enter the value for {} (twice, to confirm)", account(profile, var));
-    let status = Command::new("security")
-        .args(["add-generic-password", "-U", "-s", SERVICE, "-a", &account(profile, var), "-w"])
-        .status()?;
+    let status = Command::new("security").args(["add-generic-password", "-U", "-s", SERVICE, "-a", &account(profile, var), "-w"]).status()?;
     if !status.success() {
         bail!("failed to store the key");
     }
@@ -38,10 +33,7 @@ pub fn set(profile: &str, var: &str) -> Result<()> {
 }
 
 pub fn delete(profile: &str, var: &str) -> Result<()> {
-    let status = Command::new("security")
-        .args(["delete-generic-password", "-s", SERVICE, "-a", &account(profile, var)])
-        .stdout(Stdio::null())
-        .status()?;
+    let status = Command::new("security").args(["delete-generic-password", "-s", SERVICE, "-a", &account(profile, var)]).stdout(Stdio::null()).status()?;
     if !status.success() {
         bail!("failed to delete the key (it may not be stored)");
     }

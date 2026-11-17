@@ -113,14 +113,8 @@ async fn main() -> Result<()> {
     }
 
     let cfg = Config::load(&cli.config)?;
-    let opts = Opts {
-        root: scenario::root_of(&cli.config),
-        policy: Policy::Ask,
-        quiet: false,
-        cwd: cli.cwd.clone(),
-        auth: cli.auth.clone(),
-        mode: cli.mode.clone(),
-    };
+    let opts =
+        Opts { root: scenario::root_of(&cli.config), policy: Policy::Ask, quiet: false, cwd: cli.cwd.clone(), auth: cli.auth.clone(), mode: cli.mode.clone() };
 
     match cli.cmd {
         Cmd::List => {
@@ -131,12 +125,7 @@ async fn main() -> Result<()> {
             println!("Profiles:");
             for (name, p) in &cfg.profiles {
                 let keys: Vec<_> = p.keys.iter().map(|(k, v)| format!("{k}←{v}")).collect();
-                println!(
-                    "  {name:16} agent={} isolate={} {}",
-                    p.agent,
-                    p.isolate,
-                    keys.join(" ")
-                );
+                println!("  {name:16} agent={} isolate={} {}", p.agent, p.isolate, keys.join(" "));
             }
         }
         Cmd::Caps { target } => {

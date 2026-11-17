@@ -81,7 +81,16 @@ mod tests {
     use super::*;
 
     fn tree() -> PathBuf {
-        let d = std::env::temp_dir().join(format!("plyfold-dirs-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let d = std::env::temp_dir().join(format!(
+            "plyfold-dirs-{}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
+            {
+                // The clock is only microsecond-precise on macOS, so tests running in parallel need a counter too
+                static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+                N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            }
+        ));
         for p in ["projects/plyfold/.git", "projects/Pebrel", "projects/tsumiki/.git", "Pictures", ".config"] {
             std::fs::create_dir_all(d.join(p)).unwrap();
         }

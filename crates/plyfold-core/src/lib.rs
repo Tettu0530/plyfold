@@ -26,9 +26,9 @@ pub mod check;
 pub use attach::Attachment;
 pub mod info;
 pub mod usage;
-pub use usage::ProfileUsage;
-pub use info::{Category, Choice, ConfigOption, Cost, LiveTurn, SessionInfo, TokenUsage, TurnStats};
 use info::TurnClock;
+pub use info::{Category, Choice, ConfigOption, Cost, LiveTurn, SessionInfo, TokenUsage, TurnStats};
+pub use usage::ProfileUsage;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
@@ -67,10 +67,18 @@ pub struct PermissionChoice {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EngineEvent {
-    SessionCreated { session: SessionRecord },
-    Status { session_id: String, status: SessionStatus },
+    SessionCreated {
+        session: SessionRecord,
+    },
+    Status {
+        session_id: String,
+        status: SessionStatus,
+    },
     /// The `update` part of session/update (raw JSON; the UI renders each kind)
-    Update { session_id: String, update: Value },
+    Update {
+        session_id: String,
+        update: Value,
+    },
     PermissionRequested {
         session_id: String,
         permission_id: String,
@@ -78,14 +86,31 @@ pub enum EngineEvent {
         tool_call: Value,
         options: Vec<PermissionChoice>,
     },
-    PermissionResolved { session_id: String, permission_id: String, option_id: Option<String> },
-    TurnEnded { session_id: String, stop_reason: Option<String>, error: Option<String> },
+    PermissionResolved {
+        session_id: String,
+        permission_id: String,
+        option_id: Option<String>,
+    },
+    TurnEnded {
+        session_id: String,
+        stop_reason: Option<String>,
+        error: Option<String>,
+    },
     /// Something to tell the user (launch failures, no response, reopen results, etc.)
-    Notice { session_id: String, message: String },
+    Notice {
+        session_id: String,
+        message: String,
+    },
     /// Config options and usage (sent in full on every change; every 0.5 s while streaming)
-    Info { session_id: String, info: Box<SessionInfo> },
+    Info {
+        session_id: String,
+        info: Box<SessionInfo>,
+    },
     /// The session was renamed to a title the agent set
-    Renamed { session_id: String, title: String },
+    Renamed {
+        session_id: String,
+        title: String,
+    },
 }
 
 pub struct EngineOptions {
@@ -245,20 +270,8 @@ impl Engine {
 
     pub async fn start_session(&self, req: StartSession) -> Result<SessionRecord, CoreError> {
         let inner = &self.inner;
-        let agent = inner
-            .config
-            .read()
-            .unwrap()
-            .profiles
-            .get(&req.profile)
-            .map(|p| p.agent.clone())
-            .unwrap_or_else(|| req.profile.clone());
-        let rec = inner.store.create_session(NewSession {
-            title: req.title,
-            profile: req.profile.clone(),
-            agent,
-            ..Default::default()
-        })?;
+        let agent = inner.config.read().unwrap().profiles.get(&req.profile).map(|p| p.agent.clone()).unwrap_or_else(|| req.profile.clone());
+        let rec = inner.store.create_session(NewSession { title: req.title, profile: req.profile.clone(), agent, ..Default::default() })?;
         inner.emit(EngineEvent::SessionCreated { session: rec.clone() });
 
         let prepared: Result<PathBuf, CoreError> = (|| {
@@ -295,11 +308,7 @@ impl Engine {
             return Err(CoreError::AlreadyRunning(id.into()));
         }
         let rec = self.inner.store.get_session(id)?;
-        let cwd = rec
-            .worktree_path
-            .clone()
-            .or(rec.repo_path.clone())
-            .ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
+        let cwd = rec.worktree_path.clone().or(rec.repo_path.clone()).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
         self.launch(id, &rec.profile, Path::new(&cwd), rec.acp_session_id.clone()).await
     }
 
@@ -491,12 +500,7 @@ impl Engine {
     /// An option_id of None is treated as a cancel
     pub async fn respond_permission(&self, id: &str, permission_id: &str, option_id: Option<&str>) -> Result<(), CoreError> {
         let live = self.inner.live(id)?;
-        let request_id = live
-            .permissions
-            .lock()
-            .unwrap()
-            .remove(permission_id)
-            .ok_or_else(|| CoreError::UnknownPermission(permission_id.into()))?;
+        let request_id = live.permissions.lock().unwrap().remove(permission_id).ok_or_else(|| CoreError::UnknownPermission(permission_id.into()))?;
         live.client.respond_permission(request_id, option_id).await?;
         live.touch();
         self.inner.emit(EngineEvent::PermissionResolved {
@@ -581,7 +585,7 @@ impl Engine {
         worktree_of(&rec).ok_or_else(|| CoreError::NoWorkspace(id.into()))
     }
 
-/// The directory a session works in (its worktree, or the repository itself) and the branch to compare it with:
+    /// The directory a session works in (its worktree, or the repository itself) and the branch to compare it with:
     /// the branch it will be merged into for a worktree, the remote's default branch otherwise
     fn git_dir(&self, id: &str) -> Result<(PathBuf, Option<String>), CoreError> {
         let rec = self.inner.store.get_session(id)?;
@@ -628,7 +632,7 @@ impl Engine {
         Ok(plyfold_worktree::remote::pull_request(&dir)?)
     }
 
-        pub fn worktree_status(&self, id: &str) -> Result<plyfold_worktree::WtStatus, CoreError> {
+    pub fn worktree_status(&self, id: &str) -> Result<plyfold_worktree::WtStatus, CoreError> {
         let rec = self.inner.store.get_session(id)?;
         let wt = worktree_of(&rec).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
         Ok(plyfold_worktree::ops::status(&wt)?)
@@ -638,7 +642,8 @@ impl Engine {
     pub fn commit(&self, id: &str, message: &str) -> Result<String, CoreError> {
         let wt = self.idle_worktree(id)?;
         let hash = plyfold_worktree::ops::commit(&wt, message)?;
-        self.inner.notice(id, plyfold_i18n::tr!("コミットしました: {hash} {}", "Committed: {hash} {}", "已提交：{hash} {}", message.lines().next().unwrap_or("")));
+        self.inner
+            .notice(id, plyfold_i18n::tr!("コミットしました: {hash} {}", "Committed: {hash} {}", "已提交：{hash} {}", message.lines().next().unwrap_or("")));
         Ok(hash)
     }
 
@@ -672,7 +677,8 @@ impl Engine {
         self.close_session(id).await?;
         self.inner.worktrees.remove(&wt, true)?;
         self.inner.store.set_workspace(id, rec.repo_path.as_deref(), None, None, None)?;
-        self.inner.notice(id, plyfold_i18n::tr!("worktree と枝 {} を片付けました", "Removed the worktree and branch {}", "已清理 worktree 和分支 {}", wt.branch));
+        self.inner
+            .notice(id, plyfold_i18n::tr!("worktree と枝 {} を片付けました", "Removed the worktree and branch {}", "已清理 worktree 和分支 {}", wt.branch));
         Ok(())
     }
 
@@ -685,7 +691,15 @@ impl Engine {
     pub fn discard(&self, id: &str) -> Result<(), CoreError> {
         let wt = self.idle_worktree(id)?;
         plyfold_worktree::ops::discard(&wt)?;
-        self.inner.notice(id, plyfold_i18n::tr!("変更を破棄して、{} に戻しました", "Discarded the changes and reset to {}", "已放弃更改，并恢复到 {}", &wt.base[..wt.base.len().min(7)]));
+        self.inner.notice(
+            id,
+            plyfold_i18n::tr!(
+                "変更を破棄して、{} に戻しました",
+                "Discarded the changes and reset to {}",
+                "已放弃更改，并恢复到 {}",
+                &wt.base[..wt.base.len().min(7)]
+            ),
+        );
         Ok(())
     }
 }
@@ -773,14 +787,20 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
                 inner.emit(EngineEvent::PermissionRequested {
                     session_id: id.clone(),
                     permission_id: pid,
-                    title: v["toolCall"]["title"].as_str().map(str::to_string).unwrap_or_else(|| plyfold_i18n::tr!("（タイトルなし）", "(untitled)", "（无标题）")),
+                    title: v["toolCall"]["title"]
+                        .as_str()
+                        .map(str::to_string)
+                        .unwrap_or_else(|| plyfold_i18n::tr!("（タイトルなし）", "(untitled)", "（无标题）")),
                     tool_call: v["toolCall"].clone(),
                     options,
                 });
             }
             AgentMessage::OtherRequest { request_id, method, .. } => {
                 let _ = live.client.respond_unsupported(request_id).await;
-                inner.notice(&id, plyfold_i18n::tr!("未対応のリクエスト {method} を断りました", "Declined the unsupported request {method}", "已拒绝不支持的请求 {method}"));
+                inner.notice(
+                    &id,
+                    plyfold_i18n::tr!("未対応のリクエスト {method} を断りました", "Declined the unsupported request {method}", "已拒绝不支持的请求 {method}"),
+                );
             }
             AgentMessage::OtherNotification { .. } => {}
             AgentMessage::Closed => {
@@ -789,7 +809,12 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
                     let tail = live.client.connection().stderr_tail();
                     let mut msg = plyfold_i18n::tr!("エージェントのプロセスが終了しました", "The agent process exited", "代理进程已退出");
                     if !tail.is_empty() {
-                        msg += &plyfold_i18n::tr!("\nstderr の最後:\n{}", "\nLast stderr output:\n{}", "\nstderr 的最后几行：\n{}", tail.iter().rev().take(20).rev().cloned().collect::<Vec<_>>().join("\n"));
+                        msg += &plyfold_i18n::tr!(
+                            "\nstderr の最後:\n{}",
+                            "\nLast stderr output:\n{}",
+                            "\nstderr 的最后几行：\n{}",
+                            tail.iter().rev().take(20).rev().cloned().collect::<Vec<_>>().join("\n")
+                        );
                     }
                     inner.notice(&id, msg);
                     inner.set_status(&id, SessionStatus::Error);
@@ -813,7 +838,15 @@ async fn watchdog(inner: Arc<Inner>, id: String, live: Arc<Live>) {
             && !live.stalled.swap(true, Ordering::SeqCst)
         {
             inner.set_status(&id, SessionStatus::Stalled);
-            inner.notice(&id, plyfold_i18n::tr!("{} 秒間、エージェントから何も届いていません", "Nothing has arrived from the agent for {} seconds", "已有 {} 秒没有收到代理的任何消息", idle.as_secs()));
+            inner.notice(
+                &id,
+                plyfold_i18n::tr!(
+                    "{} 秒間、エージェントから何も届いていません",
+                    "Nothing has arrived from the agent for {} seconds",
+                    "已有 {} 秒没有收到代理的任何消息",
+                    idle.as_secs()
+                ),
+            );
         }
     }
 }

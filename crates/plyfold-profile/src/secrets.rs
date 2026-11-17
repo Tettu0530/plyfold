@@ -36,10 +36,7 @@ fn err(account: &str, reason: impl Into<String>) -> ProfileError {
 
 impl SecretStore for KeychainStore {
     fn get(&self, account: &str) -> Result<String, ProfileError> {
-        let out = Command::new("security")
-            .args(["find-generic-password", "-s", &self.service, "-a", account, "-w"])
-            .stderr(Stdio::null())
-            .output()?;
+        let out = Command::new("security").args(["find-generic-password", "-s", &self.service, "-a", account, "-w"]).stderr(Stdio::null()).output()?;
         if !out.status.success() {
             return Err(err(account, plyfold_i18n::tr!("キーチェーンに登録されていません", "Not found in the keychain", "未在钥匙串中找到")));
         }
@@ -75,7 +72,14 @@ impl SecretStore for KeychainStore {
             .stderr(Stdio::null())
             .status()?;
         if !status.success() {
-            return Err(err(account, plyfold_i18n::tr!("削除に失敗しました（登録されていない可能性があります）", "Could not delete (it may not be in the keychain)", "删除失败（可能不在钥匙串中）")));
+            return Err(err(
+                account,
+                plyfold_i18n::tr!(
+                    "削除に失敗しました（登録されていない可能性があります）",
+                    "Could not delete (it may not be in the keychain)",
+                    "删除失败（可能不在钥匙串中）"
+                ),
+            ));
         }
         Ok(())
     }

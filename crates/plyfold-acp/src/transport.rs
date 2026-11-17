@@ -69,8 +69,15 @@ impl AcpError {
 /// Something received from the agent
 #[derive(Debug, Clone)]
 pub enum Incoming {
-    Request { id: Value, method: String, params: Value },
-    Notification { method: String, params: Value },
+    Request {
+        id: Value,
+        method: String,
+        params: Value,
+    },
+    Notification {
+        method: String,
+        params: Value,
+    },
     /// The process's stdout closed (it exited)
     Closed,
 }
@@ -91,28 +98,18 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub async fn spawn(
-        spec: &SpawnSpec,
-        sink: Option<FrameSink>,
-    ) -> Result<(Arc<Self>, mpsc::UnboundedReceiver<Incoming>), AcpError> {
+    pub async fn spawn(spec: &SpawnSpec, sink: Option<FrameSink>) -> Result<(Arc<Self>, mpsc::UnboundedReceiver<Incoming>), AcpError> {
         let redactor = Arc::new(Redactor::new(spec.secrets.clone()));
 
         let mut cmd = Command::new(&spec.command);
-        cmd.args(&spec.args)
-            .current_dir(&spec.cwd)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true);
+        cmd.args(&spec.args).current_dir(&spec.cwd).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
         for var in &spec.env_remove {
             cmd.env_remove(var);
         }
         for (k, v) in &spec.env_set {
             cmd.env(k, v);
         }
-        let mut child = cmd
-            .spawn()
-            .map_err(|source| AcpError::Spawn { command: spec.command.clone(), source })?;
+        let mut child = cmd.spawn().map_err(|source| AcpError::Spawn { command: spec.command.clone(), source })?;
 
         let stdin = child.stdin.take().expect("stdin is piped");
         let stdout = child.stdout.take().expect("stdout is piped");
@@ -194,12 +191,7 @@ impl Connection {
 
     /// Returns a "barrier" along with the response: the number of requests and notifications handed out as
     /// `Incoming` by the time the response arrived. If the receiver processes that many, nothing sent before the response is lost
-    pub async fn request_with_barrier(
-        &self,
-        method: &str,
-        params: Value,
-        timeout: Option<Duration>,
-    ) -> Result<(Value, u64), AcpError> {
+    pub async fn request_with_barrier(&self, method: &str, params: Value, timeout: Option<Duration>) -> Result<(Value, u64), AcpError> {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = oneshot::channel();
         self.pending.lock().unwrap().insert(id, tx);
@@ -207,7 +199,9 @@ impl Connection {
             self.pending.lock().unwrap().remove(&id);
             return Err(e);
         }
-        let wait = async { rx.await.unwrap_or_else(|_| Err(AcpError::Closed(plyfold_i18n::tr!("応答を受け取れませんでした", "no response was received", "未收到响应")))) };
+        let wait = async {
+            rx.await.unwrap_or_else(|_| Err(AcpError::Closed(plyfold_i18n::tr!("応答を受け取れませんでした", "no response was received", "未收到响应"))))
+        };
         match timeout {
             None => wait.await,
             Some(d) => match tokio::time::timeout(d, wait).await {
@@ -220,12 +214,7 @@ impl Connection {
         }
     }
 
-    pub async fn request<P: Serialize, R: DeserializeOwned>(
-        &self,
-        method: &str,
-        params: &P,
-        timeout: Option<Duration>,
-    ) -> Result<R, AcpError> {
+    pub async fn request<P: Serialize, R: DeserializeOwned>(&self, method: &str, params: &P, timeout: Option<Duration>) -> Result<R, AcpError> {
         let params = serde_json::to_value(params).map_err(|source| AcpError::Decode { method: method.into(), source })?;
         let v = self.request_raw(method, params, timeout).await?;
         serde_json::from_value(v).map_err(|source| AcpError::Decode { method: method.into(), source })

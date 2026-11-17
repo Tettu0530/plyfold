@@ -59,10 +59,8 @@ pub struct Launch {
 
 impl Config {
     pub fn load(path: &Path) -> Result<Self> {
-        let text = std::fs::read_to_string(path)
-            .with_context(|| format!("cannot read config file: {}", path.display()))?;
-        let mut cfg: Config =
-            toml::from_str(&text).with_context(|| format!("invalid config file: {}", path.display()))?;
+        let text = std::fs::read_to_string(path).with_context(|| format!("cannot read config file: {}", path.display()))?;
+        let mut cfg: Config = toml::from_str(&text).with_context(|| format!("invalid config file: {}", path.display()))?;
 
         // Overlay a sibling *.local.toml (kept out of git) if there is one
         let local = path.with_extension("local.toml");
@@ -75,8 +73,7 @@ impl Config {
                 #[serde(default)]
                 profiles: BTreeMap<String, ProfileDef>,
             }
-            let o: Overlay = toml::from_str(&text)
-                .with_context(|| format!("invalid config file: {}", local.display()))?;
+            let o: Overlay = toml::from_str(&text).with_context(|| format!("invalid config file: {}", local.display()))?;
             cfg.agents.extend(o.agents);
             cfg.profiles.extend(o.profiles);
         }
@@ -103,27 +100,18 @@ impl Config {
             bail!("'{target}' is neither a profile nor an agent");
         };
 
-        let agent = self
-            .agents
-            .get(&profile.agent)
-            .ok_or_else(|| anyhow!("agent '{}' of profile '{profile_name}' is not defined", profile.agent))?;
+        let agent = self.agents.get(&profile.agent).ok_or_else(|| anyhow!("agent '{}' of profile '{profile_name}' is not defined", profile.agent))?;
 
         let mut env_set: Vec<(String, String)> = agent.env.clone().into_iter().collect();
         let mut env_summary = Vec::new();
         let mut secrets = Vec::new();
 
         // Except for the default profile, don't inherit key env vars from the parent
-        let env_remove = if profile.keys.is_empty() && !profile.isolate {
-            Vec::new()
-        } else {
-            agent.key_envs.clone()
-        };
+        let env_remove = if profile.keys.is_empty() && !profile.isolate { Vec::new() } else { agent.key_envs.clone() };
 
         let profile_dir = state_dir.join("profiles").join(&profile_name);
         if profile.isolate {
-            let var = agent.config_dir_env.as_ref().ok_or_else(|| {
-                anyhow!("agent '{}' has no config_dir_env, so it cannot be isolated", profile.agent)
-            })?;
+            let var = agent.config_dir_env.as_ref().ok_or_else(|| anyhow!("agent '{}' has no config_dir_env, so it cannot be isolated", profile.agent))?;
             let dir = profile_dir.clone();
             std::fs::create_dir_all(&dir)?;
             for (rel, content) in &profile.files {
@@ -161,9 +149,7 @@ impl Config {
                 keys::get(&profile_name, var)?
             } else if let Some(account) = source.strip_prefix("keychain:") {
                 // Share one key across profiles: "keychain:<name>/<VAR>"
-                let (p, v) = account
-                    .split_once('/')
-                    .ok_or_else(|| anyhow!("expected the form keychain:<name>/<VAR>: {source}"))?;
+                let (p, v) = account.split_once('/').ok_or_else(|| anyhow!("expected the form keychain:<name>/<VAR>: {source}"))?;
                 keys::get(p, v)?
             } else if let Some(other) = source.strip_prefix("env:") {
                 std::env::var(other).with_context(|| format!("environment variable {other} is not set"))?
@@ -181,15 +167,7 @@ impl Config {
             env_set.push((k.clone(), v.clone()));
         }
 
-        Ok(Launch {
-            agent: profile.agent.clone(),
-            command: agent.command.clone(),
-            args: agent.args.clone(),
-            env_set,
-            env_remove,
-            secrets,
-            env_summary,
-        })
+        Ok(Launch { agent: profile.agent.clone(), command: agent.command.clone(), args: agent.args.clone(), env_set, env_remove, secrets, env_summary })
     }
 }
 
