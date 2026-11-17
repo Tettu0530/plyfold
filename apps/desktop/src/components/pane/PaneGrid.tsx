@@ -167,7 +167,9 @@ export function PaneGrid() {
   const [dragging, setDragging] = useState(false);
   return (
     <main className="relative flex min-w-0 grow overflow-hidden">
-      <Node node={layout} path={[]} dragging={dragging} setDragging={setDragging} present />
+      {/* A lone pane is drawn as a split with one child, so splitting it keeps the pane's component (and its
+          scroll position and typed text) instead of rebuilding it under a new parent */}
+      <Node node={layout.kind === "leaf" ? { kind: "split", axis: "row", sizes: [1], children: [layout] } : layout} path={[]} dragging={dragging} setDragging={setDragging} present />
     </main>
   );
 }

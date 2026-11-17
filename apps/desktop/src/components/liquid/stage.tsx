@@ -229,21 +229,41 @@ export function useLiquidMenu(id: string, anchor: string) {
   const ref = useRef<HTMLElement | null>(null);
   // Hide from the first frame while animating (useLiquidClip overwrites the fade every frame)
   const moving = useLiquidClip(id, ref);
+  // Whether the menu is open, and where it was last seen: if the menu goes away while open (its pane is rebuilt when
+  // the layout changes), nothing reports the close, so the held blob would stay on screen. Close it from there instead
+  const isOpen = useRef(false);
+  const lastRect = useRef<DOMRect | null>(null);
+  const target = () => {
+    const el = ref.current;
+    if (el) lastRect.current = el.getBoundingClientRect();
+    return el;
+  };
+  const closeFrom = useRef<(rect: DOMRect) => void>(() => {});
+  useEffect(
+    () => () => {
+      if (isOpen.current && lastRect.current) closeFrom.current(lastRect.current);
+      isOpen.current = false;
+    },
+    [],
+  );
   const onOpenChange = (open: boolean) => {
+    isOpen.current = open;
     // Match the anchor's corner radius to the real one (otherwise mismatched corners show when it's lowered midway)
     const el0 = liquidAnchorElement(anchor);
     const anchorRadius = (el0 && parseFloat(getComputedStyle(el0).borderTopLeftRadius)) || 6;
     // hold: the blob stays as the frame after opening (no real background/border/shadow). With no swap, springs can't misalign them
     const base = { anchor, radius: 8, anchorRadius, fromLook: CHIP_LOOK, toLook: MENU_LOOK, rise: true, hold: true };
+    closeFrom.current = (rect) => {
+      const ghost = { getBoundingClientRect: () => rect } as unknown as HTMLElement;
+      liquidCloseFrom(id, { ...base, target: () => ghost });
+    };
     if (open) {
-      liquidOpen(id, { ...base, target: () => ref.current });
+      liquidOpen(id, { ...base, target });
       return;
     }
     const el = ref.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const ghost = { getBoundingClientRect: () => rect } as unknown as HTMLElement;
-    liquidCloseFrom(id, { ...base, target: () => ghost });
+    const rect = el?.getBoundingClientRect() ?? lastRect.current;
+    if (rect) closeFrom.current(rect);
   };
   return { ref, onOpenChange, moving, style: NO_ANIMATION };
 }
