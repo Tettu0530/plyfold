@@ -281,7 +281,7 @@ export function Composer({
   const t = useT();
   const [text, setText] = useState("");
   // A chip added with @ and its "@path" in the text are kept together: removing either removes the other
-  const att = useAttachments({ onMentionRemoved: (path) => setText((cur) => removeMention(cur, path)) });
+  const att = useAttachments({ scope: scope, onMentionRemoved: (path) => setText((cur) => removeMention(cur, path)) });
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
   const textRef = useAutoGrow(text);
   const mention = useMention({ root, text, setText, textRef, boxRef: att.boxRef, scope, onPick: (h) => att.addMention(h.abs, h.path) });

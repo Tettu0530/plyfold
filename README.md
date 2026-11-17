@@ -22,7 +22,7 @@ Plyfold does not implement its own agent loop. It is an ACP client: the agent CL
 - A resizable, collapsible sidebar (drag its edge; ⌘B to toggle), with a compact one-line-per-session layout in Settings
 - Transcript with messages, thoughts, tool calls, inline diffs and the agent's plan
 - Model, effort and mode switches under the composer (⇧⇥ cycles modes), plus context usage, tokens in and out, tok/s and cost where the agent reports them
-- Messages typed during a turn are queued and sent when the turn ends; images and files can be attached
+- Messages typed during a turn are queued and sent when the turn ends; images and files can be attached from the + menu or with ⌘U, by pasting, or by dropping them on a pane
 - Type `@` in the composer to pick a file from the session's working directory (git-tracked and untracked files, ignored ones left out); it is inserted as `@path` and attached as an ACP resource link
 - Permission cards inside the pane, also shown in the sidebar and as notifications
 - A session is marked Stalled when nothing arrives during a turn for a set time (120 seconds by default)

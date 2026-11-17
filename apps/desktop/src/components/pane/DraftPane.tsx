@@ -96,7 +96,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const { updateDraft, startDraft, closePane, focusPane } = useStore.getState();
   const [text, setText] = useState("");
   // A chip added with @ and its "@path" in the text are kept together: removing either removes the other
-  const att = useAttachments({ onMentionRemoved: (path) => setText((cur) => removeMention(cur, path)) });
+  const att = useAttachments({ scope: id, onMentionRemoved: (path) => setText((cur) => removeMention(cur, path)) });
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
   const textRef = useAutoGrow(text);
   // @-mentions search the repository the session will start in

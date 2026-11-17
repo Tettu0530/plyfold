@@ -10,6 +10,7 @@ import { fromPath, readImage, type Attached } from "@/lib/attachments";
 import { addDropTarget } from "@/lib/drop";
 import { hasMention } from "./Mention";
 import { cn } from "@/lib/utils";
+import { useStore } from "@/state/store";
 import { bouncy, smooth } from "../motion";
 import { Keys } from "../Keys";
 import { liquidAnchor } from "../liquid/liquid";
@@ -20,7 +21,7 @@ import { useT } from "@/i18n";
  * onMentionRemoved: called with the path when a chip that came from an @-mention is removed, so the caller can
  * delete "@path" from the text too
  */
-export function useAttachments({ onMentionRemoved }: { onMentionRemoved?: (path: string) => void } = {}) {
+export function useAttachments({ onMentionRemoved, scope }: { onMentionRemoved?: (path: string) => void; scope?: string } = {}) {
   const t = useT();
   const [items, setItems] = useState<Attached[]>([]);
   const itemsRef = useRef(items);
@@ -44,18 +45,28 @@ export function useAttachments({ onMentionRemoved }: { onMentionRemoved?: (path:
     if (!e.clipboardData.types.includes("text/plain")) e.preventDefault();
     void Promise.all(images.map(readImage)).then((read) => setItems((a) => [...a, ...read]));
   };
-  /** Open the macOS file picker and attach (passed as paths, so handled the same as a drop) */
-  const pick = async (kind: "file" | "image") => {
+  /** Open the macOS file picker (files and images alike) and attach. Passed as paths, so handled the same as a drop */
+  const pick = async () => {
     if (!inTauri) return;
-    const picked = await openDialog({
-      multiple: true,
-      directory: false,
-      title: kind === "image" ? t("attach.pickImageTitle") : t("attach.pickFileTitle"),
-      ...(kind === "image" ? { filters: [{ name: t("attach.imageFilter"), extensions: ["png", "jpg", "jpeg", "gif", "webp"] }] } : {}),
-    });
+    const picked = await openDialog({ multiple: true, directory: false, title: t("attach.pickTitle") });
     const paths = picked == null ? [] : Array.isArray(picked) ? picked : [picked];
     if (paths.length) setItems((a) => [...a, ...paths.map(fromPath)]);
   };
+  // ⌘U opens the file picker for the focused pane's composer (scope is the pane's session or draft id)
+  const pickRef = useRef(pick);
+  pickRef.current = pick;
+  useEffect(() => {
+    if (!scope) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey || e.key.toLowerCase() !== "u") return;
+      const s = useStore.getState();
+      if (s.panes[s.focusedPane] !== scope) return;
+      e.preventDefault();
+      void pickRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [scope]);
   return {
     items,
     over,
@@ -145,13 +156,10 @@ function AddMenu({ att }: { att: AttachmentsState }) {
           sideOffset={6}
           className={cn("z-[58] flex min-w-56 flex-col gap-0.5 rounded-[10px] border bg-popover p-1 text-popover-foreground", menu.moving && "opacity-0")}
         >
-          <DropdownMenu.Item className={MENU_ITEM} onSelect={() => void att.pick("file")}>
+          <DropdownMenu.Item className={MENU_ITEM} onSelect={() => void att.pick()}>
             <Paperclip className="size-3.5 text-muted-foreground" aria-hidden />
-            {t("attach.attachFile")}
-          </DropdownMenu.Item>
-          <DropdownMenu.Item className={MENU_ITEM} onSelect={() => void att.pick("image")}>
-            <ImageIcon className="size-3.5 text-muted-foreground" aria-hidden />
-            {t("attach.attachImage")}
+            {t("attach.attachFiles")}
+            <Keys keys={["cmd", "u"]} className="ml-auto pl-4 opacity-70" />
           </DropdownMenu.Item>
           <DropdownMenu.Separator className="my-0.5 h-px bg-border" />
           <p className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-muted-foreground">
