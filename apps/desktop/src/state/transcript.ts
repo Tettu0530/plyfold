@@ -246,6 +246,9 @@ export function addNotice(t: Transcript, message: string): Transcript {
   return { ...t, items: [...t.items, { kind: "notice", text: message }] };
 }
 
+/** Stop reason for a turn cut off by the agent stopping (the app quit or crashed, or the agent exited) */
+export const INTERRUPTED = "interrupted";
+
 /** Rebuild the conversation from the saved ACP traffic (readable even when the agent is stopped) */
 /** Event-log notes written by the engine around a session/load history resend (plyfold-core REPLAY_BEGIN / REPLAY_END) */
 export const REPLAY_BEGIN = "replay:begin";
@@ -260,6 +263,12 @@ export function fromHistory(events: EventRecord[]): Transcript {
   for (const e of events) {
     if (e.kind === "note" && (e.payload === REPLAY_BEGIN || e.payload === REPLAY_END)) {
       replaying = e.payload === REPLAY_BEGIN;
+      continue;
+    }
+    // The agent stopped (or the app quit, and marked it closed on the next start) in the middle of a turn: that turn
+    // will never get its answer, so close it as interrupted rather than leave it looking like it is still generating
+    if (e.kind === "status") {
+      if (t.inTurn && (e.payload === "closed" || e.payload === "error")) t = endTurn(t, null, INTERRUPTED, null, e.ts || null);
       continue;
     }
     if (e.kind === "note") {

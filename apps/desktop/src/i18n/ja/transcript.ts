@@ -7,6 +7,7 @@ export const transcript = {
   turnCost: "このターンの費用",
   elapsed: "かかった時間",
   stopped: "停止しました",
+  interrupted: "途中で終了しました",
   endedAt: "答え終えた時刻",
   thought: "考えた内容",
   empty: "まだやり取りはありません",

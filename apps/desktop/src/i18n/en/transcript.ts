@@ -9,6 +9,7 @@ export const transcript: Record<keyof typeof source, string> = {
   turnCost: "Cost of this turn",
   elapsed: "Time taken",
   stopped: "Stopped",
+  interrupted: "Interrupted",
   endedAt: "Finished at",
   thought: "Thoughts",
   empty: "No messages yet",

@@ -6,7 +6,7 @@ import { useT, contentLang } from "@/i18n";
 import { money, seconds, tokens } from "@/lib/format";
 import type { SessionInfo, TurnStats } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import type { ToolCall, TranscriptItem } from "@/state/transcript";
+import { INTERRUPTED, type ToolCall, type TranscriptItem } from "@/state/transcript";
 import { resendable, type Attached } from "@/lib/attachments";
 import { SentAttachments } from "./Attachments";
 import { Markdown } from "./Markdown";
@@ -76,6 +76,7 @@ export function TurnStatsRow({
         </Stat>
       )}
       {stopReason === "cancelled" && <span>{t("transcript.stopped")}</span>}
+      {stopReason === INTERRUPTED && <span>{t("transcript.interrupted")}</span>}
       {endedAt != null && (
         <time dateTime={new Date(endedAt).toISOString()} title={t("transcript.endedAt")} className="ml-auto">
           {clock(endedAt)}

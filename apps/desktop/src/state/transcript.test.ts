@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { EventRecord } from "@/lib/types";
-import { applyUpdate, beginTurn, emptyTranscript, endTurn, fromHistory } from "./transcript";
+import { applyUpdate, beginTurn, emptyTranscript, endTurn, fromHistory, INTERRUPTED } from "./transcript";
 
 const chunk = (sessionUpdate: string, text: string) => ({ sessionUpdate, content: { type: "text", text } });
 
@@ -213,5 +213,26 @@ describe("transcript", () => {
     ]);
     const texts = t.items.filter((i) => i.kind === "user" || i.kind === "agent").map((i) => (i as { text: string }).text);
     expect(texts).toEqual(["remember this", "echo: remember this"]);
+  });
+
+  it("closes a turn the app quit in the middle of", () => {
+    const ev = (id: number, kind: EventRecord["kind"], payload: unknown): EventRecord => ({
+      id,
+      session_id: "s",
+      ts: id,
+      kind,
+      payload: typeof payload === "string" ? payload : JSON.stringify(payload),
+    });
+    const update = (u: unknown) => ({ jsonrpc: "2.0", method: "session/update", params: { update: u } });
+    const prompt = { jsonrpc: "2.0", id: 3, method: "session/prompt", params: { prompt: [{ type: "text", text: "write it" }] } };
+    const head = [ev(1, "status", "working"), ev(2, "frame_out", prompt), ev(3, "frame_in", update(chunk("agent_message_chunk", "half an ans")))];
+    // Still running (the screen reloaded): the turn goes on
+    expect(fromHistory(head).inTurn).toBe(true);
+    // Marked closed on the next start: the turn ends as interrupted, keeping what arrived
+    const t = fromHistory([...head, ev(4, "status", "closed")]);
+    expect(t.inTurn).toBe(false);
+    const last = t.items[t.items.length - 1];
+    expect(last.kind === "stats" && last.stopReason).toBe(INTERRUPTED);
+    expect(t.items.some((i) => i.kind === "agent" && i.text === "half an ans")).toBe(true);
   });
 });
