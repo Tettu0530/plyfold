@@ -236,6 +236,8 @@ interface State {
   startSession: (args: { profile: string; repo: string; title: string; worktree: boolean; prompt?: string }) => Promise<void>;
   /** Fork into a new session. newWorktree is false only when the source agent is stopped */
   forkSession: (id: string, newWorktree: boolean) => Promise<void>;
+  /** Open a conversation the CLI already has. The draft pane is replaced by the new session */
+  adoptCliSession: (draftId: string, acpSessionId: string, title: string) => Promise<void>;
   sendPrompt: (id: string, text: string, attachments?: Attached[]) => Promise<void>;
   /** Instructions sent mid-turn (sent in order once the turn ends) */
   queues: Record<string, Queued[]>;
@@ -676,6 +678,24 @@ export const useStore = create<State>((set, get) => ({
       return { sessions: { ...s.sessions, [rec.id]: { ...cur, record: rec, historyLoaded: false } } };
     });
     await get().openInPane(rec.id, undefined, `session:${id}`);
+  },
+
+  adoptCliSession: async (draftId, acpSessionId, title) => {
+    const d = get().drafts[draftId];
+    if (!d?.profile || d.busy) return;
+    get().updateDraft(draftId, { busy: true, error: null });
+    try {
+      const rec = await api.adoptCliSession(d.profile, d.repo, acpSessionId, title);
+      // The conversation is the history the agent resent, copied into the log after SessionCreated
+      set((s) => {
+        const cur = s.sessions[rec.id] ?? newView(rec);
+        return { sessions: { ...s.sessions, [rec.id]: { ...cur, record: rec, historyLoaded: false } } };
+      });
+      const pane = leaves(get().layout).find((i) => get().panes[i] === draftId);
+      await get().openInPane(rec.id, pane, `${draftId}:cli`);
+    } catch (e) {
+      get().updateDraft(draftId, { busy: false, error: String(e) });
+    }
   },
 
   sendPrompt: async (id, text, attachments = []) => {

@@ -18,6 +18,7 @@ import type {
   ProfileSummary,
   ProfileUsage,
   PullRequest,
+  CliSession,
   SessionInfo,
   SessionRecord,
   SettingsView,
@@ -32,6 +33,9 @@ export const api = {
   startSession: (args: { profile: string; repo: string; title: string; worktree: boolean }) => invoke<SessionRecord>("start_session", args),
   reopenSession: (id: string) => invoke<void>("reopen_session", { id }),
   forkSession: (id: string, newWorktree: boolean) => invoke<SessionRecord>("fork_session", { id, newWorktree }),
+  listCliSessions: (profile: string, repo: string) => invoke<CliSession[]>("list_cli_sessions", { profile, repo }),
+  adoptCliSession: (profile: string, repo: string, acpSessionId: string, title: string) =>
+    invoke<SessionRecord>("adopt_cli_session", { profile, repo, acpSessionId, title }),
   renameSession: (id: string, title: string) => invoke<void>("rename_session", { id, title }),
   closeSession: (id: string) => invoke<void>("close_session", { id }),
   deleteSession: (id: string, removeWorktree: boolean) => invoke<void>("delete_session", { id, removeWorktree }),

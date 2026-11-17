@@ -27,4 +27,9 @@ export const draft: Record<keyof typeof source, string> = {
   repoSuggestions: "仓库建议",
   recent: "最近",
   folders: "文件夹",
+  cliSessions: "此 CLI 中的对话",
+  cliSessionsHint: "在新 worktree 中打开。未提交的更改留在原处。",
+  cliSessionsLoading: "正在读取",
+  cliSessionsEmpty: "此仓库还没有可打开的对话",
+  cliSessionsUntitled: "（无标题）",
 };

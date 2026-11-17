@@ -2,6 +2,7 @@
 //!
 //! A session is Plyfold's unit of record. It outlives the pane that displays it.
 //! Rather than relying on each CLI's own history (session/load), all ACP traffic is recorded here.
+//! A conversation adopted from the CLI is the exception: its history is the resend from session/load, copied out of that resend so it can be shown.
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -100,7 +101,7 @@ pub enum EventKind {
     FrameIn,
     /// JSON-RPC sent to the agent (redacted)
     FrameOut,
-    /// A frame copied from the session this one was forked from. Kept out of usage totals
+    /// A transcript copy that is not usage: a fork, or history resent when a CLI conversation is adopted
     ForkIn,
     /// A frame copied from the session this one was forked from. Kept out of usage totals
     ForkOut,
@@ -349,6 +350,51 @@ impl Store {
         let conn = self.conn.lock().unwrap();
         conn.execute("INSERT INTO events (session_id, ts, kind, payload) VALUES (?1, ?2, ?3, ?4)", params![session_id, now_ms(), kind.as_str(), payload])?;
         Ok(conn.last_insert_rowid())
+    }
+
+    /// The history `session/load` resent between these notes is inside the load request, so the transcript skips it.
+    /// Rewrite those updates so they are not usage, and append a copy after the notes so the transcript can show it.
+    /// Used when adopting a CLI conversation, which has no earlier copy of its own.
+    pub fn keep_resent_history(&self, session_id: &str, begin_note: &str, end_note: &str) -> Result<(), StoreError> {
+        let mut events = Vec::new();
+        let mut after = None;
+        loop {
+            let page = self.events(session_id, after, 2000)?;
+            let Some(last) = page.last() else { break };
+            after = Some(last.id);
+            let done = page.len() < 2000;
+            events.extend(page);
+            if done {
+                break;
+            }
+        }
+        let mut begin = None;
+        let mut end = None;
+        for e in &events {
+            if e.kind == EventKind::Note && e.payload == begin_note {
+                begin = Some(e.id);
+                end = None;
+            }
+            if e.kind == EventKind::Note && e.payload == end_note && begin.is_some() {
+                end = Some(e.id);
+            }
+        }
+        let (Some(begin), Some(end)) = (begin, end) else { return Ok(()) };
+        let copied: Vec<_> = events
+            .iter()
+            .filter(|e| e.id > begin && e.id < end && e.kind == EventKind::FrameIn && e.payload.contains("session/update"))
+            .map(|e| (e.id, e.ts, e.payload.clone()))
+            .collect();
+        let conn = self.conn.lock().unwrap();
+        let tx = conn.unchecked_transaction()?;
+        for (id, _, _) in &copied {
+            tx.execute("UPDATE events SET kind = 'fork_in' WHERE id = ?1 AND kind = 'frame_in'", [id])?;
+        }
+        for (_, ts, payload) in &copied {
+            tx.execute("INSERT INTO events (session_id, ts, kind, payload) VALUES (?1, ?2, 'fork_in', ?3)", params![session_id, ts, payload])?;
+        }
+        tx.commit()?;
+        Ok(())
     }
 
     /// Copies the source session's ACP frames so the fork shows the same conversation.

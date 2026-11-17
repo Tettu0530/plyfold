@@ -46,6 +46,7 @@ async fn echo_turn() {
     let (client, mut rx) = AcpClient::connect(&spec(&dir), None).await.unwrap();
     assert!(client.supports_load_session());
     assert!(client.supports_fork());
+    assert!(client.supports_list());
     let s = client.new_session(&dir).await.unwrap();
     let r = client.prompt(&s.session_id.0, "hello").await.unwrap();
     assert_eq!(r.response.stop_reason, StopReason::EndTurn);
@@ -143,6 +144,28 @@ async fn fork_session_copies_history_into_a_new_process() {
     assert_eq!(agent_text(&drain(&mut rx)), "echo: next");
     let missing = client.fork_session("no-such-session", &other).await;
     assert!(matches!(missing, Err(plyfold_acp::AcpError::Rpc { code: -32002, .. })));
+    client.shutdown().await;
+}
+
+#[tokio::test]
+async fn list_sessions_then_load_into_another_directory() {
+    let dir = tempdir("list");
+    let other = tempdir("list-cwd");
+    let sid = {
+        let (client, _rx) = AcpClient::connect(&spec(&dir), None).await.unwrap();
+        let sid = client.new_session(&dir).await.unwrap().session_id.0.to_string();
+        client.prompt(&sid, "remember this").await.unwrap();
+        client.shutdown().await;
+        sid
+    };
+    let (client, mut rx) = AcpClient::connect(&spec(&other), None).await.unwrap();
+    let listed = client.list_sessions(&dir).await.unwrap();
+    assert!(listed.iter().any(|s| s.session_id.0.as_ref() == sid && s.title.as_deref() == Some("remember this")));
+    assert!(client.list_sessions(&other).await.unwrap().is_empty());
+    client.load_session(&sid, &other).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(agent_text(&drain(&mut rx)), "echo: remember this");
+    assert!(other.join(".plyfold-mock").join(format!("{sid}.jsonl")).is_file());
     client.shutdown().await;
 }
 

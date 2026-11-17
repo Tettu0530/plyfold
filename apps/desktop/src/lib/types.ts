@@ -104,6 +104,13 @@ export type EngineEvent =
   | { type: "info"; session_id: string; info: SessionInfo }
   | { type: "renamed"; session_id: string; title: string };
 
+/** A conversation the CLI already has, which Plyfold has not recorded */
+export interface CliSession {
+  acp_session_id: string;
+  title: string | null;
+  updated_at: string | null;
+}
+
 export interface EventRecord {
   id: number;
   session_id: string;

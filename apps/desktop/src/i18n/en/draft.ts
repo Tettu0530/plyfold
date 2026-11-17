@@ -27,4 +27,9 @@ export const draft: Record<keyof typeof source, string> = {
   repoSuggestions: "Repository suggestions",
   recent: "Recent",
   folders: "Folders",
+  cliSessions: "Conversations in this CLI",
+  cliSessionsHint: "Opens in a new worktree. Uncommitted changes stay where they are",
+  cliSessionsLoading: "Loading",
+  cliSessionsEmpty: "This repository has no conversation to open yet",
+  cliSessionsUntitled: "(untitled)",
 };

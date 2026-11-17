@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-use plyfold_core::{Category, Engine, EngineOptions, SessionInfo, StartSession};
+use plyfold_core::{Category, CliSession, Engine, EngineOptions, SessionInfo, StartSession};
 use plyfold_profile::edit::{self, AuthKind, ProfileForm};
 use plyfold_profile::{Config, KeychainStore, SecretStore, default_state_dir};
 use plyfold_store::{EventRecord, SessionRecord};
@@ -301,6 +301,18 @@ async fn reopen_session(state: State<'_, AppState>, id: String) -> CmdResult<()>
 #[tauri::command]
 async fn fork_session(state: State<'_, AppState>, id: String, new_worktree: bool) -> CmdResult<SessionRecord> {
     state.engine.fork_session(&id, new_worktree).await.map_err(err)
+}
+
+#[tauri::command]
+async fn list_cli_sessions(state: State<'_, AppState>, profile: String, repo: String) -> CmdResult<Vec<CliSession>> {
+    let repo = PathBuf::from(expand_home(&repo));
+    state.engine.list_cli_sessions(&profile, &repo).await.map_err(err)
+}
+
+#[tauri::command]
+async fn adopt_cli_session(state: State<'_, AppState>, profile: String, repo: String, acp_session_id: String, title: String) -> CmdResult<SessionRecord> {
+    let repo = PathBuf::from(expand_home(&repo));
+    state.engine.adopt_session(&profile, &repo, &acp_session_id, &title).await.map_err(err)
 }
 
 #[tauri::command]
@@ -694,6 +706,8 @@ pub fn run() {
             start_session,
             reopen_session,
             fork_session,
+            list_cli_sessions,
+            adopt_cli_session,
             close_session,
             delete_session,
             prompt,

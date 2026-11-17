@@ -2,6 +2,12 @@
 
 All notable changes to Plyfold are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org). While the version starts with 0, any release may change `config.toml`, `settings.json` or the database.
 
+## [Unreleased]
+
+### Sessions
+
+- Open a conversation the CLI already has, from the new-session screen, in its own worktree. Gemini CLI has no conversation list
+
 ## [0.1.0] - 2026-11-17
 
 The first release, for macOS (Apple Silicon) and Windows 10/11 (x64; new, please report what doesn't work).
