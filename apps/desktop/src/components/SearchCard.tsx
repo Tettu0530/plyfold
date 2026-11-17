@@ -9,6 +9,7 @@ import { ProviderLogo } from "./icons";
 import { Keys } from "./Keys";
 import { useLiquidMorph } from "./liquid/liquid";
 import { smooth } from "./motion";
+import { isImeKey } from "@/lib/keys";
 
 interface Entry {
   key: string;
@@ -115,7 +116,7 @@ export function SearchCard() {
             } else if (e.key === "ArrowUp") {
               e.preventDefault();
               setSel((s) => Math.max(s - 1, 0));
-            } else if (e.key === "Enter") choose(flat[sel]);
+            } else if (e.key === "Enter" && !isImeKey(e)) choose(flat[sel]);
           }}
         >
           <div className="flex h-11 items-center gap-2.5 border-b px-3.5">

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import type { PendingPermission } from "@/state/transcript";
 import { Keys } from "../Keys";
 import { dropIn } from "../motion";
+import { isImeKey } from "@/lib/keys";
 
 /** エージェントによって「拒否」でターンが終わるかが違う（docs/probe-findings.md） */
 const REJECT_ENDS_TURN = new Set(["codex"]);
@@ -30,7 +31,7 @@ export function PermissionCard({
       <div
         className="flex flex-col gap-2.5 rounded-xl border border-permission/35 bg-card/80 p-3 shadow-[0_8px_24px_rgba(0,0,0,.45),inset_0_1px_0_rgba(255,255,255,.06)] backdrop-blur-xl backdrop-saturate-150"
         onKeyDown={(e) => {
-          if (e.key === "Enter" && once) onRespond(once.option_id);
+          if (e.key === "Enter" && !isImeKey(e) && once) onRespond(once.option_id);
         }}
       >
         <div className="flex items-center gap-2">

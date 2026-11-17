@@ -16,6 +16,8 @@ import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 import type { Attached } from "@/lib/attachments";
 import { AttachBox, useAttachments } from "./Attachments";
+import { isSendKey } from "@/lib/keys";
+import { useStore } from "@/state/store";
 
 function option(info: SessionInfo | null, c: Category): ConfigOption | undefined {
   return info?.config.find((o) => o.category === c);
@@ -208,6 +210,7 @@ export function Composer({
 }) {
   const [text, setText] = useState("");
   const att = useAttachments();
+  const sendKey = useStore((s) => s.settings.send_key ?? "enter");
   const canSend = !disabled && (!!text.trim() || att.items.length > 0);
   const send = () => {
     if (!canSend) return;
@@ -229,7 +232,7 @@ export function Composer({
           placeholder={placeholder}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+            if (isSendKey(e, sendKey)) {
               e.preventDefault();
               send();
             } else if (e.key === "Tab" && e.shiftKey && modes.length > 0) {

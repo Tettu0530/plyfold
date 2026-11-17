@@ -13,6 +13,7 @@ import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 import { withChoices } from "@/state/infoCache";
 import type { Category, ProfileSummary, ProfileUsage } from "@/lib/types";
+import { isSendKey } from "@/lib/keys";
 
 /** 認証の種類の表記 */
 function authLabel(p: { keyed: boolean; custom_provider: boolean }) {
@@ -90,6 +91,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const { updateDraft, startDraft, closePane, focusPane } = useStore.getState();
   const [text, setText] = useState("");
   const att = useAttachments();
+  const sendKey = useStore((s) => s.settings.send_key ?? "enter");
   const [repoOpen, setRepoOpen] = useState(false);
   // リポジトリの選択も、ボタンから飛び出して広がり、閉じるとボタンへ戻る（ほかのメニューと同じ分離アニメーション）
   const repoAnchor = `${id}:repo`;
@@ -217,7 +219,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
             placeholder="初期プロンプトを入力して始める"
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              if (isSendKey(e, sendKey)) {
                 e.preventDefault();
                 send();
               } else if (e.key === "Tab" && e.shiftKey && modes.length > 0) {

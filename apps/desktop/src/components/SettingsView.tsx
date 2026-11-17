@@ -83,6 +83,17 @@ export function SettingsView() {
                 ]}
               />
             </Row>
+            <Row label="送るキー" detail={settings.send_key === "cmd_enter" ? "⌘Enter で送ります。Enter は改行です" : "Enter で送ります。改行は Shift+Enter です"}>
+              <Segmented<"enter" | "cmd_enter">
+                label="送るキー"
+                value={settings.send_key ?? "enter"}
+                onChange={(v) => change({ send_key: v })}
+                options={[
+                  { value: "enter", aria: "Enter", label: <Keys keys={["enter"]} className="px-2" /> },
+                  { value: "cmd_enter", aria: "Command と Enter", label: <Keys keys={["cmd", "enter"]} className="px-2" /> },
+                ]}
+              />
+            </Row>
             <Row label="無応答とみなすまで" detail="ターンの途中でこの時間なにも届かなければ、無応答として知らせます">
               <Segmented<number>
                 label="無応答とみなすまで"

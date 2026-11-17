@@ -11,6 +11,7 @@ import { SessionMenu } from "./SessionMenu";
 import { liquidAnchor } from "./liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidMovingAnchors } from "./liquid/stage";
 import { smooth, snappy } from "./motion";
+import { isImeKey } from "@/lib/keys";
 
 export function Sidebar() {
   const sessions = useStore((s) => s.sessions);
@@ -142,7 +143,7 @@ export function Sidebar() {
                             }}
                             onKeyDown={(e) => {
                               e.stopPropagation();
-                              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                              if (e.key === "Enter" && !isImeKey(e)) {
                                 const v = e.currentTarget.value;
                                 setRenaming(null);
                                 void renameSession(r.id, v);

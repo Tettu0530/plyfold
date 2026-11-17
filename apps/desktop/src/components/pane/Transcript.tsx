@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import type { ToolCall, TranscriptItem } from "@/state/transcript";
 import { resendable, type Attached } from "@/lib/attachments";
 import { SentAttachments } from "./Attachments";
+import { Markdown } from "./Markdown";
 import { ActionRow, CopyButton, EditBox, UserActions, Working, workingLabel } from "./MessageActions";
 import { DiffBlock, ToolCalls } from "./ToolCall";
 
@@ -129,12 +130,7 @@ export function Transcript({
           case "agent":
             return (
               <div key={i} className="group flex flex-col gap-0.5">
-                <p className="m-0 leading-[1.7] whitespace-pre-wrap select-text">
-                  {b.text}
-                  {streaming && i === blocks.length - 1 && (
-                    <span aria-hidden className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 rounded-[1px] bg-foreground" />
-                  )}
-                </p>
+                <Markdown text={b.text} streaming={streaming && i === blocks.length - 1} />
                 {!(streaming && i === blocks.length - 1) && (
                   <ActionRow align="start">
                     <CopyButton text={b.text} />

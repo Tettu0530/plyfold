@@ -39,11 +39,13 @@ struct AppSettings {
     stall_seconds: u64,
     /// 新しいセッションを worktree で始める
     worktree_default: bool,
+    /// 入力欄で送るキー: "enter"（Enter で送り Shift+Enter で改行）/ "cmd_enter"（⌘Enter で送り Enter で改行）
+    send_key: String,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
-        Self { editor: "auto".into(), cleanup_after_merge: false, stall_seconds: 120, worktree_default: true }
+        Self { editor: "auto".into(), cleanup_after_merge: false, stall_seconds: 120, worktree_default: true, send_key: "enter".into() }
     }
 }
 
@@ -417,6 +419,18 @@ async fn create_pr(state: State<'_, AppState>, id: String) -> CmdResult<String> 
     state.engine.create_pr(&id).map_err(err)
 }
 
+/// 会話の中のリンクを、既定のブラウザで開く（WebView の中で開くとアプリの画面が替わってしまう）。
+/// http / https / mailto だけを通す
+#[tauri::command]
+fn open_url(url: String) -> CmdResult<()> {
+    let ok = ["http://", "https://", "mailto:"].iter().any(|p| url.starts_with(p));
+    if !ok || url.chars().any(char::is_control) {
+        return Err("このリンクは開けません".into());
+    }
+    std::process::Command::new("open").arg(&url).spawn().map_err(err)?;
+    Ok(())
+}
+
 #[tauri::command]
 fn open_in_editor(state: State<'_, AppState>, id: String) -> CmdResult<String> {
     let editor = state.settings.read().unwrap().editor.clone();
@@ -484,6 +498,7 @@ pub fn run() {
             session_history,
             usage_summary,
             complete_dirs,
+            open_url,
             start_session,
             reopen_session,
             close_session,

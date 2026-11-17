@@ -8,6 +8,7 @@ import type { DirCandidate } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { Keys } from "../Keys";
+import { isImeKey } from "@/lib/keys";
 
 const baseName = (p: string) => p.replace(/\/+$/, "").split("/").pop() || p;
 
@@ -65,7 +66,7 @@ export function RepoPicker({ value, onPick }: { value: string; onPick: (path: st
   }, [cur]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.nativeEvent.isComposing) return;
+    if (isImeKey(e)) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       if (rows.length) setActive((cur + (e.key === "ArrowDown" ? 1 : rows.length - 1)) % rows.length);

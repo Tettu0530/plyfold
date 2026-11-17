@@ -125,6 +125,8 @@ export interface AppSettings {
   cleanup_after_merge: boolean;
   stall_seconds: number;
   worktree_default: boolean;
+  /** 入力欄で送るキー */
+  send_key: "enter" | "cmd_enter";
 }
 
 export interface SettingsView {

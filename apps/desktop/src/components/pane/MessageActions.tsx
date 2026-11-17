@@ -7,6 +7,8 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { TranscriptItem } from "@/state/transcript";
 import { Keys } from "../Keys";
+import { isSendKey, sendKeys } from "@/lib/keys";
+import { useStore } from "@/state/store";
 
 const ICON_BUTTON =
   "flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40";
@@ -64,6 +66,7 @@ export function UserActions({ text, busy, onEdit, onResend }: { text: string; bu
 export function EditBox({ initial, onSend, onCancel }: { initial: string; onSend: (text: string) => void; onCancel: () => void }) {
   const [text, setText] = useState(initial);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const sendKey = useStore((s) => s.settings.send_key ?? "enter");
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -89,7 +92,7 @@ export function EditBox({ initial, onSend, onCancel }: { initial: string; onSend
         rows={1}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+          if (isSendKey(e, sendKey)) {
             e.preventDefault();
             send();
           } else if (e.key === "Escape") {
@@ -112,7 +115,7 @@ export function EditBox({ initial, onSend, onCancel }: { initial: string; onSend
           className="flex h-6 items-center gap-1.5 rounded-md bg-primary px-2 text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
         >
           送る
-          <Keys keys={["enter"]} onPrimary />
+          <Keys keys={sendKeys(sendKey)} onPrimary />
         </button>
       </div>
     </div>
