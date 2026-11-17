@@ -37,6 +37,12 @@ export interface ToolCall {
   /** 結果の文字（rawOutput、または content の文字） */
   result: string;
   exitCode: number | null;
+  /** ツールの名前（Claude の Bash、TaskOutput など。分からなければ null） */
+  toolName: string | null;
+  /** バックグラウンドで動かした（Claude の Bash の run_in_background） */
+  background: boolean;
+  /** 入力で指しているバックグラウンドの ID（shell_id、bash_id、task_id） */
+  refs: string[];
   /** 初めて届いた時刻と、終わった（completed / failed になった）時刻（ms） */
   startedAt: number | null;
   endedAt: number | null;
@@ -137,6 +143,9 @@ function mergeTool(prev: ToolCall | null, update: AcpUpdate, now: number | null)
     stream: "",
     result: "",
     exitCode: null,
+    toolName: null,
+    background: false,
+    refs: [],
     startedAt: now,
     endedAt: null,
   };
@@ -145,7 +154,12 @@ function mergeTool(prev: ToolCall | null, update: AcpUpdate, now: number | null)
   if (str(update.kind)) next.toolKind = update.kind as string;
   if (str(update.status)) next.status = update.status as string;
   const input = update.rawInput && typeof update.rawInput === "object" && !Array.isArray(update.rawInput) ? (update.rawInput as Record<string, unknown>) : null;
+  const meta0 = update._meta as { claudeCode?: { toolName?: unknown } } | undefined;
+  next.toolName = str(meta0?.claudeCode?.toolName) ?? str(update.name) ?? next.toolName;
   if (input) {
+    if (input.run_in_background === true) next.background = true;
+    const refs = ["shell_id", "bash_id", "task_id"].map((k) => str(input[k])).filter((x): x is string => !!x);
+    if (refs.length) next.refs = refs;
     next.command = commandOf(input) ?? next.command;
     next.path = str(input.file_path) ?? str(input.path) ?? str(input.filePath) ?? next.path;
     next.note = str(input.description) ?? next.note;

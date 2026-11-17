@@ -14,6 +14,7 @@ import { Keys } from "../Keys";
 import { Composer } from "./Composer";
 import { PermissionCard } from "./PermissionCard";
 import { Transcript } from "./Transcript";
+import { PaneTools } from "./PaneTools";
 
 function EmptyPane({ index }: { index: number }) {
   const newDraft = useStore((s) => s.newDraft);
@@ -96,6 +97,7 @@ function SessionPane({ index }: { index: number }) {
           </span>
         )}
         <span className="grow" />
+        <PaneTools scope={id} items={view.transcript.items} worktree={r.worktree_path ?? r.repo_path} alive={r.status !== "closed" && r.status !== "error"} />
         {diffStat && diffStat.added + diffStat.removed > 0 && (
           <button
             ref={liquidAnchor(`diff:${id}`)}

@@ -124,6 +124,11 @@ export function EditBox({ initial, onSend, onCancel }: { initial: string; onSend
 
 /** 生成中の印の文言: 最後に届いたものから、今なにをしているかを出す */
 export function workingLabel(items: TranscriptItem[]): string {
+  // このターンで実行中のツールがあれば、何が最後に届いても「実行しています」
+  for (let i = items.length - 1; i >= 0 && items[i].kind !== "user"; i--) {
+    const it = items[i];
+    if (it.kind === "tool" && (it.status === "pending" || it.status === "in_progress")) return "実行しています";
+  }
   const last = items[items.length - 1];
   if (!last || last.kind === "user") return "考えています";
   if (last.kind === "thought") return "考えています";

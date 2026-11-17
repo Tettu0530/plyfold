@@ -52,6 +52,10 @@
 - 検索（⌘K）、通知（ベルの欄と macOS の通知）
 - エージェントの発言は Markdown で描く（`components/pane/Markdown.tsx`、react-markdown + remark-gfm）。コードの塊は言語の名前とコピー、表、チェックリスト。リンクは既定のブラウザで開く（コマンド `open_url`、http / https / mailto だけ）。外の画像は読み込まず、リンクにする。HTML は描かない
 - 入力欄のキー（`lib/keys.ts`）: 日本語入力の確定の Enter で送らない（WebKit では確定の keydown が compositionend の後に来て isComposing が false。keyCode 229 と、compositionend から 80ms 以内も見る）。送るキーは設定で Enter か ⌘Enter（`send_key`）
+- ターンの途中に送った指示はキューに積み（入力欄の上に並ぶ）、正常に終わったら先頭から送る。中断やエラーなら待たせたまま（「先頭を送る」で送れる）。途中で文が空なら送るボタンは停止、esc でも中断
+- コマンドは実行中に経過時間、終わったらかかった時間。ターンの行の右端に答え終えた時刻
+- エージェントが付けたタイトル（session_info_update）でセッション名を書き換える。手で変えたら替えない（記録の title_locked）
+- ペインの見出しに、計画（済み/全部）、バックグラウンドのシェル（Claude の run_in_background。後から同じ ID を指した TaskOutput や KillShell で状態を追う）、触ったファイル（押すと Finder で見せる）のボタン。中身があるときだけ出す（`PaneTools.tsx`、`state/paneData.ts`）
 - 生成中は会話の最後に、きらめく文字（`.shimmer`、index.css）で今していることを出す（考えています、実行しています、書いています、計画しています）。経過時間と tok/s を並べる
 - 自分の発言にコピー・編集して送る・もう一度送る、エージェントの発言にコピー（マウスを乗せると出る）。ACP は履歴を巻き戻せないので、編集ともう一度送るは新しいターンとして送る（添えた画像とファイルも送り直す）。ターンの途中は押せない
 - 会話のツールの呼び出しは、行を押すとコマンド・説明・結果を開く（長いものは最初の行だけ、残りは押して出す）。終了コードが 0 でなければ赤で出す。ファイルの差分は行の差分（LCS、前後 3 行、`lib/lineDiff.ts`）で、見出しで畳める。描き方は差分の画面と共有（`components/PatchLines.tsx`）

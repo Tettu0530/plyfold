@@ -431,6 +431,17 @@ fn open_url(url: String) -> CmdResult<()> {
     Ok(())
 }
 
+/// エージェントが触ったファイルを Finder で見せる（ファイルがあるときだけ）
+#[tauri::command]
+fn reveal_file(path: String) -> CmdResult<()> {
+    let p = std::path::Path::new(&path);
+    if !p.is_absolute() || !p.exists() {
+        return Err("ファイルが見つかりません".into());
+    }
+    std::process::Command::new("open").arg("-R").arg(p).spawn().map_err(err)?;
+    Ok(())
+}
+
 #[tauri::command]
 fn open_in_editor(state: State<'_, AppState>, id: String) -> CmdResult<String> {
     let editor = state.settings.read().unwrap().editor.clone();
@@ -500,6 +511,7 @@ pub fn run() {
             usage_summary,
             complete_dirs,
             open_url,
+            reveal_file,
             start_session,
             reopen_session,
             close_session,
