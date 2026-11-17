@@ -199,6 +199,8 @@ mod tests {
         let repo = base.join("repo");
         std::fs::create_dir_all(&repo).unwrap();
         g(&repo, &["init", "-q", "-b", "main"]);
+        // Keep line endings as written (Windows runners convert to CRLF on checkout otherwise)
+        g(&repo, &["config", "core.autocrlf", "false"]);
         // Commits made in tests take their author from this repository's config
         g(&repo, &["config", "user.name", "t"]);
         g(&repo, &["config", "user.email", "t@example.invalid"]);

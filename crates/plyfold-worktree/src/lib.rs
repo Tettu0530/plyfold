@@ -195,6 +195,8 @@ mod tests {
             assert!(ok, "git {args:?}");
         };
         g(&["init", "-q", "-b", "main"]);
+        // Keep line endings as written (Windows runners convert to CRLF on checkout otherwise)
+        g(&["config", "core.autocrlf", "false"]);
         std::fs::write(dir.join("a.txt"), "one\ntwo\n").unwrap();
         std::fs::write(dir.join(".gitignore"), "/target\n").unwrap();
         g(&["add", "-A"]);
@@ -210,7 +212,8 @@ mod tests {
         let wts = Worktrees::new(base.join("wts"));
 
         let wt = wts.create(&repo.join("."), "s1", None).unwrap();
-        assert_eq!(wt.repo, repo);
+        // git may spell the same folder differently (C:/ vs C:\\, long vs short names on Windows)
+        assert_eq!(wt.repo.canonicalize().unwrap(), repo.canonicalize().unwrap());
         assert!(wt.path.join("a.txt").exists());
         assert_eq!(wt.branch, "plyfold/s1");
 
