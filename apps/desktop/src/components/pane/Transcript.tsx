@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowUp, ChevronRight, Clock, Coins, Gauge, Info, ListChecks } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
 import { useT, contentLang } from "@/i18n";
@@ -11,6 +12,7 @@ import { SentAttachments } from "./Attachments";
 import { Markdown } from "./Markdown";
 import { ActionRow, CopyButton, EditBox, UserActions, Working, workingLabel } from "./MessageActions";
 import { DiffBlock, ToolCalls } from "./ToolCall";
+import { snappy } from "../motion";
 
 function Stat({ icon: Icon, children, title, className }: { icon: typeof Gauge; children: React.ReactNode; title: string; className?: string }) {
   return (
@@ -108,9 +110,30 @@ export function Transcript({
   // The user message being edited (index in blocks)
   const [editing, setEditing] = useState<number | null>(null);
   const end = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  // Follow new output only while the view is at the bottom; reading further up is never interrupted
+  const atBottom = useRef(true);
+  const [awayFromBottom, setAwayFromBottom] = useState(false);
+  // Output arrived while scrolled up (shown as a dot on the button)
+  const [unseen, setUnseen] = useState(false);
+  const reduced = useReducedMotion();
+  const onScroll = () => {
+    const el = scroller.current;
+    if (!el) return;
+    const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+    atBottom.current = bottom;
+    setAwayFromBottom(!bottom);
+    if (bottom) setUnseen(false);
+  };
   useEffect(() => {
-    end.current?.scrollIntoView({ block: "end" });
+    if (atBottom.current) end.current?.scrollIntoView({ block: "end" });
+    else setUnseen(true);
   }, [items.length, items[items.length - 1]]);
+  const jumpToBottom = () => {
+    const el = scroller.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: reduced ? "auto" : "smooth" });
+  };
 
   // Group consecutive tool calls into one frame
   const blocks: (TranscriptItem | { kind: "tools"; tools: ToolCall[] })[] = [];
@@ -123,7 +146,8 @@ export function Transcript({
   }
 
   return (
-    <div className="flex min-h-0 grow flex-col gap-3 overflow-y-auto px-5 pt-4 pb-2">
+    <div className="relative flex min-h-0 grow flex-col">
+    <div ref={scroller} onScroll={onScroll} className="flex min-h-0 grow flex-col gap-3 overflow-y-auto px-5 pt-4 pb-2">
       {items.length === 0 && <p className="m-auto text-xs text-muted-foreground">{tr("transcript.empty")}</p>}
       {blocks.map((b, i) => {
         switch (b.kind) {
@@ -223,6 +247,27 @@ export function Transcript({
       )}
       <div ref={end} />
       {info?.cost && <span className="sr-only">{tr("transcript.sessionCost", { cost: money(info.cost.amount, info.cost.currency) })}</span>}
+    </div>
+    {/* Shown only while scrolled up; a dot means new output arrived below */}
+    <AnimatePresence>
+      {awayFromBottom && (
+        <motion.button
+          key="to-bottom"
+          type="button"
+          aria-label={unseen ? `${tr("transcript.scrollToBottom")}. ${tr("transcript.newBelow")}` : tr("transcript.scrollToBottom")}
+          title={tr("transcript.scrollToBottom")}
+          initial={{ opacity: 0, y: 8, scale: 0.9 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 8, scale: 0.9 }}
+          transition={snappy}
+          onClick={jumpToBottom}
+          className="absolute bottom-3 left-1/2 -ml-4 flex size-8 items-center justify-center rounded-full border bg-card text-muted-foreground shadow-[0_4px_12px_rgba(0,0,0,.45)] hover:bg-accent hover:text-foreground"
+        >
+          <ArrowDown className="size-4" aria-hidden />
+          {unseen && <span aria-hidden className="absolute top-0.5 right-0.5 size-2 rounded-full border-2 border-card bg-foreground" />}
+        </motion.button>
+      )}
+    </AnimatePresence>
     </div>
   );
 }

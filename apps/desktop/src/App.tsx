@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { GooDefs } from "./components/liquid/liquid";
 import { LiquidStage } from "./components/liquid/stage";
 import { DiffView } from "./components/DiffView";
+import { ImagePreview } from "./components/ImagePreview";
 import { ProfilesView } from "./components/ProfilesView";
 import { Notifications } from "./components/Notifications";
 import { SettingsView } from "./components/SettingsView";
@@ -133,6 +134,7 @@ export default function App() {
         <SettingsView />
         <LiquidStage />
         <SearchCard />
+        <ImagePreview />
         <MotionLab />
       </TooltipProvider>
     </MotionConfig>

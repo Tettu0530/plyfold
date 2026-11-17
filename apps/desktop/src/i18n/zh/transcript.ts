@@ -25,4 +25,6 @@ export const transcript: Record<keyof typeof source, string> = {
   newFile: "新文件",
   copyCode: "复制代码",
   image: "图片：{alt}",
+  scrollToBottom: "跳到最新",
+  newBelow: "下方有新输出",
 };

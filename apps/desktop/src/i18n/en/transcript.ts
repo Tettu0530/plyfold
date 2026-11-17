@@ -24,4 +24,6 @@ export const transcript: Record<keyof typeof source, string> = {
   newFile: "New file",
   copyCode: "Copy code",
   image: "Image: {alt}",
+  scrollToBottom: "Jump to latest",
+  newBelow: "New output below",
 };

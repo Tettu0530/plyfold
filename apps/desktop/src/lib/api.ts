@@ -18,6 +18,7 @@ export const api = {
   setUiLang: (lang: string) => invoke<void>("set_ui_lang", { lang }),
   revealFile: (path: string) => invoke<void>("reveal_file", { path }),
   openUrl: (url: string) => invoke<void>("open_url", { url }),
+  readImage: (path: string) => invoke<string>("read_image", { path }),
   searchFiles: (root: string, query: string) => invoke<FileHit[]>("search_files", { root, query }),
   completeDirs: (input: string) => invoke<DirCandidate[]>("complete_dirs", { input }),
   usageSummary: (days: number) => invoke<ProfileUsage[]>("usage_summary", { days }),

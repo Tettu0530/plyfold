@@ -6,9 +6,10 @@ import { DropdownMenu } from "radix-ui";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { inTauri } from "@/lib/api";
-import { fromPath, readImage, type Attached } from "@/lib/attachments";
+import { fromPath, readImage, type Attached, type AttachmentPreview } from "@/lib/attachments";
 import { addDropTarget } from "@/lib/drop";
 import { hasMention } from "./Mention";
+import { openImagePreview, useImageSrc } from "../ImagePreview";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { bouncy, smooth } from "../motion";
@@ -93,8 +94,27 @@ export function useAttachments({ onMentionRemoved, scope }: { onMentionRemoved?:
 
 export type AttachmentsState = ReturnType<typeof useAttachments>;
 
+/** A clickable image thumbnail that opens the large preview (growing out of the thumbnail) */
+function Thumb({ src, name, anchor, className }: { src: string; name: string; anchor: string; className?: string }) {
+  const t = useT();
+  return (
+    <button
+      ref={liquidAnchor(anchor)}
+      type="button"
+      aria-label={t("attach.preview", { name })}
+      title={name}
+      onClick={() => openImagePreview({ src, name, anchor })}
+      className="flex cursor-zoom-in rounded-md focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <img src={src} alt={name} className={cn("rounded-md border", className)} />
+    </button>
+  );
+}
+
 function Chip({ a, onRemove }: { a: Attached; onRemove: () => void }) {
   const t = useT();
+  // Images attached by path get their thumbnail read from the file
+  const src = useImageSrc(a.preview);
   const remove = (
     <button
       type="button"
@@ -105,10 +125,10 @@ function Chip({ a, onRemove }: { a: Attached; onRemove: () => void }) {
       <X className="size-3" aria-hidden />
     </button>
   );
-  if (a.preview.src)
+  if (src)
     return (
       <span className="relative flex">
-        <img src={a.preview.src} alt={a.preview.name} className="size-12 rounded-md border object-cover" />
+        <Thumb src={src} name={a.preview.name} anchor={`img:${a.key}`} className="size-12 object-cover" />
         <span className="absolute -top-1.5 -right-1.5 rounded-md bg-card">{remove}</span>
       </span>
     );
@@ -205,19 +225,25 @@ export function AttachBox({ att, children }: { att: AttachmentsState; children: 
 }
 
 /** Attachments on the user's own message in the transcript */
-export function SentAttachments({ items }: { items: { kind: "image" | "file"; name: string; src?: string }[] }) {
+export function SentAttachments({ items }: { items: AttachmentPreview[] }) {
+  // Each list gets its own anchor prefix so thumbnails in different messages don't share an animation origin
+  const prefix = useId();
   return (
     <div className="flex flex-wrap justify-end gap-2">
-      {items.map((a, i) =>
-        a.src ? (
-          <img key={i} src={a.src} alt={a.name} className="max-h-40 max-w-60 rounded-[10px] border object-contain" />
-        ) : (
-          <span key={i} className="flex h-7 max-w-60 items-center gap-1.5 rounded-md bg-muted px-2 text-xs">
-            {a.kind === "image" ? <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden /> : <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />}
-            <span className="min-w-0 truncate">{a.name}</span>
-          </span>
-        ),
-      )}
+      {items.map((a, i) => (
+        <SentItem key={i} a={a} anchor={`img:${prefix}:${i}`} />
+      ))}
     </div>
+  );
+}
+
+function SentItem({ a, anchor }: { a: AttachmentPreview; anchor: string }) {
+  const src = useImageSrc(a);
+  if (src) return <Thumb src={src} name={a.name} anchor={anchor} className="max-h-40 max-w-60 rounded-[10px] object-contain" />;
+  return (
+    <span className="flex h-7 max-w-60 items-center gap-1.5 rounded-md bg-muted px-2 text-xs">
+      {a.kind === "image" ? <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden /> : <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />}
+      <span className="min-w-0 truncate">{a.name}</span>
+    </span>
   );
 }

@@ -23,4 +23,6 @@ export const transcript = {
   newFile: "新しいファイル",
   copyCode: "コードをコピー",
   image: "画像: {alt}",
+  scrollToBottom: "一番下へ",
+  newBelow: "新しい出力があります",
 } satisfies Record<string, string>;

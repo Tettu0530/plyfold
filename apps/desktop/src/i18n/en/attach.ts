@@ -8,4 +8,6 @@ export const attach: Record<keyof typeof source, string> = {
   pasteHint: "{keys} pastes an image. Files dropped on the pane are attached too.",
   pickTitle: "Attach files or images",
   attachFiles: "Attach files or images",
+  preview: "View {name}",
+  closePreview: "Close",
 };

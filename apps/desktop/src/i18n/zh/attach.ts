@@ -8,4 +8,6 @@ export const attach: Record<keyof typeof source, string> = {
   pasteHint: "按 {keys} 粘贴图片。也可以把文件拖到窗格中附加。",
   pickTitle: "添加文件或图片",
   attachFiles: "添加文件或图片",
+  preview: "查看 {name}",
+  closePreview: "关闭",
 };

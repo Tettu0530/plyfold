@@ -260,6 +260,28 @@ async fn session_diff(state: State<'_, AppState>, id: String) -> CmdResult<Diff>
 }
 
 /// Completion for the repository picker (dirs.rs)
+/// An image file as a data: URL, for thumbnails and previews of attached images that were added by path
+/// (dropped or picked). Only common image types, up to 20 MB
+#[tauri::command]
+async fn read_image(path: String) -> CmdResult<String> {
+    use base64::Engine as _;
+    let p = std::path::PathBuf::from(expand_home(&path));
+    let ext = p.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
+    let mime = match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        _ => return Err(plyfold_i18n::tr!("画像ではありません", "Not an image", "不是图片")),
+    };
+    let size = std::fs::metadata(&p).map_err(err)?.len();
+    if size > 20 * 1024 * 1024 {
+        return Err(plyfold_i18n::tr!("画像が大きすぎます（20 MB まで）", "The image is too large (20 MB max)", "图片太大（最多 20 MB）"));
+    }
+    let bytes = std::fs::read(&p).map_err(err)?;
+    Ok(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
+}
+
 /// Files for @-mentions in the composer (files.rs). `root` is the session's worktree or repository
 #[tauri::command]
 async fn search_files(root: String, query: String) -> Vec<files::FileHit> {
@@ -533,6 +555,7 @@ pub fn run() {
             usage_summary,
             complete_dirs,
             search_files,
+            read_image,
             open_url,
             reveal_file,
             start_session,
