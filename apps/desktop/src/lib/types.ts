@@ -146,6 +146,16 @@ export interface AppSettings {
   notify_permission: boolean;
   /** Changed keyboard shortcuts (action → combo; "" unbinds). See lib/keymap.ts */
   keybindings: Record<string, string>;
+  /** Size of the whole UI in percent */
+  ui_scale: number;
+  /** "system" follows macOS Reduce motion */
+  reduce_motion: "system" | "reduce";
+  /** Show the agent's thinking expanded */
+  thoughts_expanded: boolean;
+  /** Reopen the sessions that were in panes when the app quit */
+  restore_panes: boolean;
+  /** Profile for new sessions ("" = the one used last) */
+  default_profile: string;
 }
 
 export interface SettingsView {

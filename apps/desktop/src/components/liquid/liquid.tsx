@@ -7,7 +7,7 @@
 //   droplet : shrinks into a round droplet, detaches, travels, then expands
 //   pop     : slides out from behind the anchor into the target shape on one spring (default; drawn below the anchor's surface)
 // Measurements (tools/liquid-probe) show Apple's morphs move the outer frame on a single spring. Every style uses one spring per stage
-import { animate, motion, motionValue, useMotionValue, useReducedMotion, useTransform, useVelocity, type MotionValue } from "motion/react";
+import { animate, motion, motionValue, useMotionValue, useReducedMotionConfig, useTransform, useVelocity, type MotionValue } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -141,7 +141,8 @@ const TRAIL = appleSpring({ duration: 0.45, bounce: 0.2 });
  * `mounted` says whether the real surface should be in the DOM (it stays mounted while animating so it can be measured)
  */
 export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRadius = 8, color = "#262626", style = "pop", zIndex = 60, sizeLag = 0.12, fromLook = DEFAULT_FROM, toLook = DEFAULT_TO, initiallyOpen = false, over, hold = false }: Options) {
-  const reduced = useReducedMotion();
+  // Follows Settings → Reduce motion as well as macOS (through MotionConfig)
+  const reduced = !!useReducedMotionConfig();
   const [phase, setPhase] = useState<Phase>(initiallyOpen ? "open" : "closed");
   const L = useMotionValue(0);
   const T = useMotionValue(0);

@@ -23,6 +23,9 @@ const LABEL: Record<Action, MessageKey> = {
   closePane: "settings.kbClosePane",
   focusNext: "settings.kbFocusNext",
   focusPrev: "settings.kbFocusPrev",
+  zoomIn: "settings.kbZoomIn",
+  zoomOut: "settings.kbZoomOut",
+  zoomReset: "settings.kbZoomReset",
 };
 
 export function ShortcutSettings({ onError }: { onError: (e: string) => void }) {

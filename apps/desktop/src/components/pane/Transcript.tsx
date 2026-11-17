@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, ChevronRight, Clock, Coins, Gauge, Info, ListChecks } from "lucide-react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
 import { useT, contentLang } from "@/i18n";
@@ -13,6 +13,7 @@ import { Markdown } from "./Markdown";
 import { ActionRow, CopyButton, EditBox, UserActions, Working, workingLabel } from "./MessageActions";
 import { DiffBlock, ToolCalls } from "./ToolCall";
 import { snappy } from "../motion";
+import { useStore } from "@/state/store";
 
 function Stat({ icon: Icon, children, title, className }: { icon: typeof Gauge; children: React.ReactNode; title: string; className?: string }) {
   return (
@@ -74,7 +75,8 @@ export function TurnStatsRow({
 
 function Thought({ text }: { text: string }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
+  // Settings → Thinking: start expanded or collapsed
+  const [open, setOpen] = useState(() => useStore.getState().settings.thoughts_expanded === true);
   return (
     <div>
       <button
@@ -116,7 +118,8 @@ export function Transcript({
   const [awayFromBottom, setAwayFromBottom] = useState(false);
   // Output arrived while scrolled up (shown as a dot on the button)
   const [unseen, setUnseen] = useState(false);
-  const reduced = useReducedMotion();
+  // Follows Settings → Reduce motion as well as macOS (through MotionConfig)
+  const reduced = !!useReducedMotionConfig();
   const onScroll = () => {
     const el = scroller.current;
     if (!el) return;

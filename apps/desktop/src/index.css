@@ -129,6 +129,12 @@
       color: var(--muted-foreground);
     }
   }
+  /* Settings → Reduce motion */
+  .reduce-motion .shimmer {
+    animation: none;
+    background-image: none;
+    color: var(--muted-foreground);
+  }
 }
 
 /* Marker while Markdown is still streaming (shown inline after the last paragraph, heading or list item) */

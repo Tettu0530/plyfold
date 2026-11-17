@@ -11,6 +11,11 @@ import { Keys } from "./Keys";
 import { useLiquidClip, useLiquidRevealed } from "./liquid/stage";
 import { Segmented } from "./Segmented";
 import { ShortcutSettings } from "./ShortcutSettings";
+import { ProviderLogo } from "./icons";
+import { useLiquidMenu } from "./liquid/stage";
+import { liquidAnchor } from "./liquid/liquid";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SCALES } from "@/lib/scale";
 
 // The label for auto is resolved at render time (the language can change)
 const EDITORS: { value: EditorChoice; label: string | null }[] = [
@@ -47,23 +52,37 @@ export function SettingsView() {
   const [error, setError] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const [current, setCurrent] = useState("general");
-  // The section in view is the last one whose top has passed the upper third of the scroll area
+  // A section picked in the list stays marked until the user scrolls themselves (a short last section can't reach the top)
+  const picked = useRef<string | null>(null);
+  // The section in view is the last one whose top is within 96px of the top of the scroll area
   useEffect(() => {
     const el = scroller.current;
     if (!el) return;
     const onScroll = () => {
-      const top = el.getBoundingClientRect().top + el.clientHeight / 3;
+      if (picked.current) return setCurrent(picked.current);
+      const top = el.getBoundingClientRect().top + 96;
       let id = SECTIONS[0].id;
       for (const sec of el.querySelectorAll<HTMLElement>("[data-section]")) if (sec.getBoundingClientRect().top <= top) id = sec.dataset.section!;
       // At the very bottom, the last section counts as current even if it is short
       if (el.scrollTop + el.clientHeight >= el.scrollHeight - 2) id = SECTIONS[SECTIONS.length - 1].id;
       setCurrent(id);
     };
+    const release = () => (picked.current = null);
     onScroll();
     el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
+    el.addEventListener("wheel", release, { passive: true });
+    el.addEventListener("pointerdown", release);
+    el.addEventListener("keydown", release);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      el.removeEventListener("wheel", release);
+      el.removeEventListener("pointerdown", release);
+      el.removeEventListener("keydown", release);
+    };
   }, [view]);
   const jump = (id: string) => {
+    picked.current = id;
+    setCurrent(id);
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     scroller.current?.querySelector(`#settings-${id}`)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
   };
@@ -143,7 +162,15 @@ export function SettingsView() {
                   ]}
                 />
               </Row>
-            </Section>
+                          <Row label={t("settings.uiScale")} detail={t("settings.uiScaleDetail")}>
+                <Segmented<number>
+                  label={t("settings.uiScale")}
+                  value={settings.ui_scale ?? 100}
+                  onChange={(v) => change({ ui_scale: v })}
+                  options={(SCALES.includes(settings.ui_scale ?? 100) ? SCALES : [...SCALES, settings.ui_scale].sort((a, b) => a - b)).map((v) => ({ value: v, label: <span className="px-1 font-mono tabular">{v}%</span> }))}
+                />
+              </Row>
+</Section>
 
             <Section id="session" title={t("settings.sectionSession")}>
               <Row label={t("settings.workspace")} detail={settings.worktree_default ? t("settings.workspaceWorktree") : t("settings.workspaceInPlace")}>
@@ -168,7 +195,24 @@ export function SettingsView() {
                   }))}
                 />
               </Row>
-            </Section>
+                          <Row label={t("settings.defaultProfile")} detail={settings.default_profile ? t("settings.defaultProfileDetailFixed") : t("settings.defaultProfileDetailLast")}>
+                <ProfilePicker value={settings.default_profile ?? ""} onChange={(v) => change({ default_profile: v })} />
+              </Row>
+              <Row label={t("settings.restorePanes")} htmlFor="st-restore" detail={settings.restore_panes === false ? t("settings.restorePanesOff") : t("settings.restorePanesOn")}>
+                <Switch id="st-restore" checked={settings.restore_panes !== false} onCheckedChange={(v) => change({ restore_panes: v })} />
+              </Row>
+              <Row label={t("settings.thoughts")} detail={settings.thoughts_expanded ? t("settings.thoughtsDetailExpanded") : t("settings.thoughtsDetailCollapsed")}>
+                <Segmented<string>
+                  label={t("settings.thoughts")}
+                  value={settings.thoughts_expanded ? "open" : "closed"}
+                  onChange={(v) => change({ thoughts_expanded: v === "open" })}
+                  options={[
+                    { value: "closed", label: <span className="px-2">{t("settings.thoughtsCollapsed")}</span> },
+                    { value: "open", label: <span className="px-2">{t("settings.thoughtsExpanded")}</span> },
+                  ]}
+                />
+              </Row>
+</Section>
 
             <Section id="keyboard" title={t("settings.sectionKeyboard")}>
               <Row label={t("settings.sendKey")} detail={settings.send_key === "cmd_enter" ? t("settings.sendCmdEnter") : t("settings.sendEnter")}>
@@ -227,7 +271,18 @@ export function SettingsView() {
             </Section>
 
             <Section id="motion" title={t("settings.sectionMotion")}>
-              <Row label={t("settings.motionLab")} detail={t("settings.motionLabDetail")}>
+              <Row label={t("settings.reduceMotion")} detail={settings.reduce_motion === "reduce" ? t("settings.reduceMotionDetailOn") : t("settings.reduceMotionDetailSystem")}>
+              <Segmented<"system" | "reduce">
+                label={t("settings.reduceMotion")}
+                value={settings.reduce_motion ?? "system"}
+                onChange={(v) => change({ reduce_motion: v })}
+                options={[
+                  { value: "system", label: <span className="px-2">{t("settings.reduceSystem")}</span> },
+                  { value: "reduce", label: <span className="px-2">{t("settings.reduceAlways")}</span> },
+                ]}
+              />
+            </Row>
+            <Row label={t("settings.motionLab")} detail={t("settings.motionLabDetail")}>
                 <button type="button" onClick={() => setLabOpen(true)} className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent">
                   <Sparkles className="size-3.5" aria-hidden />
                   {t("settings.open")}
@@ -281,5 +336,31 @@ function PathRow({ label, path, onReveal }: { label: string; path?: string; onRe
         {t("settings.revealInFinder")}
       </button>
     </div>
+  );
+}
+
+/** Profile for new sessions: "last used" or one profile (opens with the same liquid motion as other menus) */
+function ProfilePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const t = useT();
+  const profiles = useStore((s) => s.profiles);
+  const menu = useLiquidMenu("menu:settings:profile", "settings:profile");
+  const LAST = "__last__";
+  return (
+    <Select value={value || LAST} onValueChange={(v) => onChange(v === LAST ? "" : v)} onOpenChange={menu.onOpenChange}>
+      <SelectTrigger ref={liquidAnchor("settings:profile")} aria-label={t("settings.defaultProfile")} className="h-8 min-w-40">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent ref={menu.ref as React.Ref<HTMLDivElement>} style={menu.style} position="popper" align="end" sideOffset={6} className={cn("z-[58]", menu.moving && "opacity-0")}>
+        <SelectItem value={LAST}>{t("settings.defaultProfileLast")}</SelectItem>
+        {profiles.map((p) => (
+          <SelectItem key={p.name} value={p.name}>
+            <span className="flex items-center gap-1.5">
+              <ProviderLogo agent={p.agent} className="size-3 text-muted-foreground" />
+              {p.name === p.agent ? p.label : p.name}
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

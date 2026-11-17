@@ -23,6 +23,7 @@ import { useStore } from "./state/store";
 import { DragLayer } from "./components/pane/dnd";
 import { actionFor, type Action } from "./lib/keymap";
 import { currentBindings } from "./state/keys";
+import { nextScale } from "./lib/scale";
 
 function useShortcuts() {
   useEffect(() => {
@@ -42,6 +43,10 @@ function useShortcuts() {
       if (!action || action === "attach") return;
       e.preventDefault();
       const shown = leaves(s.layout);
+      const zoom = (d: number) => {
+        const next = nextScale(s.settings.ui_scale ?? 100, d);
+        if (next !== s.settings.ui_scale) void s.saveSettings({ ui_scale: next }).catch(() => {});
+      };
       const step = (d: number) => s.focusPane(shown[(shown.indexOf(s.focusedPane) + d + shown.length) % shown.length]);
       const run: Record<Exclude<Action, "attach">, () => void> = {
         search: () => s.setSearchOpen(!s.searchOpen),
@@ -59,6 +64,9 @@ function useShortcuts() {
         closePane: () => s.paneCount > 1 && s.removePane(s.focusedPane),
         focusNext: () => step(1),
         focusPrev: () => step(-1),
+        zoomIn: () => zoom(1),
+        zoomOut: () => zoom(-1),
+        zoomReset: () => void s.saveSettings({ ui_scale: 100 }).catch(() => {}),
       };
       run[action]();
     };
@@ -71,6 +79,8 @@ export default function App() {
   const t = useT();
   const init = useStore((s) => s.init);
   const sidebarOpen = useStore((s) => s.sidebarOpen);
+  // Settings → Reduce motion: "system" follows macOS
+  const reduceMotion = useStore((s) => s.settings.reduce_motion);
   const toggleSidebar = useStore((s) => s.toggleSidebar);
   const sidebarWidth = useStore((s) => s.sidebarWidth);
   const sidebarResizing = useStore((s) => s.sidebarResizing);
@@ -84,7 +94,7 @@ export default function App() {
   }, [init]);
 
   return (
-    <MotionConfig reducedMotion="user">
+    <MotionConfig reducedMotion={reduceMotion === "reduce" ? "always" : "user"}>
       <TooltipProvider>
         <div className="flex h-full flex-col">
           <header data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-2 border-b pr-2 pl-[84px]">

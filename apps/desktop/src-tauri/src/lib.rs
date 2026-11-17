@@ -52,11 +52,21 @@ struct AppSettings {
     notify_permission: bool,
     /// Changed keyboard shortcuts: action → combo ("cmd+shift+k"; "" unbinds). Defaults live in the UI (lib/keymap.ts)
     keybindings: std::collections::BTreeMap<String, String>,
+    /// Size of the whole UI in percent (webview zoom)
+    ui_scale: u32,
+    /// "system" (follow macOS Reduce motion) / "reduce" (always reduce)
+    reduce_motion: String,
+    /// Show the agent's thinking expanded instead of collapsed
+    thoughts_expanded: bool,
+    /// Reopen the sessions that were in panes when the app quit
+    restore_panes: bool,
+    /// Profile for new sessions: "" uses the one used last
+    default_profile: String,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
-        Self { editor: "auto".into(), cleanup_after_merge: false, stall_seconds: 120, worktree_default: true, send_key: "enter".into(), language: "auto".into(), sidebar_density: "comfortable".into(), notify_turn_end: true, notify_permission: true, keybindings: Default::default() }
+        Self { editor: "auto".into(), cleanup_after_merge: false, stall_seconds: 120, worktree_default: true, send_key: "enter".into(), language: "auto".into(), sidebar_density: "comfortable".into(), notify_turn_end: true, notify_permission: true, keybindings: Default::default(), ui_scale: 100, reduce_motion: "system".into(), thoughts_expanded: false, restore_panes: true, default_profile: String::new() }
     }
 }
 
@@ -93,6 +103,12 @@ fn save_settings(state: State<'_, AppState>, settings: AppSettings) -> CmdResult
     }
     if !(30..=3600).contains(&settings.stall_seconds) {
         return Err(plyfold_i18n::tr!("無応答とみなすまでの時間は 30 秒から 1 時間までです", "The no-response timeout must be between 30 seconds and 1 hour", "判定为无响应的时间须在 30 秒到 1 小时之间"));
+    }
+    if !(80..=150).contains(&settings.ui_scale) {
+        return Err(plyfold_i18n::tr!("表示の大きさは 80% から 150% までです", "The display size must be between 80% and 150%", "显示大小须在 80% 到 150% 之间"));
+    }
+    if !["system", "reduce"].contains(&settings.reduce_motion.as_str()) || settings.default_profile.len() > 128 {
+        return Err(plyfold_i18n::tr!("設定の値が正しくありません", "A setting has an invalid value", "某项设置的值无效"));
     }
     // Shortcuts are checked fully in the UI; here only keep the file small and plain
     let plain = |s: &str, max: usize| s.len() <= max && s.chars().all(|c| c.is_ascii_graphic());

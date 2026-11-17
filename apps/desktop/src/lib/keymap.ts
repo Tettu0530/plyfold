@@ -5,7 +5,7 @@
 // keyboards counts as "\\". Settings store only the overrides; "" unbinds an action.
 // ⌘1–⌘9 (focus a pane) and the keys inside the composer stay fixed.
 
-export const ACTIONS = ["newSession", "search", "settings", "toggleSidebar", "stop", "attach", "splitRight", "splitDown", "evenLayout", "closePane", "focusNext", "focusPrev"] as const;
+export const ACTIONS = ["newSession", "search", "settings", "toggleSidebar", "stop", "attach", "splitRight", "splitDown", "evenLayout", "closePane", "focusNext", "focusPrev", "zoomIn", "zoomOut", "zoomReset"] as const;
 export type Action = (typeof ACTIONS)[number];
 export type Bindings = Record<Action, string>;
 
@@ -22,6 +22,9 @@ export const DEFAULT_BINDINGS: Bindings = {
   closePane: "",
   focusNext: "cmd+]",
   focusPrev: "cmd+[",
+  zoomIn: "cmd+=",
+  zoomOut: "cmd+-",
+  zoomReset: "cmd+0",
 };
 
 const MODS = ["cmd", "ctrl", "option", "shift"] as const;

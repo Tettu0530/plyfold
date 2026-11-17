@@ -73,6 +73,23 @@ function lastRepo(): string {
   }
 }
 
+const LAST_PROFILE_KEY = "plyfold.lastProfile";
+
+/** Size of the whole UI (webview zoom; CSS zoom in the browser preview) */
+function applyScale(percent: number | undefined) {
+  const f = (percent ?? 100) / 100;
+  if (inTauri) {
+    void import("@tauri-apps/api/webview").then((w) => w.getCurrentWebview().setZoom(f)).catch(() => {});
+  } else {
+    document.documentElement.style.zoom = f === 1 ? "" : String(f);
+  }
+}
+
+/** "Reduce motion" in Settings: CSS reads the class (Motion reads the setting through MotionConfig) */
+function applyMotion(setting: AppSettings["reduce_motion"] | undefined) {
+  document.documentElement.classList.toggle("reduce-motion", setting === "reduce");
+}
+
 /** Set the UI language and tell the engine to use it too (for error and notice text) */
 function applyLang(setting: AppSettings["language"] | undefined) {
   const lang = resolveLang(setting);
@@ -345,7 +362,7 @@ export const useStore = create<State>((set, get) => ({
   settingsView: null,
   infoCache: loadInfoCache(),
   unread: {},
-  settings: { editor: "auto", cleanup_after_merge: false, stall_seconds: 120, worktree_default: true, send_key: "enter", language: "auto", sidebar_density: "comfortable", notify_turn_end: true, notify_permission: true, keybindings: {} },
+  settings: { editor: "auto", cleanup_after_merge: false, stall_seconds: 120, worktree_default: true, send_key: "enter", language: "auto", sidebar_density: "comfortable", notify_turn_end: true, notify_permission: true, keybindings: {}, ui_scale: 100, reduce_motion: "system", thoughts_expanded: false, restore_panes: true, default_profile: "" },
   liquidStyle: "pop",
   searchLayerActive: false,
   liquidLag: 0.12,
@@ -383,8 +400,12 @@ export const useStore = create<State>((set, get) => ({
     const sessions: Record<string, SessionView> = {};
     for (const r of records) sessions[r.id] = newView(r);
     // Restore the previous layout and the sessions shown in panes (without separation animations)
-    const layout = restoreLayout(readLayout(), (id) => !!sessions[id]);
+    const restored = restoreLayout(readLayout(), (id) => !!sessions[id]);
+    // With "Reopen panes" off, keep the layout but start with empty panes
+    const layout = restored && sv.settings.restore_panes === false ? { ...restored, panes: restored.panes.map(() => null) } : restored;
     applyLang(sv.settings.language);
+    applyScale(sv.settings.ui_scale);
+    applyMotion(sv.settings.reduce_motion);
     set({ profiles, sessions, settings: sv.settings, ready: true, ...(layout ? { ...layout, paneCount: leaves(layout.layout).length } : {}) });
     for (const id of layout?.panes ?? []) if (id) void loadSession(id);
   },
@@ -506,10 +527,14 @@ export const useStore = create<State>((set, get) => ({
     const next = { ...prev, ...patch };
     set({ settings: next });
     if (patch.language) applyLang(next.language);
+    if (patch.ui_scale) applyScale(next.ui_scale);
+    if (patch.reduce_motion) applyMotion(next.reduce_motion);
     try {
       await api.saveSettings(next);
     } catch (e) {
       set({ settings: prev });
+      if (patch.ui_scale) applyScale(prev.ui_scale);
+      if (patch.reduce_motion) applyMotion(prev.reduce_motion);
       throw e;
     }
   },
@@ -568,8 +593,7 @@ export const useStore = create<State>((set, get) => ({
   newDraft: () => {
     const s = get();
     const id = `draft:${Date.now()}`;
-    const named = s.profiles.find((p) => p.name !== p.agent) ?? s.profiles[0];
-    set({ drafts: { ...s.drafts, [id]: { profile: named?.name ?? null, repo: lastRepo(), worktree: s.settings.worktree_default, choices: {}, busy: false, error: null } } });
+    set({ drafts: { ...s.drafts, [id]: { profile: defaultProfile(s.profiles, s.settings.default_profile), repo: lastRepo(), worktree: s.settings.worktree_default, choices: {}, busy: false, error: null } } });
     void get().openInPane(id, undefined, "new-session");
   },
 
@@ -582,6 +606,7 @@ export const useStore = create<State>((set, get) => ({
     try {
       try {
         localStorage.setItem(LAST_REPO_KEY, d.repo);
+        localStorage.setItem(LAST_PROFILE_KEY, d.profile);
       } catch {
         // Continue even if saving fails
       }
@@ -731,6 +756,25 @@ useStore.subscribe((st, prev) => {
     // Failing to save doesn't affect behavior
   }
 });
+
+/**
+ * Profile a new session starts with: the one chosen in Settings, else the one used last, else the first profile with
+ * its own name (falling back to any profile)
+ */
+export function defaultProfile(profiles: ProfileSummary[], setting: string | undefined, last = readLastProfile()): string | null {
+  const has = (n: string | null | undefined) => !!n && profiles.some((p) => p.name === n);
+  if (has(setting)) return setting!;
+  if (has(last)) return last;
+  return (profiles.find((p) => p.name !== p.agent) ?? profiles[0])?.name ?? null;
+}
+
+function readLastProfile(): string | null {
+  try {
+    return localStorage.getItem(LAST_PROFILE_KEY);
+  } catch {
+    return null;
+  }
+}
 
 /** The first empty pane in layout order, or the focused one */
 function firstFreePane(panes: (string | null)[], shown: number[], focused: number): number {

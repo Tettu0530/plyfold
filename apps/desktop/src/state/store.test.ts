@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { SessionInfo, SessionRecord } from "@/lib/types";
 import { preset } from "./layout";
-import { reduceEvent, restoreLayout, type SessionView } from "./store";
+import { defaultProfile, reduceEvent, restoreLayout, type SessionView } from "./store";
 
 const record: SessionRecord = {
   id: "s1",
@@ -93,5 +93,22 @@ describe("renamed", () => {
     let s: Record<string, SessionView> = reduceEvent({}, { type: "session_created", session: record });
     s = reduceEvent(s, { type: "renamed", session_id: "s1", title: "リポジトリの概要" });
     expect(s.s1.record.title).toBe("リポジトリの概要");
+  });
+});
+
+describe("defaultProfile", () => {
+  const profiles = [
+    { name: "claude", agent: "claude", label: "Claude Code", isolate: false, keyed: false, custom_provider: false },
+    { name: "work", agent: "claude", label: "Claude Code", isolate: true, keyed: true, custom_provider: false },
+    { name: "codex", agent: "codex", label: "Codex", isolate: false, keyed: false, custom_provider: false },
+  ] as Parameters<typeof defaultProfile>[0];
+
+  it("prefers the setting, then the last used profile, then the first named one", () => {
+    expect(defaultProfile(profiles, "codex", "work")).toBe("codex");
+    expect(defaultProfile(profiles, "", "codex")).toBe("codex");
+    expect(defaultProfile(profiles, "", null)).toBe("work");
+    // Profiles that no longer exist are skipped
+    expect(defaultProfile(profiles, "gone", "gone-too")).toBe("work");
+    expect(defaultProfile([], "", null)).toBeNull();
   });
 });
