@@ -636,8 +636,11 @@ export function useLiquidMorph(
     return {
       revealed: phase === "open",
       mounted: phase !== "closed",
-      /** The blob remains as the frame after opening (stage keeps it registered) */
-      holding: hold && gl && phase === "open",
+      /**
+       * The blob remains as the frame after opening (stage keeps it registered). Not with reduced motion: no blob was
+       * drawn, so the surface shows its own frame (holding on would hide it and clip it to a shape that never appears)
+       */
+      holding: hold && gl && !reduced && phase === "open",
       layer: surface,
       edges: edgesRef,
       /** Something is still moving after opening (currently unused; hook for stage's lingering) */
