@@ -30,11 +30,12 @@ The first release.
 
 ### Git
 
-- Changes view built from git, with commit, merge into the original branch, discard and opening the worktree in an editor
+- Changes view built from git, with commit, merge into the original branch, discard and opening the worktree in an editor; open it from the pane header, ⌘K, the Git menu or ⌘⇧D
 - Per pane: the branch, how far it is ahead of its base and its upstream, its commits, fetch, push, pull and pull requests via `gh`
 
 ### App
 
+- The Plyfold logo: a P made of two panes, one with a folded corner, as the app icon and in the app
 - English, Japanese and Simplified Chinese
 - Settings for display size, reduced motion, notifications, defaults for new sessions and more
 - Spring-based motion modelled on SwiftUI, with a fade-only mode for Reduce motion
