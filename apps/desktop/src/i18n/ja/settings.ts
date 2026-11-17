@@ -96,4 +96,12 @@ export const settings = {
   defaultProfileLast: "前回使ったもの",
   defaultProfileDetailLast: "最後にセッションを始めたプロファイルを選んでおきます",
   defaultProfileDetailFixed: "新しいセッションはこのプロファイルで始まります。始める前に選び直せます",
+  sectionInfo: "情報",
+  infoTagline: "複数の API キーを使い分けて、コーディングエージェントの CLI を並べて動かす macOS アプリです",
+  infoVersion: "バージョン",
+  infoLicense: "ライセンス",
+  infoSource: "ソースコード",
+  infoIssues: "問題を報告",
+  infoAgents: "エージェント",
+  infoAgentsDetail: "各エージェントは ACP のサーバーとして、次のコマンドで起動します。プロファイルの設定ファイルで変更できます",
 } satisfies Record<string, string>;

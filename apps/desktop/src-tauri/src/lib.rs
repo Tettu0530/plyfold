@@ -91,6 +91,48 @@ fn get_settings(state: State<'_, AppState>) -> SettingsView {
 }
 
 /// Switch the language of engine messages (errors, notices) to match the UI language
+#[derive(Serialize)]
+struct AgentLaunch {
+    id: String,
+    /// The command line that starts the agent's ACP server
+    command: String,
+}
+
+#[derive(Serialize)]
+struct AppInfo {
+    version: String,
+    license: String,
+    repository: String,
+    tauri: String,
+    /// macOS version (sw_vers)
+    os: Option<String>,
+    arch: String,
+    agents: Vec<AgentLaunch>,
+}
+
+/// For Settings → Info
+#[tauri::command]
+fn app_info(state: State<'_, AppState>) -> AppInfo {
+    let os = std::process::Command::new("sw_vers").arg("-productVersion").output().ok().filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+    let cfg = state.config.read().unwrap();
+    let agents = cfg
+        .agents
+        .iter()
+        // The mock agent is for tests only
+        .filter(|(id, _)| id.as_str() != "mock")
+        .map(|(id, a)| AgentLaunch { id: id.clone(), command: std::iter::once(a.command.as_str()).chain(a.args.iter().map(String::as_str)).collect::<Vec<_>>().join(" ") })
+        .collect();
+    AppInfo {
+        version: env!("CARGO_PKG_VERSION").into(),
+        license: env!("CARGO_PKG_LICENSE").into(),
+        repository: env!("CARGO_PKG_REPOSITORY").into(),
+        tauri: tauri::VERSION.into(),
+        os,
+        arch: std::env::consts::ARCH.into(),
+        agents,
+    }
+}
+
 #[tauri::command]
 fn set_ui_lang(lang: String) {
     plyfold_i18n::set_lang(&lang);
@@ -645,6 +687,7 @@ pub fn run() {
             open_in_editor,
             get_settings,
             save_settings,
+            app_info,
             reveal_path,
             set_ui_lang,
         ])

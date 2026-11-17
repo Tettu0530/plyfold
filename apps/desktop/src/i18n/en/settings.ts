@@ -98,4 +98,12 @@ export const settings: Record<keyof typeof source, string> = {
   defaultProfileLast: "Last used",
   defaultProfileDetailLast: "Picks the profile you last started a session with",
   defaultProfileDetailFixed: "New sessions start with this profile. You can still pick another before starting",
+  sectionInfo: "Info",
+  infoTagline: "A macOS app that runs coding agent CLIs side by side, each with the API key you choose",
+  infoVersion: "Version",
+  infoLicense: "License",
+  infoSource: "Source code",
+  infoIssues: "Report an issue",
+  infoAgents: "Agents",
+  infoAgentsDetail: "Each agent runs as an ACP server started with the command below. You can change them in the profile config file",
 };

@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AttachmentWire } from "./attachments";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-import type { AppSettings, Category, CheckResult, Diff, DirCandidate, EngineEvent, EventRecord, FileHit, GitInfo, ProfileDetail, ProfileForm, ProfileSummary, ProfileUsage, PullRequest, SessionInfo, SessionRecord, SettingsView, WtStatus } from "./types";
+import type { AppInfo, AppSettings, Category, CheckResult, Diff, DirCandidate, EngineEvent, EventRecord, FileHit, GitInfo, ProfileDetail, ProfileForm, ProfileSummary, ProfileUsage, PullRequest, SessionInfo, SessionRecord, SettingsView, WtStatus } from "./types";
 
 // Thin wrappers around the Tauri commands (src-tauri/src/lib.rs). Argument names follow the Rust side's camelCase conversion
 export const api = {
@@ -18,6 +18,7 @@ export const api = {
   setUiLang: (lang: string) => invoke<void>("set_ui_lang", { lang }),
   revealFile: (path: string) => invoke<void>("reveal_file", { path }),
   openUrl: (url: string) => invoke<void>("open_url", { url }),
+  appInfo: () => invoke<AppInfo>("app_info"),
   readImage: (path: string) => invoke<string>("read_image", { path }),
   searchFiles: (root: string, query: string) => invoke<FileHit[]>("search_files", { root, query }),
   completeDirs: (input: string) => invoke<DirCandidate[]>("complete_dirs", { input }),

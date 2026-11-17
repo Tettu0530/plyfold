@@ -158,6 +158,17 @@ export interface AppSettings {
   default_profile: string;
 }
 
+/** Settings → Info (src-tauri app_info) */
+export interface AppInfo {
+  version: string;
+  license: string;
+  repository: string;
+  tauri: string;
+  os: string | null;
+  arch: string;
+  agents: { id: string; command: string }[];
+}
+
 export interface SettingsView {
   settings: AppSettings;
   config_path: string;

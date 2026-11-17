@@ -1,10 +1,10 @@
-import { ChevronLeft, FolderOpen, Sparkles } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Bell, ChevronLeft, ExternalLink, FolderOpen, GitCompare, HardDrive, Info, Keyboard, MessagesSquare, SlidersHorizontal, Sparkles } from "lucide-react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 import { Switch } from "@/components/ui/switch";
 import { useT, LANGS, type Lang, type MessageKey } from "@/i18n";
-import { api } from "@/lib/api";
-import type { AppSettings, EditorChoice, SettingsView as Paths } from "@/lib/types";
+import { api, inTauri } from "@/lib/api";
+import type { AppInfo, AppSettings, EditorChoice, SettingsView as Paths } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { Keys } from "./Keys";
@@ -27,14 +27,17 @@ const EDITORS: { value: EditorChoice; label: string | null }[] = [
 ];
 const STALL = [60, 120, 300, 600];
 
-const SECTIONS: { id: string; label: MessageKey }[] = [
-  { id: "general", label: "settings.sectionGeneral" },
-  { id: "session", label: "settings.sectionSession" },
-  { id: "keyboard", label: "settings.sectionKeyboard" },
-  { id: "notifications", label: "settings.sectionNotifications" },
-  { id: "diff", label: "settings.sectionDiff" },
-  { id: "storage", label: "settings.sectionStorage" },
-  { id: "motion", label: "settings.sectionMotion" },
+const SECTION_KEY = "plyfold.settingsSection";
+
+const SECTIONS: { id: string; label: MessageKey; Icon: typeof Info }[] = [
+  { id: "info", label: "settings.sectionInfo", Icon: Info },
+  { id: "general", label: "settings.sectionGeneral", Icon: SlidersHorizontal },
+  { id: "session", label: "settings.sectionSession", Icon: MessagesSquare },
+  { id: "keyboard", label: "settings.sectionKeyboard", Icon: Keyboard },
+  { id: "notifications", label: "settings.sectionNotifications", Icon: Bell },
+  { id: "diff", label: "settings.sectionDiff", Icon: GitCompare },
+  { id: "storage", label: "settings.sectionStorage", Icon: HardDrive },
+  { id: "motion", label: "settings.sectionMotion", Icon: Sparkles },
 ];
 
 /** Settings screen. Expands out of the sidebar's Settings item. Changes are saved immediately */
@@ -50,41 +53,34 @@ export function SettingsView() {
   const moving = useLiquidClip("settings", surface, { cover: true });
   const [paths, setPaths] = useState<Paths | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const scroller = useRef<HTMLDivElement>(null);
-  const [current, setCurrent] = useState("general");
-  // A section picked in the list stays marked until the user scrolls themselves (a short last section can't reach the top)
-  const picked = useRef<string | null>(null);
-  // The section in view is the last one whose top is within 96px of the top of the scroll area
-  useEffect(() => {
-    const el = scroller.current;
-    if (!el) return;
-    const onScroll = () => {
-      if (picked.current) return setCurrent(picked.current);
-      const top = el.getBoundingClientRect().top + 96;
-      let id = SECTIONS[0].id;
-      for (const sec of el.querySelectorAll<HTMLElement>("[data-section]")) if (sec.getBoundingClientRect().top <= top) id = sec.dataset.section!;
-      // At the very bottom, the last section counts as current even if it is short
-      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 2) id = SECTIONS[SECTIONS.length - 1].id;
-      setCurrent(id);
-    };
-    const release = () => (picked.current = null);
-    onScroll();
-    el.addEventListener("scroll", onScroll, { passive: true });
-    el.addEventListener("wheel", release, { passive: true });
-    el.addEventListener("pointerdown", release);
-    el.addEventListener("keydown", release);
-    return () => {
-      el.removeEventListener("scroll", onScroll);
-      el.removeEventListener("wheel", release);
-      el.removeEventListener("pointerdown", release);
-      el.removeEventListener("keydown", release);
-    };
-  }, [view]);
-  const jump = (id: string) => {
-    picked.current = id;
+  // One section at a time; the list on the left picks it (remembered for the next time settings open)
+  const [current, setCurrent] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(SECTION_KEY);
+      if (saved && SECTIONS.some((sec) => sec.id === saved)) return saved;
+    } catch {
+      // Not remembered: start from the top
+    }
+    return SECTIONS[0].id;
+  });
+  const pick = (id: string) => {
     setCurrent(id);
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    scroller.current?.querySelector(`#settings-${id}`)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    try {
+      localStorage.setItem(SECTION_KEY, id);
+    } catch {
+      // Only a convenience
+    }
+  };
+  const tabs = useRef<HTMLDivElement>(null);
+  // ↑↓ move through the list (like a tab list), focusing and showing the section
+  const onTabKey = (e: React.KeyboardEvent) => {
+    const d = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
+    if (!d) return;
+    e.preventDefault();
+    const i = SECTIONS.findIndex((sec) => sec.id === current);
+    const next = SECTIONS[(i + d + SECTIONS.length) % SECTIONS.length].id;
+    pick(next);
+    tabs.current?.querySelector<HTMLElement>(`[data-tab="${next}"]`)?.focus();
   };
 
   useEffect(() => {
@@ -124,23 +120,34 @@ export function SettingsView() {
         <span className="font-medium">{t("settings.title")}</span>
       </div>
 
-      <div ref={scroller} className="min-h-0 grow overflow-y-auto">
-        <div className="mx-auto flex max-w-[860px] gap-10 px-6 py-8">
-          {/* Section list (wide windows only): jumps to a section and marks the one in view */}
-          <nav aria-label={t("settings.title")} className="sticky top-0 hidden w-36 shrink-0 flex-col gap-0.5 self-start md:flex">
-            {SECTIONS.map((sec) => (
-              <button
-                key={sec.id}
-                type="button"
-                aria-current={current === sec.id ? "true" : undefined}
-                onClick={() => jump(sec.id)}
-                className={cn("flex h-8 items-center rounded-md px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground", current === sec.id && "bg-accent text-foreground")}
-              >
-                {t(sec.label)}
-              </button>
-            ))}
-          </nav>
-          <div className="flex min-w-0 max-w-[640px] grow flex-col gap-10">
+      <div className="flex min-h-0 grow">
+        {/* Section list: picks the one section shown on the right */}
+        <div ref={tabs} role="tablist" aria-orientation="vertical" aria-label={t("settings.title")} onKeyDown={onTabKey} className="flex w-44 shrink-0 flex-col gap-0.5 overflow-y-auto border-r px-2 py-4">
+          {SECTIONS.map((sec) => (
+            <button
+              key={sec.id}
+              type="button"
+              role="tab"
+              id={`settings-tab-${sec.id}`}
+              data-tab={sec.id}
+              aria-selected={current === sec.id}
+              aria-controls="settings-panel"
+              tabIndex={current === sec.id ? 0 : -1}
+              onClick={() => pick(sec.id)}
+              className={cn("flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground", current === sec.id && "bg-accent text-foreground")}
+            >
+              <sec.Icon className="size-3.5 shrink-0" aria-hidden />
+              {t(sec.label)}
+            </button>
+          ))}
+        </div>
+        <div id="settings-panel" role="tabpanel" aria-labelledby={`settings-tab-${current}`} className="min-h-0 grow overflow-y-auto">
+          <CurrentSection.Provider value={current}>
+          <div className="mx-auto flex max-w-[640px] min-w-0 flex-col gap-10 px-6 py-8">
+            <Section id="info" title={t("settings.sectionInfo")}>
+              <InfoSection />
+            </Section>
+
             <Section id="general" title={t("settings.sectionGeneral")}>
               <Row label={t("settings.language")} detail={settings.language === "auto" || !settings.language ? t("settings.languageAuto") : t("settings.languageFixed")}>
                 <Segmented<"auto" | Lang>
@@ -292,16 +299,21 @@ export function SettingsView() {
 
             {error && <p className="text-xs whitespace-pre-wrap text-error">{t("settings.saveFailed", { error })}</p>}
           </div>
+          </CurrentSection.Provider>
         </div>
       </div>
     </div>
   );
 }
 
+/** Which section is shown (only that one renders) */
+const CurrentSection = createContext("info");
+
 function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
+  if (useContext(CurrentSection) !== id) return null;
   return (
-    <section id={`settings-${id}`} data-section={id} className="flex scroll-mt-6 flex-col gap-4">
-      <h2 className="text-xs font-medium text-muted-foreground">{title}</h2>
+    <section aria-label={title} className="flex flex-col gap-4">
+      <h2 className="text-base font-medium">{title}</h2>
       <div className="flex flex-col gap-5">{children}</div>
     </section>
   );
@@ -362,5 +374,67 @@ function ProfilePicker({ value, onChange }: { value: string; onChange: (v: strin
         ))}
       </SelectContent>
     </Select>
+  );
+}
+
+const AGENT_NAMES: Record<string, string> = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", gemini: "Gemini CLI" };
+
+/** Settings → Info: what this app is, its version and license, where the source is, and how the agents are started */
+function InfoSection() {
+  const t = useT();
+  const [info, setInfo] = useState<AppInfo | null>(null);
+  useEffect(() => {
+    if (inTauri) void api.appInfo().then(setInfo).catch(() => setInfo(null));
+  }, []);
+  const repo = info?.repository ?? null;
+  const facts: [string, React.ReactNode][] = [
+    [t("settings.infoVersion"), info?.version ?? "—"],
+    [t("settings.infoLicense"), info?.license ?? "—"],
+    ["Tauri", info?.tauri ?? "—"],
+    ["macOS", info?.os ? `${info.os} (${info.arch})` : "—"],
+  ];
+  return (
+    <>
+      <div className="flex flex-col gap-1">
+        <span className="font-medium">Plyfold</span>
+        <span className="text-xs leading-relaxed text-muted-foreground">{t("settings.infoTagline")}</span>
+      </div>
+      <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">
+        {facts.map(([k, v]) => (
+          <div key={k} className="contents">
+            <dt className="text-muted-foreground">{k}</dt>
+            <dd className="m-0 font-mono text-xs leading-5 select-text tabular">{v}</dd>
+          </div>
+        ))}
+      </dl>
+      {repo && (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => void api.openUrl(repo)} className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent">
+            <ExternalLink className="size-3.5" aria-hidden />
+            {t("settings.infoSource")}
+          </button>
+          <button type="button" onClick={() => void api.openUrl(`${repo}/issues`)} className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent">
+            <ExternalLink className="size-3.5" aria-hidden />
+            {t("settings.infoIssues")}
+          </button>
+        </div>
+      )}
+      <div className="flex flex-col gap-2">
+        <span className="font-medium">{t("settings.infoAgents")}</span>
+        <span className="text-xs leading-relaxed text-muted-foreground">{t("settings.infoAgentsDetail")}</span>
+        {(info?.agents ?? []).map((a) => (
+          <div key={a.id} className="flex items-center gap-3">
+            <span className="flex w-28 shrink-0 items-center gap-1.5">
+              <ProviderLogo agent={a.id} className="size-3 text-muted-foreground" />
+              {AGENT_NAMES[a.id] ?? a.id}
+            </span>
+            <code className="min-w-0 truncate font-mono text-xs text-muted-foreground select-text" title={a.command}>
+              {a.command}
+            </code>
+          </div>
+        ))}
+        {!info && <span className="text-xs text-muted-foreground">—</span>}
+      </div>
+    </>
   );
 }

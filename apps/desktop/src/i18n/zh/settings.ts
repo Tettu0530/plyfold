@@ -98,4 +98,12 @@ export const settings: Record<keyof typeof source, string> = {
   defaultProfileLast: "上次使用的",
   defaultProfileDetailLast: "选择你上次开始会话时使用的配置",
   defaultProfileDetailFixed: "新会话以此配置开始。开始前仍可更换",
+  sectionInfo: "信息",
+  infoTagline: "一款 macOS 应用，可让编码智能体的 CLI 并排运行，并分别使用你选择的 API 密钥",
+  infoVersion: "版本",
+  infoLicense: "许可证",
+  infoSource: "源代码",
+  infoIssues: "报告问题",
+  infoAgents: "智能体",
+  infoAgentsDetail: "每个智能体都作为 ACP 服务器，通过下面的命令启动。可在配置文件中更改",
 };
