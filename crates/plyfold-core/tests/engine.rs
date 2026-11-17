@@ -48,7 +48,8 @@ fn engine(state: &Path, stall_ms: u64) -> Engine {
     let toml = format!(
         r#"
 [agents.mock]
-command = "{}"
+# A literal string, so Windows backslashes stay as they are
+command = '{}'
 
 [profiles.mock-keyed]
 agent = "mock"
