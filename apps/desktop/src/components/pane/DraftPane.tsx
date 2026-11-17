@@ -197,7 +197,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
       </div>
 
       <Popover open={repoOpen} onOpenChange={toggleRepo}>
-      <div className="flex shrink-0 flex-col px-3 pb-3">
+      <div className="flex shrink-0 flex-col px-[max(0.75rem,calc((100%_-_53rem)/2))] pb-3">
       {/* The repository picker aligns with the left edge of this row + input group and opens right above it */}
       <PopoverAnchor asChild>
       <div className="flex flex-col gap-1">

@@ -308,7 +308,8 @@ export function Composer({
   const mode = currentMode(info);
 
   return (
-    <div className="flex shrink-0 flex-col gap-1 px-3 pb-3">
+    // Same width as the conversation above in a wide pane (its edges line up with the messages, as in a narrow one)
+    <div className="flex shrink-0 flex-col gap-1 px-[max(0.75rem,calc((100%_-_53rem)/2))] pb-3">
       <QueueList items={queue} busy={busy} onRemove={(k) => onUnqueue?.(k)} onSendNow={() => onSendQueued?.()} />
       <ControlRow scope={scope} agent={agent} info={info} onSet={onSet} />
       <MentionMenu m={mention} boxRef={att.boxRef} />

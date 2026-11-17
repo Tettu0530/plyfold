@@ -150,7 +150,9 @@ export function Transcript({
 
   return (
     <div className="relative flex min-h-0 grow flex-col">
-    <div ref={scroller} onScroll={onScroll} className="flex min-h-0 grow flex-col gap-3 overflow-y-auto px-5 pt-4 pb-2">
+    {/* In a wide pane the conversation keeps a readable width (52rem) in the middle; the padding grows instead, so the
+        scrollbar stays at the pane's edge */}
+    <div ref={scroller} onScroll={onScroll} className="flex min-h-0 grow flex-col gap-3 overflow-y-auto px-[max(1.25rem,calc((100%_-_52rem)/2))] pt-4 pb-2">
       {items.length === 0 && <p className="m-auto text-xs text-muted-foreground">{tr("transcript.empty")}</p>}
       {blocks.map((b, i) => {
         switch (b.kind) {
