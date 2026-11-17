@@ -81,6 +81,10 @@ pub struct SessionRecord {
     pub status: SessionStatus,
     pub created_at: i64,
     pub updated_at: i64,
+    /// For a side chat: the session it was forked from. Side chats are read-only, kept out of the session list,
+    /// and deleted when closed
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub side_of: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -92,6 +96,7 @@ pub struct NewSession {
     pub worktree_path: Option<String>,
     pub branch: Option<String>,
     pub base_ref: Option<String>,
+    pub side_of: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -180,9 +185,12 @@ CREATE TABLE IF NOT EXISTS events (
     payload TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS events_by_session ON events(session_id, id);
+CREATE TABLE IF NOT EXISTS dismissed_conversations (
+    acp_session_id TEXT PRIMARY KEY
+);
 ";
 
-const SESSION_COLS: &str = "id, title, profile, agent, repo_path, worktree_path, branch, base_ref, acp_session_id, status, created_at, updated_at";
+const SESSION_COLS: &str = "id, title, profile, agent, repo_path, worktree_path, branch, base_ref, acp_session_id, status, created_at, updated_at, side_of";
 
 fn row_to_session(r: &rusqlite::Row) -> rusqlite::Result<SessionRecord> {
     Ok(SessionRecord {
@@ -198,6 +206,7 @@ fn row_to_session(r: &rusqlite::Row) -> rusqlite::Result<SessionRecord> {
         status: SessionStatus::parse(&r.get::<_, String>(9)?),
         created_at: r.get(10)?,
         updated_at: r.get(11)?,
+        side_of: r.get(12)?,
     })
 }
 
@@ -223,6 +232,10 @@ impl Store {
         if !has_lock {
             conn.execute_batch("ALTER TABLE sessions ADD COLUMN title_locked INTEGER NOT NULL DEFAULT 0")?;
         }
+        let has_side: bool = conn.prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'side_of'")?.exists([])?;
+        if !has_side {
+            conn.execute_batch("ALTER TABLE sessions ADD COLUMN side_of TEXT")?;
+        }
         Ok(Self { conn: Mutex::new(conn) })
     }
 
@@ -241,9 +254,10 @@ impl Store {
             status: SessionStatus::Starting,
             created_at: now,
             updated_at: now,
+            side_of: s.side_of,
         };
         self.conn.lock().unwrap().execute(
-            &format!("INSERT INTO sessions ({SESSION_COLS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)"),
+            &format!("INSERT INTO sessions ({SESSION_COLS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)"),
             params![
                 rec.id,
                 rec.title,
@@ -256,7 +270,8 @@ impl Store {
                 rec.acp_session_id,
                 rec.status.as_str(),
                 rec.created_at,
-                rec.updated_at
+                rec.updated_at,
+                rec.side_of
             ],
         )?;
         Ok(rec)
@@ -344,6 +359,20 @@ impl Store {
     pub fn delete_session(&self, id: &str) -> Result<(), StoreError> {
         self.conn.lock().unwrap().execute("DELETE FROM sessions WHERE id = ?1", [id])?;
         Ok(())
+    }
+
+    /// Remember an agent-side conversation Plyfold made and threw away (a closed side chat), so it is not offered
+    /// as a conversation to open from the CLI
+    pub fn dismiss_conversation(&self, acp_session_id: &str) -> Result<(), StoreError> {
+        self.conn.lock().unwrap().execute("INSERT OR IGNORE INTO dismissed_conversations (acp_session_id) VALUES (?1)", [acp_session_id])?;
+        Ok(())
+    }
+
+    pub fn dismissed_conversations(&self) -> Result<Vec<String>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT acp_session_id FROM dismissed_conversations")?;
+        let rows = stmt.query_map([], |r| r.get(0))?.collect::<Result<Vec<String>, _>>()?;
+        Ok(rows)
     }
 
     pub fn append_event(&self, session_id: &str, kind: EventKind, payload: &str) -> Result<i64, StoreError> {
