@@ -19,13 +19,20 @@ export function useAutoGrow(value: string, max = 200) {
     const el = ref.current;
     if (!el || typeof ResizeObserver === "undefined") return;
     let width = el.clientWidth;
+    let frame = 0;
     const ro = new ResizeObserver(() => {
       if (el.clientWidth === width) return;
       width = el.clientWidth;
-      fit();
+      // Refit on the next frame: changing the height inside the callback would trigger another resize in the same
+      // frame (a "ResizeObserver loop" warning)
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(fit);
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(frame);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [max]);
   return ref;
