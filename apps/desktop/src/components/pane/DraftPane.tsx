@@ -66,7 +66,10 @@ function ProfileRow({ p, u, selected, onSelect }: { p: ProfileSummary; u: Profil
               {u.turns}
             </Num>
             {tok != null && (
-              <span title={t("draft.tokensTitle", { input: tokens(u.input ?? 0), output: tokens(u.output ?? 0) })} className="hidden items-center gap-[3px] @md:flex">
+              <span
+                title={t("draft.tokensTitle", { input: tokens(u.input ?? 0), output: tokens(u.output ?? 0) })}
+                className="hidden items-center gap-[3px] @md:flex"
+              >
                 <ArrowUp className="size-3" aria-hidden />
                 {tokens(u.input ?? 0)}
                 <ArrowDown className="ml-1 size-3" aria-hidden />
@@ -103,7 +106,15 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
   const textRef = useAutoGrow(text);
   // @-mentions search the repository the session will start in
-  const mention = useMention({ root: draft?.repo ?? null, text, setText, textRef, boxRef: att.boxRef, scope: id, onPick: (h) => att.addMention(h.abs, h.path) });
+  const mention = useMention({
+    root: draft?.repo ?? null,
+    text,
+    setText,
+    textRef,
+    boxRef: att.boxRef,
+    scope: id,
+    onPick: (h) => att.addMention(h.abs, h.path),
+  });
   useEffect(() => {
     att.syncMentions(text);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -175,130 +186,138 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
 
       {/* List sits in the middle of the pane; scrolls vertically if it doesn't fit (my-auto keeps the top from being cut off) */}
       <div className="flex min-h-0 grow flex-col overflow-y-auto px-3 py-4">
-      <div className="mx-auto my-auto w-full max-w-xl">
-        <div className="mb-1 flex items-center justify-between px-2.5 text-xs text-muted-foreground">
-          <span id={`${id}-profiles`}>{t("draft.profiles")}</span>
-          <span>{t("draft.last30Days")}</span>
-        </div>
-        {/* Hide tokens when narrow (decided by row width) */}
-        <div role="radiogroup" aria-labelledby={`${id}-profiles`} onKeyDown={onListKey} className="@container flex flex-col gap-0.5">
-          {ordered.map((p) => (
-            <ProfileRow key={p.name} p={p} u={byProfile.get(p.name)} selected={p.name === draft.profile} onSelect={() => select(p.name)} />
-          ))}
-          {profiles.length === 0 && <p className="px-2.5 py-2 text-xs text-muted-foreground">{t("draft.noProfiles")}</p>}
-        </div>
-        {(draft.busy || draft.error) && (
-          <div className="mt-3 px-2.5 text-xs">
-            {draft.busy && <p className="text-muted-foreground">{t("draft.starting")}</p>}
-            {draft.error && <p className="whitespace-pre-wrap text-error">{draft.error}</p>}
+        <div className="mx-auto my-auto w-full max-w-xl">
+          <div className="mb-1 flex items-center justify-between px-2.5 text-xs text-muted-foreground">
+            <span id={`${id}-profiles`}>{t("draft.profiles")}</span>
+            <span>{t("draft.last30Days")}</span>
           </div>
-        )}
-      </div>
+          {/* Hide tokens when narrow (decided by row width) */}
+          <div role="radiogroup" aria-labelledby={`${id}-profiles`} onKeyDown={onListKey} className="@container flex flex-col gap-0.5">
+            {ordered.map((p) => (
+              <ProfileRow key={p.name} p={p} u={byProfile.get(p.name)} selected={p.name === draft.profile} onSelect={() => select(p.name)} />
+            ))}
+            {profiles.length === 0 && <p className="px-2.5 py-2 text-xs text-muted-foreground">{t("draft.noProfiles")}</p>}
+          </div>
+          {(draft.busy || draft.error) && (
+            <div className="mt-3 px-2.5 text-xs">
+              {draft.busy && <p className="text-muted-foreground">{t("draft.starting")}</p>}
+              {draft.error && <p className="whitespace-pre-wrap text-error">{draft.error}</p>}
+            </div>
+          )}
+        </div>
       </div>
 
       <Popover open={repoOpen} onOpenChange={toggleRepo}>
-      <div className="flex shrink-0 flex-col px-[max(0.75rem,calc((100%_-_53rem)/2))] pb-3">
-      {/* The repository picker aligns with the left edge of this row + input group and opens right above it */}
-      <PopoverAnchor asChild>
-      <div className="flex flex-col gap-1">
-        {/* If there's not enough width, model / effort / mode wrap to a second row */}
-        <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 text-xs">
-          <div className="flex items-center gap-0.5">
-          <PopoverTrigger asChild>
-            <button
-              ref={liquidAnchor(repoAnchor)}
-              type="button"
-              aria-label={t("draft.repo")}
-              title={draft.repo}
-              className={cn("relative flex h-6 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent data-[state=open]:bg-accent", repoRaised && "z-[57]")}
-            >
-              <FolderOpen className="size-3 text-muted-foreground" aria-hidden />
-              <span className="font-mono">{repoName(draft.repo)}</span>
-            </button>
-          </PopoverTrigger>
+        <div className="flex shrink-0 flex-col px-[max(0.75rem,calc((100%_-_53rem)/2))] pb-3">
+          {/* The repository picker aligns with the left edge of this row + input group and opens right above it */}
+          <PopoverAnchor asChild>
+            <div className="flex flex-col gap-1">
+              {/* If there's not enough width, model / effort / mode wrap to a second row */}
+              <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 text-xs">
+                <div className="flex items-center gap-0.5">
+                  <PopoverTrigger asChild>
+                    <button
+                      ref={liquidAnchor(repoAnchor)}
+                      type="button"
+                      aria-label={t("draft.repo")}
+                      title={draft.repo}
+                      className={cn(
+                        "relative flex h-6 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent data-[state=open]:bg-accent",
+                        repoRaised && "z-[57]",
+                      )}
+                    >
+                      <FolderOpen className="size-3 text-muted-foreground" aria-hidden />
+                      <span className="font-mono">{repoName(draft.repo)}</span>
+                    </button>
+                  </PopoverTrigger>
 
-          <button
-            type="button"
-            aria-pressed={draft.worktree}
-            onClick={() => updateDraft(id, { worktree: !draft.worktree })}
-            title={draft.worktree ? t("draft.worktreeOn") : t("draft.worktreeOff")}
-            className={cn(
-              "flex h-6 items-center gap-1.5 rounded-md border px-1.5 hover:bg-accent",
-              draft.worktree ? "border-border text-foreground" : "border-dashed border-border text-muted-foreground",
-            )}
-          >
-            <GitBranch className="size-3" aria-hidden />
-            {draft.worktree ? "worktree" : t("draft.inPlace")}
-          </button>
-          </div>
-          <span className="grow" />
-          <ControlRow scope={id} agent={current?.agent ?? ""} info={info} onSet={choose} empty={draft.profile ? t("draft.choicesAfterStart") : undefined} />
+                  <button
+                    type="button"
+                    aria-pressed={draft.worktree}
+                    onClick={() => updateDraft(id, { worktree: !draft.worktree })}
+                    title={draft.worktree ? t("draft.worktreeOn") : t("draft.worktreeOff")}
+                    className={cn(
+                      "flex h-6 items-center gap-1.5 rounded-md border px-1.5 hover:bg-accent",
+                      draft.worktree ? "border-border text-foreground" : "border-dashed border-border text-muted-foreground",
+                    )}
+                  >
+                    <GitBranch className="size-3" aria-hidden />
+                    {draft.worktree ? "worktree" : t("draft.inPlace")}
+                  </button>
+                </div>
+                <span className="grow" />
+                <ControlRow
+                  scope={id}
+                  agent={current?.agent ?? ""}
+                  info={info}
+                  onSet={choose}
+                  empty={draft.profile ? t("draft.choicesAfterStart") : undefined}
+                />
+              </div>
+
+              <MentionMenu m={mention} boxRef={att.boxRef} />
+              <SlashMenu m={slash} boxRef={att.boxRef} />
+              <AttachBox att={att}>
+                <textarea
+                  ref={textRef}
+                  aria-label={t("draft.firstPrompt")}
+                  rows={1}
+                  autoFocus
+                  value={text}
+                  placeholder={t("draft.firstPromptPlaceholder")}
+                  onChange={(e) => {
+                    setText(e.target.value);
+                    mention.syncCaret();
+                    slash.syncCaret();
+                  }}
+                  onSelect={() => {
+                    mention.syncCaret();
+                    slash.syncCaret();
+                  }}
+                  onKeyDown={(e) => {
+                    if (mention.onKeyDown(e) || slash.onKeyDown(e)) return;
+                    if (isSendKey(e, sendKey)) {
+                      e.preventDefault();
+                      send();
+                    } else if (e.key === "Tab" && e.shiftKey && modes.length > 0) {
+                      e.preventDefault();
+                      const i = mode ? modes.indexOf(mode) : -1;
+                      choose("mode", modes[(i + 1) % modes.length]);
+                    }
+                  }}
+                  className="min-h-0 grow resize-none bg-transparent py-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
+                />
+                <button
+                  type="button"
+                  aria-label={t("draft.start")}
+                  disabled={draft.busy || !draft.profile}
+                  onClick={send}
+                  className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
+                >
+                  <ArrowUp className="size-3.5" aria-hidden />
+                </button>
+              </AttachBox>
+            </div>
+          </PopoverAnchor>
         </div>
-
-        <MentionMenu m={mention} boxRef={att.boxRef} />
-      <SlashMenu m={slash} boxRef={att.boxRef} />
-        <AttachBox att={att}>
-          <textarea
-            ref={textRef}
-            aria-label={t("draft.firstPrompt")}
-            rows={1}
-            autoFocus
-            value={text}
-            placeholder={t("draft.firstPromptPlaceholder")}
-            onChange={(e) => {
-              setText(e.target.value);
-              mention.syncCaret();
-            slash.syncCaret();
+        <PopoverContent
+          ref={repoMenu.ref as React.Ref<HTMLDivElement>}
+          style={repoMenu.style}
+          side="top"
+          align="start"
+          sideOffset={6}
+          // Don't span the full pane width (if wide, the body seems to fly far out before returning)
+          className={cn("z-[58] w-[min(32rem,var(--radix-popper-anchor-width))] p-1.5", repoMenu.moving && "opacity-0")}
+        >
+          <RepoPicker
+            value={draft.repo}
+            onPick={(repo) => {
+              updateDraft(id, { repo });
+              toggleRepo(false);
             }}
-            onSelect={() => {
-            mention.syncCaret();
-            slash.syncCaret();
-          }}
-            onKeyDown={(e) => {
-              if (mention.onKeyDown(e) || slash.onKeyDown(e)) return;
-              if (isSendKey(e, sendKey)) {
-                e.preventDefault();
-                send();
-              } else if (e.key === "Tab" && e.shiftKey && modes.length > 0) {
-                e.preventDefault();
-                const i = mode ? modes.indexOf(mode) : -1;
-                choose("mode", modes[(i + 1) % modes.length]);
-              }
-            }}
-            className="min-h-0 grow resize-none bg-transparent py-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
           />
-          <button
-            type="button"
-            aria-label={t("draft.start")}
-            disabled={draft.busy || !draft.profile}
-            onClick={send}
-            className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
-          >
-            <ArrowUp className="size-3.5" aria-hidden />
-          </button>
-        </AttachBox>
-      </div>
-      </PopoverAnchor>
-      </div>
-      <PopoverContent
-        ref={repoMenu.ref as React.Ref<HTMLDivElement>}
-        style={repoMenu.style}
-        side="top"
-        align="start"
-        sideOffset={6}
-        // Don't span the full pane width (if wide, the body seems to fly far out before returning)
-        className={cn("z-[58] w-[min(32rem,var(--radix-popper-anchor-width))] p-1.5", repoMenu.moving && "opacity-0")}
-      >
-        <RepoPicker
-          value={draft.repo}
-          onPick={(repo) => {
-            updateDraft(id, { repo });
-            toggleRepo(false);
-          }}
-        />
-      </PopoverContent>
+        </PopoverContent>
       </Popover>
-
     </section>
   );
 }

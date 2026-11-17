@@ -1,13 +1,6 @@
 // Types matching the serde shapes on the Rust side (plyfold-core / plyfold-store)
 
-export type SessionStatus =
-  | "starting"
-  | "idle"
-  | "working"
-  | "awaiting_permission"
-  | "stalled"
-  | "error"
-  | "closed";
+export type SessionStatus = "starting" | "idle" | "working" | "awaiting_permission" | "stalled" | "error" | "closed";
 
 export interface SessionRecord {
   id: string;

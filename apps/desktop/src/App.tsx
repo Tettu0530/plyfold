@@ -87,7 +87,7 @@ export default function App() {
   const sidebarResizing = useStore((s) => s.sidebarResizing);
   const focusedRepo = useStore((s) => {
     const id = s.panes[s.focusedPane];
-    return id ? s.sessions[id]?.record.repo_path ?? null : null;
+    return id ? (s.sessions[id]?.record.repo_path ?? null) : null;
   });
   useShortcuts();
   useEffect(() => {
@@ -131,11 +131,7 @@ export default function App() {
             </motion.div>
             <PaneGrid />
           </div>
-          {!inTauri && (
-            <p className="fixed right-3 bottom-3 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
-              {t("app.browserOnly")}
-            </p>
-          )}
+          {!inTauri && <p className="fixed right-3 bottom-3 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">{t("app.browserOnly")}</p>}
         </div>
         <GooDefs />
         <DiffView />

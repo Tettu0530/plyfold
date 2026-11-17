@@ -24,7 +24,11 @@ export function SplitFlap<T extends string>({ value, render, className }: { valu
 
   const cell = "col-start-1 row-start-1 flex items-center gap-1.5";
   if (prev === null) {
-    return <span className={`inline-grid ${className ?? ""}`}><span className={cell}>{render(value)}</span></span>;
+    return (
+      <span className={`inline-grid ${className ?? ""}`}>
+        <span className={cell}>{render(value)}</span>
+      </span>
+    );
   }
   // While flipping, fill each half with the background color (if transparent, old and new text would overlap)
   const solid = `${cell} bg-background`;

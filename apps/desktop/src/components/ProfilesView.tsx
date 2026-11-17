@@ -67,7 +67,9 @@ export function ProfilesView() {
 
   if (!view) return null;
   const visible = revealed && !view.closing;
-  const rows = profiles.filter((p) => p.agent === agent).sort((a, b) => Number(b.name === b.agent) - Number(a.name === a.agent) || a.name.localeCompare(b.name));
+  const rows = profiles
+    .filter((p) => p.agent === agent)
+    .sort((a, b) => Number(b.name === b.agent) - Number(a.name === a.agent) || a.name.localeCompare(b.name));
   const sessionCount = (name: string) => Object.values(sessions).filter((v) => v.record.profile === name).length;
   const pickAgent = (a: string) => {
     setAgent(a);
@@ -81,10 +83,18 @@ export function ProfilesView() {
       role="dialog"
       aria-label={t("profiles.title")}
       aria-hidden={!visible}
-      className={cn("fixed inset-x-0 top-10 bottom-0 flex flex-col bg-background transition-opacity duration-150", moving ? "pointer-events-none z-[56]" : "z-40", visible ? "opacity-100" : "pointer-events-none opacity-0")}
+      className={cn(
+        "fixed inset-x-0 top-10 bottom-0 flex flex-col bg-background transition-opacity duration-150",
+        moving ? "pointer-events-none z-[56]" : "z-40",
+        visible ? "opacity-100" : "pointer-events-none opacity-0",
+      )}
     >
       <div className="flex h-10 shrink-0 items-center gap-2 border-b pr-3 pl-2">
-        <button type="button" onClick={close} className="flex h-7 items-center gap-1 rounded-lg pr-2 pl-1 text-muted-foreground hover:bg-accent hover:text-foreground">
+        <button
+          type="button"
+          onClick={close}
+          className="flex h-7 items-center gap-1 rounded-lg pr-2 pl-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
           <ChevronLeft className="size-4" aria-hidden />
           {t("profiles.back")}
           <Keys keys={["esc"]} />
@@ -116,7 +126,11 @@ export function ProfilesView() {
           <div className="flex h-12 shrink-0 items-center gap-2 px-4">
             <h1 className="text-base font-semibold">{AGENT_NAMES[agent] ?? agent}</h1>
             <span className="grow" />
-            <button type="button" onClick={() => setSelected(null)} className="flex h-7 items-center gap-1.5 rounded-lg border border-input px-2 hover:bg-accent">
+            <button
+              type="button"
+              onClick={() => setSelected(null)}
+              className="flex h-7 items-center gap-1.5 rounded-lg border border-input px-2 hover:bg-accent"
+            >
               <Plus className="size-3.5" aria-hidden />
               {t("profiles.add")}
             </button>
@@ -132,7 +146,10 @@ export function ProfilesView() {
                   role="option"
                   aria-selected={on}
                   onClick={() => setSelected(p.name)}
-                  className={cn("flex flex-col gap-1 rounded-lg border px-3 py-2 text-left", on ? "border-foreground/40 bg-muted" : "border-transparent hover:bg-accent")}
+                  className={cn(
+                    "flex flex-col gap-1 rounded-lg border px-3 py-2 text-left",
+                    on ? "border-foreground/40 bg-muted" : "border-transparent hover:bg-accent",
+                  )}
                 >
                   <span className="flex items-center gap-2">
                     <span className="font-medium">{p.name === p.agent ? "default" : p.label}</span>
@@ -143,7 +160,11 @@ export function ProfilesView() {
                   {c && (
                     <span className={cn("flex items-center gap-1.5 text-xs", c.ok ? "text-muted-foreground" : "text-error")}>
                       {c.ok ? <CircleCheck className="size-3 text-working" aria-hidden /> : <CircleAlert className="size-3" aria-hidden />}
-                      <span className="truncate">{c.ok ? t("profiles.replied", { model: c.reported_model ?? c.configured_model ?? t("profiles.noModelName") }) : t("profiles.cannotConnect")}</span>
+                      <span className="truncate">
+                        {c.ok
+                          ? t("profiles.replied", { model: c.reported_model ?? c.configured_model ?? t("profiles.noModelName") })
+                          : t("profiles.cannotConnect")}
+                      </span>
                       {c.ok && c.first_text_ms !== null && <span className="ml-auto font-mono tabular">{seconds(c.first_text_ms)}</span>}
                     </span>
                   )}
@@ -387,7 +408,13 @@ function Editor({ agent, name, sessions, check, onCheck, onSaved, onDeleted }: E
             </h3>
             <span className="text-xs text-muted-foreground">{t("profiles.checkDetail")}</span>
             <span className="grow" />
-            {check && <span className="text-xs text-muted-foreground">{t("profiles.checkLast", { time: new Date(check.at * 1000).toLocaleTimeString(currentLang() === "ja" ? "ja-JP" : "en-US", { hour: "2-digit", minute: "2-digit" }) })}</span>}
+            {check && (
+              <span className="text-xs text-muted-foreground">
+                {t("profiles.checkLast", {
+                  time: new Date(check.at * 1000).toLocaleTimeString(currentLang() === "ja" ? "ja-JP" : "en-US", { hour: "2-digit", minute: "2-digit" }),
+                })}
+              </span>
+            )}
             <button
               type="button"
               disabled={busy !== null || dirty}

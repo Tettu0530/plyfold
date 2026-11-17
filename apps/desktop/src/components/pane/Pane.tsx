@@ -32,7 +32,12 @@ function EmptyPane({ index }: { index: number }) {
   const removable = useStore((s) => s.paneCount > 1);
   return (
     <PaneMenu slot={index}>
-      <section ref={paneHeadAnchor(index)} aria-label={t("pane.emptyLabel", { n: index + 1 })} onMouseDown={() => focusPane(index)} className="relative flex min-w-0 flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
+      <section
+        ref={paneHeadAnchor(index)}
+        aria-label={t("pane.emptyLabel", { n: index + 1 })}
+        onMouseDown={() => focusPane(index)}
+        className="relative flex min-w-0 flex-col items-center justify-center gap-2 text-xs text-muted-foreground"
+      >
         {removable && (
           <button
             type="button"
@@ -119,12 +124,18 @@ function SessionPane({ index }: { index: number }) {
         >
           <StatusIcon status={r.status} />
           <PaneTitle id={id} title={r.title} />
-          <span title={t("pane.profileTitle", { agent: r.agent, profile: r.profile })} className="hidden items-center gap-1 text-xs whitespace-nowrap text-muted-foreground @[22rem]:flex">
+          <span
+            title={t("pane.profileTitle", { agent: r.agent, profile: r.profile })}
+            className="hidden items-center gap-1 text-xs whitespace-nowrap text-muted-foreground @[22rem]:flex"
+          >
             <ProviderLogo agent={r.agent} className="size-3" />
             {r.profile === r.agent ? "default" : r.profile}
           </span>
           {mismatch && (
-            <span title={t("pane.modelMismatch", { model: modelOpt?.current ?? "" })} className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
+            <span
+              title={t("pane.modelMismatch", { model: modelOpt?.current ?? "" })}
+              className="flex items-center gap-1 font-mono text-xs text-muted-foreground"
+            >
               <TriangleAlert className="size-3.5 text-permission" aria-hidden />
               {reported}
             </span>
@@ -132,14 +143,14 @@ function SessionPane({ index }: { index: number }) {
           <span className="grow" />
           <span className="hidden items-center gap-2 @[30rem]:flex">
             <PaneTools
-            scope={id}
-            items={view.transcript.items}
-            worktree={r.worktree_path ?? r.repo_path}
-            alive={r.status !== "closed" && r.status !== "error"}
-            busy={view.transcript.inTurn}
-            isWorktree={!!r.worktree_path}
-            title={r.title}
-          />
+              scope={id}
+              items={view.transcript.items}
+              worktree={r.worktree_path ?? r.repo_path}
+              alive={r.status !== "closed" && r.status !== "error"}
+              busy={view.transcript.inTurn}
+              isWorktree={!!r.worktree_path}
+              title={r.title}
+            />
           </span>
           {diffStat && diffStat.added + diffStat.removed > 0 && (
             <button
@@ -158,7 +169,12 @@ function SessionPane({ index }: { index: number }) {
             </button>
           )}
           {working && (
-            <button type="button" aria-label={t("pane.stop")} onClick={() => void cancel(id)} className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+            <button
+              type="button"
+              aria-label={t("pane.stop")}
+              onClick={() => void cancel(id)}
+              className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
               <Square className="size-3.5" aria-hidden />
             </button>
           )}
@@ -173,7 +189,13 @@ function SessionPane({ index }: { index: number }) {
         </div>
       </PaneMenu>
 
-      <Transcript items={view.transcript.items} info={view.info} streaming={r.status === "working"} busy={view.transcript.inTurn} onResend={(t, a) => void sendPrompt(id, t, a)} />
+      <Transcript
+        items={view.transcript.items}
+        info={view.info}
+        streaming={r.status === "working"}
+        busy={view.transcript.inTurn}
+        onResend={(t, a) => void sendPrompt(id, t, a)}
+      />
 
       <div className="px-5">
         <AnimatePresence>

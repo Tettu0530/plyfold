@@ -5,7 +5,23 @@
 // keyboards counts as "\\". Settings store only the overrides; "" unbinds an action.
 // ⌘1–⌘9 (focus a pane) and the keys inside the composer stay fixed.
 
-export const ACTIONS = ["newSession", "search", "settings", "toggleSidebar", "stop", "attach", "splitRight", "splitDown", "evenLayout", "closePane", "focusNext", "focusPrev", "zoomIn", "zoomOut", "zoomReset"] as const;
+export const ACTIONS = [
+  "newSession",
+  "search",
+  "settings",
+  "toggleSidebar",
+  "stop",
+  "attach",
+  "splitRight",
+  "splitDown",
+  "evenLayout",
+  "closePane",
+  "focusNext",
+  "focusPrev",
+  "zoomIn",
+  "zoomOut",
+  "zoomReset",
+] as const;
 export type Action = (typeof ACTIONS)[number];
 export type Bindings = Record<Action, string>;
 
@@ -87,7 +103,14 @@ const KEY_RE = /^([a-z0-9]|f([1-9]|1[0-9])|[\\,./;'[\]\-=`]|space|enter|tab|back
 function validCombo(c: string): boolean {
   const parts = keysOf(c);
   const key = parts.pop();
-  return !!key && KEY_RE.test(key) && parts.every((m, i) => MODS.includes(m as (typeof MODS)[number]) && MODS.indexOf(m as (typeof MODS)[number]) > (i ? MODS.indexOf(parts[i - 1] as (typeof MODS)[number]) : -1));
+  return (
+    !!key &&
+    KEY_RE.test(key) &&
+    parts.every(
+      (m, i) =>
+        MODS.includes(m as (typeof MODS)[number]) && MODS.indexOf(m as (typeof MODS)[number]) > (i ? MODS.indexOf(parts[i - 1] as (typeof MODS)[number]) : -1),
+    )
+  );
 }
 
 /** The action a keyboard event triggers */
@@ -98,7 +121,21 @@ export function actionFor(e: KeyEventLike, bindings: Bindings): Action | null {
 }
 
 /** Combos that macOS or text editing already use (and ⌘1–⌘9, which focus panes) */
-const RESERVED = new Set(["cmd+c", "cmd+v", "cmd+x", "cmd+a", "cmd+z", "cmd+shift+z", "cmd+q", "cmd+w", "cmd+h", "cmd+m", "cmd+tab", "cmd+space", ...Array.from({ length: 9 }, (_, i) => `cmd+${i + 1}`)]);
+const RESERVED = new Set([
+  "cmd+c",
+  "cmd+v",
+  "cmd+x",
+  "cmd+a",
+  "cmd+z",
+  "cmd+shift+z",
+  "cmd+q",
+  "cmd+w",
+  "cmd+h",
+  "cmd+m",
+  "cmd+tab",
+  "cmd+space",
+  ...Array.from({ length: 9 }, (_, i) => `cmd+${i + 1}`),
+]);
 
 export type ComboProblem = "needsModifier" | "reserved";
 
@@ -115,7 +152,11 @@ export function comboProblem(combo: string): ComboProblem | null {
  * Overrides after binding `action` to `combo`: another action using the same combo is unbound (returned as `moved`),
  * and values equal to the default are dropped so the settings file only keeps real changes
  */
-export function rebind(overrides: Record<string, string> | undefined, action: Action, combo: string): { overrides: Record<string, string>; moved: Action | null } {
+export function rebind(
+  overrides: Record<string, string> | undefined,
+  action: Action,
+  combo: string,
+): { overrides: Record<string, string>; moved: Action | null } {
   const current = bindingsOf(overrides);
   const moved = combo ? (ACTIONS.find((a) => a !== action && current[a] === combo) ?? null) : null;
   const next: Bindings = { ...current, [action]: combo };

@@ -108,7 +108,11 @@ export function EditBox({ initial, onSend, onCancel }: { initial: string; onSend
       />
       <div className="flex items-center justify-end gap-1.5 text-xs">
         <span className="mr-auto px-1 text-muted-foreground">{t("message.sendsAsNewTurn")}</span>
-        <button type="button" onClick={onCancel} className="flex h-6 items-center gap-1.5 rounded-md px-2 text-muted-foreground hover:bg-accent hover:text-foreground">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex h-6 items-center gap-1.5 rounded-md px-2 text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
           {t("message.cancel")}
           <Keys keys={["esc"]} />
         </button>

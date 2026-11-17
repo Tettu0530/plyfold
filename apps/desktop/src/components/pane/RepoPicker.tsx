@@ -48,7 +48,10 @@ export function RepoPicker({ value, onPick }: { value: string; onPick: (path: st
     }
     let alive = true;
     const timer = setTimeout(() => {
-      void api.completeDirs(query).then((d) => alive && setDirs(d)).catch(() => alive && setDirs([]));
+      void api
+        .completeDirs(query)
+        .then((d) => alive && setDirs(d))
+        .catch(() => alive && setDirs([]));
     }, 80);
     return () => {
       alive = false;
@@ -59,7 +62,10 @@ export function RepoPicker({ value, onPick }: { value: string; onPick: (path: st
   // Right after opening, only recent ones. Once typing starts, list recent ones whose name contains the text, plus completions
   const q = baseName(query).toLowerCase();
   const recentShown = touched ? recent.filter((r) => r.path !== query && r.name.toLowerCase().includes(q)).slice(0, 3) : recent;
-  const rows = [...recentShown.map((r) => ({ ...r, recent: true })), ...dirs.filter((d) => !recentShown.some((r) => r.path === d.path)).map((d) => ({ ...d, recent: false }))];
+  const rows = [
+    ...recentShown.map((r) => ({ ...r, recent: true })),
+    ...dirs.filter((d) => !recentShown.some((r) => r.path === d.path)).map((d) => ({ ...d, recent: false })),
+  ];
   const cur = Math.min(active, Math.max(0, rows.length - 1));
 
   useEffect(() => setActive(0), [query]);

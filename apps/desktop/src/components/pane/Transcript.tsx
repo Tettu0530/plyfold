@@ -57,12 +57,24 @@ export function TurnStatsRow({
       )}
       {stats?.usage && (
         <>
-          <Stat icon={ArrowUp} title={t("transcript.inputTokens")}>{tokens(stats.usage.input + stats.usage.cached_read + stats.usage.cached_write)}</Stat>
-          <Stat icon={ArrowDown} title={t("transcript.outputTokens")}>{tokens(stats.usage.output)}</Stat>
+          <Stat icon={ArrowUp} title={t("transcript.inputTokens")}>
+            {tokens(stats.usage.input + stats.usage.cached_read + stats.usage.cached_write)}
+          </Stat>
+          <Stat icon={ArrowDown} title={t("transcript.outputTokens")}>
+            {tokens(stats.usage.output)}
+          </Stat>
         </>
       )}
-      {cost && <Stat icon={Coins} title={t("transcript.turnCost")}>{cost}</Stat>}
-      {stats && stats.elapsed_ms > 0 && <Stat icon={Clock} title={t("transcript.elapsed")}>{seconds(stats.elapsed_ms)}</Stat>}
+      {cost && (
+        <Stat icon={Coins} title={t("transcript.turnCost")}>
+          {cost}
+        </Stat>
+      )}
+      {stats && stats.elapsed_ms > 0 && (
+        <Stat icon={Clock} title={t("transcript.elapsed")}>
+          {seconds(stats.elapsed_ms)}
+        </Stat>
+      )}
       {stopReason === "cancelled" && <span>{t("transcript.stopped")}</span>}
       {endedAt != null && (
         <time dateTime={new Date(endedAt).toISOString()} title={t("transcript.endedAt")} className="ml-auto">
@@ -88,7 +100,11 @@ function Thought({ text }: { text: string }) {
         <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} aria-hidden />
         {t("transcript.thought")}
       </button>
-      {open && <p lang={contentLang(text)} className="mt-1 border-l pl-3 text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">{text}</p>}
+      {open && (
+        <p lang={contentLang(text)} className="mt-1 border-l pl-3 text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
+          {text}
+        </p>
+      )}
     </div>
   );
 }
@@ -128,10 +144,12 @@ export function Transcript({
     setAwayFromBottom(!bottom);
     if (bottom) setUnseen(false);
   };
+  // Follow new output (a new item, or the last one growing while it streams)
+  const last = items[items.length - 1];
   useEffect(() => {
     if (atBottom.current) end.current?.scrollIntoView({ block: "end" });
     else setUnseen(true);
-  }, [items.length, items[items.length - 1]]);
+  }, [items.length, last]);
   const jumpToBottom = () => {
     const el = scroller.current;
     if (!el) return;
@@ -150,129 +168,133 @@ export function Transcript({
 
   return (
     <div className="relative flex min-h-0 grow flex-col">
-    {/* In a wide pane the conversation keeps a readable width (52rem) in the middle; the padding grows instead, so the
+      {/* In a wide pane the conversation keeps a readable width (52rem) in the middle; the padding grows instead, so the
         scrollbar stays at the pane's edge */}
-    <div ref={scroller} onScroll={onScroll} className="flex min-h-0 grow flex-col gap-3 overflow-y-auto px-[max(1.25rem,calc((100%_-_52rem)/2))] pt-4 pb-2">
-      {items.length === 0 && <p className="m-auto text-xs text-muted-foreground">{tr("transcript.empty")}</p>}
-      {blocks.map((b, i) => {
-        switch (b.kind) {
-          case "user":
-            return (
-              <div key={i} className={cn("group flex flex-col items-end gap-1.5 self-end", editing === i ? "w-[78%]" : "max-w-[78%]")}>
-                {b.attachments && <SentAttachments items={b.attachments} />}
-                {editing === i ? (
-                  <EditBox
-                    initial={b.text}
-                    onCancel={() => setEditing(null)}
-                    onSend={(t) => {
-                      setEditing(null);
-                      onResend?.(t, resendable(b.attachments ?? []));
-                    }}
-                  />
-                ) : (
-                  <>
-                    {b.text && <div lang={contentLang(b.text)} className="rounded-[10px] bg-muted px-3 py-1.5 leading-relaxed whitespace-pre-wrap select-text">{b.text}</div>}
-                    {onResend && (
-                      <UserActions
-                        text={b.text}
-                        busy={busy}
-                        onEdit={() => setEditing(i)}
-                        onResend={() => onResend(b.text, resendable(b.attachments ?? []))}
-                      />
-                    )}
-                  </>
-                )}
-              </div>
-            );
-          case "agent":
-            return (
-              <div key={i} className="group flex flex-col gap-0.5">
-                <Markdown text={b.text} streaming={streaming && i === blocks.length - 1} />
-                {!(streaming && i === blocks.length - 1) && (
-                  <ActionRow align="start">
-                    <CopyButton text={b.text} />
-                  </ActionRow>
-                )}
-              </div>
-            );
-          case "thought":
-            return <Thought key={i} text={b.text} />;
-          case "tools":
-            return (
-              <div key={i} className="flex flex-col gap-3">
-                <ToolCalls tools={b.tools} />
-                {b.tools.flatMap((t) => t.diffs.map((d, k) => <DiffBlock key={`${t.id}-${k}`} d={d} />))}
-              </div>
-            );
-          case "plan":
-            return (
-              <div key={i} className="rounded-[10px] border bg-card px-3 py-2">
-                <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
-                  <ListChecks className="size-3.5" aria-hidden />
-                  {tr("transcript.plan")}
+      <div ref={scroller} onScroll={onScroll} className="flex min-h-0 grow flex-col gap-3 overflow-y-auto px-[max(1.25rem,calc((100%_-_52rem)/2))] pt-4 pb-2">
+        {items.length === 0 && <p className="m-auto text-xs text-muted-foreground">{tr("transcript.empty")}</p>}
+        {blocks.map((b, i) => {
+          switch (b.kind) {
+            case "user":
+              return (
+                <div key={i} className={cn("group flex flex-col items-end gap-1.5 self-end", editing === i ? "w-[78%]" : "max-w-[78%]")}>
+                  {b.attachments && <SentAttachments items={b.attachments} />}
+                  {editing === i ? (
+                    <EditBox
+                      initial={b.text}
+                      onCancel={() => setEditing(null)}
+                      onSend={(t) => {
+                        setEditing(null);
+                        onResend?.(t, resendable(b.attachments ?? []));
+                      }}
+                    />
+                  ) : (
+                    <>
+                      {b.text && (
+                        <div lang={contentLang(b.text)} className="rounded-[10px] bg-muted px-3 py-1.5 leading-relaxed whitespace-pre-wrap select-text">
+                          {b.text}
+                        </div>
+                      )}
+                      {onResend && (
+                        <UserActions
+                          text={b.text}
+                          busy={busy}
+                          onEdit={() => setEditing(i)}
+                          onResend={() => onResend(b.text, resendable(b.attachments ?? []))}
+                        />
+                      )}
+                    </>
+                  )}
                 </div>
-                {b.entries.map((e, k) => (
-                  <div key={k} className={cn("text-xs leading-6", e.status === "completed" && "text-muted-foreground line-through")}>
-                    {e.content}
+              );
+            case "agent":
+              return (
+                <div key={i} className="group flex flex-col gap-0.5">
+                  <Markdown text={b.text} streaming={streaming && i === blocks.length - 1} />
+                  {!(streaming && i === blocks.length - 1) && (
+                    <ActionRow align="start">
+                      <CopyButton text={b.text} />
+                    </ActionRow>
+                  )}
+                </div>
+              );
+            case "thought":
+              return <Thought key={i} text={b.text} />;
+            case "tools":
+              return (
+                <div key={i} className="flex flex-col gap-3">
+                  <ToolCalls tools={b.tools} />
+                  {b.tools.flatMap((t) => t.diffs.map((d, k) => <DiffBlock key={`${t.id}-${k}`} d={d} />))}
+                </div>
+              );
+            case "plan":
+              return (
+                <div key={i} className="rounded-[10px] border bg-card px-3 py-2">
+                  <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
+                    <ListChecks className="size-3.5" aria-hidden />
+                    {tr("transcript.plan")}
                   </div>
-                ))}
-              </div>
-            );
-          case "stats":
-            return (
-              <div key={i} className="flex flex-col gap-3">
-                <TurnStatsRow stats={b.stats} error={b.error} stopReason={b.stopReason} cost={undefined} endedAt={b.endedAt} />
-                {i < blocks.length - 1 && <div className="h-px bg-border" />}
-              </div>
-            );
-          case "notice":
-            return (
-              <p key={i} className="m-0 flex gap-2 text-xs whitespace-pre-wrap text-muted-foreground">
-                <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-                {b.text}
-              </p>
-            );
-        }
-      })}
-      {streaming && (
-        <div className="flex items-center gap-3">
-          <Working label={workingLabel(items)} />
-          {info?.live && (
-            <TurnStatsRow
-              stats={{
-                usage: null,
-                elapsed_ms: info.live.elapsed_ms,
-                ttft_ms: info.live.ttft_ms,
-                tokens_per_sec: info.live.est_tokens_per_sec,
-                estimated: true,
-              }}
-            />
-          )}
-        </div>
-      )}
-      <div ref={end} />
-      {info?.cost && <span className="sr-only">{tr("transcript.sessionCost", { cost: money(info.cost.amount, info.cost.currency) })}</span>}
-    </div>
-    {/* Shown only while scrolled up; a dot means new output arrived below */}
-    <AnimatePresence>
-      {awayFromBottom && (
-        <motion.button
-          key="to-bottom"
-          type="button"
-          aria-label={unseen ? `${tr("transcript.scrollToBottom")}. ${tr("transcript.newBelow")}` : tr("transcript.scrollToBottom")}
-          title={tr("transcript.scrollToBottom")}
-          initial={{ opacity: 0, y: 8, scale: 0.9 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 8, scale: 0.9 }}
-          transition={snappy}
-          onClick={jumpToBottom}
-          className="absolute bottom-3 left-1/2 -ml-4 flex size-8 items-center justify-center rounded-full border bg-card text-muted-foreground shadow-[0_4px_12px_rgba(0,0,0,.45)] hover:bg-accent hover:text-foreground"
-        >
-          <ArrowDown className="size-4" aria-hidden />
-          {unseen && <span aria-hidden className="absolute top-0.5 right-0.5 size-2 rounded-full border-2 border-card bg-foreground" />}
-        </motion.button>
-      )}
-    </AnimatePresence>
+                  {b.entries.map((e, k) => (
+                    <div key={k} className={cn("text-xs leading-6", e.status === "completed" && "text-muted-foreground line-through")}>
+                      {e.content}
+                    </div>
+                  ))}
+                </div>
+              );
+            case "stats":
+              return (
+                <div key={i} className="flex flex-col gap-3">
+                  <TurnStatsRow stats={b.stats} error={b.error} stopReason={b.stopReason} cost={undefined} endedAt={b.endedAt} />
+                  {i < blocks.length - 1 && <div className="h-px bg-border" />}
+                </div>
+              );
+            case "notice":
+              return (
+                <p key={i} className="m-0 flex gap-2 text-xs whitespace-pre-wrap text-muted-foreground">
+                  <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                  {b.text}
+                </p>
+              );
+          }
+        })}
+        {streaming && (
+          <div className="flex items-center gap-3">
+            <Working label={workingLabel(items)} />
+            {info?.live && (
+              <TurnStatsRow
+                stats={{
+                  usage: null,
+                  elapsed_ms: info.live.elapsed_ms,
+                  ttft_ms: info.live.ttft_ms,
+                  tokens_per_sec: info.live.est_tokens_per_sec,
+                  estimated: true,
+                }}
+              />
+            )}
+          </div>
+        )}
+        <div ref={end} />
+        {info?.cost && <span className="sr-only">{tr("transcript.sessionCost", { cost: money(info.cost.amount, info.cost.currency) })}</span>}
+      </div>
+      {/* Shown only while scrolled up; a dot means new output arrived below */}
+      <AnimatePresence>
+        {awayFromBottom && (
+          <motion.button
+            key="to-bottom"
+            type="button"
+            aria-label={unseen ? `${tr("transcript.scrollToBottom")}. ${tr("transcript.newBelow")}` : tr("transcript.scrollToBottom")}
+            title={tr("transcript.scrollToBottom")}
+            initial={{ opacity: 0, y: 8, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.9 }}
+            transition={snappy}
+            onClick={jumpToBottom}
+            className="absolute bottom-3 left-1/2 -ml-4 flex size-8 items-center justify-center rounded-full border bg-card text-muted-foreground shadow-[0_4px_12px_rgba(0,0,0,.45)] hover:bg-accent hover:text-foreground"
+          >
+            <ArrowDown className="size-4" aria-hidden />
+            {unseen && <span aria-hidden className="absolute top-0.5 right-0.5 size-2 rounded-full border-2 border-card bg-foreground" />}
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

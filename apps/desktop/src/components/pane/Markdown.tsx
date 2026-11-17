@@ -61,7 +61,9 @@ const components: Components = {
   h5: ({ children }) => <h6 className="mt-3 mb-1.5 font-semibold first:mt-0">{children}</h6>,
   h6: ({ children }) => <h6 className="mt-3 mb-1.5 font-semibold first:mt-0">{children}</h6>,
   ul: ({ children, className }) => (
-    <ul className={cn("my-2 flex list-disc flex-col gap-1 pl-5 marker:text-muted-foreground", className?.includes("contains-task-list") && "list-none pl-1")}>{children}</ul>
+    <ul className={cn("my-2 flex list-disc flex-col gap-1 pl-5 marker:text-muted-foreground", className?.includes("contains-task-list") && "list-none pl-1")}>
+      {children}
+    </ul>
   ),
   ol: ({ children, start }) => (
     <ol start={start} className="my-2 flex list-decimal flex-col gap-1 pl-5 marker:font-mono marker:text-muted-foreground">

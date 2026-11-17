@@ -2,15 +2,34 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AttachmentWire } from "./attachments";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-import type { AppInfo, AppSettings, Category, CheckResult, Diff, DirCandidate, EngineEvent, EventRecord, FileHit, GitInfo, ProfileDetail, ProfileForm, ProfileSummary, ProfileUsage, PullRequest, SessionInfo, SessionRecord, SettingsView, WtStatus } from "./types";
+import type {
+  AppInfo,
+  AppSettings,
+  Category,
+  CheckResult,
+  Diff,
+  DirCandidate,
+  EngineEvent,
+  EventRecord,
+  FileHit,
+  GitInfo,
+  ProfileDetail,
+  ProfileForm,
+  ProfileSummary,
+  ProfileUsage,
+  PullRequest,
+  SessionInfo,
+  SessionRecord,
+  SettingsView,
+  WtStatus,
+} from "./types";
 
 // Thin wrappers around the Tauri commands (src-tauri/src/lib.rs). Argument names follow the Rust side's camelCase conversion
 export const api = {
   listProfiles: () => invoke<ProfileSummary[]>("list_profiles"),
   listSessions: () => invoke<SessionRecord[]>("list_sessions"),
   sessionHistory: (id: string) => invoke<EventRecord[]>("session_history", { id }),
-  startSession: (args: { profile: string; repo: string; title: string; worktree: boolean }) =>
-    invoke<SessionRecord>("start_session", args),
+  startSession: (args: { profile: string; repo: string; title: string; worktree: boolean }) => invoke<SessionRecord>("start_session", args),
   reopenSession: (id: string) => invoke<void>("reopen_session", { id }),
   renameSession: (id: string, title: string) => invoke<void>("rename_session", { id, title }),
   closeSession: (id: string) => invoke<void>("close_session", { id }),
@@ -25,10 +44,8 @@ export const api = {
   usageSummary: (days: number) => invoke<ProfileUsage[]>("usage_summary", { days }),
   prompt: (id: string, text: string, attachments: AttachmentWire[] = []) => invoke<void>("prompt", { id, text, attachments }),
   cancel: (id: string) => invoke<void>("cancel", { id }),
-  respondPermission: (id: string, permissionId: string, optionId: string | null) =>
-    invoke<void>("respond_permission", { id, permissionId, optionId }),
-  setByCategory: (id: string, category: Category, value: string) =>
-    invoke<void>("set_by_category", { id, category, value }),
+  respondPermission: (id: string, permissionId: string, optionId: string | null) => invoke<void>("respond_permission", { id, permissionId, optionId }),
+  setByCategory: (id: string, category: Category, value: string) => invoke<void>("set_by_category", { id, category, value }),
   sessionInfo: (id: string) => invoke<SessionInfo | null>("session_info", { id }),
   sessionDiff: (id: string) => invoke<Diff>("session_diff", { id }),
   worktreeStatus: (id: string) => invoke<WtStatus>("worktree_status", { id }),

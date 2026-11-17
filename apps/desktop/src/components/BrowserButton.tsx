@@ -36,7 +36,10 @@ export function BrowserButton() {
       aria-label={t("pane.previewNew")}
       title={t("pane.previewNew")}
       onClick={() => useStore.getState().openPreview("", ANCHOR)}
-      className={cn("relative flex size-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground", raised && "z-[57]")}
+      className={cn(
+        "relative flex size-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground",
+        raised && "z-[57]",
+      )}
     >
       <Globe className="size-4" aria-hidden />
       {/* A dot when an agent has printed a local URL (listed in the new pane) */}

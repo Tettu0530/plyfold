@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { isSendKey } from "./keys";
 
 // Tests run in node, so key events are plain objects of the right shape
-const key = (o: Partial<KeyboardEvent>) => ({ key: "Enter", isComposing: false, keyCode: 13, shiftKey: false, metaKey: false, ctrlKey: false, ...o }) as KeyboardEvent;
+const key = (o: Partial<KeyboardEvent>) =>
+  ({ key: "Enter", isComposing: false, keyCode: 13, shiftKey: false, metaKey: false, ctrlKey: false, ...o }) as KeyboardEvent;
 
 describe("keys", () => {
   it("treats the Enter that commits Japanese input as IME, not send", () => {

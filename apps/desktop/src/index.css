@@ -107,7 +107,14 @@
    It signals work in progress, so it is exempt from the no-decorative-loops rule (same as a spinner). Uses only the text and muted tokens */
 @layer components {
   .shimmer {
-    background-image: linear-gradient(90deg, var(--muted-foreground) 0%, var(--muted-foreground) 40%, var(--foreground) 50%, var(--muted-foreground) 60%, var(--muted-foreground) 100%);
+    background-image: linear-gradient(
+      90deg,
+      var(--muted-foreground) 0%,
+      var(--muted-foreground) 40%,
+      var(--foreground) 50%,
+      var(--muted-foreground) 60%,
+      var(--muted-foreground) 100%
+    );
     background-size: 250% 100%;
     background-clip: text;
     -webkit-background-clip: text;

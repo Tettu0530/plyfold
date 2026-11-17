@@ -61,7 +61,16 @@ export function Notifications() {
   const items: Item[] = [];
   for (const v of Object.values(sessions)) {
     const u = URGENT[v.record.status];
-    if (u) items.push({ id: v.record.id, title: v.record.title, status: v.record.status, at: v.record.updated_at, urgent: true, reason: t(u.reasonKey), color: u.color });
+    if (u)
+      items.push({
+        id: v.record.id,
+        title: v.record.title,
+        status: v.record.status,
+        at: v.record.updated_at,
+        urgent: true,
+        reason: t(u.reasonKey),
+        color: u.color,
+      });
     else if (unread[v.record.id]) {
       const r = unread[v.record.id];
       items.push({
@@ -77,7 +86,11 @@ export function Notifications() {
   }
   items.sort((a, b) => Number(b.urgent) - Number(a.urgent) || b.at - a.at);
   const urgent = items.filter((i) => i.urgent).length;
-  const label = urgent ? t("notifications.urgentLabel", { count: urgent }) : items.length ? t("notifications.newLabel", { count: items.length }) : t("notifications.title");
+  const label = urgent
+    ? t("notifications.urgentLabel", { count: urgent })
+    : items.length
+      ? t("notifications.newLabel", { count: items.length })
+      : t("notifications.title");
 
   return (
     <Popover open={open} onOpenChange={toggle}>
@@ -86,11 +99,17 @@ export function Notifications() {
           ref={liquidAnchor("notifications")}
           type="button"
           aria-label={label}
-          className={cn("relative flex size-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground data-[state=open]:bg-accent", raised && "z-[57]")}
+          className={cn(
+            "relative flex size-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground data-[state=open]:bg-accent",
+            raised && "z-[57]",
+          )}
         >
           <Bell className="size-4" aria-hidden />
           {items.length > 0 && (
-            <span aria-hidden className={cn("absolute top-1 right-1 size-[7px] rounded-full border-2 border-background", urgent ? "bg-permission" : "bg-foreground")} />
+            <span
+              aria-hidden
+              className={cn("absolute top-1 right-1 size-[7px] rounded-full border-2 border-background", urgent ? "bg-permission" : "bg-foreground")}
+            />
           )}
         </button>
       </PopoverTrigger>

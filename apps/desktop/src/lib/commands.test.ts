@@ -3,11 +3,19 @@ import { describe, expect, it } from "vitest";
 import { commandsFromHistory, parseCommands } from "./commands";
 import type { EventRecord } from "./types";
 
-const frame = (id: number, update: unknown): EventRecord => ({ id, session_id: "s", ts: id, kind: "frame_in", payload: JSON.stringify({ jsonrpc: "2.0", method: "session/update", params: { sessionId: "x", update } }) });
+const frame = (id: number, update: unknown): EventRecord => ({
+  id,
+  session_id: "s",
+  ts: id,
+  kind: "frame_in",
+  payload: JSON.stringify({ jsonrpc: "2.0", method: "session/update", params: { sessionId: "x", update } }),
+});
 
 describe("slash commands from ACP", () => {
   it("reads names, descriptions and hints", () => {
-    expect(parseCommands([{ name: "/compact", description: " Summarize ", input: { hint: "instructions" } }, { name: "init", input: null }, { name: "" }, null])).toEqual([
+    expect(
+      parseCommands([{ name: "/compact", description: " Summarize ", input: { hint: "instructions" } }, { name: "init", input: null }, { name: "" }, null]),
+    ).toEqual([
       { name: "compact", description: "Summarize", hint: "instructions" },
       { name: "init", description: "", hint: null },
     ]);

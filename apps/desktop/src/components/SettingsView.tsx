@@ -86,7 +86,10 @@ export function SettingsView() {
   useEffect(() => {
     if (!view) return;
     setError(null);
-    void api.getSettings().then(setPaths).catch(() => setPaths(null));
+    void api
+      .getSettings()
+      .then(setPaths)
+      .catch(() => setPaths(null));
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") close();
     };
@@ -108,10 +111,18 @@ export function SettingsView() {
       role="dialog"
       aria-label={t("settings.title")}
       aria-hidden={!visible}
-      className={cn("fixed inset-x-0 top-10 bottom-0 flex flex-col bg-background transition-opacity duration-150", moving ? "pointer-events-none z-[56]" : "z-40", visible ? "opacity-100" : "pointer-events-none opacity-0")}
+      className={cn(
+        "fixed inset-x-0 top-10 bottom-0 flex flex-col bg-background transition-opacity duration-150",
+        moving ? "pointer-events-none z-[56]" : "z-40",
+        visible ? "opacity-100" : "pointer-events-none opacity-0",
+      )}
     >
       <div className="flex h-10 shrink-0 items-center gap-2 border-b pr-3 pl-2">
-        <button type="button" onClick={close} className="flex h-7 items-center gap-1 rounded-lg pr-2 pl-1 text-muted-foreground hover:bg-accent hover:text-foreground">
+        <button
+          type="button"
+          onClick={close}
+          className="flex h-7 items-center gap-1 rounded-lg pr-2 pl-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
           <ChevronLeft className="size-4" aria-hidden />
           {t("settings.back")}
           <Keys keys={["esc"]} />
@@ -122,7 +133,14 @@ export function SettingsView() {
 
       <div className="flex min-h-0 grow">
         {/* Section list: picks the one section shown on the right */}
-        <div ref={tabs} role="tablist" aria-orientation="vertical" aria-label={t("settings.title")} onKeyDown={onTabKey} className="flex w-44 shrink-0 flex-col gap-0.5 overflow-y-auto border-r px-2 py-4">
+        <div
+          ref={tabs}
+          role="tablist"
+          aria-orientation="vertical"
+          aria-label={t("settings.title")}
+          onKeyDown={onTabKey}
+          className="flex w-44 shrink-0 flex-col gap-0.5 overflow-y-auto border-r px-2 py-4"
+        >
           {SECTIONS.map((sec) => (
             <button
               key={sec.id}
@@ -134,7 +152,10 @@ export function SettingsView() {
               aria-controls="settings-panel"
               tabIndex={current === sec.id ? 0 : -1}
               onClick={() => pick(sec.id)}
-              className={cn("flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground", current === sec.id && "bg-accent text-foreground")}
+              className={cn(
+                "flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground",
+                current === sec.id && "bg-accent text-foreground",
+              )}
             >
               <sec.Icon className="size-3.5 shrink-0" aria-hidden />
               {t(sec.label)}
@@ -143,162 +164,191 @@ export function SettingsView() {
         </div>
         <div id="settings-panel" role="tabpanel" aria-labelledby={`settings-tab-${current}`} className="min-h-0 grow overflow-y-auto">
           <CurrentSection.Provider value={current}>
-          <div className="mx-auto flex max-w-[640px] min-w-0 flex-col gap-10 px-6 py-8">
-            <Section id="info" title={t("settings.sectionInfo")}>
-              <InfoSection />
-            </Section>
+            <div className="mx-auto flex max-w-[640px] min-w-0 flex-col gap-10 px-6 py-8">
+              <Section id="info" title={t("settings.sectionInfo")}>
+                <InfoSection />
+              </Section>
 
-            <Section id="general" title={t("settings.sectionGeneral")}>
-              <Row label={t("settings.language")} detail={settings.language === "auto" || !settings.language ? t("settings.languageAuto") : t("settings.languageFixed")}>
-                <Segmented<"auto" | Lang>
+              <Section id="general" title={t("settings.sectionGeneral")}>
+                <Row
                   label={t("settings.language")}
-                  value={settings.language ?? "auto"}
-                  onChange={(v) => change({ language: v })}
-                  // Language names are shown in their own script (the same in every UI language)
-                  options={[{ value: "auto" as const, label: <span className="px-2">{t("settings.auto")}</span> }, ...LANGS.map((l) => ({ value: l.value, label: <span className="px-2">{l.label}</span> }))]}
-                />
-              </Row>
-              <Row label={t("settings.sidebarDensity")} detail={settings.sidebar_density === "compact" ? t("settings.sidebarCompactDetail") : t("settings.sidebarComfortableDetail")}>
-                <Segmented<"comfortable" | "compact">
+                  detail={settings.language === "auto" || !settings.language ? t("settings.languageAuto") : t("settings.languageFixed")}
+                >
+                  <Segmented<"auto" | Lang>
+                    label={t("settings.language")}
+                    value={settings.language ?? "auto"}
+                    onChange={(v) => change({ language: v })}
+                    // Language names are shown in their own script (the same in every UI language)
+                    options={[
+                      { value: "auto" as const, label: <span className="px-2">{t("settings.auto")}</span> },
+                      ...LANGS.map((l) => ({ value: l.value, label: <span className="px-2">{l.label}</span> })),
+                    ]}
+                  />
+                </Row>
+                <Row
                   label={t("settings.sidebarDensity")}
-                  value={settings.sidebar_density ?? "comfortable"}
-                  onChange={(v) => change({ sidebar_density: v })}
-                  options={[
-                    { value: "comfortable", label: <span className="px-2">{t("settings.sidebarComfortable")}</span> },
-                    { value: "compact", label: <span className="px-2">{t("settings.sidebarCompact")}</span> },
-                  ]}
-                />
-              </Row>
-                          <Row label={t("settings.uiScale")} detail={t("settings.uiScaleDetail")}>
-                <Segmented<number>
-                  label={t("settings.uiScale")}
-                  value={settings.ui_scale ?? 100}
-                  onChange={(v) => change({ ui_scale: v })}
-                  options={(SCALES.includes(settings.ui_scale ?? 100) ? SCALES : [...SCALES, settings.ui_scale].sort((a, b) => a - b)).map((v) => ({ value: v, label: <span className="px-1 font-mono tabular">{v}%</span> }))}
-                />
-              </Row>
-</Section>
+                  detail={settings.sidebar_density === "compact" ? t("settings.sidebarCompactDetail") : t("settings.sidebarComfortableDetail")}
+                >
+                  <Segmented<"comfortable" | "compact">
+                    label={t("settings.sidebarDensity")}
+                    value={settings.sidebar_density ?? "comfortable"}
+                    onChange={(v) => change({ sidebar_density: v })}
+                    options={[
+                      { value: "comfortable", label: <span className="px-2">{t("settings.sidebarComfortable")}</span> },
+                      { value: "compact", label: <span className="px-2">{t("settings.sidebarCompact")}</span> },
+                    ]}
+                  />
+                </Row>
+                <Row label={t("settings.uiScale")} detail={t("settings.uiScaleDetail")}>
+                  <Segmented<number>
+                    label={t("settings.uiScale")}
+                    value={settings.ui_scale ?? 100}
+                    onChange={(v) => change({ ui_scale: v })}
+                    options={(SCALES.includes(settings.ui_scale ?? 100) ? SCALES : [...SCALES, settings.ui_scale].sort((a, b) => a - b)).map((v) => ({
+                      value: v,
+                      label: <span className="px-1 font-mono tabular">{v}%</span>,
+                    }))}
+                  />
+                </Row>
+              </Section>
 
-            <Section id="session" title={t("settings.sectionSession")}>
-              <Row label={t("settings.workspace")} detail={settings.worktree_default ? t("settings.workspaceWorktree") : t("settings.workspaceInPlace")}>
-                <Segmented<string>
-                  label={t("settings.workspace")}
-                  value={settings.worktree_default ? "wt" : "direct"}
-                  onChange={(v) => change({ worktree_default: v === "wt" })}
-                  options={[
-                    { value: "wt", label: <span className="px-2">worktree</span> },
-                    { value: "direct", label: <span className="px-2">{t("settings.inPlace")}</span> },
-                  ]}
-                />
-              </Row>
-              <Row label={t("settings.stall")} detail={t("settings.stallDetail")}>
-                <Segmented<number>
-                  label={t("settings.stall")}
-                  value={settings.stall_seconds}
-                  onChange={(v) => change({ stall_seconds: v })}
-                  options={(STALL.includes(settings.stall_seconds) ? STALL : [...STALL, settings.stall_seconds].sort((a, b) => a - b)).map((v) => ({
-                    value: v,
-                    label: <span className="px-1.5 font-mono tabular">{v < 60 ? t("settings.seconds", { count: v }) : t("settings.minutes", { count: v / 60 })}</span>,
-                  }))}
-                />
-              </Row>
-                          <Row label={t("settings.defaultProfile")} detail={settings.default_profile ? t("settings.defaultProfileDetailFixed") : t("settings.defaultProfileDetailLast")}>
-                <ProfilePicker value={settings.default_profile ?? ""} onChange={(v) => change({ default_profile: v })} />
-              </Row>
-              <Row label={t("settings.restorePanes")} htmlFor="st-restore" detail={settings.restore_panes === false ? t("settings.restorePanesOff") : t("settings.restorePanesOn")}>
-                <Switch id="st-restore" checked={settings.restore_panes !== false} onCheckedChange={(v) => change({ restore_panes: v })} />
-              </Row>
-              <Row label={t("settings.thoughts")} detail={settings.thoughts_expanded ? t("settings.thoughtsDetailExpanded") : t("settings.thoughtsDetailCollapsed")}>
-                <Segmented<string>
+              <Section id="session" title={t("settings.sectionSession")}>
+                <Row label={t("settings.workspace")} detail={settings.worktree_default ? t("settings.workspaceWorktree") : t("settings.workspaceInPlace")}>
+                  <Segmented<string>
+                    label={t("settings.workspace")}
+                    value={settings.worktree_default ? "wt" : "direct"}
+                    onChange={(v) => change({ worktree_default: v === "wt" })}
+                    options={[
+                      { value: "wt", label: <span className="px-2">worktree</span> },
+                      { value: "direct", label: <span className="px-2">{t("settings.inPlace")}</span> },
+                    ]}
+                  />
+                </Row>
+                <Row label={t("settings.stall")} detail={t("settings.stallDetail")}>
+                  <Segmented<number>
+                    label={t("settings.stall")}
+                    value={settings.stall_seconds}
+                    onChange={(v) => change({ stall_seconds: v })}
+                    options={(STALL.includes(settings.stall_seconds) ? STALL : [...STALL, settings.stall_seconds].sort((a, b) => a - b)).map((v) => ({
+                      value: v,
+                      label: (
+                        <span className="px-1.5 font-mono tabular">
+                          {v < 60 ? t("settings.seconds", { count: v }) : t("settings.minutes", { count: v / 60 })}
+                        </span>
+                      ),
+                    }))}
+                  />
+                </Row>
+                <Row
+                  label={t("settings.defaultProfile")}
+                  detail={settings.default_profile ? t("settings.defaultProfileDetailFixed") : t("settings.defaultProfileDetailLast")}
+                >
+                  <ProfilePicker value={settings.default_profile ?? ""} onChange={(v) => change({ default_profile: v })} />
+                </Row>
+                <Row
+                  label={t("settings.restorePanes")}
+                  htmlFor="st-restore"
+                  detail={settings.restore_panes === false ? t("settings.restorePanesOff") : t("settings.restorePanesOn")}
+                >
+                  <Switch id="st-restore" checked={settings.restore_panes !== false} onCheckedChange={(v) => change({ restore_panes: v })} />
+                </Row>
+                <Row
                   label={t("settings.thoughts")}
-                  value={settings.thoughts_expanded ? "open" : "closed"}
-                  onChange={(v) => change({ thoughts_expanded: v === "open" })}
-                  options={[
-                    { value: "closed", label: <span className="px-2">{t("settings.thoughtsCollapsed")}</span> },
-                    { value: "open", label: <span className="px-2">{t("settings.thoughtsExpanded")}</span> },
-                  ]}
-                />
-              </Row>
-</Section>
+                  detail={settings.thoughts_expanded ? t("settings.thoughtsDetailExpanded") : t("settings.thoughtsDetailCollapsed")}
+                >
+                  <Segmented<string>
+                    label={t("settings.thoughts")}
+                    value={settings.thoughts_expanded ? "open" : "closed"}
+                    onChange={(v) => change({ thoughts_expanded: v === "open" })}
+                    options={[
+                      { value: "closed", label: <span className="px-2">{t("settings.thoughtsCollapsed")}</span> },
+                      { value: "open", label: <span className="px-2">{t("settings.thoughtsExpanded")}</span> },
+                    ]}
+                  />
+                </Row>
+              </Section>
 
-            <Section id="keyboard" title={t("settings.sectionKeyboard")}>
-              <Row label={t("settings.sendKey")} detail={settings.send_key === "cmd_enter" ? t("settings.sendCmdEnter") : t("settings.sendEnter")}>
-                <Segmented<"enter" | "cmd_enter">
-                  label={t("settings.sendKey")}
-                  value={settings.send_key ?? "enter"}
-                  onChange={(v) => change({ send_key: v })}
-                  options={[
-                    { value: "enter", aria: "Enter", label: <Keys keys={["enter"]} className="px-2" /> },
-                    { value: "cmd_enter", aria: t("settings.cmdEnterAria"), label: <Keys keys={["cmd", "enter"]} className="px-2" /> },
-                  ]}
-                />
-              </Row>
-              <div className="flex flex-col gap-1">
-                <span className="font-medium">{t("settings.shortcuts")}</span>
-                <span className="text-xs leading-relaxed text-muted-foreground">{t("settings.shortcutsDetail")}</span>
-              </div>
-              <ShortcutSettings onError={setError} />
-            </Section>
+              <Section id="keyboard" title={t("settings.sectionKeyboard")}>
+                <Row label={t("settings.sendKey")} detail={settings.send_key === "cmd_enter" ? t("settings.sendCmdEnter") : t("settings.sendEnter")}>
+                  <Segmented<"enter" | "cmd_enter">
+                    label={t("settings.sendKey")}
+                    value={settings.send_key ?? "enter"}
+                    onChange={(v) => change({ send_key: v })}
+                    options={[
+                      { value: "enter", aria: "Enter", label: <Keys keys={["enter"]} className="px-2" /> },
+                      { value: "cmd_enter", aria: t("settings.cmdEnterAria"), label: <Keys keys={["cmd", "enter"]} className="px-2" /> },
+                    ]}
+                  />
+                </Row>
+                <div className="flex flex-col gap-1">
+                  <span className="font-medium">{t("settings.shortcuts")}</span>
+                  <span className="text-xs leading-relaxed text-muted-foreground">{t("settings.shortcutsDetail")}</span>
+                </div>
+                <ShortcutSettings onError={setError} />
+              </Section>
 
-            <Section id="notifications" title={t("settings.sectionNotifications")}>
-              <Row label={t("settings.notifyTurnEnd")} htmlFor="st-notify-turn" detail={t("settings.notifyTurnEndDetail")}>
-                <Switch id="st-notify-turn" checked={settings.notify_turn_end !== false} onCheckedChange={(v) => change({ notify_turn_end: v })} />
-              </Row>
-              <Row label={t("settings.notifyPermission")} htmlFor="st-notify-perm" detail={t("settings.notifyPermissionDetail")}>
-                <Switch id="st-notify-perm" checked={settings.notify_permission !== false} onCheckedChange={(v) => change({ notify_permission: v })} />
-              </Row>
-            </Section>
+              <Section id="notifications" title={t("settings.sectionNotifications")}>
+                <Row label={t("settings.notifyTurnEnd")} htmlFor="st-notify-turn" detail={t("settings.notifyTurnEndDetail")}>
+                  <Switch id="st-notify-turn" checked={settings.notify_turn_end !== false} onCheckedChange={(v) => change({ notify_turn_end: v })} />
+                </Row>
+                <Row label={t("settings.notifyPermission")} htmlFor="st-notify-perm" detail={t("settings.notifyPermissionDetail")}>
+                  <Switch id="st-notify-perm" checked={settings.notify_permission !== false} onCheckedChange={(v) => change({ notify_permission: v })} />
+                </Row>
+              </Section>
 
-            <Section id="diff" title={t("settings.sectionDiff")}>
-              <Row label={t("settings.openInEditor")} detail={settings.editor === "auto" ? t("settings.editorAutoDetail") : t("settings.editorDetail")}>
-                <Segmented<EditorChoice>
-                  label={t("settings.editor")}
-                  value={settings.editor}
-                  onChange={(editor) => change({ editor })}
-                  options={EDITORS.map((e) => ({ value: e.value, label: <span className="px-1.5">{e.label ?? t("settings.auto")}</span> }))}
-                />
-              </Row>
-              <Row
-                label={t("settings.cleanup")}
-                htmlFor="st-cleanup"
-                detail={
-                  settings.cleanup_after_merge
-                    ? t("settings.cleanupOn")
-                    : t("settings.cleanupOff")
-                }
-              >
-                <Switch id="st-cleanup" checked={settings.cleanup_after_merge} onCheckedChange={(v) => change({ cleanup_after_merge: v })} />
-              </Row>
-            </Section>
+              <Section id="diff" title={t("settings.sectionDiff")}>
+                <Row label={t("settings.openInEditor")} detail={settings.editor === "auto" ? t("settings.editorAutoDetail") : t("settings.editorDetail")}>
+                  <Segmented<EditorChoice>
+                    label={t("settings.editor")}
+                    value={settings.editor}
+                    onChange={(editor) => change({ editor })}
+                    options={EDITORS.map((e) => ({ value: e.value, label: <span className="px-1.5">{e.label ?? t("settings.auto")}</span> }))}
+                  />
+                </Row>
+                <Row
+                  label={t("settings.cleanup")}
+                  htmlFor="st-cleanup"
+                  detail={settings.cleanup_after_merge ? t("settings.cleanupOn") : t("settings.cleanupOff")}
+                >
+                  <Switch id="st-cleanup" checked={settings.cleanup_after_merge} onCheckedChange={(v) => change({ cleanup_after_merge: v })} />
+                </Row>
+              </Section>
 
-            <Section id="storage" title={t("settings.sectionStorage")}>
-              <PathRow label={t("settings.profileConfig")} path={paths?.config_path} onReveal={() => void api.revealPath("config")} />
-              <PathRow label={t("settings.stateDir")} path={paths?.state_dir} onReveal={() => void api.revealPath("data")} />
-              <p className="text-xs leading-relaxed text-muted-foreground">{t("settings.keychainNote")}</p>
-            </Section>
+              <Section id="storage" title={t("settings.sectionStorage")}>
+                <PathRow label={t("settings.profileConfig")} path={paths?.config_path} onReveal={() => void api.revealPath("config")} />
+                <PathRow label={t("settings.stateDir")} path={paths?.state_dir} onReveal={() => void api.revealPath("data")} />
+                <p className="text-xs leading-relaxed text-muted-foreground">{t("settings.keychainNote")}</p>
+              </Section>
 
-            <Section id="motion" title={t("settings.sectionMotion")}>
-              <Row label={t("settings.reduceMotion")} detail={settings.reduce_motion === "reduce" ? t("settings.reduceMotionDetailOn") : t("settings.reduceMotionDetailSystem")}>
-              <Segmented<"system" | "reduce">
-                label={t("settings.reduceMotion")}
-                value={settings.reduce_motion ?? "system"}
-                onChange={(v) => change({ reduce_motion: v })}
-                options={[
-                  { value: "system", label: <span className="px-2">{t("settings.reduceSystem")}</span> },
-                  { value: "reduce", label: <span className="px-2">{t("settings.reduceAlways")}</span> },
-                ]}
-              />
-            </Row>
-            <Row label={t("settings.motionLab")} detail={t("settings.motionLabDetail")}>
-                <button type="button" onClick={() => setLabOpen(true)} className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent">
-                  <Sparkles className="size-3.5" aria-hidden />
-                  {t("settings.open")}
-                </button>
-              </Row>
-            </Section>
+              <Section id="motion" title={t("settings.sectionMotion")}>
+                <Row
+                  label={t("settings.reduceMotion")}
+                  detail={settings.reduce_motion === "reduce" ? t("settings.reduceMotionDetailOn") : t("settings.reduceMotionDetailSystem")}
+                >
+                  <Segmented<"system" | "reduce">
+                    label={t("settings.reduceMotion")}
+                    value={settings.reduce_motion ?? "system"}
+                    onChange={(v) => change({ reduce_motion: v })}
+                    options={[
+                      { value: "system", label: <span className="px-2">{t("settings.reduceSystem")}</span> },
+                      { value: "reduce", label: <span className="px-2">{t("settings.reduceAlways")}</span> },
+                    ]}
+                  />
+                </Row>
+                <Row label={t("settings.motionLab")} detail={t("settings.motionLabDetail")}>
+                  <button
+                    type="button"
+                    onClick={() => setLabOpen(true)}
+                    className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent"
+                  >
+                    <Sparkles className="size-3.5" aria-hidden />
+                    {t("settings.open")}
+                  </button>
+                </Row>
+              </Section>
 
-            {error && <p className="text-xs whitespace-pre-wrap text-error">{t("settings.saveFailed", { error })}</p>}
-          </div>
+              {error && <p className="text-xs whitespace-pre-wrap text-error">{t("settings.saveFailed", { error })}</p>}
+            </div>
           </CurrentSection.Provider>
         </div>
       </div>
@@ -362,7 +412,14 @@ function ProfilePicker({ value, onChange }: { value: string; onChange: (v: strin
       <SelectTrigger ref={liquidAnchor("settings:profile")} aria-label={t("settings.defaultProfile")} className="h-8 min-w-40">
         <SelectValue />
       </SelectTrigger>
-      <SelectContent ref={menu.ref as React.Ref<HTMLDivElement>} style={menu.style} position="popper" align="end" sideOffset={6} className={cn("z-[58]", menu.moving && "opacity-0")}>
+      <SelectContent
+        ref={menu.ref as React.Ref<HTMLDivElement>}
+        style={menu.style}
+        position="popper"
+        align="end"
+        sideOffset={6}
+        className={cn("z-[58]", menu.moving && "opacity-0")}
+      >
         <SelectItem value={LAST}>{t("settings.defaultProfileLast")}</SelectItem>
         {profiles.map((p) => (
           <SelectItem key={p.name} value={p.name}>
@@ -384,7 +441,11 @@ function InfoSection() {
   const t = useT();
   const [info, setInfo] = useState<AppInfo | null>(null);
   useEffect(() => {
-    if (inTauri) void api.appInfo().then(setInfo).catch(() => setInfo(null));
+    if (inTauri)
+      void api
+        .appInfo()
+        .then(setInfo)
+        .catch(() => setInfo(null));
   }, []);
   const repo = info?.repository ?? null;
   const facts: [string, React.ReactNode][] = [
@@ -409,11 +470,19 @@ function InfoSection() {
       </dl>
       {repo && (
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => void api.openUrl(repo)} className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent">
+          <button
+            type="button"
+            onClick={() => void api.openUrl(repo)}
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent"
+          >
             <ExternalLink className="size-3.5" aria-hidden />
             {t("settings.infoSource")}
           </button>
-          <button type="button" onClick={() => void api.openUrl(`${repo}/issues`)} className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent">
+          <button
+            type="button"
+            onClick={() => void api.openUrl(`${repo}/issues`)}
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent"
+          >
             <ExternalLink className="size-3.5" aria-hidden />
             {t("settings.infoIssues")}
           </button>

@@ -37,7 +37,8 @@ export function preset(count: 1 | 2 | 4, slots: number[] = [0, 1, 2, 3]): Layout
 /** Which preset the tree is shaped like (any sizes), or null for a custom layout */
 export function presetOf(node: LayoutNode): 1 | 2 | 4 | null {
   if (node.kind === "leaf") return 1;
-  const rowOfLeaves = (n: LayoutNode, k: number) => n.kind === "split" && n.axis === "row" && n.children.length === k && n.children.every((c) => c.kind === "leaf");
+  const rowOfLeaves = (n: LayoutNode, k: number) =>
+    n.kind === "split" && n.axis === "row" && n.children.length === k && n.children.every((c) => c.kind === "leaf");
   if (rowOfLeaves(node, 2)) return 2;
   if (node.axis === "column" && node.children.length === 2 && node.children.every((c) => rowOfLeaves(c, 2))) return 4;
   return null;

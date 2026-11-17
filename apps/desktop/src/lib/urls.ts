@@ -1,6 +1,7 @@
 // Local web addresses printed by commands (dev servers and the like), for the preview pane
 
 // Terminal colour codes (Vite and others colour their "Local:" line)
+// eslint-disable-next-line no-control-regex -- matching the escape character is the point
 const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g;
 const LOCAL = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::\d{2,5})?(?:\/[^\s"'`<>)\]]*)?/g;
 

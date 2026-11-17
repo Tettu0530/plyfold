@@ -136,7 +136,10 @@ function Chip({ a, onRemove }: { a: Attached; onRemove: () => void }) {
     );
   const Icon = a.preview.kind === "image" ? ImageIcon : FileText;
   return (
-    <span title={a.wire.kind === "file" ? a.wire.path : a.preview.name} className="flex h-7 max-w-48 items-center gap-1.5 rounded-md bg-muted pr-0.5 pl-2 text-xs">
+    <span
+      title={a.wire.kind === "file" ? a.wire.path : a.preview.name}
+      className="flex h-7 max-w-48 items-center gap-1.5 rounded-md bg-muted pr-0.5 pl-2 text-xs"
+    >
       <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
       <span className="min-w-0 truncate">{a.preview.name}</span>
       {remove}
@@ -151,7 +154,9 @@ function AddMenu({ att }: { att: AttachmentsState }) {
   const t = useT();
   const attachKeys = useKeys("attach");
   // Where the keys sit in the sentence depends on the language, so split around {keys} and put Keys in between
-  const [hintBefore, hintAfter = ""] = t("attach.pasteHint").split("{keys}").map((s) => s.trim());
+  const [hintBefore, hintAfter = ""] = t("attach.pasteHint")
+    .split("{keys}")
+    .map((s) => s.trim());
   const anchor = `add:${useId()}`;
   const menu = useLiquidMenu(`menu:${anchor}`, anchor);
   const raised = useLiquidActiveAnchors().has(anchor);
@@ -206,11 +211,26 @@ export function AttachBox({ att, children }: { att: AttachmentsState; children: 
     >
       <AnimatePresence initial={false}>
         {att.items.length > 0 && (
-          <motion.div key="chips" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={smooth} className="overflow-hidden">
+          <motion.div
+            key="chips"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={smooth}
+            className="overflow-hidden"
+          >
             <div className="flex flex-wrap items-center gap-2 px-2 pt-2.5">
               <AnimatePresence initial={false}>
                 {att.items.map((a) => (
-                  <motion.span key={a.key} layout="position" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.6, opacity: 0 }} transition={bouncy} className="flex">
+                  <motion.span
+                    key={a.key}
+                    layout="position"
+                    initial={{ scale: 0.6, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.6, opacity: 0 }}
+                    transition={bouncy}
+                    className="flex"
+                  >
                     <Chip a={a} onRemove={() => att.remove(a.key)} />
                   </motion.span>
                 ))}
@@ -245,7 +265,11 @@ function SentItem({ a, anchor }: { a: AttachmentPreview; anchor: string }) {
   if (src) return <Thumb src={src} name={a.name} anchor={anchor} className="max-h-40 max-w-60 rounded-[10px] object-contain" />;
   return (
     <span className="flex h-7 max-w-60 items-center gap-1.5 rounded-md bg-muted px-2 text-xs">
-      {a.kind === "image" ? <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden /> : <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />}
+      {a.kind === "image" ? (
+        <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+      ) : (
+        <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+      )}
       <span className="min-w-0 truncate">{a.name}</span>
     </span>
   );

@@ -19,7 +19,21 @@ const keyOf = (n: LayoutNode) => (n.kind === "leaf" ? `leaf-${n.slot}` : `split-
  * The divider between children i-1 and i of a split. Drag it to move the boundary (only these two children change),
  * double-click or press Enter to make them equal, or focus it and use the arrow keys
  */
-function Divider({ path, index, axis, sizes, container, onDragging }: { path: number[]; index: number; axis: "row" | "column"; sizes: number[]; container: React.RefObject<HTMLElement | null>; onDragging: (d: boolean) => void }) {
+function Divider({
+  path,
+  index,
+  axis,
+  sizes,
+  container,
+  onDragging,
+}: {
+  path: number[];
+  index: number;
+  axis: "row" | "column";
+  sizes: number[];
+  container: React.RefObject<HTMLElement | null>;
+  onDragging: (d: boolean) => void;
+}) {
   const t = useT();
   const setSplitSizes = useStore((s) => s.setSplitSizes);
   const [active, setActive] = useState(false);
@@ -43,7 +57,7 @@ function Divider({ path, index, axis, sizes, container, onDragging }: { path: nu
     if (!r) return sizes[index - 1];
     const size = vertical ? r.width : r.height;
     const before = sizes.slice(0, index - 1).reduce((a, b) => a + b, 0);
-    const v = ((vertical ? e.clientX - r.left : e.clientY - r.top) / size) - before;
+    const v = (vertical ? e.clientX - r.left : e.clientY - r.top) / size - before;
     const min = minFraction();
     return Math.min(pair - min, Math.max(min, v));
   };
@@ -143,7 +157,12 @@ function Node({ node, path, dragging, setDragging, present }: NodeProps) {
   const ref = useRef<HTMLDivElement>(null);
   if (node.kind === "leaf")
     return (
-      <div data-pane-index={present ? node.slot : undefined} aria-hidden={present ? undefined : true} className="relative flex min-h-0 min-w-0 grow overflow-hidden border-r border-b [&>div>section]:min-w-0 [&>div>section]:grow" style={{ contain: "layout paint" }}>
+      <div
+        data-pane-index={present ? node.slot : undefined}
+        aria-hidden={present ? undefined : true}
+        className="relative flex min-h-0 min-w-0 grow overflow-hidden border-r border-b [&>div>section]:min-w-0 [&>div>section]:grow"
+        style={{ contain: "layout paint" }}
+      >
         <Pane index={node.slot} />
       </div>
     );
@@ -169,7 +188,13 @@ export function PaneGrid() {
     <main className="relative flex min-w-0 grow overflow-hidden">
       {/* A lone pane is drawn as a split with one child, so splitting it keeps the pane's component (and its
           scroll position and typed text) instead of rebuilding it under a new parent */}
-      <Node node={layout.kind === "leaf" ? { kind: "split", axis: "row", sizes: [1], children: [layout] } : layout} path={[]} dragging={dragging} setDragging={setDragging} present />
+      <Node
+        node={layout.kind === "leaf" ? { kind: "split", axis: "row", sizes: [1], children: [layout] } : layout}
+        path={[]}
+        dragging={dragging}
+        setDragging={setDragging}
+        present
+      />
     </main>
   );
 }

@@ -1,6 +1,20 @@
 // Pane header buttons: plan, background shells, touched files, git (the preview is in the app header, BrowserButton). Click to show the contents in a liquid menu
 // Always shown (so you know where they are). With nothing inside, only the icon is shown, no count
-import { ArrowUp, Check, Circle, CircleHelp, CircleX, FileText, Globe, ListChecks, LoaderCircle, GitBranch, Pencil, SquareStop, SquareTerminal } from "lucide-react";
+import {
+  ArrowUp,
+  Check,
+  Circle,
+  CircleHelp,
+  CircleX,
+  FileText,
+  Globe,
+  ListChecks,
+  LoaderCircle,
+  GitBranch,
+  Pencil,
+  SquareStop,
+  SquareTerminal,
+} from "lucide-react";
 import { createContext, useContext, useMemo, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -15,13 +29,30 @@ import { liquidAnchor } from "../liquid/liquid";
 import { GitPanel, unpushed, useGitInfo } from "./GitMenu";
 import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 
-const TRIGGER = "relative flex h-6 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground";
+const TRIGGER =
+  "relative flex h-6 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground";
 
 /** Header button and the panel it opens */
 /** Lets menu contents close their own menu (after opening a preview, for example) */
 export const CloseMenu = createContext<() => void>(() => {});
 
-function ToolButton({ scope, name, label, icon, badge, width, children }: { scope: string; name: string; label: string; icon: React.ReactNode; badge: React.ReactNode | null; width: string; children: React.ReactNode }) {
+function ToolButton({
+  scope,
+  name,
+  label,
+  icon,
+  badge,
+  width,
+  children,
+}: {
+  scope: string;
+  name: string;
+  label: string;
+  icon: React.ReactNode;
+  badge: React.ReactNode | null;
+  width: string;
+  children: React.ReactNode;
+}) {
   const anchor = `${scope}:${name}`;
   const menu = useLiquidMenu(`menu:${anchor}`, anchor);
   const raised = useLiquidActiveAnchors().has(anchor);
@@ -32,25 +63,25 @@ function ToolButton({ scope, name, label, icon, badge, width, children }: { scop
   };
   return (
     <CloseMenu.Provider value={() => change(false)}>
-    <Popover open={open} onOpenChange={change}>
-      <PopoverTrigger asChild>
-        <button ref={liquidAnchor(anchor)} type="button" aria-label={label} title={label} className={cn(TRIGGER, raised && "z-[57]")}>
-          {icon}
-          {badge !== null && <span className="font-mono tabular">{badge}</span>}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        ref={menu.ref as React.Ref<HTMLDivElement>}
-        style={menu.style}
-        side="bottom"
-        align="end"
-        sideOffset={6}
-        className={cn("z-[58] flex max-h-96 flex-col gap-0.5 overflow-y-auto p-1.5", width, menu.moving && "opacity-0")}
-      >
-        <div className="px-1.5 pt-0.5 pb-1 text-xs font-medium text-muted-foreground">{label}</div>
-        {children}
-      </PopoverContent>
-    </Popover>
+      <Popover open={open} onOpenChange={change}>
+        <PopoverTrigger asChild>
+          <button ref={liquidAnchor(anchor)} type="button" aria-label={label} title={label} className={cn(TRIGGER, raised && "z-[57]")}>
+            {icon}
+            {badge !== null && <span className="font-mono tabular">{badge}</span>}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          ref={menu.ref as React.Ref<HTMLDivElement>}
+          style={menu.style}
+          side="bottom"
+          align="end"
+          sideOffset={6}
+          className={cn("z-[58] flex max-h-96 flex-col gap-0.5 overflow-y-auto p-1.5", width, menu.moving && "opacity-0")}
+        >
+          <div className="px-1.5 pt-0.5 pb-1 text-xs font-medium text-muted-foreground">{label}</div>
+          {children}
+        </PopoverContent>
+      </Popover>
     </CloseMenu.Provider>
   );
 }
@@ -86,7 +117,9 @@ function ShellRow({ s, anchor }: { s: BackgroundShell; anchor: string }) {
           {t(st.label)}
         </span>
       </div>
-      {last && <pre className="m-0 overflow-hidden rounded-[6px] bg-background px-2 py-1 font-mono text-xs leading-5 whitespace-pre text-muted-foreground">{last}</pre>}
+      {last && (
+        <pre className="m-0 overflow-hidden rounded-[6px] bg-background px-2 py-1 font-mono text-xs leading-5 whitespace-pre text-muted-foreground">{last}</pre>
+      )}
       <div className="flex items-center gap-2">
         {s.id && <span className="font-mono text-xs text-muted-foreground">{s.id}</span>}
         {/* A dev server's address in its output can be opened in a preview pane */}
@@ -146,53 +179,85 @@ export function PaneTools({
 
   return (
     <>
-      <ToolButton scope={scope} name="plan" label={t("pane.plan")} icon={<ListChecks className="size-3.5" aria-hidden />} badge={plan.length ? `${done}/${plan.length}` : null} width="w-80">
-          {plan.length === 0 && <Empty>{t("pane.planEmpty")}</Empty>}
-          {plan.map((e, i) => {
-            const p = PLAN_ICON[e.status] ?? PLAN_ICON.pending;
-            return (
-              <div key={i} className="flex items-start gap-2 px-1.5 py-1">
-                <p.Icon className={cn("mt-0.5 size-3.5 shrink-0", p.className, p.spin && "animate-spin")} aria-hidden />
-                <span className={cn("text-sm leading-snug", e.status === "completed" && "text-muted-foreground line-through")}>{e.content}</span>
-              </div>
-            );
-          })}
-        </ToolButton>
+      <ToolButton
+        scope={scope}
+        name="plan"
+        label={t("pane.plan")}
+        icon={<ListChecks className="size-3.5" aria-hidden />}
+        badge={plan.length ? `${done}/${plan.length}` : null}
+        width="w-80"
+      >
+        {plan.length === 0 && <Empty>{t("pane.planEmpty")}</Empty>}
+        {plan.map((e, i) => {
+          const p = PLAN_ICON[e.status] ?? PLAN_ICON.pending;
+          return (
+            <div key={i} className="flex items-start gap-2 px-1.5 py-1">
+              <p.Icon className={cn("mt-0.5 size-3.5 shrink-0", p.className, p.spin && "animate-spin")} aria-hidden />
+              <span className={cn("text-sm leading-snug", e.status === "completed" && "text-muted-foreground line-through")}>{e.content}</span>
+            </div>
+          );
+        })}
+      </ToolButton>
+      <ToolButton
+        scope={scope}
+        name="shells"
+        label={t("pane.shells")}
+        icon={<SquareTerminal className={cn("size-3.5", running > 0 && "text-working")} aria-hidden />}
+        badge={shells.length ? (running > 0 ? running : shells.length) : null}
+        width="w-96"
+      >
+        {shells.length === 0 && <Empty>{t("pane.shellsEmpty")}</Empty>}
+        {shells.map((s, i) => (
+          <ShellRow key={s.id ?? i} s={s} anchor={`${scope}:shells`} />
+        ))}
+      </ToolButton>
+      <ToolButton
+        scope={scope}
+        name="files"
+        label={t("pane.files")}
+        icon={<FileText className="size-3.5" aria-hidden />}
+        badge={files.length || null}
+        width="w-96"
+      >
+        {files.length === 0 && <Empty>{t("pane.filesEmpty")}</Empty>}
+        {files.map((f) => (
+          <button
+            key={f.path}
+            type="button"
+            title={inTauri ? t("pane.revealInFinder", { path: f.path }) : f.path}
+            onClick={() => inTauri && void api.revealFile(f.path).catch(() => {})}
+            className="flex h-7 w-full items-center gap-2 rounded-md px-1.5 text-left hover:bg-accent"
+          >
+            {f.edited ? (
+              <Pencil className="size-3.5 shrink-0 text-muted-foreground" aria-label={t("pane.fileEdited")} />
+            ) : (
+              <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-label={t("pane.fileRead")} />
+            )}
+            <span className="min-w-0 grow truncate font-mono text-xs">{relative(f.path, worktree)}</span>
+            {f.count > 1 && <span className="shrink-0 font-mono text-xs text-muted-foreground tabular">{f.count}</span>}
+          </button>
+        ))}
+      </ToolButton>
+      {/* Only for sessions in a git repository */}
+      {git.info && (
         <ToolButton
           scope={scope}
-          name="shells"
-          label={t("pane.shells")}
-          icon={<SquareTerminal className={cn("size-3.5", running > 0 && "text-working")} aria-hidden />}
-          badge={shells.length ? (running > 0 ? running : shells.length) : null}
-          width="w-96"
+          name="git"
+          label={t("pane.git")}
+          icon={<GitBranch className="size-3.5" aria-hidden />}
+          badge={
+            toPush > 0 ? (
+              <span className="flex items-center">
+                <ArrowUp className="size-3" aria-hidden />
+                {toPush}
+              </span>
+            ) : null
+          }
+          width="w-[26rem]"
         >
-          {shells.length === 0 && <Empty>{t("pane.shellsEmpty")}</Empty>}
-          {shells.map((s, i) => (
-            <ShellRow key={s.id ?? i} s={s} anchor={`${scope}:shells`} />
-          ))}
+          <GitPanel id={scope} git={git} busy={busy} worktree={isWorktree} title={title} />
         </ToolButton>
-        <ToolButton scope={scope} name="files" label={t("pane.files")} icon={<FileText className="size-3.5" aria-hidden />} badge={files.length || null} width="w-96">
-          {files.length === 0 && <Empty>{t("pane.filesEmpty")}</Empty>}
-          {files.map((f) => (
-            <button
-              key={f.path}
-              type="button"
-              title={inTauri ? t("pane.revealInFinder", { path: f.path }) : f.path}
-              onClick={() => inTauri && void api.revealFile(f.path).catch(() => {})}
-              className="flex h-7 w-full items-center gap-2 rounded-md px-1.5 text-left hover:bg-accent"
-            >
-              {f.edited ? <Pencil className="size-3.5 shrink-0 text-muted-foreground" aria-label={t("pane.fileEdited")} /> : <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-label={t("pane.fileRead")} />}
-              <span className="min-w-0 grow truncate font-mono text-xs">{relative(f.path, worktree)}</span>
-              {f.count > 1 && <span className="shrink-0 font-mono text-xs text-muted-foreground tabular">{f.count}</span>}
-            </button>
-          ))}
-        </ToolButton>
-        {/* Only for sessions in a git repository */}
-        {git.info && (
-          <ToolButton scope={scope} name="git" label={t("pane.git")} icon={<GitBranch className="size-3.5" aria-hidden />} badge={toPush > 0 ? <span className="flex items-center"><ArrowUp className="size-3" aria-hidden />{toPush}</span> : null} width="w-[26rem]">
-            <GitPanel id={scope} git={git} busy={busy} worktree={isWorktree} title={title} />
-          </ToolButton>
-        )}
+      )}
     </>
   );
 }

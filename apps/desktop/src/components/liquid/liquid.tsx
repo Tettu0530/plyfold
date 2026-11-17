@@ -76,7 +76,9 @@ function wobble(el: HTMLElement | undefined, dir: { x: number; y: number }) {
   const { easing, ms } = springToCss({ duration: 0.45, bounce: 0.45 });
   el.animate(
     [
-      { transform: `translate(${(dir.x * 3).toFixed(1)}px, ${(dir.y * 3).toFixed(1)}px) scale(${(1 + 0.05 * Math.abs(dir.x)).toFixed(3)}, ${(1 + 0.05 * Math.abs(dir.y)).toFixed(3)})` },
+      {
+        transform: `translate(${(dir.x * 3).toFixed(1)}px, ${(dir.y * 3).toFixed(1)}px) scale(${(1 + 0.05 * Math.abs(dir.x)).toFixed(3)}, ${(1 + 0.05 * Math.abs(dir.y)).toFixed(3)})`,
+      },
       { transform: "translate(0px, 0px) scale(1, 1)" },
     ],
     { duration: ms, easing, composite: "add" },
@@ -140,7 +142,24 @@ const TRAIL = appleSpring({ duration: 0.45, bounce: 0.2 });
  * Separation animation. Show the real surface while `revealed` is true, and render `layer` somewhere.
  * `mounted` says whether the real surface should be in the DOM (it stays mounted while animating so it can be measured)
  */
-export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRadius = 8, color = "#262626", style = "pop", zIndex = 60, sizeLag = 0.12, fromLook = DEFAULT_FROM, toLook = DEFAULT_TO, initiallyOpen = false, over, hold = false }: Options) {
+export function useLiquidMorph(
+  open: boolean,
+  {
+    anchor,
+    target,
+    radius,
+    anchorRadius = 8,
+    color = "#262626",
+    style = "pop",
+    zIndex = 60,
+    sizeLag = 0.12,
+    fromLook = DEFAULT_FROM,
+    toLook = DEFAULT_TO,
+    initiallyOpen = false,
+    over,
+    hold = false,
+  }: Options,
+) {
   // Follows Settings → Reduce motion as well as macOS (through MotionConfig)
   const reduced = !!useReducedMotionConfig();
   const [phase, setPhase] = useState<Phase>(initiallyOpen ? "open" : "closed");
@@ -358,10 +377,7 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
           // Corner radius: takes the flight radius at the start, holds it, and only switches to the target's radius near the end
           const travel = Math.min(1, Math.max(0, pv));
           const flight = FLIGHT_RADIUS;
-          const r =
-            travel < 0.75
-              ? lerp(a.radius, flight, smoothstep(0, 0.25, travel))
-              : lerp(flight, to.radius, smoothstep(0.75, 1, travel));
+          const r = travel < 0.75 ? lerp(a.radius, flight, smoothstep(0, 0.25, travel)) : lerp(flight, to.radius, smoothstep(0.75, 1, travel));
           rad.set(Math.min(r, Math.min(w, h) / 2));
           look.set(opening ? k : 1 - k);
         };
@@ -485,33 +501,34 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
   if (style === "pop") {
     // With the GPU, draw the shape merged with the anchor on the liquid-gl canvas (no DOM surface).
     // Otherwise draw just a DOM surface with border and shadow (no merging)
-    const surface = animating && !gl
-      ? createPortal(
-          <>
-          <motion.div
-            aria-hidden
-            className="pointer-events-none fixed top-0 left-0 border"
-            style={{
-              zIndex,
-              x,
-              y,
-              width: w,
-              height: h,
-              scaleX: popScaleX,
-              scaleY: popScaleY,
-              opacity,
-              borderRadius: rad,
-              background,
-              borderColor,
-              boxShadow,
-              backdropFilter: backdrop,
-              WebkitBackdropFilter: backdrop,
-            }}
-          />
-          </>,
-          document.body,
-        )
-      : null;
+    const surface =
+      animating && !gl
+        ? createPortal(
+            <>
+              <motion.div
+                aria-hidden
+                className="pointer-events-none fixed top-0 left-0 border"
+                style={{
+                  zIndex,
+                  x,
+                  y,
+                  width: w,
+                  height: h,
+                  scaleX: popScaleX,
+                  scaleY: popScaleY,
+                  opacity,
+                  borderRadius: rad,
+                  background,
+                  borderColor,
+                  boxShadow,
+                  backdropFilter: backdrop,
+                  WebkitBackdropFilter: backdrop,
+                }}
+              />
+            </>,
+            document.body,
+          )
+        : null;
     return {
       revealed: phase === "open",
       mounted: phase !== "closed",
@@ -529,7 +546,16 @@ export function useLiquidMorph(open: boolean, { anchor, target, radius, anchorRa
           {ghost && (
             <motion.div
               className="absolute"
-              style={{ left: ghost.l, top: ghost.t, width: ghost.r - ghost.l, height: ghost.b - ghost.t, borderRadius: anchorRadius, background: color, opacity: ghostOpacity, scale: ghostScale }}
+              style={{
+                left: ghost.l,
+                top: ghost.t,
+                width: ghost.r - ghost.l,
+                height: ghost.b - ghost.t,
+                borderRadius: anchorRadius,
+                background: color,
+                opacity: ghostOpacity,
+                scale: ghostScale,
+              }}
             />
           )}
           <motion.div className="absolute top-0 left-0" style={{ x, y, width: w, height: h, opacity }}>

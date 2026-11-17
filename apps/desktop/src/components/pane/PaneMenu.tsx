@@ -31,7 +31,10 @@ export function PaneMenu({ slot, children }: { slot: number; children: React.Rea
           ref={menu.ref as React.Ref<HTMLDivElement>}
           style={menu.style}
           onKeyDown={pickByKey}
-          className={cn("z-[80] flex min-w-52 flex-col gap-0.5 rounded-[10px] border bg-popover p-1 text-popover-foreground shadow-[0_8px_24px_rgba(0,0,0,.45)]", menu.moving && "opacity-0")}
+          className={cn(
+            "z-[80] flex min-w-52 flex-col gap-0.5 rounded-[10px] border bg-popover p-1 text-popover-foreground shadow-[0_8px_24px_rgba(0,0,0,.45)]",
+            menu.moving && "opacity-0",
+          )}
         >
           <ContextMenu.Item data-key="r" className={MENU_ITEM} onSelect={() => split("right")}>
             <PanelRight className="size-3.5 text-muted-foreground" aria-hidden />

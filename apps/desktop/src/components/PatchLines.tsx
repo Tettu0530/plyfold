@@ -28,4 +28,3 @@ export function Unified({ lines }: { lines: PatchLine[] }) {
     </div>
   );
 }
-

@@ -35,7 +35,14 @@ function closeImagePreview() {
   const { current, closing } = usePreview.getState();
   if (!current || closing) return;
   usePreview.setState({ closing: true });
-  liquidCloseFrom(ID, { anchor: current.anchor, target, radius: 10, anchorRadius: 6, toLook: CLEAR, onDone: () => usePreview.setState({ current: null, closing: false }) });
+  liquidCloseFrom(ID, {
+    anchor: current.anchor,
+    target,
+    radius: 10,
+    anchorRadius: 6,
+    toLook: CLEAR,
+    onDone: () => usePreview.setState({ current: null, closing: false }),
+  });
 }
 
 // ---- thumbnails of images that were attached by path (dropped or picked): loaded once per path
@@ -97,7 +104,13 @@ export function ImagePreview() {
             onClick={closeImagePreview}
             className="fixed inset-0 z-[54] bg-black/60"
           />
-          <div key="image" role="dialog" aria-label={current.name} className="fixed inset-0 z-[58] flex items-center justify-center p-10" onClick={closeImagePreview}>
+          <div
+            key="image"
+            role="dialog"
+            aria-label={current.name}
+            className="fixed inset-0 z-[58] flex items-center justify-center p-10"
+            onClick={closeImagePreview}
+          >
             <img
               ref={ref}
               data-image-preview

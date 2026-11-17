@@ -14,7 +14,7 @@ export interface SpringParams {
 }
 
 export function springConstants({ duration, bounce }: SpringParams) {
-  const stiffness = (2 * Math.PI / duration) ** 2;
+  const stiffness = ((2 * Math.PI) / duration) ** 2;
   const damping = bounce >= 0 ? (4 * Math.PI * (1 - bounce)) / duration : (4 * Math.PI) / (duration * (1 + bounce));
   return { stiffness, damping, mass: 1 };
 }
@@ -79,7 +79,11 @@ export function springToCss(p: SpringParams, samples = 48): { easing: string; ms
 
 /** Expose CSS variables --ease-NAME and --dur-NAME (for CSS transitions in shadcn components) */
 export function installCssSprings(root: HTMLElement = document.documentElement) {
-  for (const [name, p] of [["smooth", SMOOTH], ["snappy", SNAPPY], ["bouncy", BOUNCY]] as const) {
+  for (const [name, p] of [
+    ["smooth", SMOOTH],
+    ["snappy", SNAPPY],
+    ["bouncy", BOUNCY],
+  ] as const) {
     const { easing, ms } = springToCss(p);
     root.style.setProperty(`--ease-${name}`, easing);
     root.style.setProperty(`--dur-${name}`, `${ms}ms`);

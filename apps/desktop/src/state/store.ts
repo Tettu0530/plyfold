@@ -13,16 +13,7 @@ import { loadInfoCache, saveInfoCache, snapshot, type InfoCache } from "./infoCa
 import { commandsFromHistory } from "@/lib/commands";
 import type { SlashCommand } from "@/lib/types";
 import type { AppSettings, Category, SessionStatus, EngineEvent, ProfileSummary, ProfileUsage, SessionInfo, SessionRecord } from "@/lib/types";
-import {
-  addNotice,
-  applyUpdate,
-  beginTurn,
-  emptyTranscript,
-  endTurn,
-  fromHistory,
-  type PendingPermission,
-  type Transcript,
-} from "./transcript";
+import { addNotice, applyUpdate, beginTurn, emptyTranscript, endTurn, fromHistory, type PendingPermission, type Transcript } from "./transcript";
 
 export interface SessionView {
   record: SessionRecord;
@@ -37,7 +28,6 @@ export interface SessionView {
   /** Slash commands from the session's log (used while the agent isn't running) */
   commands?: SlashCommand[];
 }
-
 
 /** A session not started yet (opens empty in a pane) */
 export interface Draft {
@@ -66,8 +56,7 @@ const settingsEl = () => document.querySelector<HTMLElement>("[data-settings-vie
 const profilesEl = () => document.querySelector<HTMLElement>("[data-profiles-view]");
 const diffEl = () => document.querySelector<HTMLElement>("[data-diff-view]");
 const paneEl = (i: number) => document.querySelector<HTMLElement>(`[data-pane-index="${i}"]`);
-const anchorOf = (id: string) =>
-  isDraft(id) ? "new-session" : isPreview(id) ? (useStore.getState().previews[id]?.anchor ?? "new-session") : `session:${id}`;
+const anchorOf = (id: string) => (isDraft(id) ? "new-session" : isPreview(id) ? (useStore.getState().previews[id]?.anchor ?? "new-session") : `session:${id}`);
 const LAST_REPO_KEY = "plyfold.lastRepo";
 function lastRepo(): string {
   try {
@@ -130,9 +119,8 @@ export interface Layout {
 export const SIDEBAR_MIN = 200;
 export const SIDEBAR_MAX = 420;
 export const SIDEBAR_DEFAULT = 240;
-const clampSidebar = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.round(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, v))) : SIDEBAR_DEFAULT);
-
-
+const clampSidebar = (v: unknown) =>
+  typeof v === "number" && Number.isFinite(v) ? Math.round(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, v))) : SIDEBAR_DEFAULT;
 
 /** Restore the saved layout against current sessions (deleted sessions and drafts become empty panes) */
 export function restoreLayout(saved: unknown, exists: (id: string) => boolean): Layout | null {
@@ -366,7 +354,23 @@ export const useStore = create<State>((set, get) => ({
   settingsView: null,
   infoCache: loadInfoCache(),
   unread: {},
-  settings: { editor: "auto", cleanup_after_merge: false, stall_seconds: 120, worktree_default: true, send_key: "enter", language: "auto", sidebar_density: "comfortable", notify_turn_end: true, notify_permission: true, keybindings: {}, ui_scale: 100, reduce_motion: "system", thoughts_expanded: false, restore_panes: true, default_profile: "" },
+  settings: {
+    editor: "auto",
+    cleanup_after_merge: false,
+    stall_seconds: 120,
+    worktree_default: true,
+    send_key: "enter",
+    language: "auto",
+    sidebar_density: "comfortable",
+    notify_turn_end: true,
+    notify_permission: true,
+    keybindings: {},
+    ui_scale: 100,
+    reduce_motion: "system",
+    thoughts_expanded: false,
+    restore_panes: true,
+    default_profile: "",
+  },
   liquidStyle: "pop",
   searchLayerActive: false,
   liquidLag: 0.12,
@@ -388,7 +392,8 @@ export const useStore = create<State>((set, get) => ({
         const title = s.sessions[(e as { session_id?: string }).session_id ?? ""]?.record.title ?? t("store.fallbackTitle");
         const { notify_permission, notify_turn_end } = get().settings;
         if (e.type === "permission_requested" && notify_permission !== false) notify(title, t("store.notifyPermission"));
-        if (e.type === "turn_ended" && notify_turn_end !== false) notify(title, e.error ? t("store.notifyError", { error: e.error }) : t("store.notifyTurnEnded"));
+        if (e.type === "turn_ended" && notify_turn_end !== false)
+          notify(title, e.error ? t("store.notifyError", { error: e.error }) : t("store.notifyTurnEnded"));
         // Record turn ends as notifications for sessions not on screen (or when the app isn't in focus)
         if (e.type === "turn_ended") {
           const shown = visibleSessions(s).includes(e.session_id) && document.hasFocus();
@@ -573,8 +578,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   queues: {},
-  enqueue: (id, text, attachments) =>
-    set((s) => ({ queues: { ...s.queues, [id]: [...(s.queues[id] ?? []), { key: `q${++queueSeq}`, text, attachments }] } })),
+  enqueue: (id, text, attachments) => set((s) => ({ queues: { ...s.queues, [id]: [...(s.queues[id] ?? []), { key: `q${++queueSeq}`, text, attachments }] } })),
   unqueue: (id, key) => set((s) => ({ queues: { ...s.queues, [id]: (s.queues[id] ?? []).filter((q) => q.key !== key) } })),
   sendQueued: (id) => {
     const s = get();
@@ -597,7 +601,19 @@ export const useStore = create<State>((set, get) => ({
   newDraft: () => {
     const s = get();
     const id = `draft:${Date.now()}`;
-    set({ drafts: { ...s.drafts, [id]: { profile: defaultProfile(s.profiles, s.settings.default_profile), repo: lastRepo(), worktree: s.settings.worktree_default, choices: {}, busy: false, error: null } } });
+    set({
+      drafts: {
+        ...s.drafts,
+        [id]: {
+          profile: defaultProfile(s.profiles, s.settings.default_profile),
+          repo: lastRepo(),
+          worktree: s.settings.worktree_default,
+          choices: {},
+          busy: false,
+          error: null,
+        },
+      },
+    });
     void get().openInPane(id, undefined, "new-session");
   },
 
@@ -659,7 +675,11 @@ export const useStore = create<State>((set, get) => ({
         await applyChoices(id, pending);
         set((s) => (s.sessions[id] ? { sessions: { ...s.sessions, [id]: { ...s.sessions[id], pending: {} } } } : s));
       }
-      await api.prompt(id, text, attachments.map((a) => a.wire));
+      await api.prompt(
+        id,
+        text,
+        attachments.map((a) => a.wire),
+      );
     } catch (err) {
       set((s) => {
         const v = s.sessions[id];
@@ -752,7 +772,11 @@ async function loadSession(id: string) {
 useStore.subscribe((st, prev) => {
   if (
     !st.ready ||
-    (st.panes === prev.panes && st.layout === prev.layout && st.focusedPane === prev.focusedPane && st.sidebarOpen === prev.sidebarOpen && st.sidebarWidth === prev.sidebarWidth)
+    (st.panes === prev.panes &&
+      st.layout === prev.layout &&
+      st.focusedPane === prev.focusedPane &&
+      st.sidebarOpen === prev.sidebarOpen &&
+      st.sidebarWidth === prev.sidebarWidth)
   )
     return;
   const layout: Layout = {

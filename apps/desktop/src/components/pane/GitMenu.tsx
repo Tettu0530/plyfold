@@ -92,7 +92,8 @@ export function GitPanel({ id, git, busy, worktree, title }: { id: string; git: 
   const toPush = unpushed(info);
   const page = info.web_url && info.branch ? `${info.web_url}/tree/${info.branch.split("/").map(encodeURIComponent).join("/")}` : info.web_url;
   const btn = "flex h-7 items-center gap-1.5 rounded-md border border-input px-2 text-xs hover:bg-accent disabled:pointer-events-none disabled:opacity-40";
-  const spin = (a: Action, Icon: typeof RefreshCw) => (running === a ? <LoaderCircle className="size-3.5 animate-spin" aria-hidden /> : <Icon className="size-3.5" aria-hidden />);
+  const spin = (a: Action, Icon: typeof RefreshCw) =>
+    running === a ? <LoaderCircle className="size-3.5 animate-spin" aria-hidden /> : <Icon className="size-3.5" aria-hidden />;
 
   return (
     <div className="flex flex-col gap-2 px-1.5 pb-1">
@@ -104,13 +105,25 @@ export function GitPanel({ id, git, busy, worktree, title }: { id: string; git: 
             {info.branch ?? t("pane.gitDetached")}
           </span>
           {page && (
-            <button type="button" onClick={() => void api.openUrl(page)} aria-label={t("pane.gitOpenWeb")} title={t("pane.gitOpenWeb")} className="ml-auto flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+            <button
+              type="button"
+              onClick={() => void api.openUrl(page)}
+              aria-label={t("pane.gitOpenWeb")}
+              title={t("pane.gitOpenWeb")}
+              className="ml-auto flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
               <ExternalLink className="size-3.5" aria-hidden />
             </button>
           )}
         </div>
-        {info.base && <span className="text-xs text-muted-foreground">{info.ahead_base > 0 ? t("pane.gitAheadBase", { base: info.base, count: info.ahead_base }) : t("pane.gitSameAsBase", { base: info.base })}</span>}
-        {info.base && info.behind_base > 0 && <span className="text-xs text-muted-foreground">{t("pane.gitBehindBase", { base: info.base, count: info.behind_base })}</span>}
+        {info.base && (
+          <span className="text-xs text-muted-foreground">
+            {info.ahead_base > 0 ? t("pane.gitAheadBase", { base: info.base, count: info.ahead_base }) : t("pane.gitSameAsBase", { base: info.base })}
+          </span>
+        )}
+        {info.base && info.behind_base > 0 && (
+          <span className="text-xs text-muted-foreground">{t("pane.gitBehindBase", { base: info.base, count: info.behind_base })}</span>
+        )}
         <span className="flex items-center gap-2 text-xs text-muted-foreground">
           {!info.remote_url ? (
             t("pane.gitNoRemote")
@@ -147,7 +160,18 @@ export function GitPanel({ id, git, busy, worktree, title }: { id: string; git: 
             {spin("fetch", RefreshCw)}
             {t("pane.gitFetch")}
           </button>
-          <button type="button" className={btn} disabled={!!running || !info.branch || (info.upstream !== null && info.ahead === 0)} onClick={() => void run("push", () => api.gitPush(id), (u) => t("pane.gitPushed", { upstream: String(u) }))}>
+          <button
+            type="button"
+            className={btn}
+            disabled={!!running || !info.branch || (info.upstream !== null && info.ahead === 0)}
+            onClick={() =>
+              void run(
+                "push",
+                () => api.gitPush(id),
+                (u) => t("pane.gitPushed", { upstream: String(u) }),
+              )
+            }
+          >
             {spin("push", ArrowUp)}
             {t("pane.gitPush")}
             {toPush > 0 && <span className="font-mono tabular text-muted-foreground">{toPush}</span>}
@@ -157,14 +181,32 @@ export function GitPanel({ id, git, busy, worktree, title }: { id: string; git: 
             className={btn}
             disabled={!!running || busy || info.behind === 0}
             title={busy ? t("pane.gitBusy") : undefined}
-            onClick={() => void run("pull", () => api.gitPull(id), () => t("pane.gitPulled"))}
+            onClick={() =>
+              void run(
+                "pull",
+                () => api.gitPull(id),
+                () => t("pane.gitPulled"),
+              )
+            }
           >
             {spin("pull", ArrowDown)}
             {t("pane.gitPull")}
             {info.behind > 0 && <span className="font-mono tabular text-muted-foreground">{info.behind}</span>}
           </button>
           {!pr && worktree && info.ahead_base > 0 && (
-            <button type="button" className={btn} disabled={!!running || busy || info.changed > 0} title={info.changed > 0 ? t("pane.gitCommitFirst") : undefined} onClick={() => void run("pr", () => api.createPr(id), () => t("pane.gitPrCreated"))}>
+            <button
+              type="button"
+              className={btn}
+              disabled={!!running || busy || info.changed > 0}
+              title={info.changed > 0 ? t("pane.gitCommitFirst") : undefined}
+              onClick={() =>
+                void run(
+                  "pr",
+                  () => api.createPr(id),
+                  () => t("pane.gitPrCreated"),
+                )
+              }
+            >
               {spin("pr", GitPullRequest)}
               {t("pane.gitCreatePr")}
             </button>
@@ -179,7 +221,9 @@ export function GitPanel({ id, git, busy, worktree, title }: { id: string; git: 
       {/* Commits */}
       <div className="flex flex-col">
         <span className="pb-1 text-xs font-medium text-muted-foreground">{t("pane.gitCommits")}</span>
-        {info.commits.length === 0 && <span className="text-xs text-muted-foreground">{info.base ? t("pane.gitNoCommitsSinceBase", { base: info.base }) : t("pane.gitNoCommits")}</span>}
+        {info.commits.length === 0 && (
+          <span className="text-xs text-muted-foreground">{info.base ? t("pane.gitNoCommitsSinceBase", { base: info.base }) : t("pane.gitNoCommits")}</span>
+        )}
         {info.commits.map((c) => (
           <div key={c.sha} className="flex h-7 items-center gap-2" title={`${c.sha} ${c.author}`}>
             {/* Commits not on the remote yet are marked (pushed ones have no mark) */}
@@ -198,11 +242,28 @@ export function GitPanel({ id, git, busy, worktree, title }: { id: string; git: 
 
 function PrRow({ pr, title }: { pr: PullRequest; title: string }) {
   const t = useT();
-  const state = pr.state === "MERGED" ? { Icon: GitMerge, label: t("pane.gitPrMerged") } : pr.state === "CLOSED" ? { Icon: X, label: t("pane.gitPrClosed") } : { Icon: GitPullRequest, label: pr.draft ? t("pane.gitPrDraft") : t("pane.gitPrOpen") };
-  const review = pr.review === "APPROVED" ? t("pane.gitReviewApproved") : pr.review === "CHANGES_REQUESTED" ? t("pane.gitReviewChanges") : pr.review === "REVIEW_REQUIRED" ? t("pane.gitReviewRequired") : null;
+  const state =
+    pr.state === "MERGED"
+      ? { Icon: GitMerge, label: t("pane.gitPrMerged") }
+      : pr.state === "CLOSED"
+        ? { Icon: X, label: t("pane.gitPrClosed") }
+        : { Icon: GitPullRequest, label: pr.draft ? t("pane.gitPrDraft") : t("pane.gitPrOpen") };
+  const review =
+    pr.review === "APPROVED"
+      ? t("pane.gitReviewApproved")
+      : pr.review === "CHANGES_REQUESTED"
+        ? t("pane.gitReviewChanges")
+        : pr.review === "REVIEW_REQUIRED"
+          ? t("pane.gitReviewRequired")
+          : null;
   const { passed, failed, pending } = pr.checks;
   return (
-    <button type="button" onClick={() => void api.openUrl(pr.url)} title={pr.title || title} className="flex flex-col gap-1 rounded-md border px-2 py-1.5 text-left hover:bg-accent">
+    <button
+      type="button"
+      onClick={() => void api.openUrl(pr.url)}
+      title={pr.title || title}
+      className="flex flex-col gap-1 rounded-md border px-2 py-1.5 text-left hover:bg-accent"
+    >
       <span className="flex items-center gap-1.5">
         <state.Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
         <span className="font-mono text-xs">#{pr.number}</span>

@@ -123,74 +123,84 @@ export function Sidebar() {
                   const quiet = r.status === "idle" || r.status === "closed" || r.status === "starting";
                   return (
                     <SessionMenu key={r.id} record={r} onRename={() => setRenaming(r.id)}>
-                    <motion.a
-                      layout="position"
-                      transition={smooth}
-                      ref={liquidAnchor(`session:${r.id}`)}
-                      href="#"
-                      // Drag a row onto a pane to open it there, or onto a pane's edge to open it in a new split
-                      draggable={false}
-                      onPointerDown={(e) => {
-                        if (renaming !== r.id) startDrag(e, () => ({ kind: "session", id: r.id, title: r.title, agent: r.agent }));
-                      }}
-                      whileTap={{ scale: 1.03 }}
-                      aria-current={open.has(r.id) ? "true" : undefined}
-                      title={compact ? t("sidebar.rowTitle", { title: r.title, profile: r.profile === r.agent ? "default" : r.profile, age: age(r.updated_at) }) : undefined}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        void openInPane(r.id, undefined, `session:${r.id}`);
-                      }}
-                      className={cn(
-                        "relative flex flex-col gap-1 rounded-lg text-foreground no-underline hover:bg-accent data-[state=open]:bg-accent",
-                        compact ? "mb-0.5 px-2 py-1.5" : "mb-1 p-2",
-                        (open.has(r.id) || moving.has(`session:${r.id}`)) && "bg-accent",
-                        active.has(`session:${r.id}`) && "z-[57]",
-                      )}
-                    >
-                      <span className="flex min-w-0 items-center gap-2">
-                        <ProviderLogo agent={r.agent} className="text-muted-foreground" />
-                        {renaming === r.id ? (
-                          <input
-                            aria-label={t("sidebar.renameLabel")}
-                            defaultValue={r.title}
-                            autoFocus
-                            onFocus={(e) => e.currentTarget.select()}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                            }}
-                            onKeyDown={(e) => {
-                              e.stopPropagation();
-                              if (e.key === "Enter" && !isImeKey(e)) {
+                      <motion.a
+                        layout="position"
+                        transition={smooth}
+                        ref={liquidAnchor(`session:${r.id}`)}
+                        href="#"
+                        // Drag a row onto a pane to open it there, or onto a pane's edge to open it in a new split
+                        draggable={false}
+                        onPointerDown={(e) => {
+                          if (renaming !== r.id) startDrag(e, () => ({ kind: "session", id: r.id, title: r.title, agent: r.agent }));
+                        }}
+                        whileTap={{ scale: 1.03 }}
+                        aria-current={open.has(r.id) ? "true" : undefined}
+                        title={
+                          compact
+                            ? t("sidebar.rowTitle", { title: r.title, profile: r.profile === r.agent ? "default" : r.profile, age: age(r.updated_at) })
+                            : undefined
+                        }
+                        onClick={(e) => {
+                          e.preventDefault();
+                          void openInPane(r.id, undefined, `session:${r.id}`);
+                        }}
+                        className={cn(
+                          "relative flex flex-col gap-1 rounded-lg text-foreground no-underline hover:bg-accent data-[state=open]:bg-accent",
+                          compact ? "mb-0.5 px-2 py-1.5" : "mb-1 p-2",
+                          (open.has(r.id) || moving.has(`session:${r.id}`)) && "bg-accent",
+                          active.has(`session:${r.id}`) && "z-[57]",
+                        )}
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          <ProviderLogo agent={r.agent} className="text-muted-foreground" />
+                          {renaming === r.id ? (
+                            <input
+                              aria-label={t("sidebar.renameLabel")}
+                              defaultValue={r.title}
+                              autoFocus
+                              onFocus={(e) => e.currentTarget.select()}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                              onKeyDown={(e) => {
+                                e.stopPropagation();
+                                if (e.key === "Enter" && !isImeKey(e)) {
+                                  const v = e.currentTarget.value;
+                                  setRenaming(null);
+                                  void renameSession(r.id, v);
+                                } else if (e.key === "Escape") setRenaming(null);
+                              }}
+                              onBlur={(e) => {
                                 const v = e.currentTarget.value;
                                 setRenaming(null);
-                                void renameSession(r.id, v);
-                              } else if (e.key === "Escape") setRenaming(null);
-                            }}
-                            onBlur={(e) => {
-                              const v = e.currentTarget.value;
-                              setRenaming(null);
-                              if (v.trim() && v !== r.title) void renameSession(r.id, v);
-                            }}
-                            className="min-w-0 grow rounded-sm bg-background px-1 outline outline-ring"
-                          />
-                        ) : (
-                          <span className="min-w-0 grow truncate">{r.title}</span>
+                                if (v.trim() && v !== r.title) void renameSession(r.id, v);
+                              }}
+                              className="min-w-0 grow rounded-sm bg-background px-1 outline outline-ring"
+                            />
+                          ) : (
+                            <span className="min-w-0 grow truncate">{r.title}</span>
+                          )}
+                          {unread[r.id] && (
+                            <span
+                              role="img"
+                              aria-label={t("sidebar.unread")}
+                              className={cn("size-1.5 shrink-0 rounded-full", unread[r.id].error ? "bg-error" : "bg-foreground")}
+                            />
+                          )}
+                          <span className={cn("flex shrink-0 items-center gap-1 text-xs", quiet ? "text-muted-foreground" : st.color)}>
+                            <StatusIcon status={r.status} className="size-3" />
+                            {/* Compact rows keep the state icon (with its accessible label) but drop the word */}
+                            {!compact && st.label}
+                          </span>
+                        </span>
+                        {!compact && (
+                          <span className="flex items-center gap-2 pl-[22px] text-xs text-muted-foreground">
+                            <span className="min-w-0 grow truncate">{r.profile === r.agent ? "default" : r.profile}</span>
+                            <span className="font-mono tabular">{age(r.updated_at)}</span>
+                          </span>
                         )}
-                        {unread[r.id] && <span role="img" aria-label={t("sidebar.unread")} className={cn("size-1.5 shrink-0 rounded-full", unread[r.id].error ? "bg-error" : "bg-foreground")} />}
-                        <span className={cn("flex shrink-0 items-center gap-1 text-xs", quiet ? "text-muted-foreground" : st.color)}>
-                          <StatusIcon status={r.status} className="size-3" />
-                          {/* Compact rows keep the state icon (with its accessible label) but drop the word */}
-                          {!compact && st.label}
-                        </span>
-                      </span>
-                      {!compact && (
-                        <span className="flex items-center gap-2 pl-[22px] text-xs text-muted-foreground">
-                          <span className="min-w-0 grow truncate">{r.profile === r.agent ? "default" : r.profile}</span>
-                          <span className="font-mono tabular">{age(r.updated_at)}</span>
-                        </span>
-                      )}
-                    </motion.a>
+                      </motion.a>
                     </SessionMenu>
                   );
                 })}
@@ -301,7 +311,10 @@ function SidebarResizer() {
     >
       <span
         aria-hidden
-        className={cn("h-full w-0.5 bg-foreground/25 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100", active && "opacity-100")}
+        className={cn(
+          "h-full w-0.5 bg-foreground/25 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100",
+          active && "opacity-100",
+        )}
       />
     </div>
   );

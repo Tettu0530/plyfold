@@ -46,7 +46,8 @@ export function PermissionCard({
         <div className="flex flex-wrap items-center gap-1.5">
           {once && (
             <Button size="sm" autoFocus onClick={() => onRespond(once.option_id)} className="h-7 gap-1.5 px-2.5">
-              {t("permission.allowOnce")}<Keys keys={["enter"]} onPrimary />
+              {t("permission.allowOnce")}
+              <Keys keys={["enter"]} onPrimary />
             </Button>
           )}
           {always && (

@@ -79,10 +79,24 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
             placeholder={t("pane.previewPlaceholder")}
             className="h-6 min-w-0 grow rounded-md bg-transparent px-1.5 font-mono text-xs outline-none focus:bg-background focus:outline focus:outline-ring"
           />
-          <button type="button" disabled={empty} aria-label={t("pane.previewReload")} title={t("pane.previewReload")} onClick={() => setNonce((n) => n + 1)} className={ICON}>
+          <button
+            type="button"
+            disabled={empty}
+            aria-label={t("pane.previewReload")}
+            title={t("pane.previewReload")}
+            onClick={() => setNonce((n) => n + 1)}
+            className={ICON}
+          >
             <RotateCw className="size-3.5" aria-hidden />
           </button>
-          <button type="button" disabled={empty} aria-label={t("pane.previewExternal")} title={t("pane.previewExternal")} onClick={openOutside} className={ICON}>
+          <button
+            type="button"
+            disabled={empty}
+            aria-label={t("pane.previewExternal")}
+            title={t("pane.previewExternal")}
+            onClick={openOutside}
+            className={ICON}
+          >
             <ExternalLink className="size-3.5" aria-hidden />
           </button>
           <button type="button" aria-label={t("common.close")} onClick={() => closePane(index)} className={ICON}>
@@ -93,23 +107,27 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
       {empty ? (
         <StartPage onOpen={(u) => setPreviewUrl(id, u)} />
       ) : (
-      <div className="relative min-h-0 grow bg-white">
-        <iframe
-          key={`${url}#${nonce}`}
-          title={url}
-          src={url}
-          // The page can run its own scripts, forms and popups, but cannot reach the app (it is a different origin)
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
-          referrerPolicy="no-referrer"
-          onLoad={() => setLoaded(true)}
-          className="absolute inset-0 size-full border-0"
-        />
-        {!loaded && (
-          <div className={cn("pointer-events-none absolute inset-0 flex items-center justify-center bg-background text-xs text-muted-foreground transition-opacity duration-150")}>
-            <p className="m-0 max-w-sm px-6 text-center">{slow ? t("pane.previewSlow") : t("pane.previewLoading")}</p>
-          </div>
-        )}
-      </div>
+        <div className="relative min-h-0 grow bg-white">
+          <iframe
+            key={`${url}#${nonce}`}
+            title={url}
+            src={url}
+            // The page can run its own scripts, forms and popups, but cannot reach the app (it is a different origin)
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
+            referrerPolicy="no-referrer"
+            onLoad={() => setLoaded(true)}
+            className="absolute inset-0 size-full border-0"
+          />
+          {!loaded && (
+            <div
+              className={cn(
+                "pointer-events-none absolute inset-0 flex items-center justify-center bg-background text-xs text-muted-foreground transition-opacity duration-150",
+              )}
+            >
+              <p className="m-0 max-w-sm px-6 text-center">{slow ? t("pane.previewSlow") : t("pane.previewLoading")}</p>
+            </div>
+          )}
+        </div>
       )}
     </section>
   );
@@ -137,4 +155,5 @@ function StartPage({ onOpen }: { onOpen: (url: string) => void }) {
   );
 }
 
-const ICON = "flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40";
+const ICON =
+  "flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40";

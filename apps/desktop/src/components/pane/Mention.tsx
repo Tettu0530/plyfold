@@ -41,7 +41,10 @@ export function hasMention(text: string, path: string): boolean {
 
 /** Delete every "@path" token (and the space after it) from the text */
 export function removeMention(text: string, path: string): string {
-  const out = text.replace(mentionRe(path, "g"), "$1").replace(/(^|\s) (?=\s|$)/g, "$1").replace(/ {2,}/g, " ");
+  const out = text
+    .replace(mentionRe(path, "g"), "$1")
+    .replace(/(^|\s) (?=\s|$)/g, "$1")
+    .replace(/ {2,}/g, " ");
   // A mention at the very start leaves a leading space behind
   return /^\s/.test(text) ? out : out.replace(/^ +/, "");
 }
@@ -198,7 +201,9 @@ export function MentionMenu({ m, boxRef }: { m: MentionState; boxRef: React.RefO
               <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{dirOf(h.path)}</span>
             </button>
           ))}
-          {m.hits.length === 0 && <p className="m-0 px-1.5 py-1 text-xs text-muted-foreground">{t(m.loaded ? "composer.mentionEmpty" : "composer.mentionLoading")}</p>}
+          {m.hits.length === 0 && (
+            <p className="m-0 px-1.5 py-1 text-xs text-muted-foreground">{t(m.loaded ? "composer.mentionEmpty" : "composer.mentionLoading")}</p>
+          )}
         </div>
       </PopoverContent>
     </Popover>

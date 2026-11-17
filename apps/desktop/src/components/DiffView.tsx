@@ -86,10 +86,18 @@ export function DiffView() {
       role="dialog"
       aria-label={t("diff.dialogLabel", { title: r.title })}
       aria-hidden={!visible}
-      className={cn("fixed inset-x-0 top-10 bottom-0 flex flex-col bg-background transition-opacity duration-150", moving ? "pointer-events-none z-[56]" : "z-40", visible ? "opacity-100" : "pointer-events-none opacity-0")}
+      className={cn(
+        "fixed inset-x-0 top-10 bottom-0 flex flex-col bg-background transition-opacity duration-150",
+        moving ? "pointer-events-none z-[56]" : "z-40",
+        visible ? "opacity-100" : "pointer-events-none opacity-0",
+      )}
     >
       <div className="flex h-10 shrink-0 items-center gap-2 border-b pr-3 pl-2">
-        <button type="button" onClick={closeDiff} className="flex h-7 items-center gap-1 rounded-lg pr-2 pl-1 text-muted-foreground hover:bg-accent hover:text-foreground">
+        <button
+          type="button"
+          onClick={closeDiff}
+          className="flex h-7 items-center gap-1 rounded-lg pr-2 pl-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
           <ChevronLeft className="size-4" aria-hidden />
           {t("diff.backToPane")}
           <Keys keys={["esc"]} />
@@ -157,7 +165,9 @@ export function DiffView() {
 
         <main className="flex min-w-0 grow flex-col">
           {error && <p className="p-4 text-xs whitespace-pre-wrap text-error">{t("diff.loadFailed", { error })}</p>}
-          {data && files.length === 0 && <p className="p-4 text-xs text-muted-foreground">{r.base_ref ? t("diff.noChangesSince", { base: r.base_ref.slice(0, 7) }) : t("diff.noChanges")}</p>}
+          {data && files.length === 0 && (
+            <p className="p-4 text-xs text-muted-foreground">{r.base_ref ? t("diff.noChangesSince", { base: r.base_ref.slice(0, 7) }) : t("diff.noChanges")}</p>
+          )}
           {current && (
             <>
               <div className="flex h-11 shrink-0 items-center gap-3 border-b px-4">
@@ -197,7 +207,12 @@ export function DiffView() {
           id={diff.id}
           title={r.title}
           status={wt}
-          busy={view.record.status === "working" || view.record.status === "awaiting_permission" || view.record.status === "starting" || view.record.status === "stalled"}
+          busy={
+            view.record.status === "working" ||
+            view.record.status === "awaiting_permission" ||
+            view.record.status === "starting" ||
+            view.record.status === "stalled"
+          }
           onDone={() => {
             bumpDiff();
             return reload(diff.id);
@@ -278,11 +293,21 @@ function Actions({ id, title, status, busy, onDone }: { id: string; title: strin
           }}
         >
           <GitCommitHorizontal className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-          <Input aria-label={t("diff.commitMessageLabel")} value={message} onChange={(e) => setMessage(e.target.value)} autoFocus className="h-8 grow text-sm" />
+          <Input
+            aria-label={t("diff.commitMessageLabel")}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            autoFocus
+            className="h-8 grow text-sm"
+          />
           <button type="button" onClick={() => setComposing(false)} className="h-8 rounded-lg px-3 text-muted-foreground hover:bg-accent hover:text-foreground">
             {t("common.cancel")}
           </button>
-          <button type="submit" disabled={running || !message.trim()} className="h-8 rounded-lg bg-primary px-3 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40">
+          <button
+            type="submit"
+            disabled={running || !message.trim()}
+            className="h-8 rounded-lg bg-primary px-3 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
+          >
             {t("diff.commit")}
           </button>
         </form>
@@ -295,12 +320,22 @@ function Actions({ id, title, status, busy, onDone }: { id: string; title: strin
           {!status.dirty &&
             status.commits > 0 &&
             (confirmPr ? (
-              <button type="button" disabled={running || busy} onClick={() => void pr()} className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent disabled:opacity-40">
+              <button
+                type="button"
+                disabled={running || busy}
+                onClick={() => void pr()}
+                className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent disabled:opacity-40"
+              >
                 <GitPullRequest className="size-3.5" aria-hidden />
                 {t("diff.pushAndCreatePr")}
               </button>
             ) : (
-              <button type="button" disabled={running || busy} onClick={() => setConfirmPr(true)} className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent disabled:opacity-40">
+              <button
+                type="button"
+                disabled={running || busy}
+                onClick={() => setConfirmPr(true)}
+                className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent disabled:opacity-40"
+              >
                 <GitPullRequest className="size-3.5" aria-hidden />
                 {t("diff.createPr")}
               </button>
@@ -309,18 +344,33 @@ function Actions({ id, title, status, busy, onDone }: { id: string; title: strin
           <span className="grow" />
           {!nothing &&
             (confirmDiscard ? (
-              <button type="button" disabled={running || busy} onClick={() => void discard()} className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-error hover:bg-error/10 disabled:opacity-40">
+              <button
+                type="button"
+                disabled={running || busy}
+                onClick={() => void discard()}
+                className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-error hover:bg-error/10 disabled:opacity-40"
+              >
                 <Trash2 className="size-3.5" aria-hidden />
                 {t("diff.discardWithCommits")}
               </button>
             ) : (
-              <button type="button" disabled={running || busy} onClick={() => setConfirmDiscard(true)} className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-error hover:bg-error/10 disabled:opacity-40">
+              <button
+                type="button"
+                disabled={running || busy}
+                onClick={() => setConfirmDiscard(true)}
+                className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-error hover:bg-error/10 disabled:opacity-40"
+              >
                 <Trash2 className="size-3.5" aria-hidden />
                 {t("diff.discard")}
               </button>
             ))}
           {status.dirty ? (
-            <button type="button" disabled={running || busy} onClick={() => setComposing(true)} className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40">
+            <button
+              type="button"
+              disabled={running || busy}
+              onClick={() => setComposing(true)}
+              className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
+            >
               <GitCommitHorizontal className="size-3.5" aria-hidden />
               {t("diff.commitEllipsis")}
             </button>

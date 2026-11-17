@@ -55,7 +55,10 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
         <ContextMenu.Content
           ref={menu.ref as React.Ref<HTMLDivElement>}
           style={menu.style}
-          className={cn("z-[80] flex min-w-52 flex-col gap-0.5 rounded-[10px] border bg-popover p-1 text-popover-foreground shadow-[0_8px_24px_rgba(0,0,0,.45)]", menu.moving && "opacity-0")}
+          className={cn(
+            "z-[80] flex min-w-52 flex-col gap-0.5 rounded-[10px] border bg-popover p-1 text-popover-foreground shadow-[0_8px_24px_rgba(0,0,0,.45)]",
+            menu.moving && "opacity-0",
+          )}
           onKeyDown={(e) => {
             // esc in the delete options goes back to the first menu instead of closing it
             if (confirm && e.key === "Escape") {
@@ -95,15 +98,25 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
             </>
           ) : (
             <>
-              <ContextMenu.Label className="px-2 pt-1 pb-1.5 text-xs text-muted-foreground">{t("sessionMenu.confirmDelete", { title: record.title })}</ContextMenu.Label>
+              <ContextMenu.Label className="px-2 pt-1 pb-1.5 text-xs text-muted-foreground">
+                {t("sessionMenu.confirmDelete", { title: record.title })}
+              </ContextMenu.Label>
               {record.worktree_path && (
-                <ContextMenu.Item data-key="w" className={cn(MENU_ITEM, "text-error data-[highlighted]:bg-error/10")} onSelect={() => run(() => removeSession(record.id, true))}>
+                <ContextMenu.Item
+                  data-key="w"
+                  className={cn(MENU_ITEM, "text-error data-[highlighted]:bg-error/10")}
+                  onSelect={() => run(() => removeSession(record.id, true))}
+                >
                   <Trash2 className="size-3.5" aria-hidden />
                   {t("sessionMenu.deleteWithWorktree")}
                   <Shortcut k="w" />
                 </ContextMenu.Item>
               )}
-              <ContextMenu.Item data-key="d" className={cn(MENU_ITEM, "text-error data-[highlighted]:bg-error/10")} onSelect={() => run(() => removeSession(record.id, false))}>
+              <ContextMenu.Item
+                data-key="d"
+                className={cn(MENU_ITEM, "text-error data-[highlighted]:bg-error/10")}
+                onSelect={() => run(() => removeSession(record.id, false))}
+              >
                 <Trash2 className="size-3.5" aria-hidden />
                 {record.worktree_path ? t("sessionMenu.deleteRecordOnly") : t("sessionMenu.deleteRecord")}
                 <Shortcut k="d" />

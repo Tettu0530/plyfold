@@ -141,7 +141,24 @@ function createScene(): Scene | null {
     gl.attachShader(prog, compile(gl, gl.FRAGMENT_SHADER, FRAG));
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) ?? "link");
-    const names = ["uRect", "uView", "uDpr", "uA", "uAr", "uS", "uSr", "uK", "uFillA", "uFillS", "uLineA", "uLineS", "uShadow", "uShadowGeo", "uOpacity", "uOver"];
+    const names = [
+      "uRect",
+      "uView",
+      "uDpr",
+      "uA",
+      "uAr",
+      "uS",
+      "uSr",
+      "uK",
+      "uFillA",
+      "uFillS",
+      "uLineA",
+      "uLineS",
+      "uShadow",
+      "uShadowGeo",
+      "uOpacity",
+      "uOver",
+    ];
     const loc = Object.fromEntries(names.map((n) => [n, gl.getUniformLocation(prog, n)]));
     gl.bindVertexArray(gl.createVertexArray());
     document.body.appendChild(canvas);
@@ -261,6 +278,10 @@ export function parseColor(s: string): Rgba {
 /** First shadow of e.g. "0px 16px 48px rgba(0,0,0,.55)" */
 export function parseShadow(s: string): BlobFrame["shadow"] {
   const color = parseColor(s);
-  const nums = s.replace(/rgba?\([^)]*\)/, "").match(/-?[\d.]+px/g)?.map((v) => parseFloat(v)) ?? [];
+  const nums =
+    s
+      .replace(/rgba?\([^)]*\)/, "")
+      .match(/-?[\d.]+px/g)
+      ?.map((v) => parseFloat(v)) ?? [];
   return { x: nums[0] ?? 0, y: nums[1] ?? 0, blur: nums[2] ?? 0, color };
 }

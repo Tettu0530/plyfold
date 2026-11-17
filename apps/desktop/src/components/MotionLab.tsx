@@ -66,7 +66,21 @@ function Curve({ p }: { p: SpringParams }) {
   );
 }
 
-function Slider({ label, value, min, max, step, onChange }: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void }) {
+function Slider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+}) {
   return (
     <label className="flex items-center gap-3 text-xs">
       <span className="w-16 text-muted-foreground">{label}</span>
@@ -100,7 +114,12 @@ function ThrowCard({ p }: { p: SpringParams }) {
   return (
     <div ref={area} className="relative h-56 rounded-lg bg-background">
       {CORNERS(1, 1).map((c, i) => (
-        <span key={i} aria-hidden className="absolute size-[72px] rounded-xl border border-dashed border-border" style={{ left: c.x ? undefined : 0, right: c.x ? 0 : undefined, top: c.y ? undefined : 0, bottom: c.y ? 0 : undefined }} />
+        <span
+          key={i}
+          aria-hidden
+          className="absolute size-[72px] rounded-xl border border-dashed border-border"
+          style={{ left: c.x ? undefined : 0, right: c.x ? 0 : undefined, top: c.y ? undefined : 0, bottom: c.y ? 0 : undefined }}
+        />
       ))}
       <motion.div
         role="button"
@@ -156,7 +175,12 @@ function SeparationDemo() {
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-3">
         <span className="text-xs text-muted-foreground">{t("motionLab.separationStyle")}</span>
-        <Segmented<LiquidStyle> label={t("motionLab.separationStyle")} value={style} onChange={setStyle} options={STYLES.map((s) => ({ value: s.value, label: t(s.label) }))} />
+        <Segmented<LiquidStyle>
+          label={t("motionLab.separationStyle")}
+          value={style}
+          onChange={setStyle}
+          options={STYLES.map((s) => ({ value: s.value, label: t(s.label) }))}
+        />
       </div>
       <p className="text-xs text-muted-foreground">{note && t(note)}</p>
       {style === "pop" && <Slider label={t("motionLab.sizeLag")} value={lag} min={0} max={0.3} step={0.01} onChange={setLag} />}
@@ -216,7 +240,9 @@ export function MotionLab() {
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">{t("motionLab.frameRate")}</span>
-              <span className={cn("font-mono tabular", hz !== null && hz < 100 && "text-permission")}>{hz === null ? t("motionLab.measuring") : `${hz} Hz`}</span>
+              <span className={cn("font-mono tabular", hz !== null && hz < 100 && "text-permission")}>
+                {hz === null ? t("motionLab.measuring") : `${hz} Hz`}
+              </span>
             </div>
             {hz !== null && hz < 100 && <p className="text-xs text-muted-foreground">{t("motionLab.throttled")}</p>}
             <Segmented<string>
@@ -254,12 +280,7 @@ export function MotionLab() {
               </Button>
             </div>
             <div className="flex items-center gap-4">
-              <motion.button
-                type="button"
-                whileTap={{ scale: 1.08 }}
-                transition={appleSpring(INTERACTIVE)}
-                className="h-9 rounded-xl bg-muted px-4"
-              >
+              <motion.button type="button" whileTap={{ scale: 1.08 }} transition={appleSpring(INTERACTIVE)} className="h-9 rounded-xl bg-muted px-4">
                 {t("motionLab.pressToGrow")}
               </motion.button>
               <label className="flex items-center gap-2 text-xs">

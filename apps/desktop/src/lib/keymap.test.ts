@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { actionFor, bindingsOf, comboOf, comboProblem, DEFAULT_BINDINGS, keysOf, rebind } from "./keymap";
 
-const ev = (code: string, mods: Partial<{ metaKey: boolean; ctrlKey: boolean; altKey: boolean; shiftKey: boolean }> = {}) => ({ code, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, ...mods });
+const ev = (code: string, mods: Partial<{ metaKey: boolean; ctrlKey: boolean; altKey: boolean; shiftKey: boolean }> = {}) => ({
+  code,
+  metaKey: false,
+  ctrlKey: false,
+  altKey: false,
+  shiftKey: false,
+  ...mods,
+});
 
 describe("keymap", () => {
   it("reads combos from physical keys in a fixed modifier order", () => {

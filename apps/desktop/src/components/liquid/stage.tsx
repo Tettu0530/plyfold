@@ -151,10 +151,10 @@ export function useLiquidClip(id: string, ref: React.RefObject<HTMLElement | nul
     let covered = false;
     const hide = (on: boolean) => {
       if (!el || !saved) return;
-      el.style.background = on ? "transparent" : saved.background ?? "";
-      el.style.borderColor = on ? "transparent" : saved.borderColor ?? "";
-      el.style.boxShadow = on ? "none" : saved.boxShadow ?? "";
-      el.style.backdropFilter = on ? "none" : saved.backdropFilter ?? "";
+      el.style.background = on ? "transparent" : (saved.background ?? "");
+      el.style.borderColor = on ? "transparent" : (saved.borderColor ?? "");
+      el.style.boxShadow = on ? "none" : (saved.boxShadow ?? "");
+      el.style.backdropFilter = on ? "none" : (saved.backdropFilter ?? "");
     };
     const tick = () => {
       el = ref.current ?? el;
@@ -170,7 +170,10 @@ export function useLiquidClip(id: string, ref: React.RefObject<HTMLElement | nul
       const e = liveEdges.get(id);
       const box = el?.getBoundingClientRect();
       if (el && e && box && box.width > 0) {
-        const l = e.L.get(), t = e.T.get(), r = e.R.get(), b = e.B.get();
+        const l = e.L.get(),
+          t = e.T.get(),
+          r = e.R.get(),
+          b = e.B.get();
         const top = Math.max(0, t - box.top);
         const left = Math.max(0, l - box.left);
         const right = Math.max(0, box.right - r);
@@ -353,7 +356,9 @@ function JobView({ job }: { job: Job }) {
     // Don't unregister while the blob serves as the frame (a close animation replaces the registration)
     if (job.open && holding) return;
     if (job.open && revealed && settling) {
-      useStage.setState((s) => (s.jobs[job.id]?.nonce === job.nonce && !s.jobs[job.id].lingering ? { jobs: { ...s.jobs, [job.id]: { ...s.jobs[job.id], lingering: true } } } : s));
+      useStage.setState((s) =>
+        s.jobs[job.id]?.nonce === job.nonce && !s.jobs[job.id].lingering ? { jobs: { ...s.jobs, [job.id]: { ...s.jobs[job.id], lingering: true } } } : s,
+      );
       return;
     }
     if ((job.open && revealed) || (!job.open && !mounted)) {
@@ -367,6 +372,8 @@ function JobView({ job }: { job: Job }) {
         return { jobs, revealed: rv };
       });
     }
+    // job.onDone is read when the job finishes; a new callback alone doesn't need to re-run this
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job.open, revealed, mounted, settling, holding, job.id, job.nonce]);
 
   return layer;

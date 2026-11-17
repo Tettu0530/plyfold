@@ -62,13 +62,26 @@ function ContextMeter({ info, pct, scope }: { info: SessionInfo; pct: number; sc
             raised && "z-[57]",
           )}
         >
-          <span role="progressbar" aria-label={t("composer.contextUsage")} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} className="h-1 w-10 overflow-hidden rounded-sm bg-muted">
+          <span
+            role="progressbar"
+            aria-label={t("composer.contextUsage")}
+            aria-valuenow={pct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            className="h-1 w-10 overflow-hidden rounded-sm bg-muted"
+          >
             <motion.span className="block h-full bg-foreground" animate={{ width: `${pct}%` }} transition={smooth} />
           </span>
           {pct}%
         </button>
       </PopoverTrigger>
-      <PopoverContent ref={menu.ref as React.Ref<HTMLDivElement>} style={menu.style} side="top" align="end" className={cn("z-[58] flex w-60 flex-col gap-2 p-3 text-xs", menu.moving && "opacity-0")}>
+      <PopoverContent
+        ref={menu.ref as React.Ref<HTMLDivElement>}
+        style={menu.style}
+        side="top"
+        align="end"
+        className={cn("z-[58] flex w-60 flex-col gap-2 p-3 text-xs", menu.moving && "opacity-0")}
+      >
         <div className="flex items-baseline justify-between">
           <span className="font-medium">{t("composer.context")}</span>
           <span className="font-mono tabular">
@@ -131,12 +144,24 @@ export function ControlRow({
     <div className="flex items-center gap-0.5 text-xs">
       {model && (
         <Select value={model.current ?? undefined} onValueChange={(v) => onSet("model", v)} onOpenChange={modelMenu.onOpenChange}>
-          <SelectTrigger ref={liquidAnchor(`${scope}:model`)} aria-label="model" className={cn(CHIP_TRIGGER, "relative", raised.has(`${scope}:model`) && "z-[57]")}>
+          <SelectTrigger
+            ref={liquidAnchor(`${scope}:model`)}
+            aria-label="model"
+            className={cn(CHIP_TRIGGER, "relative", raised.has(`${scope}:model`) && "z-[57]")}
+          >
             <ProviderLogo agent={agent} className="size-3 text-muted-foreground" />
             <span>{model.choices.find((c) => c.value === model.current)?.name ?? model.current}</span>
             <ChevronsUpDown className="size-3 text-muted-foreground" aria-hidden />
           </SelectTrigger>
-          <SelectContent ref={modelMenu.ref as React.Ref<HTMLDivElement>} style={modelMenu.style} position="popper" side="top" align="start" sideOffset={6} className={cn("z-[58]", modelMenu.moving && "opacity-0")}>
+          <SelectContent
+            ref={modelMenu.ref as React.Ref<HTMLDivElement>}
+            style={modelMenu.style}
+            position="popper"
+            side="top"
+            align="start"
+            sideOffset={6}
+            className={cn("z-[58]", modelMenu.moving && "opacity-0")}
+          >
             {model.choices.map((c) => (
               <SelectItem key={c.value} value={c.value}>
                 {c.name}
@@ -147,7 +172,11 @@ export function ControlRow({
       )}
       {effort && (
         <Select value={effort.current ?? undefined} onValueChange={(v) => onSet("thought_level", v)} onOpenChange={effortMenu.onOpenChange}>
-          <SelectTrigger ref={liquidAnchor(`${scope}:effort`)} aria-label="effort" className={cn(CHIP_TRIGGER, "relative gap-1.5", raised.has(`${scope}:effort`) && "z-[57]")}>
+          <SelectTrigger
+            ref={liquidAnchor(`${scope}:effort`)}
+            aria-label="effort"
+            className={cn(CHIP_TRIGGER, "relative gap-1.5", raised.has(`${scope}:effort`) && "z-[57]")}
+          >
             <span className="flex h-2.5 items-end gap-0.5" aria-hidden>
               {effort.choices.map((c, i) => (
                 <span
@@ -159,7 +188,15 @@ export function ControlRow({
             </span>
             <span className="text-muted-foreground">{effort.current}</span>
           </SelectTrigger>
-          <SelectContent ref={effortMenu.ref as React.Ref<HTMLDivElement>} style={effortMenu.style} position="popper" side="top" align="start" sideOffset={6} className={cn("z-[58]", effortMenu.moving && "opacity-0")}>
+          <SelectContent
+            ref={effortMenu.ref as React.Ref<HTMLDivElement>}
+            style={effortMenu.style}
+            position="popper"
+            side="top"
+            align="start"
+            sideOffset={6}
+            className={cn("z-[58]", effortMenu.moving && "opacity-0")}
+          >
             {effort.choices.map((c) => (
               <SelectItem key={c.value} value={c.value}>
                 {c.name}
@@ -203,7 +240,14 @@ function QueueList({ items, busy, onRemove, onSendNow }: { items: Queued[]; busy
   return (
     <AnimatePresence initial={false}>
       {items.length > 0 && (
-        <motion.div key="queue" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={smooth} className="overflow-hidden">
+        <motion.div
+          key="queue"
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: "auto", opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={smooth}
+          className="overflow-hidden"
+        >
           <div className="flex flex-col gap-0.5 pb-1">
             <div className="flex items-center gap-1.5 px-1.5 text-xs text-muted-foreground">
               <ListOrdered className="size-3.5" aria-hidden />
@@ -229,7 +273,9 @@ function QueueList({ items, busy, onRemove, onSendNow }: { items: Queued[]; busy
                 >
                   <CornerDownRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                   <span className="min-w-0 grow truncate">{q.text || q.attachments.map((a) => a.preview.name).join(" ")}</span>
-                  {q.attachments.length > 0 && <Paperclip className="size-3 shrink-0 text-muted-foreground" aria-label={t("composer.attachmentsCount", { count: q.attachments.length })} />}
+                  {q.attachments.length > 0 && (
+                    <Paperclip className="size-3 shrink-0 text-muted-foreground" aria-label={t("composer.attachmentsCount", { count: q.attachments.length })} />
+                  )}
                   <button
                     type="button"
                     aria-label={t("composer.removeFromQueue")}

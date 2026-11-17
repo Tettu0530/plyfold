@@ -20,4 +20,25 @@ import { settings } from "./settings";
 import { motionLab } from "./motionLab";
 import { store } from "./store";
 
-export const zh = { common, app, sidebar, sessionMenu, search, notifications, status, format, pane, transcript, composer, message, permission, draft, attach, profiles, diff, settings, motionLab, store };
+export const zh = {
+  common,
+  app,
+  sidebar,
+  sessionMenu,
+  search,
+  notifications,
+  status,
+  format,
+  pane,
+  transcript,
+  composer,
+  message,
+  permission,
+  draft,
+  attach,
+  profiles,
+  diff,
+  settings,
+  motionLab,
+  store,
+};

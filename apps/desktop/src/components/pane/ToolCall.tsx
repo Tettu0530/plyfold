@@ -82,7 +82,11 @@ function useClamp(text: string, first: number) {
   // The count is rendered in a monospace element, so split the translated text around {n}
   const [before, after = ""] = t("transcript.showMore", { count: rest }).split("{n}");
   const more = rest > 0 && (
-    <button type="button" onClick={() => setAll(true)} className="flex h-7 w-full items-center px-3 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
+    <button
+      type="button"
+      onClick={() => setAll(true)}
+      className="flex h-7 w-full items-center px-3 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+    >
       {before}
       <span className="mx-1 font-mono tabular">{rest}</span>
       {after}
@@ -97,7 +101,14 @@ function Output({ text }: { text: string }) {
   return (
     <div className="overflow-hidden rounded-md bg-background">
       {/* While collapsed, only the first lines (no scrolling). Once fully shown, cap the height and scroll */}
-      <pre className={cn("m-0 px-3 py-2 font-mono text-xs leading-5 whitespace-pre text-foreground/85 select-text", c.folded ? "overflow-x-auto overflow-y-hidden" : "max-h-80 overflow-auto")}>{c.text}</pre>
+      <pre
+        className={cn(
+          "m-0 px-3 py-2 font-mono text-xs leading-5 whitespace-pre text-foreground/85 select-text",
+          c.folded ? "overflow-x-auto overflow-y-hidden" : "max-h-80 overflow-auto",
+        )}
+      >
+        {c.text}
+      </pre>
       {c.more}
     </div>
   );
@@ -129,7 +140,11 @@ function Detail({ t }: { t: ToolCall }) {
       {t.note && <p className="m-0 text-xs text-muted-foreground">{t.note}</p>}
       {showCommand && <Command text={t.command!} />}
       {showPath && <p className="m-0 font-mono text-xs break-all text-muted-foreground select-text">{t.path}</p>}
-      {output ? <Output text={output} /> : !showCommand && !showPath && !t.note && <p className="m-0 text-xs text-muted-foreground">{tr("transcript.noResult")}</p>}
+      {output ? (
+        <Output text={output} />
+      ) : (
+        !showCommand && !showPath && !t.note && <p className="m-0 text-xs text-muted-foreground">{tr("transcript.noResult")}</p>
+      )}
     </div>
   );
 }
@@ -198,7 +213,12 @@ export function DiffBlock({ d }: { d: DiffPreview }) {
   const diff = useMemo(() => lineDiff(d.oldText, d.newText), [d.oldText, d.newText]);
   return (
     <figure className="m-0 overflow-hidden rounded-[10px] border bg-card">
-      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex h-8 w-full items-center gap-2 px-3 text-left hover:bg-accent/50">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="flex h-8 w-full items-center gap-2 px-3 text-left hover:bg-accent/50"
+      >
         <motion.span animate={{ rotate: open ? 90 : 0 }} transition={snappy} className="flex text-muted-foreground">
           <ChevronRight className="size-3.5" aria-hidden />
         </motion.span>
@@ -212,7 +232,14 @@ export function DiffBlock({ d }: { d: DiffPreview }) {
       </button>
       <AnimatePresence initial={false}>
         {open && (
-          <motion.div key="lines" initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} transition={smooth} className="overflow-hidden border-t">
+          <motion.div
+            key="lines"
+            initial={{ height: 0 }}
+            animate={{ height: "auto" }}
+            exit={{ height: 0 }}
+            transition={smooth}
+            className="overflow-hidden border-t"
+          >
             <div className="max-h-72 overflow-auto py-1 font-mono text-xs leading-5 select-text">
               <Unified lines={diff.lines} />
             </div>

@@ -37,8 +37,7 @@ export function lineDiff(oldText: string | null, newText: string, context = 3): 
     const w = m + 1;
     const dp = new Uint32Array((n + 1) * w);
     for (let i = n - 1; i >= 0; i--)
-      for (let j = m - 1; j >= 0; j--)
-        dp[i * w + j] = am[i] === bm[j] ? dp[(i + 1) * w + j + 1] + 1 : Math.max(dp[(i + 1) * w + j], dp[i * w + j + 1]);
+      for (let j = m - 1; j >= 0; j--) dp[i * w + j] = am[i] === bm[j] ? dp[(i + 1) * w + j + 1] + 1 : Math.max(dp[(i + 1) * w + j], dp[i * w + j + 1]);
     let i = 0;
     let j = 0;
     while (i < n || j < m) {
@@ -54,7 +53,11 @@ export function lineDiff(oldText: string | null, newText: string, context = 3): 
       }
     }
   }
-  const ops: Op[] = [...a.slice(0, pre).map((t) => ({ k: "ctx" as const, text: t })), ...mid, ...a.slice(a.length - suf).map((t) => ({ k: "ctx" as const, text: t }))];
+  const ops: Op[] = [
+    ...a.slice(0, pre).map((t) => ({ k: "ctx" as const, text: t })),
+    ...mid,
+    ...a.slice(a.length - suf).map((t) => ({ k: "ctx" as const, text: t })),
+  ];
 
   // Number the lines and collapse unchanged lines more than `context` lines from a change
   const near = new Array<boolean>(ops.length).fill(false);

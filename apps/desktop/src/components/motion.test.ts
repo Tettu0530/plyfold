@@ -5,7 +5,7 @@ import { project, rubberBand, SMOOTH, SNAPPY, springConstants, springPosition, s
 describe("Apple springs", () => {
   it("matches the SwiftUI conversion formulas", () => {
     const k = springConstants({ duration: 0.5, bounce: 0.3 });
-    expect(k.stiffness).toBeCloseTo((2 * Math.PI / 0.5) ** 2, 6); // ≈ 157.9
+    expect(k.stiffness).toBeCloseTo(((2 * Math.PI) / 0.5) ** 2, 6); // ≈ 157.9
     expect(k.damping).toBeCloseTo((4 * Math.PI * 0.7) / 0.5, 6); // ≈ 17.6
     // overdamped
     expect(springConstants({ duration: 0.5, bounce: -0.5 }).damping).toBeCloseTo((4 * Math.PI) / 0.25, 6);

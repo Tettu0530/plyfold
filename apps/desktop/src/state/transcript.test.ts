@@ -35,7 +35,15 @@ describe("transcript", () => {
 
   it("reads Claude's Bash: command, description and output", () => {
     const id = "toolu_1";
-    let t = applyUpdate(emptyTranscript(), { sessionUpdate: "tool_call", toolCallId: id, rawInput: {}, status: "pending", title: "Terminal", kind: "execute", content: [] });
+    let t = applyUpdate(emptyTranscript(), {
+      sessionUpdate: "tool_call",
+      toolCallId: id,
+      rawInput: {},
+      status: "pending",
+      title: "Terminal",
+      kind: "execute",
+      content: [],
+    });
     t = applyUpdate(t, { sessionUpdate: "tool_call_update", toolCallId: id, rawInput: { command: "date" }, title: "date" });
     t = applyUpdate(t, {
       sessionUpdate: "tool_call_update",
@@ -65,7 +73,12 @@ describe("transcript", () => {
       rawInput: { command: "/bin/zsh -lc 'cargo test'", cwd: "/w" },
     });
     t = applyUpdate(t, { sessionUpdate: "tool_call_update", toolCallId: id, _meta: { terminal_output_delta: { data: "running\n" } } });
-    t = applyUpdate(t, { sessionUpdate: "tool_call_update", toolCallId: id, status: "completed", _meta: { terminal_output_delta: { data: "failed\n" }, terminal_exit: { exit_code: 101 } } });
+    t = applyUpdate(t, {
+      sessionUpdate: "tool_call_update",
+      toolCallId: id,
+      status: "completed",
+      _meta: { terminal_output_delta: { data: "failed\n" }, terminal_exit: { exit_code: 101 } },
+    });
     expect(t.items[0]).toMatchObject({ command: "cargo test", stream: "running\nfailed\n", exitCode: 101 });
   });
 

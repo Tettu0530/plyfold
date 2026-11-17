@@ -82,8 +82,9 @@ function diffsOf(update: AcpUpdate): DiffPreview[] {
   const content = update.content;
   if (!Array.isArray(content)) return [];
   return content
-    .filter((c): c is { type: string; path: string; oldText?: string | null; newText: string } =>
-      typeof c === "object" && c !== null && (c as { type?: string }).type === "diff",
+    .filter(
+      (c): c is { type: string; path: string; oldText?: string | null; newText: string } =>
+        typeof c === "object" && c !== null && (c as { type?: string }).type === "diff",
     )
     .map((c) => ({ path: c.path, oldText: c.oldText ?? null, newText: c.newText }));
 }
@@ -112,7 +113,11 @@ function commandOf(input: Record<string, unknown>): string | null {
 function contentText(content: unknown): string | null {
   if (!Array.isArray(content)) return null;
   const texts = content
-    .map((c) => (c as { type?: string; content?: { type?: string; text?: unknown } })?.type === "content" ? (c as { content?: { text?: unknown } }).content?.text : undefined)
+    .map((c) =>
+      (c as { type?: string; content?: { type?: string; text?: unknown } })?.type === "content"
+        ? (c as { content?: { text?: unknown } }).content?.text
+        : undefined,
+    )
     .filter((x): x is string => typeof x === "string");
   if (texts.length === 0) return null;
   return texts.map((x) => x.replace(/^```[\w-]*\n([\s\S]*?)\n?```$/, "$1")).join("\n");
@@ -227,7 +232,13 @@ export function beginTurn(t: Transcript, prompt: string, attachments: Attachment
   return { inTurn: true, items: [...t.items, item] };
 }
 
-export function endTurn(t: Transcript, stats: TurnStats | null, stopReason: string | null, error: string | null, endedAt: number | null = Date.now()): Transcript {
+export function endTurn(
+  t: Transcript,
+  stats: TurnStats | null,
+  stopReason: string | null,
+  error: string | null,
+  endedAt: number | null = Date.now(),
+): Transcript {
   return { inTurn: false, items: [...t.items, { kind: "stats", stats, stopReason, error, endedAt }] };
 }
 
