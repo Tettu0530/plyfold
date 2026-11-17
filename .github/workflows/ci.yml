@@ -59,7 +59,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Tests
-        run: cargo test --workspace --locked
+        # Keep going after a failing crate, so one run shows every Windows difference
+        run: cargo test --workspace --locked --no-fail-fast
 
   windows-installer:
     name: Windows installer
