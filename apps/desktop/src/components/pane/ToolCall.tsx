@@ -1,7 +1,9 @@
 // 会話の中のツールの呼び出し。行を押すと、実行したコマンドと結果を開く（段階的な開示）
 import { Check, ChevronRight, CircleX, FileText, LoaderCircle, Pencil, Search, SquareTerminal, Wrench } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+import { seconds } from "@/lib/format";
 
 import { lineDiff } from "@/lib/lineDiff";
 import { cn } from "@/lib/utils";
@@ -16,18 +18,34 @@ const TOOL_ICONS: Record<string, typeof FileText> = {
   execute: SquareTerminal,
 };
 
-/** 最初に見せる結果の行数。残りは押して出す */
-const FIRST_LINES = 40;
+/** 最初に見せる結果の行数。残りは押して出す（畳んでいるあいだはスクロールしない） */
+const FIRST_LINES = 12;
+
+/** 動いているあいだだけ、一定の間隔で描き直す（経過時間を数える） */
+function useNow(active: boolean, ms = 100) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const t = setInterval(() => setNow(Date.now()), ms);
+    return () => clearInterval(t);
+  }, [active, ms]);
+  return now;
+}
 
 const shortPath = (p: string) => p.split("/").slice(-3).join("/");
 
 function Status({ t }: { t: ToolCall }) {
   const running = t.status === "pending" || t.status === "in_progress";
+  const now = useNow(running);
+  // 実行中は経過時間を数え、終わったらかかった時間を出す
+  const elapsed = t.startedAt != null ? (running ? now : (t.endedAt ?? t.startedAt)) - t.startedAt : null;
+  const time = elapsed != null && (running || elapsed >= 100) ? <span className="font-mono tabular">{seconds(Math.max(0, elapsed))}</span> : null;
   if (running)
     return (
       <span className="flex items-center gap-1 text-xs text-working">
         <LoaderCircle className="size-3.5 animate-spin" aria-hidden />
         実行中
+        {time}
       </span>
     );
   if (t.status === "failed" || (t.exitCode != null && t.exitCode !== 0))
@@ -48,6 +66,7 @@ function Status({ t }: { t: ToolCall }) {
     <span className="flex items-center gap-1 text-xs text-muted-foreground">
       <Check className="size-3.5" aria-hidden />
       完了
+      {time}
     </span>
   );
 }
@@ -62,7 +81,7 @@ function useClamp(text: string, first: number) {
       残り <span className="mx-1 font-mono tabular">{rest}</span> 行を表示
     </button>
   );
-  return { text: rest ? lines.slice(0, first).join("\n") : lines.join("\n"), more };
+  return { text: rest ? lines.slice(0, first).join("\n") : lines.join("\n"), more, folded: rest > 0 };
 }
 
 /** 結果の文字 */
@@ -70,7 +89,8 @@ function Output({ text }: { text: string }) {
   const c = useClamp(text, FIRST_LINES);
   return (
     <div className="overflow-hidden rounded-md bg-background">
-      <pre className="m-0 max-h-80 overflow-auto px-3 py-2 font-mono text-xs leading-5 whitespace-pre text-foreground/85 select-text">{c.text}</pre>
+      {/* 畳んでいるあいだは最初の行だけ（スクロールしない）。全部を出したら、高さを抑えてスクロールする */}
+      <pre className={cn("m-0 px-3 py-2 font-mono text-xs leading-5 whitespace-pre text-foreground/85 select-text", c.folded ? "overflow-x-auto overflow-y-hidden" : "max-h-80 overflow-auto")}>{c.text}</pre>
       {c.more}
     </div>
   );

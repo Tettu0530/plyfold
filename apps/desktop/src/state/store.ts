@@ -63,6 +63,14 @@ function lastRepo(): string {
   }
 }
 
+/** ターンの途中に送った指示 */
+export interface Queued {
+  key: string;
+  text: string;
+  attachments: Attached[];
+}
+let queueSeq = 0;
+
 /** エンジンの出来事の受け口（開発中に store が読み直されても、窓に 1 つだけにする） */
 const engineListener = ((globalThis as { __plyfoldEngineListener?: { current: Promise<() => void> | null } }).__plyfoldEngineListener ??= { current: null });
 let initStarted = false;
@@ -158,6 +166,12 @@ interface State {
   setLiquidLag: (v: number) => void;
   startSession: (args: { profile: string; repo: string; title: string; worktree: boolean; prompt?: string }) => Promise<void>;
   sendPrompt: (id: string, text: string, attachments?: Attached[]) => Promise<void>;
+  /** ターンの途中に送った指示（ターンが終わったら先頭から順に送る） */
+  queues: Record<string, Queued[]>;
+  enqueue: (id: string, text: string, attachments: Attached[]) => void;
+  unqueue: (id: string, key: string) => void;
+  /** キューの先頭を今すぐ送る（ターンの途中なら何もしない） */
+  sendQueued: (id: string) => void;
   cancel: (id: string) => Promise<void>;
   respondPermission: (id: string, optionId: string | null) => Promise<void>;
   setCategory: (id: string, category: Category, value: string) => Promise<void>;
@@ -228,6 +242,9 @@ export function reduceEvent(sessions: Record<string, SessionView>, e: EngineEven
     case "info":
       next.info = e.info;
       break;
+    case "renamed":
+      next.record = { ...v.record, title: e.title };
+      break;
   }
   return { ...sessions, [id]: next };
 }
@@ -261,7 +278,9 @@ export const useStore = create<State>((set, get) => ({
     // 受け口は窓に 1 つだけ。開発中に store が読み直されたら、前の受け口を外す
     // （2 つあると、同じ出来事が 2 回入り、発言の文字が 2 重になる）
     const prev = engineListener.current;
-    const next = onEngineEvent((e) =>
+    const next = onEngineEvent((e) => {
+      // ターンが終わったら、積んでおいた指示を送る（中断やエラーで終わったときは送らず、待たせたままにする）
+      if (e.type === "turn_ended" && !e.error && e.stop_reason !== "cancelled") queueMicrotask(() => get().sendQueued(e.session_id));
       set((s) => {
         const sessions = reduceEvent(s.sessions, e);
         // アプリを見ていないときは、macOS の通知も出す
@@ -274,8 +293,8 @@ export const useStore = create<State>((set, get) => ({
           if (!shown) return { sessions, unread: { ...s.unread, [e.session_id]: { at: Date.now(), error: !!e.error } } };
         }
         return { sessions };
-      }),
-    );
+      });
+    });
     engineListener.current = next;
     if (prev) void prev.then((off) => off());
     await next;
@@ -393,6 +412,18 @@ export const useStore = create<State>((set, get) => ({
       if (isDraft(id)) delete drafts[id];
       return { panes, drafts };
     });
+  },
+
+  queues: {},
+  enqueue: (id, text, attachments) =>
+    set((s) => ({ queues: { ...s.queues, [id]: [...(s.queues[id] ?? []), { key: `q${++queueSeq}`, text, attachments }] } })),
+  unqueue: (id, key) => set((s) => ({ queues: { ...s.queues, [id]: (s.queues[id] ?? []).filter((q) => q.key !== key) } })),
+  sendQueued: (id) => {
+    const s = get();
+    const [next, ...rest] = s.queues[id] ?? [];
+    if (!next || s.sessions[id]?.transcript.inTurn) return;
+    set({ queues: { ...s.queues, [id]: rest } });
+    void get().sendPrompt(id, next.text, next.attachments);
   },
 
   usage: null,

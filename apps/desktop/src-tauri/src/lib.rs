@@ -449,7 +449,7 @@ fn rename_session(state: State<'_, AppState>, id: String, title: String) -> CmdR
     if title.is_empty() {
         return Err("名前が空です".into());
     }
-    state.engine.store().set_title(&id, title).map_err(err)
+    state.engine.store().rename_by_user(&id, title).map_err(err)
 }
 
 #[tauri::command]

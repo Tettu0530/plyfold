@@ -78,3 +78,11 @@ describe("restoreLayout", () => {
     expect(restoreLayout({ panes: ["a"], paneCount: 1, focusedPane: 2 }, () => true)?.focusedPane).toBe(0);
   });
 });
+
+describe("renamed", () => {
+  it("replaces the title when the agent names the session", () => {
+    let s: Record<string, SessionView> = reduceEvent({}, { type: "session_created", session: record });
+    s = reduceEvent(s, { type: "renamed", session_id: "s1", title: "リポジトリの概要" });
+    expect(s.s1.record.title).toBe("リポジトリの概要");
+  });
+});

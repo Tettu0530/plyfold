@@ -15,7 +15,7 @@ export type TranscriptItem =
   | { kind: "thought"; text: string }
   | ToolCall
   | { kind: "plan"; entries: { content: string; status: string }[] }
-  | { kind: "stats"; stats: TurnStats | null; stopReason: string | null; error: string | null }
+  | { kind: "stats"; stats: TurnStats | null; stopReason: string | null; error: string | null; endedAt: number | null }
   | { kind: "notice"; text: string };
 
 /** ツールの呼び出し。エージェントごとに出し方が違うので、見せるものだけを取り出して持つ */
@@ -37,6 +37,9 @@ export interface ToolCall {
   /** 結果の文字（rawOutput、または content の文字） */
   result: string;
   exitCode: number | null;
+  /** 初めて届いた時刻と、終わった（completed / failed になった）時刻（ms） */
+  startedAt: number | null;
+  endedAt: number | null;
 }
 
 export interface PendingPermission {
@@ -120,7 +123,7 @@ function resultOf(raw: unknown): string | null {
 }
 
 /** tool_call と tool_call_update の中身を、今の状態に重ねる（ACP の決まりどおり、来た欄だけ置き換える） */
-function mergeTool(prev: ToolCall | null, update: AcpUpdate): ToolCall {
+function mergeTool(prev: ToolCall | null, update: AcpUpdate, now: number | null): ToolCall {
   const base: ToolCall = prev ?? {
     kind: "tool",
     id: String(update.toolCallId ?? ""),
@@ -134,6 +137,8 @@ function mergeTool(prev: ToolCall | null, update: AcpUpdate): ToolCall {
     stream: "",
     result: "",
     exitCode: null,
+    startedAt: now,
+    endedAt: null,
   };
   const next: ToolCall = { ...base };
   if (str(update.title)) next.title = update.title as string;
@@ -160,10 +165,12 @@ function mergeTool(prev: ToolCall | null, update: AcpUpdate): ToolCall {
   const meta = (update._meta ?? {}) as { terminal_output_delta?: { data?: unknown }; terminal_exit?: { exit_code?: unknown } };
   if (typeof meta.terminal_output_delta?.data === "string") next.stream = base.stream + meta.terminal_output_delta.data;
   if (typeof meta.terminal_exit?.exit_code === "number") next.exitCode = meta.terminal_exit.exit_code;
+  if (next.endedAt == null && (next.status === "completed" || next.status === "failed")) next.endedAt = now;
   return next;
 }
 
-export function applyUpdate(t: Transcript, update: AcpUpdate): Transcript {
+/** now は出来事の時刻（ms）。記録から組み立てるときは記録の時刻を渡す */
+export function applyUpdate(t: Transcript, update: AcpUpdate, now: number | null = Date.now()): Transcript {
   const kind = update.sessionUpdate;
   switch (kind) {
     case "user_message_chunk":
@@ -181,10 +188,10 @@ export function applyUpdate(t: Transcript, update: AcpUpdate): Transcript {
       const at = t.items.findIndex((it) => it.kind === "tool" && it.id === id);
       if (at < 0) {
         if (kind === "tool_call_update" && !id) return t;
-        return { ...t, items: [...t.items, mergeTool(null, update)] };
+        return { ...t, items: [...t.items, mergeTool(null, update, now)] };
       }
       const items = t.items.slice();
-      items[at] = mergeTool(items[at] as ToolCall, update);
+      items[at] = mergeTool(items[at] as ToolCall, update, now);
       return { ...t, items };
     }
     case "plan": {
@@ -206,8 +213,8 @@ export function beginTurn(t: Transcript, prompt: string, attachments: Attachment
   return { inTurn: true, items: [...t.items, item] };
 }
 
-export function endTurn(t: Transcript, stats: TurnStats | null, stopReason: string | null, error: string | null): Transcript {
-  return { inTurn: false, items: [...t.items, { kind: "stats", stats, stopReason, error }] };
+export function endTurn(t: Transcript, stats: TurnStats | null, stopReason: string | null, error: string | null, endedAt: number | null = Date.now()): Transcript {
+  return { inTurn: false, items: [...t.items, { kind: "stats", stats, stopReason, error, endedAt }] };
 }
 
 export function addNotice(t: Transcript, message: string): Transcript {
@@ -237,7 +244,7 @@ export function fromHistory(events: EventRecord[]): Transcript {
       t = beginTurn(t, prompt, previewsOfPrompt(blocks));
     } else if (e.kind === "frame_in" && msg.method === "session/update") {
       const params = msg.params as { update?: AcpUpdate } | undefined;
-      if (params?.update) t = applyUpdate(t, params.update);
+      if (params?.update) t = applyUpdate(t, params.update, e.ts || null);
     } else if (e.kind === "frame_in" && t.inTurn && msg.result && typeof msg.result === "object") {
       const result = msg.result as { stopReason?: string; usage?: Record<string, number> };
       if (typeof result.stopReason === "string") {
@@ -258,7 +265,7 @@ export function fromHistory(events: EventRecord[]): Transcript {
               estimated: false,
             }
           : null;
-        t = endTurn(t, stats, result.stopReason, null);
+        t = endTurn(t, stats, result.stopReason, null, e.ts || null);
       }
     }
   }

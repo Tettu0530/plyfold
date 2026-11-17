@@ -1,5 +1,5 @@
-import { ArrowUp, ChevronsUpDown } from "lucide-react";
-import { motion } from "motion/react";
+import { ArrowUp, ChevronsUpDown, CornerDownRight, ListOrdered, ListPlus, Paperclip, Square, X } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -17,8 +17,8 @@ import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 import type { Attached } from "@/lib/attachments";
 import { AttachBox, useAttachments } from "./Attachments";
 import { useAutoGrow } from "./autoGrow";
-import { isSendKey } from "@/lib/keys";
-import { useStore } from "@/state/store";
+import { isImeKey, isSendKey } from "@/lib/keys";
+import { useStore, type Queued } from "@/state/store";
 
 function option(info: SessionInfo | null, c: Category): ConfigOption | undefined {
   return info?.config.find((o) => o.category === c);
@@ -192,28 +192,91 @@ export function ControlRow({
   );
 }
 
+/** ターンの途中に送った指示の並び。ターンが終わると先頭から送る */
+function QueueList({ items, busy, onRemove, onSendNow }: { items: Queued[]; busy: boolean; onRemove: (key: string) => void; onSendNow: () => void }) {
+  return (
+    <AnimatePresence initial={false}>
+      {items.length > 0 && (
+        <motion.div key="queue" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={smooth} className="overflow-hidden">
+          <div className="flex flex-col gap-0.5 pb-1">
+            <div className="flex items-center gap-1.5 px-1.5 text-xs text-muted-foreground">
+              <ListOrdered className="size-3.5" aria-hidden />
+              {busy ? "ターンが終わったら送ります" : "送っていない指示"}
+              <span className="font-mono tabular">{items.length}</span>
+              {!busy && (
+                <button type="button" onClick={onSendNow} className="ml-auto flex h-6 items-center gap-1 rounded-md px-1.5 text-foreground hover:bg-accent">
+                  <ArrowUp className="size-3" aria-hidden />
+                  先頭を送る
+                </button>
+              )}
+            </div>
+            <AnimatePresence initial={false}>
+              {items.map((q) => (
+                <motion.div
+                  key={q.key}
+                  layout="position"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={smooth}
+                  className="flex h-7 items-center gap-2 rounded-md bg-card pr-0.5 pl-2.5"
+                >
+                  <CornerDownRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                  <span className="min-w-0 grow truncate">{q.text || q.attachments.map((a) => a.preview.name).join(" ")}</span>
+                  {q.attachments.length > 0 && <Paperclip className="size-3 shrink-0 text-muted-foreground" aria-label={`添えたもの ${q.attachments.length}`} />}
+                  <button
+                    type="button"
+                    aria-label="キューから外す"
+                    onClick={() => onRemove(q.key)}
+                    className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                    <X className="size-3" aria-hidden />
+                  </button>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 export function Composer({
   scope,
   agent,
   info,
   disabled,
+  busy = false,
   placeholder,
   onSend,
   onSet,
+  onStop,
+  queue = [],
+  onUnqueue,
+  onSendQueued,
 }: {
   scope: string;
   agent: string;
   info: SessionInfo | null;
   disabled: boolean;
+  /** ターンの途中（送るとキューに積む。文が空なら送るボタンは停止になる） */
+  busy?: boolean;
   placeholder: string;
   onSend: (text: string, attachments: Attached[]) => void;
   onSet: (c: Category, v: string) => void;
+  onStop?: () => void;
+  queue?: Queued[];
+  onUnqueue?: (key: string) => void;
+  onSendQueued?: () => void;
 }) {
   const [text, setText] = useState("");
   const att = useAttachments();
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
   const textRef = useAutoGrow(text);
   const canSend = !disabled && (!!text.trim() || att.items.length > 0);
+  // 途中で文が空なら、送るボタンは停止になる
+  const stopMode = busy && !text.trim() && att.items.length === 0 && !!onStop;
   const send = () => {
     if (!canSend) return;
     onSend(text.trim(), att.items);
@@ -225,6 +288,7 @@ export function Composer({
 
   return (
     <div className="flex shrink-0 flex-col gap-1 px-3 pb-3">
+      <QueueList items={queue} busy={busy} onRemove={(k) => onUnqueue?.(k)} onSendNow={() => onSendQueued?.()} />
       <ControlRow scope={scope} agent={agent} info={info} onSet={onSet} />
       <AttachBox att={att}>
         <textarea
@@ -238,6 +302,10 @@ export function Composer({
             if (isSendKey(e, sendKey)) {
               e.preventDefault();
               send();
+            } else if (e.key === "Escape" && busy && onStop && !isImeKey(e)) {
+              // 作業中は esc で中断（Claude Code と同じ）
+              e.preventDefault();
+              onStop();
             } else if (e.key === "Tab" && e.shiftKey && modes.length > 0) {
               e.preventDefault();
               const i = mode ? modes.indexOf(mode) : -1;
@@ -246,15 +314,28 @@ export function Composer({
           }}
           className="min-h-0 grow resize-none bg-transparent py-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
         />
-        <button
-          type="button"
-          aria-label="送る"
-          disabled={!canSend}
-          onClick={send}
-          className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground hover:bg-accent disabled:opacity-40"
-        >
-          <ArrowUp className="size-3.5" aria-hidden />
-        </button>
+        {stopMode ? (
+          <button
+            type="button"
+            aria-label="停止（esc）"
+            title="停止（esc）"
+            onClick={onStop}
+            className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            <Square className="size-3 fill-current" aria-hidden />
+          </button>
+        ) : (
+          <button
+            type="button"
+            aria-label={busy ? "キューに積む" : "送る"}
+            title={busy ? "キューに積む（ターンが終わったら送ります）" : undefined}
+            disabled={!canSend}
+            onClick={send}
+            className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground hover:bg-accent disabled:opacity-40"
+          >
+            {busy ? <ListPlus className="size-3.5" aria-hidden /> : <ArrowUp className="size-3.5" aria-hidden />}
+          </button>
+        )}
       </AttachBox>
     </div>
   );

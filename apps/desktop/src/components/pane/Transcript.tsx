@@ -21,7 +21,26 @@ function Stat({ icon: Icon, children, title, className }: { icon: typeof Gauge; 
 }
 
 /** ターンの真下に出す 1 行（tok/s、入力、出力、費用、時間） */
-export function TurnStatsRow({ stats, cost, error, stopReason }: { stats: TurnStats | null; cost?: string; error?: string | null; stopReason?: string | null }) {
+/** 答え終えた時刻。今日なら時刻だけ、ほかの日は日付も */
+function clock(ms: number): string {
+  const d = new Date(ms);
+  const hm = `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return d.toDateString() === new Date().toDateString() ? hm : `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
+}
+
+export function TurnStatsRow({
+  stats,
+  cost,
+  error,
+  stopReason,
+  endedAt,
+}: {
+  stats: TurnStats | null;
+  cost?: string;
+  error?: string | null;
+  stopReason?: string | null;
+  endedAt?: number | null;
+}) {
   if (error) return <p className="text-xs text-error">{error}</p>;
   return (
     <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground tabular">
@@ -40,6 +59,11 @@ export function TurnStatsRow({ stats, cost, error, stopReason }: { stats: TurnSt
       {cost && <Stat icon={Coins} title="このターンの費用">{cost}</Stat>}
       {stats && stats.elapsed_ms > 0 && <Stat icon={Clock} title="かかった時間">{seconds(stats.elapsed_ms)}</Stat>}
       {stopReason === "cancelled" && <span>停止しました</span>}
+      {endedAt != null && (
+        <time dateTime={new Date(endedAt).toISOString()} title="答え終えた時刻" className="ml-auto">
+          {clock(endedAt)}
+        </time>
+      )}
     </div>
   );
 }
@@ -164,7 +188,7 @@ export function Transcript({
           case "stats":
             return (
               <div key={i} className="flex flex-col gap-3">
-                <TurnStatsRow stats={b.stats} error={b.error} stopReason={b.stopReason} cost={undefined} />
+                <TurnStatsRow stats={b.stats} error={b.error} stopReason={b.stopReason} cost={undefined} endedAt={b.endedAt} />
                 {i < blocks.length - 1 && <div className="h-px bg-border" />}
               </div>
             );

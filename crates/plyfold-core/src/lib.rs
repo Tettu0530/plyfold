@@ -84,6 +84,8 @@ pub enum EngineEvent {
     Notice { session_id: String, message: String },
     /// 設定項目と使用量（変わるたびに全体を送る。流れている途中は 0.5 秒ごと）
     Info { session_id: String, info: Box<SessionInfo> },
+    /// エージェントが付けたタイトルで、セッションの名前が替わった
+    Renamed { session_id: String, title: String },
 }
 
 pub struct EngineOptions {
@@ -661,6 +663,13 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
                         live.info.lock().unwrap().live = Some(clock.live());
                         live_due = true;
                     }
+                }
+                // エージェントが付けたタイトル（Claude の session_info_update）。人が名前を変えていなければ書き換える
+                if update["sessionUpdate"] == "session_info_update"
+                    && let Some(title) = update["title"].as_str().map(str::trim).filter(|t| !t.is_empty())
+                    && matches!(inner.store.set_title_from_agent(&id, title), Ok(true))
+                {
+                    inner.emit(EngineEvent::Renamed { session_id: id.clone(), title: title.to_string() });
                 }
                 inner.emit(EngineEvent::Update { session_id: id.clone(), update: update.clone() });
                 if changed || live_due {

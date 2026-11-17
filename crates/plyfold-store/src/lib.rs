@@ -210,6 +210,13 @@ impl Store {
     fn init(conn: Connection) -> Result<Self, StoreError> {
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.execute_batch(SCHEMA)?;
+        // 後から足した列（古い記録にはない）
+        let has_lock: bool = conn
+            .prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'title_locked'")?
+            .exists([])?;
+        if !has_lock {
+            conn.execute_batch("ALTER TABLE sessions ADD COLUMN title_locked INTEGER NOT NULL DEFAULT 0")?;
+        }
         Ok(Self { conn: Mutex::new(conn) })
     }
 
@@ -310,6 +317,29 @@ impl Store {
         self.update(id, "title", &title)
     }
 
+    /// 人が名前を変えた。以後、エージェントが付けたタイトルでは書き換えない
+    pub fn rename_by_user(&self, id: &str, title: &str) -> Result<(), StoreError> {
+        let n = self
+            .conn
+            .lock()
+            .unwrap()
+            .execute("UPDATE sessions SET title = ?1, title_locked = 1, updated_at = ?2 WHERE id = ?3", params![title, now_ms(), id])?;
+        if n == 0 {
+            return Err(StoreError::NotFound(id.into()));
+        }
+        Ok(())
+    }
+
+    /// エージェントが付けたタイトル。人が名前を変えていなければ書き換える（並び順は変えない）。書き換えたら true
+    pub fn set_title_from_agent(&self, id: &str, title: &str) -> Result<bool, StoreError> {
+        let n = self
+            .conn
+            .lock()
+            .unwrap()
+            .execute("UPDATE sessions SET title = ?1 WHERE id = ?2 AND title_locked = 0 AND title <> ?1", params![title, id])?;
+        Ok(n > 0)
+    }
+
     /// 記録ごと消す（イベントも消える）
     pub fn delete_session(&self, id: &str) -> Result<(), StoreError> {
         self.conn.lock().unwrap().execute("DELETE FROM sessions WHERE id = ?1", [id])?;
@@ -393,6 +423,17 @@ mod tests {
         store
             .create_session(NewSession { title: title.into(), profile: "p".into(), agent: "mock".into(), ..Default::default() })
             .unwrap()
+    }
+
+    #[test]
+    fn agent_titles_do_not_override_user_names() {
+        let store = Store::open_in_memory().unwrap();
+        let s = new(&store, "最初の指示");
+        assert!(store.set_title_from_agent(&s.id, "リポジトリの概要").unwrap());
+        assert!(!store.set_title_from_agent(&s.id, "リポジトリの概要").unwrap(), "同じなら書き換えない");
+        store.rename_by_user(&s.id, "自分で付けた名前").unwrap();
+        assert!(!store.set_title_from_agent(&s.id, "別のタイトル").unwrap());
+        assert_eq!(store.get_session(&s.id).unwrap().title, "自分で付けた名前");
     }
 
     #[test]

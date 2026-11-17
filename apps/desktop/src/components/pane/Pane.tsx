@@ -50,7 +50,8 @@ function SessionPane({ index }: { index: number }) {
   const id = useStore((s) => s.panes[index]);
   const view = useStore((s) => (id ? s.sessions[id] : undefined));
   const focused = useStore((s) => s.focusedPane === index);
-  const { focusPane, closePane, sendPrompt, cancel, respondPermission, setCategory } = useStore.getState();
+  const { focusPane, closePane, sendPrompt, cancel, respondPermission, setCategory, enqueue, unqueue, sendQueued } = useStore.getState();
+  const queue = useStore((s) => (id ? s.queues[id] : undefined));
   const [diffStat, setDiffStat] = useState<{ added: number; removed: number } | null>(null);
   const openDiff = useStore((s) => s.openDiff);
   const diffActive = useLiquidActiveAnchors().has(`diff:${id}`);
@@ -150,17 +151,23 @@ function SessionPane({ index }: { index: number }) {
           const base = r.status === "closed" || r.status === "error" || r.status === "starting" ? (view.info ?? cached ?? null) : view.info;
           return base && Object.keys(view.pending).length > 0 ? withChoices(base, view.pending) : base;
         })()}
-        disabled={working}
+        disabled={r.status === "starting"}
+        busy={view.transcript.inTurn}
         placeholder={
           r.status === "closed" || r.status === "error"
             ? "送ると、エージェントを起動し直して続けます"
             : view.permission
-              ? "権限確認に答えると続きます"
-              : working
-                ? "作業中です（終わってから送れます）"
+              ? "権限確認に答えると続きます（送った指示は後で送ります）"
+              : view.transcript.inTurn
+                ? "作業中です。送った指示は、ターンが終わったら送ります"
                 : "指示を入力"
         }
-        onSend={(t, a) => void sendPrompt(id, t, a)}
+        // ターンの途中に送ったものは、キューに積んで後で送る
+        onSend={(t, a) => (view.transcript.inTurn ? enqueue(id, t, a) : void sendPrompt(id, t, a))}
+        onStop={() => void cancel(id)}
+        queue={queue ?? []}
+        onUnqueue={(k) => unqueue(id, k)}
+        onSendQueued={() => sendQueued(id)}
         onSet={(c, v) => void setCategory(id, c, v)}
       />
     </section>
