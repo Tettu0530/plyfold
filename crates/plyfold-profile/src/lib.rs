@@ -178,7 +178,7 @@ impl Config {
                 if link.symlink_metadata().is_ok() {
                     std::fs::remove_file(&link)?;
                 }
-                std::os::unix::fs::symlink(dest, &link)?;
+                link_to(&dest, &link)?;
             }
             env_summary.push(format!("{var}={}", profile_dir.display()));
             env_set.push((var.clone(), profile_dir.display().to_string()));
@@ -229,12 +229,29 @@ fn safe_rel(kind: &'static str, rel: &str) -> Result<PathBuf, ProfileError> {
 
 fn expand_home(p: &str) -> PathBuf {
     match p.strip_prefix("~/") {
-        Some(rest) => PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(rest),
+        Some(rest) => dirs::home_dir().unwrap_or_default().join(rest),
         None => PathBuf::from(p),
     }
 }
 
-/// Default state directory on macOS
+/// Make `link` point at `dest` (a profile's shared file or folder). A symlink on macOS; on Windows a symlink when the
+/// system allows it (Developer Mode or an administrator), else a copy of a file
+fn link_to(dest: &Path, link: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(dest, link)
+    }
+    #[cfg(windows)]
+    {
+        let made = if dest.is_dir() { std::os::windows::fs::symlink_dir(dest, link) } else { std::os::windows::fs::symlink_file(dest, link) };
+        match made {
+            Ok(()) => Ok(()),
+            Err(_) if dest.is_file() => std::fs::copy(dest, link).map(|_| ()),
+            Err(e) => Err(e),
+        }
+    }
+}
+
 /// Where Plyfold keeps its state: ~/Library/Application Support/plyfold on macOS, %APPDATA%\plyfold on Windows
 pub fn default_state_dir() -> PathBuf {
     dirs::data_dir().map(|d| d.join("plyfold")).unwrap_or_else(|| expand_home("~/.plyfold"))

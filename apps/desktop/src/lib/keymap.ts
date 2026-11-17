@@ -84,12 +84,14 @@ function keyOf(e: Pick<KeyboardEvent, "code">): string | null {
 
 type KeyEventLike = Pick<KeyboardEvent, "code" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">;
 
-/** The combo a keyboard event makes, or null if it is only a modifier (or a key we don't bind) */
-export function comboOf(e: KeyEventLike): string | null {
+/**
+ * The combo a keyboard event makes, or null if it is only a modifier (or a key we don't bind). `mac` defaults to the
+ * running OS: "cmd" is the primary modifier, ⌘ on macOS and Ctrl elsewhere (where Ctrl has no separate meaning)
+ */
+export function comboOf(e: KeyEventLike, mac = isMac): string | null {
   const key = keyOf(e);
   if (!key) return null;
-  // "cmd" is the primary modifier: ⌘ on macOS, Ctrl elsewhere (where Ctrl has no separate meaning)
-  const on = { cmd: isMac ? e.metaKey : e.ctrlKey, ctrl: isMac && e.ctrlKey, option: e.altKey, shift: e.shiftKey };
+  const on = { cmd: mac ? e.metaKey : e.ctrlKey, ctrl: mac && e.ctrlKey, option: e.altKey, shift: e.shiftKey };
   return [...MODS.filter((m) => on[m]), key].join("+");
 }
 
@@ -120,8 +122,8 @@ function validCombo(c: string): boolean {
 }
 
 /** The action a keyboard event triggers */
-export function actionFor(e: KeyEventLike, bindings: Bindings): Action | null {
-  const c = comboOf(e);
+export function actionFor(e: KeyEventLike, bindings: Bindings, mac = isMac): Action | null {
+  const c = comboOf(e, mac);
   if (!c) return null;
   return ACTIONS.find((a) => bindings[a] === c) ?? null;
 }
