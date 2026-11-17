@@ -300,7 +300,7 @@ links = { "auth.json" = "/nonexistent/auth.json" }
         let store = MemoryStore::from([("proxy/KEY", "sk-test-1234567890")]);
         let r = cfg.resolve("claude-proxy", &state, Path::new("/w"), &store).unwrap();
         let env: BTreeMap<_, _> = r.spawn.env_set.iter().cloned().collect();
-        let dir = state.join("profiles/claude-proxy");
+        let dir = state.join("profiles").join("claude-proxy");
         assert_eq!(env["CLAUDE_CONFIG_DIR"], dir.display().to_string());
         assert_eq!(env["ANTHROPIC_AUTH_TOKEN"], "sk-test-1234567890");
         assert_eq!(env["HOME_HINT"], format!("{}/x", dir.display()));
@@ -317,7 +317,7 @@ links = { "auth.json" = "/nonexistent/auth.json" }
         let cfg = Config::from_toml(TOML).unwrap();
         let store = MemoryStore::from([("codex-own/OPENAI_API_KEY", "sk-own-abcdefgh")]);
         cfg.resolve("codex-own", &state, Path::new("/w"), &store).unwrap();
-        let link = state.join("profiles/codex-own/auth.json");
+        let link = state.join("profiles").join("codex-own").join("auth.json");
         assert_eq!(std::fs::read_link(link).unwrap(), Path::new("/nonexistent/auth.json"));
     }
 
