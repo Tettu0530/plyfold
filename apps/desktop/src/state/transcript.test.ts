@@ -94,7 +94,7 @@ describe("transcript", () => {
       text: "これを見て",
       attachments: [
         { kind: "image", name: "a b.png", src: "data:image/png;base64,AAAA" },
-        { kind: "file", name: "notes.md" },
+        { kind: "file", name: "notes.md", path: "/tmp/notes.md" },
       ],
     });
   });

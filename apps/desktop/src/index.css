@@ -98,3 +98,31 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* 生成中の文字のきらめき（Claude の「考えています」と同じ: 明るい帯が文字の上を左から右へ流れる）。
+   作業中を示す印なので、飾りのループの禁止の例外（回る輪と同じ扱い）。色は本文と補足のトークンだけ */
+@layer components {
+  .shimmer {
+    background-image: linear-gradient(90deg, var(--muted-foreground) 0%, var(--muted-foreground) 40%, var(--foreground) 50%, var(--muted-foreground) 60%, var(--muted-foreground) 100%);
+    background-size: 250% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    animation: shimmer 2.2s linear infinite;
+  }
+  @keyframes shimmer {
+    from {
+      background-position: 100% 0;
+    }
+    to {
+      background-position: 0% 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .shimmer {
+      animation: none;
+      background-image: none;
+      color: var(--muted-foreground);
+    }
+  }
+}

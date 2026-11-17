@@ -126,7 +126,7 @@ function SessionPane({ index }: { index: number }) {
         </button>
       </div>
 
-      <Transcript items={view.transcript.items} info={view.info} streaming={r.status === "working"} />
+      <Transcript items={view.transcript.items} info={view.info} streaming={r.status === "working"} busy={view.transcript.inTurn} onResend={(t, a) => void sendPrompt(id, t, a)} />
 
       <div className="px-5">
         <AnimatePresence>

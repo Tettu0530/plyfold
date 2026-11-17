@@ -5,7 +5,9 @@ import { money, seconds, tokens } from "@/lib/format";
 import type { SessionInfo, TurnStats } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import type { ToolCall, TranscriptItem } from "@/state/transcript";
+import { resendable, type Attached } from "@/lib/attachments";
 import { SentAttachments } from "./Attachments";
+import { ActionRow, CopyButton, EditBox, UserActions, Working, workingLabel } from "./MessageActions";
 import { DiffBlock, ToolCalls } from "./ToolCall";
 
 function Stat({ icon: Icon, children, title, className }: { icon: typeof Gauge; children: React.ReactNode; title: string; className?: string }) {
@@ -59,7 +61,23 @@ function Thought({ text }: { text: string }) {
   );
 }
 
-export function Transcript({ items, info, streaming }: { items: TranscriptItem[]; info: SessionInfo | null; streaming: boolean }) {
+export function Transcript({
+  items,
+  info,
+  streaming,
+  busy = streaming,
+  onResend,
+}: {
+  items: TranscriptItem[];
+  info: SessionInfo | null;
+  streaming: boolean;
+  /** ターンの途中か（権限確認の待ちも含む）。途中は送り直せない */
+  busy?: boolean;
+  /** 自分の発言を（直して）新しいターンとして送る */
+  onResend?: (text: string, attachments: Attached[]) => void;
+}) {
+  // 編集している自分の発言（blocks の位置）
+  const [editing, setEditing] = useState<number | null>(null);
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
     end.current?.scrollIntoView({ block: "end" });
@@ -82,19 +100,47 @@ export function Transcript({ items, info, streaming }: { items: TranscriptItem[]
         switch (b.kind) {
           case "user":
             return (
-              <div key={i} className="flex max-w-[78%] flex-col items-end gap-1.5 self-end">
+              <div key={i} className={cn("group flex flex-col items-end gap-1.5 self-end", editing === i ? "w-[78%]" : "max-w-[78%]")}>
                 {b.attachments && <SentAttachments items={b.attachments} />}
-                {b.text && <div className="rounded-[10px] bg-muted px-3 py-1.5 leading-relaxed whitespace-pre-wrap select-text">{b.text}</div>}
+                {editing === i ? (
+                  <EditBox
+                    initial={b.text}
+                    onCancel={() => setEditing(null)}
+                    onSend={(t) => {
+                      setEditing(null);
+                      onResend?.(t, resendable(b.attachments ?? []));
+                    }}
+                  />
+                ) : (
+                  <>
+                    {b.text && <div className="rounded-[10px] bg-muted px-3 py-1.5 leading-relaxed whitespace-pre-wrap select-text">{b.text}</div>}
+                    {onResend && (
+                      <UserActions
+                        text={b.text}
+                        busy={busy}
+                        onEdit={() => setEditing(i)}
+                        onResend={() => onResend(b.text, resendable(b.attachments ?? []))}
+                      />
+                    )}
+                  </>
+                )}
               </div>
             );
           case "agent":
             return (
-              <p key={i} className="m-0 leading-[1.7] whitespace-pre-wrap select-text">
-                {b.text}
-                {streaming && i === blocks.length - 1 && (
-                  <span aria-hidden className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 rounded-[1px] bg-foreground" />
+              <div key={i} className="group flex flex-col gap-0.5">
+                <p className="m-0 leading-[1.7] whitespace-pre-wrap select-text">
+                  {b.text}
+                  {streaming && i === blocks.length - 1 && (
+                    <span aria-hidden className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 rounded-[1px] bg-foreground" />
+                  )}
+                </p>
+                {!(streaming && i === blocks.length - 1) && (
+                  <ActionRow align="start">
+                    <CopyButton text={b.text} />
+                  </ActionRow>
                 )}
-              </p>
+              </div>
             );
           case "thought":
             return <Thought key={i} text={b.text} />;
@@ -135,16 +181,21 @@ export function Transcript({ items, info, streaming }: { items: TranscriptItem[]
             );
         }
       })}
-      {streaming && info?.live && (
-        <TurnStatsRow
-          stats={{
-            usage: null,
-            elapsed_ms: info.live.elapsed_ms,
-            ttft_ms: info.live.ttft_ms,
-            tokens_per_sec: info.live.est_tokens_per_sec,
-            estimated: true,
-          }}
-        />
+      {streaming && (
+        <div className="flex items-center gap-3">
+          <Working label={workingLabel(items)} />
+          {info?.live && (
+            <TurnStatsRow
+              stats={{
+                usage: null,
+                elapsed_ms: info.live.elapsed_ms,
+                ttft_ms: info.live.ttft_ms,
+                tokens_per_sec: info.live.est_tokens_per_sec,
+                estimated: true,
+              }}
+            />
+          )}
+        </div>
       )}
       <div ref={end} />
       {info?.cost && <span className="sr-only">セッションの費用 {money(info.cost.amount, info.cost.currency)}</span>}
