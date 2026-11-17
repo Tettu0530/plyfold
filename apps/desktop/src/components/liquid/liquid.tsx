@@ -106,8 +106,12 @@ class AnchorBody {
   /** The neck broke: spring back from where the pull left the anchor */
   release(dir: Dir) {
     if (!this.el?.animate) return;
-    // Never weaker than the old fixed tug, so a quick separation still shows the anchor letting go
-    const from = this.holding ? this.last : { x: dir.x * 3, y: dir.y * 3, sx: 1 + 0.05 * Math.abs(dir.x), sy: 1 + 0.05 * Math.abs(dir.y) };
+    // At least a clear tug: menus that open over their own button break the neck almost at once, so the pull alone
+    // would leave the anchor barely moving
+    const ax = Math.abs(dir.x);
+    const ay = Math.abs(dir.y);
+    const base = { x: dir.x * 3.5, y: dir.y * 3.5, sx: 1 + 0.08 * ax - 0.03 * ay, sy: 1 + 0.08 * ay - 0.03 * ax };
+    const from = this.holding && Math.hypot(this.last.x, this.last.y) > 3.5 ? this.last : base;
     this.stop();
     const { easing, ms } = springToCss({ duration: 0.45, bounce: 0.45 });
     this.el.animate([{ transform: tf(from.x, from.y, from.sx, from.sy) }, { transform: tf(0, 0, 1, 1) }], { duration: ms, easing, composite: "add" });
@@ -117,14 +121,14 @@ class AnchorBody {
   absorb(dir: Dir, speed: number) {
     if (!this.el?.animate) return;
     this.stop();
-    const m = Math.min(1, Math.max(0.35, speed / 1200));
+    const m = Math.min(1, Math.max(0.6, speed / 1000));
     const ax = Math.abs(dir.x);
     const ay = Math.abs(dir.y);
     // Pushed away from the blob and squashed along the hit, bulging across it
-    const x = -dir.x * 4 * m;
-    const y = -dir.y * 4 * m;
-    const sx = 1 + m * (0.07 * ay - 0.1 * ax);
-    const sy = 1 + m * (0.07 * ax - 0.1 * ay);
+    const x = -dir.x * 5 * m;
+    const y = -dir.y * 5 * m;
+    const sx = 1 + m * (0.08 * ay - 0.12 * ax);
+    const sy = 1 + m * (0.08 * ax - 0.12 * ay);
     const { easing, ms } = springToCss({ duration: 0.5, bounce: 0.5 });
     this.el.animate([{ transform: tf(x, y, sx, sy) }, { transform: tf(0, 0, 1, 1) }], { duration: ms, easing, composite: "add" });
   }
@@ -396,12 +400,14 @@ export function useLiquidMorph(
               const sy = popScaleY.get();
               const cx = (L.get() + R.get()) / 2;
               const cy = (T.get() + B.get()) / 2;
-              // Don't merge while overlapping (exact overlap bulges the whole shape, making it look larger than the anchor)
-              const sep = separation(Math.hypot(cx - (a.l + a.r) / 2, cy - (a.t + a.b) / 2), Math.min(a.r - a.l, a.b - a.t));
               // When closing, widen the merge distance as it returns (gets sucked back in)
-              const k = (opening ? mergeAt(kMax, grown) : kMax * Math.min(1, Math.max(0, (grown - 0.25) / 0.5))) * sep;
+              const kBase = opening ? mergeAt(kMax, grown) : kMax * Math.min(1, Math.max(0, (grown - 0.25) / 0.5));
+              const thick = Math.min(a.r - a.l, a.b - a.t);
+              // Don't merge while overlapping (exact overlap bulges the whole shape, making it look larger than the anchor).
+              // The adhesion follows where the blob really is; the drawing follows the fused shape below
+              const kRaw = kBase * separation(Math.hypot(cx - (a.l + a.r) / 2, cy - (a.t + a.b) / 2), thick);
               const gap = rectGap(a, raw);
-              const pull = adh.update(dt, gap, k);
+              const pull = adh.update(dt, gap, kRaw);
               if (opening) {
                 tension.set(pull);
                 // While joined, the anchor itself is drawn toward the blob as the neck stretches
@@ -420,9 +426,26 @@ export function useLiquidMorph(
               }
               const hw = ((R.get() - L.get()) * sx) / 2;
               const hh = ((B.get() - T.get()) * sy) / 2;
+              const blob = { l: cx - hw, t: cy - hh, r: cx + hw, b: cy + hh, radius: rad.get() * Math.min(sx, sy) };
+              // Fusion: next to the button the blob takes the button's own shape (it reads its live rect, so it follows
+              // the button's tug and squash). Opening, it leaves from the button; closing, it becomes the button again,
+              // so no edge of it ever shows around the button behind it
+              const fuse = opening ? 1 - smoothstep(0, 0.3, grown) : smoothstep(0.6, 1, grown);
+              const fused =
+                fuse > 0
+                  ? {
+                      l: lerp(blob.l, a.l, fuse),
+                      t: lerp(blob.t, a.t, fuse),
+                      r: lerp(blob.r, a.r, fuse),
+                      b: lerp(blob.b, a.b, fuse),
+                      radius: lerp(blob.radius, anchorRadius, fuse),
+                    }
+                  : blob;
+              // Merge width for what is drawn: from the fused shape, so a blob that has become the button doesn't bulge
+              const k = kBase * separation(Math.hypot((fused.l + fused.r) / 2 - (a.l + a.r) / 2, (fused.t + fused.b) / 2 - (a.t + a.b) / 2), thick);
               return {
                 a: { ...a, radius: anchorRadius },
-                s: { l: cx - hw, t: cy - hh, r: cx + hw, b: cy + hh, radius: rad.get() * Math.min(sx, sy) },
+                s: fused,
                 k,
                 fillA,
                 fillS: parseColor(background.get()),
