@@ -118,6 +118,19 @@ async fn fork_keeps_the_conversation_and_leaves_uncommitted_files_behind() {
     assert!(matches!(eng.fork_session(&src.id, false).await, Err(CoreError::SharedWorkspace(_))));
     assert!(eng.store().events(&shared.id, None, 100).unwrap().iter().any(|e| e.payload.contains("同じ作業場所で分岐しました")));
 
+    // Deleting, cleaning up or discarding one session must not wipe the worktree the other still uses
+    std::fs::write(src_wt.join("keep.txt"), "shared\n").unwrap();
+    assert!(matches!(eng.discard(&src.id), Err(CoreError::SharedWorktree)));
+    assert!(src_wt.join("keep.txt").exists());
+    assert!(!eng.cleanup_worktree(&src.id).await.unwrap());
+    assert!(src_wt.join("keep.txt").exists());
+    assert_eq!(eng.store().get_session(&src.id).unwrap().worktree_path.as_deref(), src.worktree_path.as_deref());
+    eng.delete_session(&src.id, true).await.unwrap();
+    assert!(src_wt.exists());
+    assert!(eng.store().events(&shared.id, None, 100).unwrap().iter().any(|e| e.payload.contains("worktree と枝は残してあります")));
+    eng.delete_session(&shared.id, true).await.unwrap();
+    assert!(!src_wt.exists());
+
     eng.prompt(&forked.id, "after").unwrap();
     wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { session_id, .. } if session_id == &forked.id)).await;
 }

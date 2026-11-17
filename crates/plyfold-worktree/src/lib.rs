@@ -72,6 +72,14 @@ pub fn repo_root(dir: &Path) -> Result<PathBuf, WorktreeError> {
     git(dir, &["rev-parse", "--show-toplevel"]).map(|s| PathBuf::from(s.trim())).map_err(|_| WorktreeError::NotARepo(dir.to_path_buf()))
 }
 
+/// The commit HEAD points at. None when the directory is not a repository, or has no commits yet.
+/// Uses the same git helper as the other worktree operations
+pub fn head(dir: &Path) -> Option<String> {
+    let s = git(dir, &["rev-parse", "--verify", "HEAD"]).ok()?;
+    let s = s.trim();
+    (!s.is_empty()).then(|| s.to_string())
+}
+
 /// Manages where worktrees are placed
 pub struct Worktrees {
     root: PathBuf,
@@ -186,6 +194,7 @@ mod tests {
         let wts = Worktrees::new(base.join("wts"));
 
         let wt = wts.create(&repo.join("."), "s1", None).unwrap();
+        assert_eq!(head(&repo).as_deref(), Some(wt.base.as_str()));
         assert_eq!(wt.repo, repo);
         assert!(wt.path.join("a.txt").exists());
         assert_eq!(wt.branch, "plyfold/s1");
@@ -217,5 +226,6 @@ mod tests {
     fn not_a_repo() {
         let d = tmp("norepo");
         assert!(matches!(Worktrees::new(d.join("w")).create(&d, "s", None), Err(WorktreeError::NotARepo(_))));
+        assert!(head(&d).is_none());
     }
 }

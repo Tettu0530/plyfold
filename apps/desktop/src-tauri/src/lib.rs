@@ -547,16 +547,18 @@ struct MergeResult {
 async fn merge_session(state: State<'_, AppState>, id: String) -> CmdResult<MergeResult> {
     let target = state.engine.merge(&id).map_err(err)?;
     let cleanup = state.settings.read().unwrap().cleanup_after_merge;
-    if cleanup {
+    let cleaned = if cleanup {
         state.engine.cleanup_worktree(&id).await.map_err(|e| {
             plyfold_i18n::tr!(
                 "{target} には取り込みましたが、片付けに失敗しました: {e}",
                 "Merged into {target}, but cleanup failed: {e}",
                 "已合并到 {target}，但清理失败：{e}"
             )
-        })?;
-    }
-    Ok(MergeResult { target, cleaned: cleanup })
+        })?
+    } else {
+        false
+    };
+    Ok(MergeResult { target, cleaned })
 }
 
 /// Git commands run git (and the network for fetch / push / pull / gh) synchronously, so keep them off the async workers

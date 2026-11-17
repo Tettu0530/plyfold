@@ -6,7 +6,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ### Sessions
 
-- Fork a session from its sidebar menu. The new session keeps the conversation, in its own worktree or, once the source agent has stopped, in the same workspace
+- Fork a session from its sidebar menu. The new session keeps the conversation, in its own worktree or, once the source agent has stopped, in the same workspace. A shared worktree is removed only with the last session that uses it, and discarding its changes is refused while another session still uses it
 
 ## [0.1.0] - 2026-11-17
 

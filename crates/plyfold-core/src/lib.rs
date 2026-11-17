@@ -68,6 +68,15 @@ pub enum CoreError {
         )
     )]
     SharedWorkspace(String),
+    #[error(
+        "{}",
+        plyfold_i18n::tr!(
+            "この worktree は別のセッションも使っています。そちらのセッションを消すまで、変更は破棄できません",
+            "Another session still uses this worktree, so these changes cannot be discarded yet",
+            "另一个会话仍在使用此 worktree，因此现在不能放弃这些更改"
+        )
+    )]
+    SharedWorktree,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -369,7 +378,7 @@ impl Engine {
 
         let cwd = if new_worktree {
             let at = src.worktree_path.as_deref().unwrap_or(repo.as_str());
-            let base = head_commit(Path::new(at)).or(src.base_ref.clone());
+            let base = plyfold_worktree::head(Path::new(at)).or(src.base_ref.clone());
             match inner.worktrees.create(Path::new(&repo), &rec.id, base.as_deref()) {
                 Ok(wt) => {
                     inner.store.set_workspace(
@@ -688,12 +697,25 @@ impl Engine {
         Ok(())
     }
 
-    /// Delete the session and its record. With `remove_worktree`, also delete the worktree and branch (work is lost)
+    /// Delete the session and its record. With `remove_worktree`, also delete the worktree and branch (work is lost),
+    /// unless another session still uses that worktree: then only the record goes, and the others are told it was kept
     pub async fn delete_session(&self, id: &str, remove_worktree: bool) -> Result<(), CoreError> {
         let rec = self.inner.store.get_session(id)?;
         self.close_session(id).await?;
         if remove_worktree && let Some(wt) = worktree_of(&rec) {
-            self.inner.worktrees.remove(&wt, true)?;
+            let others = rec.worktree_path.as_deref().map(|path| sessions_sharing_worktree(&self.inner, id, path)).transpose()?.unwrap_or_default();
+            if others.is_empty() {
+                self.inner.worktrees.remove(&wt, true)?;
+            } else {
+                let note = plyfold_i18n::tr!(
+                    "同じ worktree のセッションを消しました。このセッションが使っているので、worktree と枝は残してあります",
+                    "A session that shared this worktree was deleted. The worktree and branch were kept, because this session still uses them",
+                    "已删除一个共用此 worktree 的会话。此会话仍在使用，因此保留了 worktree 和分支"
+                );
+                for other in &others {
+                    self.inner.notice(other, note.clone());
+                }
+            }
         }
         self.inner.store.delete_session(id)?;
         Ok(())
@@ -799,16 +821,29 @@ impl Engine {
         Ok(plyfold_worktree::ops::open_in_editor(&wt, prefer)?)
     }
 
-    /// Cleanup after merging: stop the agent and delete the worktree and branch. The record stays; reopening runs in the original repository
-    pub async fn cleanup_worktree(&self, id: &str) -> Result<(), CoreError> {
+    /// Cleanup after merging: stop the agent and delete the worktree and branch. The record stays; reopening runs in the original repository.
+    /// Returns whether the worktree was actually removed. It is kept, and this session stays on it, while another session still uses it
+    pub async fn cleanup_worktree(&self, id: &str) -> Result<bool, CoreError> {
         let rec = self.inner.store.get_session(id)?;
         let wt = worktree_of(&rec).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
+        let others = rec.worktree_path.as_deref().map(|path| sessions_sharing_worktree(&self.inner, id, path)).transpose()?.unwrap_or_default();
         self.close_session(id).await?;
+        if !others.is_empty() {
+            self.inner.notice(
+                id,
+                plyfold_i18n::tr!(
+                    "別のセッションが同じ worktree を使っているので、worktree と枝は残しました",
+                    "Kept the worktree and branch, because another session still uses them",
+                    "另一个会话仍在使用同一 worktree，因此保留了 worktree 和分支"
+                ),
+            );
+            return Ok(false);
+        }
         self.inner.worktrees.remove(&wt, true)?;
         self.inner.store.set_workspace(id, rec.repo_path.as_deref(), None, None, None)?;
         self.inner
             .notice(id, plyfold_i18n::tr!("worktree と枝 {} を片付けました", "Removed the worktree and branch {}", "已清理 worktree 和分支 {}", wt.branch));
-        Ok(())
+        Ok(true)
     }
 
     /// Change the no-response timeout (takes effect from the next watchdog check)
@@ -816,8 +851,14 @@ impl Engine {
         self.inner.stall_after_ms.store(d.as_millis() as u64, Ordering::SeqCst);
     }
 
-    /// Reset the working tree to the base commit
+    /// Reset the working tree to the base commit. Refused while another session uses the same worktree, so its files are not wiped
     pub fn discard(&self, id: &str) -> Result<(), CoreError> {
+        let rec = self.inner.store.get_session(id)?;
+        if let Some(path) = rec.worktree_path.as_deref()
+            && !sessions_sharing_worktree(&self.inner, id, path)?.is_empty()
+        {
+            return Err(CoreError::SharedWorktree);
+        }
         let wt = self.idle_worktree(id)?;
         plyfold_worktree::ops::discard(&wt)?;
         self.inner.notice(
@@ -839,15 +880,10 @@ fn workspace_in_use(inner: &Inner, dir: &str) -> bool {
     running.into_iter().any(|other| inner.store.get_session(&other).ok().and_then(|r| r.worktree_path.or(r.repo_path)).is_some_and(|path| path == dir))
 }
 
-/// HEAD of a worktree, so a fork branches from the source's latest commit rather than its original base
-fn head_commit(dir: &Path) -> Option<String> {
-    let out = std::process::Command::new("git").args(["rev-parse", "--verify", "HEAD"]).current_dir(dir).output().ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let s = String::from_utf8(out.stdout).ok()?;
-    let s = s.trim();
-    (!s.is_empty()).then(|| s.to_string())
+/// Other sessions whose worktree is this directory. A store error is returned rather than treated as "nobody",
+/// which would otherwise delete a worktree that is still in use
+fn sessions_sharing_worktree(inner: &Inner, id: &str, worktree_path: &str) -> Result<Vec<String>, CoreError> {
+    Ok(inner.store.list_sessions()?.into_iter().filter(|s| s.id != id && s.worktree_path.as_deref() == Some(worktree_path)).map(|s| s.id).collect())
 }
 
 fn worktree_of(rec: &SessionRecord) -> Option<Worktree> {
