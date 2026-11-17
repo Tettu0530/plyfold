@@ -2,7 +2,7 @@
 
 ## Decisions
 
-- **macOS only** to start with
+- **macOS first**; Windows is supported too (credentials in the Credential Manager, state in %APPDATA%, Ctrl as the primary modifier)
 - **The UI is fully custom** (Tauri + our own UI). We do not use the native Liquid Glass: it cannot be used throughout a WebView, so it would end up half-applied
 - **We do not write our own agent loop**. Plyfold is an ACP client that drives existing CLIs (Claude Code, Codex, OpenCode, Gemini CLI) behind the scenes
 - **Registering multiple API keys for one CLI is a core requirement**

@@ -26,13 +26,15 @@ import { currentBindings } from "./state/keys";
 import { nextScale } from "./lib/scale";
 import { BrowserButton } from "./components/BrowserButton";
 import { PlyfoldMark } from "./components/Logo";
+import { isMac, primaryKey } from "./lib/platform";
+import { cn } from "./lib/utils";
 
 function useShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const s = useStore.getState();
       // ⌘1–⌘9 focus panes in layout order (left to right, top to bottom); fixed, not in the keymap
-      if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
+      if (primaryKey(e) && !(isMac ? e.ctrlKey : e.metaKey) && !e.altKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
         const slot = leaves(s.layout)[Number(e.code.slice(5)) - 1];
         if (slot !== undefined) {
           e.preventDefault();
@@ -104,7 +106,8 @@ export default function App() {
     <MotionConfig reducedMotion={reduceMotion === "reduce" ? "always" : "user"}>
       <TooltipProvider>
         <div className="flex h-full flex-col">
-          <header data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-2 border-b pr-2 pl-[84px]">
+          {/* On macOS the window's traffic lights sit over the header's left end; Windows has a regular title bar */}
+          <header data-tauri-drag-region className={cn("flex h-10 shrink-0 items-center gap-2 border-b pr-2", isMac ? "pl-[84px]" : "pl-2")}>
             <button
               type="button"
               aria-label={sidebarOpen ? t("app.hideSidebar") : t("app.showSidebar")}

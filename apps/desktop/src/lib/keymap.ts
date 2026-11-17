@@ -1,4 +1,7 @@
+import { isMac } from "./platform";
+
 // Keyboard shortcuts that can be changed in Settings.
+// "cmd" means the primary modifier: ⌘ on macOS, Ctrl on Windows (shortcuts carry over between the two).
 //
 // A combo is written "cmd+shift+\\": modifiers in a fixed order (cmd, ctrl, option, shift) and then one key. Keys come
 // from KeyboardEvent.code (the physical key), so ⌥ and ⇧ don't change which key was pressed; the ¥ key on Japanese
@@ -85,7 +88,8 @@ type KeyEventLike = Pick<KeyboardEvent, "code" | "metaKey" | "ctrlKey" | "altKey
 export function comboOf(e: KeyEventLike): string | null {
   const key = keyOf(e);
   if (!key) return null;
-  const on = { cmd: e.metaKey, ctrl: e.ctrlKey, option: e.altKey, shift: e.shiftKey };
+  // "cmd" is the primary modifier: ⌘ on macOS, Ctrl elsewhere (where Ctrl has no separate meaning)
+  const on = { cmd: isMac ? e.metaKey : e.ctrlKey, ctrl: isMac && e.ctrlKey, option: e.altKey, shift: e.shiftKey };
   return [...MODS.filter((m) => on[m]), key].join("+");
 }
 

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { isMac } from "@/lib/platform";
 
 // Show key combinations as icons (.claude/skills/no-ai-slop-ui, section 6: copy)
 const ICONS: Record<string, { Icon: LucideIcon; label: string }> = {
@@ -29,15 +30,19 @@ const ICONS: Record<string, { Icon: LucideIcon; label: string }> = {
 };
 
 const TEXT: Record<string, string> = { esc: "esc", ",": ",", ".": "." };
+// Windows and Linux name their modifiers in words ("cmd" is the primary modifier, Ctrl there)
+const OTHER_OS: Record<string, string> = { cmd: "Ctrl", option: "Alt", ctrl: "Ctrl" };
+const iconFor = (k: string) => (isMac || !OTHER_OS[k] ? ICONS[k] : undefined);
+const textFor = (k: string) => (!isMac && OTHER_OS[k]) || TEXT[k] || k.toUpperCase();
 
 /** e.g. <Keys keys={["cmd", "k"]} /> */
 export function Keys({ keys, className, onPrimary }: { keys: string[]; className?: string; onPrimary?: boolean }) {
   if (keys.length === 0) return null;
-  const label = keys.map((k) => ICONS[k]?.label ?? (TEXT[k] ?? k).toUpperCase()).join("+");
+  const label = keys.map((k) => iconFor(k)?.label ?? textFor(k)).join("+");
   return (
     <kbd aria-label={label} className={cn("inline-flex shrink-0 items-center gap-0.5", className)}>
       {keys.map((k) => {
-        const icon = ICONS[k];
+        const icon = iconFor(k);
         return (
           <span
             key={k}
@@ -47,7 +52,7 @@ export function Keys({ keys, className, onPrimary }: { keys: string[]; className
               onPrimary ? "border-current/25 opacity-70" : "border-border text-muted-foreground",
             )}
           >
-            {icon ? <icon.Icon className="size-2.5" strokeWidth={2.25} /> : (TEXT[k] ?? k.toUpperCase())}
+            {icon ? <icon.Icon className="size-2.5" strokeWidth={2.25} /> : textFor(k)}
           </span>
         );
       })}
