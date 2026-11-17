@@ -116,7 +116,7 @@ export function ControlRow({
   onSet,
   empty,
   scope,
-  noMode = false,
+  noPickers = false,
 }: {
   agent: string;
   info: SessionInfo | null;
@@ -125,18 +125,19 @@ export function ControlRow({
   empty?: string;
   /** Per-pane name for the separation animation's origin (session or draft id) */
   scope: string;
-  /** No mode picker (a side chat is read-only whatever the mode) */
-  noMode?: boolean;
+  /** No model, effort or mode pickers (the side chat), only the context meter */
+  noPickers?: boolean;
 }) {
   const t = useT();
   const raised = useLiquidActiveAnchors();
   const modelMenu = useLiquidMenu(`menu:${scope}:model`, `${scope}:model`);
   const effortMenu = useLiquidMenu(`menu:${scope}:effort`, `${scope}:effort`);
   const modeMenu = useLiquidMenu(`menu:${scope}:mode`, `${scope}:mode`);
-  const model = option(info, "model");
-  const effort = option(info, "thought_level");
+  // The side chat keeps the main session's model and effort: changing them would drop the prompt cache it shares
+  const model = noPickers ? null : option(info, "model");
+  const effort = noPickers ? null : option(info, "thought_level");
   const mode = currentMode(info);
-  const modes = noMode ? [] : modeChoices(info);
+  const modes = noPickers ? [] : modeChoices(info);
   const ctxPct = info?.context_used != null && info.context_size ? Math.round((info.context_used / info.context_size) * 100) : null;
 
   return (
@@ -330,7 +331,7 @@ export function Composer({
   onSendQueued,
   root = null,
   commands,
-  noMode = false,
+  noPickers = false,
 }: {
   scope: string;
   agent: string;
@@ -349,8 +350,8 @@ export function Composer({
   root?: string | null;
   /** Slash commands to complete after "/" */
   commands?: SlashCommand[];
-  /** Hide the mode picker and its ⇧⇥ (the side chat) */
-  noMode?: boolean;
+  /** Hide the model, effort and mode pickers, and ⇧⇥ (the side chat) */
+  noPickers?: boolean;
 }) {
   const t = useT();
   const [text, setText] = useState("");
@@ -382,14 +383,14 @@ export function Composer({
     setText("");
     att.clear();
   };
-  const modes = noMode ? [] : modeChoices(info);
+  const modes = noPickers ? [] : modeChoices(info);
   const mode = currentMode(info);
 
   return (
     // Same width as the conversation above in a wide pane (its edges line up with the messages, as in a narrow one)
     <div className="flex shrink-0 flex-col gap-1 px-[max(0.75rem,calc((100%_-_53rem)/2))] pb-3">
       <QueueList items={queue} busy={busy} onRemove={(k) => onUnqueue?.(k)} onSendNow={() => onSendQueued?.()} />
-      <ControlRow scope={scope} agent={agent} info={info} onSet={onSet} noMode={noMode} />
+      <ControlRow scope={scope} agent={agent} info={info} onSet={onSet} noPickers={noPickers} />
       <MentionMenu m={mention} boxRef={att.boxRef} />
       <SlashMenu m={slash} boxRef={att.boxRef} />
       <AttachBox att={att}>

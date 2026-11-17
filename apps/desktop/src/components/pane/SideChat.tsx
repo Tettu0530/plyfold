@@ -1,7 +1,7 @@
 // The side chat: a read-only fork of the session beside it, for questions that should not enter the main conversation.
 // It opens as a column at the pane's right edge (its width springs, so the main conversation reflows rather than scales)
 
-import { LoaderCircle, MessageCircleQuestionMark, RefreshCw, X } from "lucide-react";
+import { MessageCircleQuestionMark, RefreshCw, X } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -11,6 +11,7 @@ import { useStore } from "@/state/store";
 import { smooth } from "../motion";
 import { Composer } from "./Composer";
 import { Transcript } from "./Transcript";
+import { Spinner } from "../icons";
 
 /** The column's width: about 40% of the pane, between 280 and 420 px */
 function useColumnWidth(pane: React.RefObject<HTMLElement | null>) {
@@ -131,7 +132,7 @@ function SideChatBody({ mainId }: { mainId: string }) {
         <p className="m-3 text-xs whitespace-pre-wrap text-error">{side.error}</p>
       ) : !view || !r ? (
         <p className="m-auto flex items-center gap-2 text-xs text-muted-foreground">
-          <LoaderCircle className="size-3.5 animate-spin" aria-hidden />
+          <Spinner className="size-3.5" aria-hidden />
           {t("side.starting")}
         </p>
       ) : (
@@ -156,7 +157,7 @@ function SideChatBody({ mainId }: { mainId: string }) {
             onStop={() => void cancel(r.id)}
             root={r.worktree_path ?? r.repo_path}
             commands={view.info?.commands ?? []}
-            noMode
+            noPickers
             onSet={(c, v) => void setCategory(r.id, c, v)}
           />
         </>

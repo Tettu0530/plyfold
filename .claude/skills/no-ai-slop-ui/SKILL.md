@@ -27,7 +27,7 @@ Do not ship anything that breaks the rules below unless you can explain why.
   - Working = emerald `#34d399`, waiting for permission = amber `#fbbf24`, stalled = orange `#fb923c`, error = red `#f87171`, idle / stopped = neutral
   - Added = emerald tones, removed = red tones
 - Never convey state by color alone. Always add a **per-state icon** and text
-  - Working = spinning ring (loader-circle), waiting for permission = shield, stalled = hourglass, error = circle with ×, idle = circle, stopped = square
+  - Working = the twelve-bar spinner (`Spinner` in `components/icons.tsx`: short bars around a circle that fade in turn), waiting for permission = shield, stalled = hourglass, error = circle with ×, idle = circle, stopped = square
 - Don't invent new brand colors. At most one accent color
 
 ## 2. Banned (typical AI slop)
@@ -94,7 +94,7 @@ Prioritize **moving the way Apple's UI moves** over the glass look. The implemen
   - Swapping (replacing a pane's session with another session): the original session starts returning to its row first, and the new session bursts out 140ms later
   - Where it is used: search (⌘K), opening and closing sessions (sidebar row ↔ pane), new session (button → empty pane)
   - When creating a new surface, first consider whether it can open inside an existing screen rather than as a modal (a new session is an empty pane, not a modal)
-- Animate only meaningful changes. Decorative looping animations are banned (except the spinning ring for "working")
+- Animate only meaningful changes. Decorative looping animations are banned (except the spinner for "working")
 - Don't animate when macOS "Reduce motion" is on (Motion's `reducedMotion="user"`; in CSS, a 150ms fade)
 - Animate only transform and opacity. Don't animate width / height / top / left directly
   - **Exception: when a region containing text changes size** (e.g. splitting panes), don't use Motion's `layout` (it scales, so the contents stretch). Spring the actual width and height and re-lay out the contents every frame (like Apple's Split View). For rows that only change position when reordered, use `layout="position"`

@@ -2,7 +2,7 @@
 // its upstream, the commits on it, and the pull request, with fetch / push / pull. (Commit, merge, discard and creating a
 // PR are at the bottom of the changes view.) The info refreshes when the pane opens, when a turn ends and after each
 // action; opening the view also fetches from the remote if that hasn't happened for a while
-import { ArrowDown, ArrowUp, Check, CircleDot, ExternalLink, GitBranch, GitMerge, GitPullRequest, LoaderCircle, RefreshCw, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, CircleDot, ExternalLink, GitBranch, GitMerge, GitPullRequest, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useT } from "@/i18n";
@@ -11,6 +11,7 @@ import { age } from "@/lib/format";
 import type { GitInfo, PullRequest } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
+import { Spinner } from "../icons";
 
 /** Fetch again on open when the last fetch is older than this */
 const STALE_FETCH_S = 5 * 60;
@@ -93,7 +94,7 @@ export function GitPanel({ id, git, busy, title }: { id: string; git: GitState; 
   const page = info.web_url && info.branch ? `${info.web_url}/tree/${info.branch.split("/").map(encodeURIComponent).join("/")}` : info.web_url;
   const btn = "flex h-7 items-center gap-1.5 rounded-md border border-input px-2 text-xs hover:bg-accent disabled:pointer-events-none disabled:opacity-40";
   const spin = (a: Action, Icon: typeof RefreshCw) =>
-    running === a ? <LoaderCircle className="size-3.5 animate-spin" aria-hidden /> : <Icon className="size-3.5" aria-hidden />;
+    running === a ? <Spinner className="size-3.5" aria-hidden /> : <Icon className="size-3.5" aria-hidden />;
 
   return (
     <div className="flex flex-col gap-2 px-1.5 pb-1">

@@ -1,5 +1,5 @@
 // A tool call in the transcript. Click the row to reveal the command and its result (progressive disclosure)
-import { Check, ChevronRight, CircleX, FileText, LoaderCircle, Pencil, Search, SquareTerminal, Wrench } from "lucide-react";
+import { Check, ChevronRight, CircleX, FileText, Pencil, Search, SquareTerminal, Wrench } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import type { DiffPreview, ToolCall } from "@/state/transcript";
 import { smooth, snappy } from "../motion";
 import { Unified } from "../PatchLines";
+import { Spinner } from "../icons";
 
 const TOOL_ICONS: Record<string, typeof FileText> = {
   read: FileText,
@@ -45,7 +46,7 @@ function Status({ t }: { t: ToolCall }) {
   if (running)
     return (
       <span className="flex items-center gap-1 text-xs text-working">
-        <LoaderCircle className="size-3.5 animate-spin" aria-hidden />
+        <Spinner className="size-3.5" aria-hidden />
         {tr("transcript.toolRunning")}
         {time}
       </span>

@@ -1,7 +1,7 @@
 // Pane header buttons: plan, background shells, touched files (the preview is in the app header, BrowserButton; Git and
 // the changes are one view, opened from the button next to these). Click to show the contents in a liquid menu
 // Always shown (so you know where they are). With nothing inside, only the icon is shown, no count
-import { Check, Circle, CircleHelp, CircleX, FileText, Globe, ListChecks, LoaderCircle, Pencil, SquareStop, SquareTerminal } from "lucide-react";
+import { Check, Circle, CircleHelp, CircleX, FileText, Globe, ListChecks, Pencil, SquareStop, SquareTerminal } from "lucide-react";
 import { createContext, useContext, useMemo, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -14,6 +14,7 @@ import { useStore } from "@/state/store";
 import type { TranscriptItem } from "@/state/transcript";
 import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
+import { Spinner } from "../icons";
 
 const TRIGGER =
   "relative flex h-6 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground";
@@ -79,7 +80,7 @@ function Empty({ children }: { children: React.ReactNode }) {
 const relative = (path: string, base: string | null) => (base && path.startsWith(`${base}/`) ? path.slice(base.length + 1) : path);
 
 const SHELL: Record<ShellState, { label: MessageKey; Icon: typeof Check; className: string; spin?: boolean }> = {
-  running: { label: "pane.shellRunning", Icon: LoaderCircle, className: "text-working", spin: true },
+  running: { label: "pane.shellRunning", Icon: Spinner, className: "text-working" },
   done: { label: "pane.shellDone", Icon: Check, className: "text-muted-foreground" },
   failed: { label: "pane.shellFailed", Icon: CircleX, className: "text-error" },
   stopped: { label: "pane.shellStopped", Icon: SquareStop, className: "text-muted-foreground" },
@@ -129,7 +130,7 @@ function ShellRow({ s, anchor }: { s: BackgroundShell; anchor: string }) {
 
 const PLAN_ICON: Record<string, { Icon: typeof Check; className: string; spin?: boolean }> = {
   completed: { Icon: Check, className: "text-muted-foreground" },
-  in_progress: { Icon: LoaderCircle, className: "text-working", spin: true },
+  in_progress: { Icon: Spinner, className: "text-working" },
   pending: { Icon: Circle, className: "text-muted-foreground" },
 };
 

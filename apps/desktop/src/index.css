@@ -136,6 +136,19 @@
       color: var(--muted-foreground);
     }
   }
+  /* The working spinner: twelve bars around a circle, each fading in turn (it only changes opacity, so it stays on with
+     Reduce motion, like the system's activity indicator) */
+  .spinner-bar {
+    animation: spinner-fade 1.2s linear infinite;
+  }
+  @keyframes spinner-fade {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0.15;
+    }
+  }
   /* Settings → Reduce motion */
   .reduce-motion .shimmer {
     animation: none;
