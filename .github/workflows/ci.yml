@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,38 +14,93 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  test:
-    name: Test (macOS)
+  rust:
+    name: Rust (macOS)
+    # The app and its tests are macOS only (Keychain, sw_vers, open)
     runs-on: macos-latest
+    timeout-minutes: 30
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
 
-      - name: Rust tests
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Tests
         run: cargo test --workspace --locked
 
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - name: Check out
+        uses: actions/checkout@v5
+
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: apps/desktop/package-lock.json
 
-      - name: Install frontend dependencies
-        working-directory: apps/desktop
+      - name: Install dependencies
         run: npm ci
 
+      - name: Format
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
       - name: Type check
-        working-directory: apps/desktop
+        # Also checks that every translation has the same keys as the Japanese source
         run: npx tsc --noEmit -p .
 
-      - name: Frontend tests
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: npx vite build
+
+  dependencies:
+    name: Dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@v5
+
+      # Known vulnerabilities, licenses and sources of the Rust dependencies (deny.toml)
+      - name: cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories licenses bans sources
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      # Known vulnerabilities in what ships with the app (dev tools are left out)
+      - name: npm audit
         working-directory: apps/desktop
-        run: npx vitest run
+        run: npm audit --omit=dev --audit-level=high

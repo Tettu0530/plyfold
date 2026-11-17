@@ -1,0 +1,5 @@
+# Formatting commits, skipped by `git blame` on GitHub (locally: git config blame.ignoreRevsFile .git-blame-ignore-revs)
+# Format Rust with rustfmt
+7b042e76d2882a7fb685608e0555f29599185879
+# Format the frontend with Prettier
+b7e14046ac6ffdff951d77618ebd816fe782a76d

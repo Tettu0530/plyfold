@@ -1,0 +1,38 @@
+# cargo-deny (CI: Dependencies job). Plyfold ships for macOS only, so only those targets are checked
+[graph]
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin"]
+
+[advisories]
+version = 2
+
+[licenses]
+version = 2
+# Licenses the dependencies use today, all fine inside an MIT app (MPL-2.0 is file-level copyleft and fine unmodified).
+# Add one here only after checking it
+allow = [
+  "MIT",
+  "MIT-0",
+  "Apache-2.0",
+  "BSD-3-Clause",
+  "Zlib",
+  "0BSD",
+  "CC0-1.0",
+  "Unlicense",
+  "Unicode-3.0",
+  "MPL-2.0",
+]
+confidence-threshold = 0.8
+
+[licenses.private]
+# The workspace's own crates (publish = false)
+ignore = true
+
+[bans]
+# Tauri pulls several versions of some crates; that is not a problem by itself
+multiple-versions = "allow"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

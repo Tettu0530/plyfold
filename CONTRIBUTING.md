@@ -66,21 +66,26 @@ The UI talks only to `plyfold-core` (through the Tauri commands in `apps/desktop
 
 ## Checks
 
-Run these before opening a pull request. CI runs the same tests on macOS.
+Run these before opening a pull request. CI runs the same checks (Rust on macOS, the frontend on Linux) and fails on any warning.
 
 From the repository root:
 
 ```sh
-cargo check --workspace
+cargo fmt --all
+cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
 From `apps/desktop`:
 
 ```sh
+npm run format
+npm run lint
 npx tsc --noEmit -p .
-npx vitest run
+npm test
 ```
+
+CI also checks the dependencies: `cargo deny check` (known vulnerabilities, licenses and sources, configured in `deny.toml`) and `npm audit` for what ships with the app. A new Rust dependency with a license that isn't in `deny.toml` needs a look before it is added there.
 
 Add tests with your change where it makes sense. Rust unit tests live next to the code; engine tests that use the mock agent are in `crates/plyfold-core/tests/`. Frontend tests are `*.test.ts` files next to the code they test.
 
@@ -122,7 +127,7 @@ It also works inside `#[error(...)]` for `thiserror`. Developer-only output (log
 
 ### Rust
 
-- Match the style of the surrounding code. The code is not formatted with default `rustfmt` settings, so don't run `cargo fmt` over whole files; it would bury your change in unrelated diffs.
+- Format with `cargo fmt` (settings in `rustfmt.toml`: 160 columns). Formatting-only commits are listed in `.git-blame-ignore-revs`.
 - Secrets must never reach logs, the event log or error messages. Anything that writes ACP traffic goes through the redactor, and anything that shows a key shows only its tail.
 - Keys are passed to agents only as environment variables at launch, never as command-line arguments.
 
@@ -130,6 +135,7 @@ It also works inside `#[error(...)]` for `thiserror`. Developer-only output (log
 
 - Keep state in the Zustand store (`src/state/`). Keep Tauri calls in `src/lib/api.ts`.
 - Use the `@/` import alias for `src/`.
+- Format with Prettier (`npm run format`, 160 columns) and keep ESLint clean (`npm run lint`).
 
 ## Commit messages
 
