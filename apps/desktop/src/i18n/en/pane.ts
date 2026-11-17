@@ -52,4 +52,7 @@ export const pane: Record<keyof typeof source, string> = {
   dropRight: "Split right",
   dropTop: "Split up",
   dropBottom: "Split down",
+  splitRight: "Split right",
+  splitDown: "Split down",
+  evenLayout: "Even out panes",
 };

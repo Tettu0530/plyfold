@@ -10,6 +10,7 @@ import { normalizeUrl } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { startDrag } from "./dnd";
+import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
 
 /** After this long without a load event, suggest opening the page in a browser */
 const SLOW_MS = 8000;
@@ -47,39 +48,43 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
 
   return (
     <section aria-label={t("pane.previewLabel", { url })} onMouseDown={() => focusPane(index)} className="flex min-w-0 flex-col">
-      <div
-        onPointerDown={(e) => startDrag(e, () => ({ kind: "pane", slot: index, title: url }))}
-        className="flex h-9 shrink-0 cursor-grab items-center gap-1.5 border-b pr-1.5 pl-3"
-      >
-        <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-        <input
-          aria-label={t("pane.previewUrl")}
-          value={draft}
-          spellCheck={false}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              go();
-              e.currentTarget.blur();
-            } else if (e.key === "Escape") {
-              setDraft(url);
-              e.currentTarget.blur();
-            }
-          }}
-          onFocus={(e) => e.currentTarget.select()}
-          className="h-6 min-w-0 grow rounded-md bg-transparent px-1.5 font-mono text-xs outline-none focus:bg-background focus:outline focus:outline-ring"
-        />
-        <button type="button" aria-label={t("pane.previewReload")} title={t("pane.previewReload")} onClick={() => setNonce((n) => n + 1)} className={ICON}>
-          <RotateCw className="size-3.5" aria-hidden />
-        </button>
-        <button type="button" aria-label={t("pane.previewExternal")} title={t("pane.previewExternal")} onClick={openOutside} className={ICON}>
-          <ExternalLink className="size-3.5" aria-hidden />
-        </button>
-        <button type="button" aria-label={t("common.close")} onClick={() => closePane(index)} className={ICON}>
-          <X className="size-3.5" aria-hidden />
-        </button>
-      </div>
+      {/* Right-click: split, even out, close */}
+      <PaneMenu slot={index}>
+        <div
+          ref={paneHeadAnchor(index)}
+          onPointerDown={(e) => startDrag(e, () => ({ kind: "pane", slot: index, title: url }))}
+          className="flex h-9 shrink-0 cursor-grab items-center gap-1.5 border-b pr-1.5 pl-3"
+        >
+          <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <input
+            aria-label={t("pane.previewUrl")}
+            value={draft}
+            spellCheck={false}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                go();
+                e.currentTarget.blur();
+              } else if (e.key === "Escape") {
+                setDraft(url);
+                e.currentTarget.blur();
+              }
+            }}
+            onFocus={(e) => e.currentTarget.select()}
+            className="h-6 min-w-0 grow rounded-md bg-transparent px-1.5 font-mono text-xs outline-none focus:bg-background focus:outline focus:outline-ring"
+          />
+          <button type="button" aria-label={t("pane.previewReload")} title={t("pane.previewReload")} onClick={() => setNonce((n) => n + 1)} className={ICON}>
+            <RotateCw className="size-3.5" aria-hidden />
+          </button>
+          <button type="button" aria-label={t("pane.previewExternal")} title={t("pane.previewExternal")} onClick={openOutside} className={ICON}>
+            <ExternalLink className="size-3.5" aria-hidden />
+          </button>
+          <button type="button" aria-label={t("common.close")} onClick={() => closePane(index)} className={ICON}>
+            <X className="size-3.5" aria-hidden />
+          </button>
+        </div>
+      </PaneMenu>
       <div className="relative min-h-0 grow bg-white">
         <iframe
           key={`${url}#${nonce}`}

@@ -50,4 +50,7 @@ export const pane = {
   dropRight: "右に分割",
   dropTop: "上に分割",
   dropBottom: "下に分割",
+  splitRight: "右に分割",
+  splitDown: "下に分割",
+  evenLayout: "大きさを揃える",
 } satisfies Record<string, string>;

@@ -134,6 +134,12 @@ export function setSizes(node: LayoutNode, path: number[], sizes: number[]): Lay
   return { ...node, children: node.children.map((c, j) => (j === i ? setSizes(c, rest, sizes) : c)) };
 }
 
+/** Make every split's children equal in size */
+export function evenSizes(node: LayoutNode): LayoutNode {
+  if (node.kind === "leaf") return node;
+  return split(node.axis, node.children.map(evenSizes));
+}
+
 /** Check a saved tree: right shape, slots are unique non-negative integers, sizes are usable */
 export function validLayout(saved: unknown): LayoutNode | null {
   const seen = new Set<number>();

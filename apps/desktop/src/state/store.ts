@@ -5,7 +5,7 @@ import { create } from "zustand";
 import type { Look, LiquidStyle } from "@/components/liquid/liquid";
 import { liquidCloseFrom, liquidOpen } from "@/components/liquid/stage";
 import type { Attached } from "@/lib/attachments";
-import { freeSlot, leaves, moveSlot, preset, removeSlot, setSizes, splitAt, swapSlots, validLayout, type Edge, type LayoutNode } from "./layout";
+import { evenSizes, freeSlot, leaves, moveSlot, preset, removeSlot, setSizes, splitAt, swapSlots, validLayout, type Edge, type LayoutNode } from "./layout";
 import { resolveLang, setLang, t } from "@/i18n";
 import { api, inTauri, onEngineEvent } from "@/lib/api";
 import { notify } from "@/lib/notify";
@@ -34,7 +34,6 @@ export interface SessionView {
   pending: Partial<Record<Category, string>>;
 }
 
-export type PaneCount = 1 | 2 | 4;
 
 /** A session not started yet (opens empty in a pane) */
 export interface Draft {
@@ -166,7 +165,10 @@ interface State {
   ready: boolean;
 
   init: () => Promise<void>;
-  setPaneCount: (n: PaneCount) => void;
+  /** Split the focused pane and focus the new, empty pane */
+  splitFocused: (edge: Edge) => void;
+  /** Make all panes in every split the same size */
+  evenLayout: () => void;
   /** The pane layout (split tree); paneCount is the number of panes it shows */
   layout: LayoutNode;
   /** Resize the split at `path` (dragging a divider) */
@@ -386,18 +388,11 @@ export const useStore = create<State>((set, get) => ({
     for (const id of layout?.panes ?? []) if (id) void loadSession(id);
   },
 
-  // The 1 / 2 / 4 buttons: rebuild the layout as that preset, keeping the panes shown now (in order) first
-  setPaneCount: (paneCount) =>
-    set((s) => {
-      const shown = leaves(s.layout);
-      const others = s.panes.map((_, i) => i).filter((i) => !shown.includes(i));
-      while (shown.length + others.length < paneCount) others.push(shown.length + others.length);
-      const slots = [...shown, ...others].slice(0, paneCount);
-      const layout = preset(paneCount, slots);
-      const panes = [...s.panes];
-      while (panes.length <= Math.max(...slots)) panes.push(null);
-      return { layout, panes, paneCount, focusedPane: slots.includes(s.focusedPane) ? s.focusedPane : slots[0] };
-    }),
+  splitFocused: (edge) => {
+    const slot = get().splitPane(get().focusedPane, edge, null);
+    set({ focusedPane: slot });
+  },
+  evenLayout: () => set((s) => ({ layout: evenSizes(s.layout) })),
   setSplitSizes: (path, sizes) => set((s) => ({ layout: setSizes(s.layout, path, sizes) })),
   splitPane: (target, edge, id, from) => {
     const s = get();

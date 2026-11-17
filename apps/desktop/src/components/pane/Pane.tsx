@@ -19,6 +19,7 @@ import { PermissionCard } from "./PermissionCard";
 import { Transcript } from "./Transcript";
 import { PaneTools } from "./PaneTools";
 import { startDrag } from "./dnd";
+import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
 
 function EmptyPane({ index }: { index: number }) {
   const t = useT();
@@ -28,30 +29,32 @@ function EmptyPane({ index }: { index: number }) {
   // The last pane can't be removed (there is always at least one)
   const removable = useStore((s) => s.paneCount > 1);
   return (
-    <section aria-label={t("pane.emptyLabel", { n: index + 1 })} onMouseDown={() => focusPane(index)} className="relative flex min-w-0 flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
-      {removable && (
+    <PaneMenu slot={index}>
+      <section ref={paneHeadAnchor(index)} aria-label={t("pane.emptyLabel", { n: index + 1 })} onMouseDown={() => focusPane(index)} className="relative flex min-w-0 flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
+        {removable && (
+          <button
+            type="button"
+            aria-label={t("pane.removePane")}
+            title={t("pane.removePane")}
+            onClick={() => removePane(index)}
+            className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-md hover:bg-accent hover:text-foreground"
+          >
+            <X className="size-3.5" aria-hidden />
+          </button>
+        )}
+        <p>{t("pane.emptyHint")}</p>
         <button
           type="button"
-          aria-label={t("pane.removePane")}
-          title={t("pane.removePane")}
-          onClick={() => removePane(index)}
-          className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-md hover:bg-accent hover:text-foreground"
+          onClick={() => {
+            focusPane(index);
+            newDraft();
+          }}
+          className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent hover:text-foreground"
         >
-          <X className="size-3.5" aria-hidden />
+          {t("pane.newSession")} <Keys keys={["cmd", "n"]} />
         </button>
-      )}
-      <p>{t("pane.emptyHint")}</p>
-      <button
-        type="button"
-        onClick={() => {
-          focusPane(index);
-          newDraft();
-        }}
-        className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent hover:text-foreground"
-      >
-        {t("pane.newSession")} <Keys keys={["cmd", "n"]} />
-      </button>
-    </section>
+      </section>
+    </PaneMenu>
   );
 }
 
@@ -105,56 +108,60 @@ function SessionPane({ index }: { index: number }) {
       className={cn("@container flex min-w-0 flex-col", focused && "bg-white/[0.01]")}
     >
       {/* Drag the header to move the pane (onto another pane's edge to split, or its center to swap) */}
-      <div
-        onPointerDown={(e) => startDrag(e, () => ({ kind: "pane", slot: index, title: r.title, agent: r.agent }))}
-        className="flex h-9 shrink-0 cursor-grab items-center gap-2 border-b pr-1.5 pl-3"
-      >
-        <StatusIcon status={r.status} />
-        <PaneTitle id={id} title={r.title} />
-        <span title={t("pane.profileTitle", { agent: r.agent, profile: r.profile })} className="hidden items-center gap-1 text-xs whitespace-nowrap text-muted-foreground @[22rem]:flex">
-          <ProviderLogo agent={r.agent} className="size-3" />
-          {r.profile === r.agent ? "default" : r.profile}
-        </span>
-        {mismatch && (
-          <span title={t("pane.modelMismatch", { model: modelOpt?.current ?? "" })} className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
-            <TriangleAlert className="size-3.5 text-permission" aria-hidden />
-            {reported}
-          </span>
-        )}
-        <span className="grow" />
-        <span className="hidden items-center gap-2 @[30rem]:flex">
-          <PaneTools scope={id} items={view.transcript.items} worktree={r.worktree_path ?? r.repo_path} alive={r.status !== "closed" && r.status !== "error"} />
-        </span>
-        {diffStat && diffStat.added + diffStat.removed > 0 && (
-          <button
-            ref={liquidAnchor(`diff:${id}`)}
-            type="button"
-            title={t("pane.openDiff", { branch: r.branch ?? "" })}
-            onClick={() => openDiff(id)}
-            className={cn(
-              "relative flex h-6 items-center gap-1 rounded-md px-1.5 font-mono text-xs hover:bg-accent",
-              (diffActive || diffOpen) && "bg-accent",
-              diffActive && "z-[57]",
-            )}
-          >
-            <span className="text-working">+{diffStat.added}</span>
-            <span className="text-error">−{diffStat.removed}</span>
-          </button>
-        )}
-        {working && (
-          <button type="button" aria-label={t("pane.stop")} onClick={() => void cancel(id)} className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
-            <Square className="size-3.5" aria-hidden />
-          </button>
-        )}
-        <button
-          type="button"
-          aria-label={t("pane.closePane")}
-          onClick={() => closePane(index)}
-          className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+      {/* Right-click: split, even out, close */}
+      <PaneMenu slot={index}>
+        <div
+          ref={paneHeadAnchor(index)}
+          onPointerDown={(e) => startDrag(e, () => ({ kind: "pane", slot: index, title: r.title, agent: r.agent }))}
+          className="flex h-9 shrink-0 cursor-grab items-center gap-2 border-b pr-1.5 pl-3"
         >
-          <X className="size-3.5" aria-hidden />
-        </button>
-      </div>
+          <StatusIcon status={r.status} />
+          <PaneTitle id={id} title={r.title} />
+          <span title={t("pane.profileTitle", { agent: r.agent, profile: r.profile })} className="hidden items-center gap-1 text-xs whitespace-nowrap text-muted-foreground @[22rem]:flex">
+            <ProviderLogo agent={r.agent} className="size-3" />
+            {r.profile === r.agent ? "default" : r.profile}
+          </span>
+          {mismatch && (
+            <span title={t("pane.modelMismatch", { model: modelOpt?.current ?? "" })} className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
+              <TriangleAlert className="size-3.5 text-permission" aria-hidden />
+              {reported}
+            </span>
+          )}
+          <span className="grow" />
+          <span className="hidden items-center gap-2 @[30rem]:flex">
+            <PaneTools scope={id} items={view.transcript.items} worktree={r.worktree_path ?? r.repo_path} alive={r.status !== "closed" && r.status !== "error"} />
+          </span>
+          {diffStat && diffStat.added + diffStat.removed > 0 && (
+            <button
+              ref={liquidAnchor(`diff:${id}`)}
+              type="button"
+              title={t("pane.openDiff", { branch: r.branch ?? "" })}
+              onClick={() => openDiff(id)}
+              className={cn(
+                "relative flex h-6 items-center gap-1 rounded-md px-1.5 font-mono text-xs hover:bg-accent",
+                (diffActive || diffOpen) && "bg-accent",
+                diffActive && "z-[57]",
+              )}
+            >
+              <span className="text-working">+{diffStat.added}</span>
+              <span className="text-error">−{diffStat.removed}</span>
+            </button>
+          )}
+          {working && (
+            <button type="button" aria-label={t("pane.stop")} onClick={() => void cancel(id)} className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+              <Square className="size-3.5" aria-hidden />
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label={t("pane.closePane")}
+            onClick={() => closePane(index)}
+            className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <X className="size-3.5" aria-hidden />
+          </button>
+        </div>
+      </PaneMenu>
 
       <Transcript items={view.transcript.items} info={view.info} streaming={r.status === "working"} busy={view.transcript.inTurn} onResend={(t, a) => void sendPrompt(id, t, a)} />
 

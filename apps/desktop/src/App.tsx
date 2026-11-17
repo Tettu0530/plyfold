@@ -1,4 +1,4 @@
-import { Columns2, Grid2x2, PanelLeft, Square } from "lucide-react";
+import { PanelLeft } from "lucide-react";
 import { motion, MotionConfig } from "motion/react";
 import { useEffect } from "react";
 
@@ -13,14 +13,13 @@ import { SettingsView } from "./components/SettingsView";
 import { MotionLab } from "./components/MotionLab";
 import { PaneGrid } from "./components/pane/PaneGrid";
 import { SearchCard } from "./components/SearchCard";
-import { Segmented } from "./components/Segmented";
 import { Sidebar } from "./components/Sidebar";
 import { smooth } from "./components/motion";
 import { useT } from "./i18n";
 import { inTauri } from "./lib/api";
 import { repoName } from "./lib/format";
-import { leaves, presetOf } from "./state/layout";
-import { useStore, type PaneCount } from "./state/store";
+import { leaves } from "./state/layout";
+import { useStore } from "./state/store";
 import { DragLayer } from "./components/pane/dnd";
 
 function useShortcuts() {
@@ -47,6 +46,10 @@ function useShortcuts() {
           e.preventDefault();
           void s.cancel(id);
         }
+      } else if (e.code === "Backslash" || e.code === "IntlYen" || e.key === "\\" || e.key === "|" || e.key === "¥") {
+        // ⌘\ splits the focused pane to the right, ⌘⇧\ downward (the ¥ key on Japanese keyboards works too)
+        e.preventDefault();
+        s.splitFocused(e.shiftKey ? "bottom" : "right");
       } else if (/^[1-9]$/.test(e.key)) {
         // ⌘1–⌘9 focus panes in layout order (left to right, top to bottom)
         const slot = leaves(s.layout)[Number(e.key) - 1];
@@ -64,9 +67,6 @@ function useShortcuts() {
 export default function App() {
   const t = useT();
   const init = useStore((s) => s.init);
-  // Which preset (1 / 2 / 4) the layout is; none is highlighted for a custom layout
-  const presetNow = useStore((s) => presetOf(s.layout));
-  const setPaneCount = useStore((s) => s.setPaneCount);
   const sidebarOpen = useStore((s) => s.sidebarOpen);
   const toggleSidebar = useStore((s) => s.toggleSidebar);
   const sidebarWidth = useStore((s) => s.sidebarWidth);
@@ -99,16 +99,6 @@ export default function App() {
               {focusedRepo ? repoName(focusedRepo) : "Plyfold"}
             </span>
             <span data-tauri-drag-region className="grow" />
-            <Segmented<PaneCount>
-              label={t("app.paneCount")}
-              value={(presetNow ?? 0) as PaneCount}
-              onChange={setPaneCount}
-              options={[
-                { value: 1 as PaneCount, label: <Square className="size-3.5" aria-hidden />, aria: t("app.panes", { count: 1 }) },
-                { value: 2 as PaneCount, label: <Columns2 className="size-3.5" aria-hidden />, aria: t("app.panes", { count: 2 }) },
-                { value: 4 as PaneCount, label: <Grid2x2 className="size-3.5" aria-hidden />, aria: t("app.panes", { count: 4 }) },
-              ]}
-            />
             <Notifications />
           </header>
 

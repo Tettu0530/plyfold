@@ -18,7 +18,7 @@ Plyfold does not implement its own agent loop. It is an ACP client: the agent CL
 ## Features
 
 - Sessions grouped by repository in the sidebar, with their status (Working, Waiting for permission, Stalled, Idle, Stopped, Error) shown as an icon and a word
-- Free pane layout: split any pane left, right, up or down, as many times as you like, or pick the 1, 2 or 4 pane presets. Drag the boundary between panes to resize them (double-click to split evenly)
+- Free pane layout: split any pane left, right, up or down, as many times as you like (⌘\ right, ⌘⇧\ down, or right-click a pane header). Drag the boundary between panes to resize them (double-click to split evenly), or even out every pane from the same menu
 - Drag a session from the sidebar onto a pane to open it there, or onto a pane's edge to open it in a new split. Drag a pane by its header to move it next to another pane or swap the two; the drop area is outlined before you let go
 - A resizable, collapsible sidebar (drag its edge; ⌘B to toggle), with a compact one-line-per-session layout in Settings
 - Transcript with messages, thoughts, tool calls, inline diffs and the agent's plan; it follows new output only while you are at the bottom, with a button to jump back down

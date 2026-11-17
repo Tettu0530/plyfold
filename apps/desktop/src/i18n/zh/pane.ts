@@ -52,4 +52,7 @@ export const pane: Record<keyof typeof source, string> = {
   dropRight: "向右拆分",
   dropTop: "向上拆分",
   dropBottom: "向下拆分",
+  splitRight: "向右拆分",
+  splitDown: "向下拆分",
+  evenLayout: "均分窗格",
 };

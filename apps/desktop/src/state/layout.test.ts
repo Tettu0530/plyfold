@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { freeSlot, leaf, leaves, moveSlot, pathOf, preset, presetOf, removeSlot, setSizes, splitAt, swapSlots, validLayout, type LayoutNode } from "./layout";
+import { evenSizes, freeSlot, leaf, leaves, moveSlot, pathOf, preset, presetOf, removeSlot, setSizes, splitAt, swapSlots, validLayout, type LayoutNode } from "./layout";
 
 const sizesOf = (n: LayoutNode) => (n.kind === "split" ? n.sizes.map((s) => Math.round(s * 100) / 100) : []);
 
@@ -69,5 +69,12 @@ describe("layout tree", () => {
     expect(validLayout({ kind: "split", axis: "diagonal", children: [] })).toBeNull();
     expect(validLayout({ kind: "leaf", slot: -1 })).toBeNull();
     expect(validLayout(null)).toBeNull();
+  });
+
+  it("evens out every split", () => {
+    const t = setSizes(splitAt(preset(2), 1, "bottom", 2), [], [0.8, 0.2]);
+    const even = evenSizes(t);
+    expect(even.kind === "split" && even.sizes).toEqual([0.5, 0.5]);
+    expect(leaves(even)).toEqual([0, 1, 2]);
   });
 });

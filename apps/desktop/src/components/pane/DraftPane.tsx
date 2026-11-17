@@ -18,6 +18,7 @@ import type { Category, ProfileSummary, ProfileUsage } from "@/lib/types";
 import { isSendKey } from "@/lib/keys";
 import { useT, type MessageKey } from "@/i18n";
 import { startDrag } from "./dnd";
+import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
 
 /** Label for the auth type */
 function authLabel(p: { keyed: boolean; custom_provider: boolean }): MessageKey {
@@ -148,22 +149,26 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
 
   return (
     <section aria-label={t("draft.paneLabel", { n: index + 1 })} onMouseDown={() => focusPane(index)} className="flex min-w-0 flex-col">
-      <div
-        onPointerDown={(e) => startDrag(e, () => ({ kind: "pane", slot: index, title: t("draft.title") }))}
-        className="flex h-9 shrink-0 cursor-grab items-center gap-2 border-b pr-1.5 pl-3"
-      >
-        <Plus className="size-3.5 text-muted-foreground" aria-hidden />
-        <span className="font-medium">{t("draft.title")}</span>
-        <span className="grow" />
-        <button
-          type="button"
-          aria-label={t("common.close")}
-          onClick={() => closePane(index)}
-          className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+      {/* Right-click: split, even out, close */}
+      <PaneMenu slot={index}>
+        <div
+          ref={paneHeadAnchor(index)}
+          onPointerDown={(e) => startDrag(e, () => ({ kind: "pane", slot: index, title: t("draft.title") }))}
+          className="flex h-9 shrink-0 cursor-grab items-center gap-2 border-b pr-1.5 pl-3"
         >
-          <X className="size-3.5" aria-hidden />
-        </button>
-      </div>
+          <Plus className="size-3.5 text-muted-foreground" aria-hidden />
+          <span className="font-medium">{t("draft.title")}</span>
+          <span className="grow" />
+          <button
+            type="button"
+            aria-label={t("common.close")}
+            onClick={() => closePane(index)}
+            className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <X className="size-3.5" aria-hidden />
+          </button>
+        </div>
+      </PaneMenu>
 
       {/* List sits in the middle of the pane; scrolls vertically if it doesn't fit (my-auto keeps the top from being cut off) */}
       <div className="flex min-h-0 grow flex-col overflow-y-auto px-3 py-4">

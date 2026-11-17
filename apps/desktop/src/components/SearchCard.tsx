@@ -1,4 +1,4 @@
-import { KeyRound, ListChecks, Plus, Search, Settings, Square } from "lucide-react";
+import { Equal, KeyRound, ListChecks, PanelBottom, PanelRight, Plus, Search, Settings, Square } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -67,6 +67,9 @@ export function SearchCard() {
       { key: "new", label: t("search.newSession"), keys: ["cmd", "n"], icon: <Plus className="size-3.5" />, run: () => newDraft() },
       { key: "mode", label: t("search.switchMode"), keys: ["shift", "tab"], icon: <ListChecks className="size-3.5" />, run: () => {} },
       { key: "stop", label: t("search.stopTurn"), keys: ["cmd", "."], icon: <Square className="size-3.5" />, run: () => focusedId && void cancel(focusedId) },
+      { key: "splitRight", label: t("pane.splitRight"), keys: ["cmd", "\\"], icon: <PanelRight className="size-3.5" />, run: () => useStore.getState().splitFocused("right") },
+      { key: "splitDown", label: t("pane.splitDown"), keys: ["cmd", "shift", "\\"], icon: <PanelBottom className="size-3.5" />, run: () => useStore.getState().splitFocused("bottom") },
+      { key: "even", label: t("pane.evenLayout"), icon: <Equal className="size-3.5" />, run: () => useStore.getState().evenLayout() },
       { key: "settings", label: t("search.settings"), keys: ["cmd", ","], icon: <Settings className="size-3.5" />, run: () => openSettings() },
       { key: "profiles", label: t("search.profiles"), icon: <KeyRound className="size-3.5" />, run: () => openProfiles() },
     ].filter((c) => match(c.label));
