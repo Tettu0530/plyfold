@@ -11,4 +11,6 @@ export const sidebar: Record<keyof typeof source, string> = {
   profiles: "Profiles",
   settings: "Settings",
   rowTitle: "{title} ({profile}, {age})",
+  resize: "Sidebar width",
+  resizeHint: "Drag to resize. Double-click to reset.",
 };

@@ -64,6 +64,8 @@ export default function App() {
   const setPaneCount = useStore((s) => s.setPaneCount);
   const sidebarOpen = useStore((s) => s.sidebarOpen);
   const toggleSidebar = useStore((s) => s.toggleSidebar);
+  const sidebarWidth = useStore((s) => s.sidebarWidth);
+  const sidebarResizing = useStore((s) => s.sidebarResizing);
   const focusedRepo = useStore((s) => {
     const id = s.panes[s.focusedPane];
     return id ? s.sessions[id]?.record.repo_path ?? null : null;
@@ -110,8 +112,8 @@ export default function App() {
                 While closed it is inert, so focus and screen readers skip it */}
             <motion.div
               initial={false}
-              animate={{ width: sidebarOpen ? 240 : 0 }}
-              transition={smooth}
+              animate={{ width: sidebarOpen ? sidebarWidth : 0 }}
+              transition={sidebarResizing ? { duration: 0 } : smooth}
               inert={!sidebarOpen}
               className="flex shrink-0 overflow-hidden"
             >

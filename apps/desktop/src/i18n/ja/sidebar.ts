@@ -9,4 +9,6 @@ export const sidebar = {
   profiles: "プロファイル",
   settings: "設定",
   rowTitle: "{title}（{profile}、{age}）",
+  resize: "サイドバーの幅",
+  resizeHint: "ドラッグで幅を変える。ダブルクリックで元の幅に戻す",
 } satisfies Record<string, string>;

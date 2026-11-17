@@ -69,7 +69,7 @@ describe("reduceEvent", () => {
 describe("restoreLayout", () => {
   it("keeps sessions that still exist and drops drafts and removed ones", () => {
     const l = restoreLayout({ panes: ["a", "gone", "draft:1", "b"], paneCount: 4, focusedPane: 3 }, (id) => id === "a" || id === "b");
-    expect(l).toEqual({ panes: ["a", null, null, "b"], paneCount: 4, focusedPane: 3, split: { x: 0.5, y: 0.5 }, sidebarOpen: true });
+    expect(l).toEqual({ panes: ["a", null, null, "b"], paneCount: 4, focusedPane: 3, split: { x: 0.5, y: 0.5 }, sidebarOpen: true, sidebarWidth: 240 });
   });
 
   it("rejects broken data and clamps the focused pane", () => {
@@ -80,6 +80,7 @@ describe("restoreLayout", () => {
     const l = restoreLayout({ panes: [], paneCount: 2, split: { x: 0.99, y: "x" }, sidebarOpen: false }, () => true);
     expect(l?.split).toEqual({ x: 0.85, y: 0.5 });
     expect(l?.sidebarOpen).toBe(false);
+    expect(restoreLayout({ panes: [], paneCount: 2, sidebarWidth: 9999 }, () => true)?.sidebarWidth).toBe(420);
   });
 });
 

@@ -92,7 +92,14 @@ export interface Layout {
   /** Where the panes are split: x is the left/right boundary, y the top/bottom one (0..1 of the pane area) */
   split: Split;
   sidebarOpen: boolean;
+  sidebarWidth: number;
 }
+
+/** Sidebar width bounds and default (px) */
+export const SIDEBAR_MIN = 200;
+export const SIDEBAR_MAX = 420;
+export const SIDEBAR_DEFAULT = 240;
+const clampSidebar = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.round(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, v))) : SIDEBAR_DEFAULT);
 
 export interface Split {
   x: number;
@@ -114,7 +121,7 @@ export function restoreLayout(saved: unknown, exists: (id: string) => boolean): 
   const focusedPane = typeof o.focusedPane === "number" && o.focusedPane >= 0 && o.focusedPane < paneCount ? o.focusedPane : 0;
   const split = { x: clampSplit(o.split?.x), y: clampSplit(o.split?.y) };
   const sidebarOpen = o.sidebarOpen !== false;
-  return { panes, paneCount, focusedPane, split, sidebarOpen };
+  return { panes, paneCount, focusedPane, split, sidebarOpen, sidebarWidth: clampSidebar(o.sidebarWidth) };
 }
 
 function readLayout(): unknown {
@@ -150,6 +157,10 @@ interface State {
   setSplit: (patch: Partial<Split>) => void;
   sidebarOpen: boolean;
   toggleSidebar: () => void;
+  sidebarWidth: number;
+  setSidebarWidth: (px: number) => void;
+  /** True while the sidebar edge is being dragged (the width follows the pointer instead of springing) */
+  sidebarResizing: boolean;
   /** from を渡すと、その出発点から分離アニメーションで開く */
   openInPane: (id: string, pane?: number, from?: string) => Promise<void>;
   /** 新しいセッションの下書きを、空いているペインに開く */
@@ -282,6 +293,8 @@ export const useStore = create<State>((set, get) => ({
   paneCount: 2,
   split: EVEN_SPLIT,
   sidebarOpen: true,
+  sidebarWidth: SIDEBAR_DEFAULT,
+  sidebarResizing: false,
   focusedPane: 0,
   searchOpen: false,
   labOpen: false,
@@ -338,6 +351,7 @@ export const useStore = create<State>((set, get) => ({
   setPaneCount: (paneCount) => set((s) => ({ paneCount, focusedPane: Math.min(s.focusedPane, paneCount - 1) })),
   setSplit: (patch) => set((s) => ({ split: { x: clampSplit(patch.x ?? s.split.x), y: clampSplit(patch.y ?? s.split.y) } })),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+  setSidebarWidth: (px) => set({ sidebarWidth: clampSidebar(px) }),
 
   openInPane: async (id, pane, from) => {
     if (get().unread[id]) {
@@ -616,7 +630,7 @@ async function loadSession(id: string) {
 useStore.subscribe((st, prev) => {
   if (
     !st.ready ||
-    (st.panes === prev.panes && st.paneCount === prev.paneCount && st.focusedPane === prev.focusedPane && st.split === prev.split && st.sidebarOpen === prev.sidebarOpen)
+    (st.panes === prev.panes && st.paneCount === prev.paneCount && st.focusedPane === prev.focusedPane && st.split === prev.split && st.sidebarOpen === prev.sidebarOpen && st.sidebarWidth === prev.sidebarWidth)
   )
     return;
   const layout: Layout = {
@@ -625,6 +639,7 @@ useStore.subscribe((st, prev) => {
     focusedPane: st.focusedPane,
     split: st.split,
     sidebarOpen: st.sidebarOpen,
+    sidebarWidth: st.sidebarWidth,
   };
   try {
     localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));

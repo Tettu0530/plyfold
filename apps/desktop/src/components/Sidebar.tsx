@@ -1,11 +1,11 @@
 import { ChevronRight, KeyRound, Plus, Search, Settings } from "lucide-react";
 import { motion } from "motion/react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { age, repoName } from "@/lib/format";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
-import { useStore } from "@/state/store";
+import { SIDEBAR_DEFAULT, SIDEBAR_MIN, useStore } from "@/state/store";
 import { ProviderLogo, STATUS, StatusIcon } from "./icons";
 import { Keys } from "./Keys";
 import { SessionMenu } from "./SessionMenu";
@@ -34,6 +34,7 @@ export function Sidebar() {
   const moving = useLiquidMovingAnchors();
   // Compact: one line per session; profile and age move to the row's tooltip
   const compact = useStore((s) => s.settings.sidebar_density === "compact");
+  const sidebarWidth = useStore((s) => s.sidebarWidth);
   const searchOpen = useStore((s) => s.searchOpen);
   const [closed, setClosed] = useState<Record<string, boolean>>({});
   // 名前を変えている行
@@ -54,7 +55,8 @@ export function Sidebar() {
   const open = new Set(panes.slice(0, paneCount).filter(Boolean));
 
   return (
-    <nav aria-label={t("sidebar.label")} className="relative flex w-60 shrink-0 flex-col border-r bg-sidebar">
+    <nav aria-label={t("sidebar.label")} style={{ width: sidebarWidth }} className="relative flex shrink-0 flex-col border-r bg-sidebar">
+      <SidebarResizer />
       <div className="flex flex-col p-2">
         <motion.button
           ref={liquidAnchor("new-session")}
@@ -221,5 +223,72 @@ export function Sidebar() {
         </motion.button>
       </div>
     </nav>
+  );
+}
+
+/**
+ * The sidebar's right edge. Drag to resize (it follows the pointer), double-click or Enter for the default width,
+ * arrow keys to nudge. Releasing well past the minimum width hides the sidebar (like Finder); it reopens at its last width
+ */
+function SidebarResizer() {
+  const t = useT();
+  const width = useStore((s) => s.sidebarWidth);
+  const dragging = useRef<{ left: number; from: number; collapse: boolean } | null>(null);
+  const [active, setActive] = useState(false);
+  const end = () => {
+    const d = dragging.current;
+    dragging.current = null;
+    setActive(false);
+    useStore.setState({ sidebarResizing: false });
+    if (d?.collapse) {
+      // Hide it, and reopen later at the width it had before this drag
+      useStore.getState().setSidebarWidth(d.from);
+      useStore.getState().toggleSidebar();
+    }
+  };
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={t("sidebar.resize")}
+      aria-valuenow={width}
+      aria-valuemin={SIDEBAR_MIN}
+      title={t("sidebar.resizeHint")}
+      tabIndex={0}
+      onPointerDown={(e) => {
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          // Synthetic events have no capturable pointer
+        }
+        const nav = e.currentTarget.parentElement?.getBoundingClientRect();
+        dragging.current = { left: nav?.left ?? 0, from: useStore.getState().sidebarWidth, collapse: false };
+        setActive(true);
+        useStore.setState({ sidebarResizing: true });
+      }}
+      onPointerMove={(e) => {
+        const d = dragging.current;
+        if (!d) return;
+        const w = e.clientX - d.left;
+        d.collapse = w < SIDEBAR_MIN - 80;
+        useStore.getState().setSidebarWidth(w);
+      }}
+      onPointerUp={end}
+      onPointerCancel={end}
+      onDoubleClick={() => useStore.getState().setSidebarWidth(SIDEBAR_DEFAULT)}
+      onKeyDown={(e) => {
+        const step = e.shiftKey ? 40 : 8;
+        if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+          e.preventDefault();
+          useStore.getState().setSidebarWidth(width + (e.key === "ArrowLeft" ? -step : step));
+        } else if (e.key === "Enter") useStore.getState().setSidebarWidth(SIDEBAR_DEFAULT);
+      }}
+      className="group absolute top-0 right-0 bottom-0 z-10 flex w-1.5 cursor-col-resize justify-end outline-none"
+    >
+      <span
+        aria-hidden
+        className={cn("h-full w-0.5 bg-foreground/25 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100", active && "opacity-100")}
+      />
+    </div>
   );
 }
