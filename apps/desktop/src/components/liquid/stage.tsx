@@ -129,10 +129,12 @@ export function useLiquidActive(id: string): boolean {
 }
 
 /**
- * For full screens: while animating, clip the screen to the blob's shape and fade it in as it expands
- * (fading out as it shrinks on close). Content appears without waiting for full expansion
+ * While animating, clip the screen to the blob's shape and fade it in as it expands (fading out as it shrinks on
+ * close). Content appears without waiting for full expansion. `cover`: a full-window screen, which stops clipping
+ * once the blob has covered it (menus keep the blob as their frame instead, see useLiquidMenu)
  */
-export function useLiquidClip(id: string, ref: React.RefObject<HTMLElement | null>) {
+export function useLiquidClip(id: string, ref: React.RefObject<HTMLElement | null>, opts: { cover?: boolean } = {}) {
+  const cover = !!opts.cover;
   const active = useLiquidActive(id);
   useEffect(() => {
     if (!active) return;
@@ -142,6 +144,18 @@ export function useLiquidClip(id: string, ref: React.RefObject<HTMLElement | nul
     let el: HTMLElement | null = null;
     const KEYS = ["clipPath", "opacity", "transition", "animation", "background", "borderColor", "boxShadow", "backdropFilter"] as const;
     let saved: Partial<Record<(typeof KEYS)[number], string>> | null = null;
+    // Once the blob has covered the whole screen, the spring's rebound makes it ~1-2px smaller again for a few frames.
+    // Clipping to it then shows a thin line of what is behind at the edges (a flicker), so from the moment it first
+    // covers the screen, show the screen itself unclipped with its own background. Shrinking clearly (closing) resumes
+    const SLACK = 4;
+    let covered = false;
+    const hide = (on: boolean) => {
+      if (!el || !saved) return;
+      el.style.background = on ? "transparent" : saved.background ?? "";
+      el.style.borderColor = on ? "transparent" : saved.borderColor ?? "";
+      el.style.boxShadow = on ? "none" : saved.boxShadow ?? "";
+      el.style.backdropFilter = on ? "none" : saved.backdropFilter ?? "";
+    };
     const tick = () => {
       el = ref.current ?? el;
       if (el && !saved) {
@@ -161,6 +175,22 @@ export function useLiquidClip(id: string, ref: React.RefObject<HTMLElement | nul
         const left = Math.max(0, l - box.left);
         const right = Math.max(0, box.right - r);
         const bottom = Math.max(0, box.bottom - b);
+        const inset = Math.max(top, left, right, bottom);
+        if (cover && !covered && inset === 0) {
+          covered = true;
+          hide(false);
+        } else if (covered && inset > SLACK) {
+          covered = false;
+          hide(true);
+        }
+        if (covered) {
+          el.style.clipPath = "none";
+          el.style.opacity = "1";
+          el.style.transition = "none";
+          el.style.animation = "none";
+          raf = requestAnimationFrame(tick);
+          return;
+        }
         el.style.clipPath = `inset(${top}px ${right}px ${bottom}px ${left}px round ${e.rad.get()}px)`;
         // Reveal by area ratio (fade in between 30% and 80% of full size).
         // An anchor about as large as the target (e.g. a right-clicked row) starts with enough area, so also cap by open amount
@@ -178,7 +208,7 @@ export function useLiquidClip(id: string, ref: React.RefObject<HTMLElement | nul
       if (!el || !saved) return;
       for (const k of KEYS) el.style[k] = saved[k] ?? "";
     };
-  }, [active, id, ref]);
+  }, [active, id, ref, cover]);
   return active;
 }
 

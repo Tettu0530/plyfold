@@ -47,7 +47,7 @@ export function ProfilesView() {
   const close = useStore((s) => s.closeProfiles);
   const revealed = useLiquidRevealed("profiles");
   const surface = useRef<HTMLDivElement>(null);
-  const moving = useLiquidClip("profiles", surface);
+  const moving = useLiquidClip("profiles", surface, { cover: true });
   const agents = useMemo(() => profiles.filter((p) => p.name === p.agent && (p.agent !== "mock" || import.meta.env.DEV)).map((p) => p.agent), [profiles]);
   const [agent, setAgent] = useState<string>("claude");
   // Selected profile. null means a new one

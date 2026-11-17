@@ -31,7 +31,7 @@ export function DiffView() {
   const closeDiff = useStore((s) => s.closeDiff);
   const revealed = useLiquidRevealed("diff");
   const surface = useRef<HTMLDivElement>(null);
-  const moving = useLiquidClip("diff", surface);
+  const moving = useLiquidClip("diff", surface, { cover: true });
   const [data, setData] = useState<Diff | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sel, setSel] = useState(0);

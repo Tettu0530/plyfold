@@ -31,7 +31,7 @@ export function SettingsView() {
   const setLabOpen = useStore((s) => s.setLabOpen);
   const revealed = useLiquidRevealed("settings");
   const surface = useRef<HTMLDivElement>(null);
-  const moving = useLiquidClip("settings", surface);
+  const moving = useLiquidClip("settings", surface, { cover: true });
   const [paths, setPaths] = useState<Paths | null>(null);
   const [error, setError] = useState<string | null>(null);
 
