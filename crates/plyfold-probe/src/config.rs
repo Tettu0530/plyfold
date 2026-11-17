@@ -138,7 +138,10 @@ impl Config {
                 if link.symlink_metadata().is_ok() {
                     std::fs::remove_file(&link)?;
                 }
+                #[cfg(unix)]
                 std::os::unix::fs::symlink(&dest, &link)?;
+                #[cfg(windows)]
+                std::os::windows::fs::symlink_file(&dest, &link)?;
             }
             env_summary.push(format!("{var}={}", dir.display()));
             env_set.push((var.clone(), dir.display().to_string()));

@@ -5,6 +5,9 @@
 //! The shell runs once, without input, with a time limit; anything it prints besides the PATH (rc file messages) is
 //! ignored. If it fails, common install locations are added instead
 
+// Only Unix-like systems need this; on Windows the helpers below are unused
+#![cfg_attr(windows, allow(unused_imports, dead_code))]
+
 use std::io::Read;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -12,6 +15,7 @@ use std::time::{Duration, Instant};
 const MARK: &str = "__PLYFOLD_PATH__";
 const TIMEOUT: Duration = Duration::from_secs(5);
 
+#[cfg(not(windows))]
 /// The PATH printed by the user's login shell (interactive, so version managers set up in .zshrc are included)
 fn login_shell_path() -> Option<String> {
     let shell = std::env::var("SHELL").ok().filter(|s| s.starts_with('/')).unwrap_or_else(|| "/bin/zsh".into());
@@ -34,6 +38,7 @@ fn login_shell_path() -> Option<String> {
     between_marks(&out)
 }
 
+#[cfg_attr(windows, allow(dead_code))]
 fn between_marks(out: &str) -> Option<String> {
     let start = out.find(MARK)? + MARK.len();
     let len = out[start..].find(MARK)?;
@@ -41,12 +46,19 @@ fn between_marks(out: &str) -> Option<String> {
     (!path.is_empty()).then(|| path.to_string())
 }
 
+#[cfg_attr(windows, allow(dead_code))]
 /// `first` followed by the entries of `rest` it doesn't already have (order kept, empty entries dropped)
 fn merge(first: &str, rest: &str) -> String {
     let mut seen = std::collections::HashSet::new();
     first.split(':').chain(rest.split(':')).filter(|p| !p.is_empty() && seen.insert(*p)).collect::<Vec<_>>().join(":")
 }
 
+/// Call before anything else starts (setting environment variables is only safe while the process is single-threaded).
+/// Windows apps already get the user's PATH, so there is nothing to do there
+#[cfg(windows)]
+pub fn adopt_login_path() {}
+
+#[cfg(not(windows))]
 /// Call before anything else starts (setting environment variables is only safe while the process is single-threaded)
 pub fn adopt_login_path() {
     let current = std::env::var("PATH").unwrap_or_default();
@@ -76,6 +88,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn the_login_shell_answers() {
         // zsh is on every Mac; its PATH always has /usr/bin
         assert!(login_shell_path().is_some_and(|p| p.split(':').any(|e| e == "/usr/bin")));

@@ -5,6 +5,29 @@
 
 pub mod ops;
 pub mod remote;
+
+/// A command to run. On Windows the program is looked up the way a shell would (`gh` finds `gh.exe`, `code` finds
+/// `code.cmd`) and runs without flashing a console window; elsewhere this is `Command::new`
+pub(crate) fn command(program: &str) -> Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt as _;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let resolved = which::which(program).map(|p| p.into_os_string()).unwrap_or_else(|_| program.into());
+        let mut c = Command::new(resolved);
+        c.creation_flags(CREATE_NO_WINDOW);
+        c
+    }
+    #[cfg(not(windows))]
+    {
+        Command::new(program)
+    }
+}
+
+/// Whether a program is on the PATH
+pub(crate) fn has_program(program: &str) -> bool {
+    which::which(program).is_ok()
+}
 pub use ops::WtStatus;
 
 use std::path::{Path, PathBuf};
@@ -52,7 +75,7 @@ pub struct Diff {
 }
 
 fn git(dir: &Path, args: &[&str]) -> Result<String, WorktreeError> {
-    let out = Command::new("git").args(args).current_dir(dir).output()?;
+    let out = command("git").args(args).current_dir(dir).output()?;
     if !out.status.success() {
         return Err(WorktreeError::Git { args: args.join(" "), stderr: String::from_utf8_lossy(&out.stderr).trim().to_string() });
     }
@@ -61,7 +84,7 @@ fn git(dir: &Path, args: &[&str]) -> Result<String, WorktreeError> {
 
 /// Exit code 1 also counts as success (`git diff --no-index` returns 1 when there are differences)
 fn git_diff_ok(dir: &Path, args: &[&str]) -> Result<String, WorktreeError> {
-    let out = Command::new("git").args(args).current_dir(dir).output()?;
+    let out = command("git").args(args).current_dir(dir).output()?;
     match out.status.code() {
         Some(0) | Some(1) => Ok(String::from_utf8_lossy(&out.stdout).to_string()),
         _ => Err(WorktreeError::Git { args: args.join(" "), stderr: String::from_utf8_lossy(&out.stderr).trim().to_string() }),
@@ -155,7 +178,8 @@ mod tests {
         let d = std::env::temp_dir().join(format!("plyfold-wt-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
-        d.canonicalize().unwrap()
+        // macOS: resolve /var → /private/var. Windows: keep the path as is (canonicalize adds a \\?\ prefix git rejects)
+        if cfg!(windows) { d } else { d.canonicalize().unwrap() }
     }
 
     fn init_repo(dir: &Path) {
@@ -171,6 +195,8 @@ mod tests {
             assert!(ok, "git {args:?}");
         };
         g(&["init", "-q", "-b", "main"]);
+        // Keep line endings as written (Windows runners convert to CRLF on checkout otherwise)
+        g(&["config", "core.autocrlf", "false"]);
         std::fs::write(dir.join("a.txt"), "one\ntwo\n").unwrap();
         std::fs::write(dir.join(".gitignore"), "/target\n").unwrap();
         g(&["add", "-A"]);
@@ -186,7 +212,8 @@ mod tests {
         let wts = Worktrees::new(base.join("wts"));
 
         let wt = wts.create(&repo.join("."), "s1", None).unwrap();
-        assert_eq!(wt.repo, repo);
+        // git may spell the same folder differently (C:/ vs C:\\, long vs short names on Windows)
+        assert_eq!(wt.repo.canonicalize().unwrap(), repo.canonicalize().unwrap());
         assert!(wt.path.join("a.txt").exists());
         assert_eq!(wt.branch, "plyfold/s1");
 

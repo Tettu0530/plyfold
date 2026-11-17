@@ -32,7 +32,7 @@ Plyfold launches coding-agent CLIs on your machine and passes them your credenti
 
 ### API keys
 
-- Keys are stored in the macOS Keychain under the service `plyfold`, never in `config.toml`, `settings.json` or the database.
+- Keys are stored in the macOS Keychain (the Credential Manager on Windows) under the service `plyfold`, never in `config.toml`, `settings.json` or the database.
 - Keys reach an agent only as environment variables when it is launched, never as command-line arguments.
 - A profile that sets its own keys or config directory removes the agent's key variables (for example `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`) from the inherited environment, so keys from your shell are not passed to it.
 - The UI shows only the last four characters of a key.

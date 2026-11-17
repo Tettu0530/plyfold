@@ -26,7 +26,7 @@ pub fn status(wt: &Worktree) -> Result<WtStatus, WorktreeError> {
     let target = git(&wt.repo, &["symbolic-ref", "--quiet", "--short", "HEAD"]).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
     let merged = commits > 0
         && target.as_ref().is_some_and(|t| {
-            std::process::Command::new("git").args(["merge-base", "--is-ancestor", &wt.branch, t]).current_dir(&wt.repo).status().is_ok_and(|s| s.success())
+            crate::command("git").args(["merge-base", "--is-ancestor", &wt.branch, t]).current_dir(&wt.repo).status().is_ok_and(|s| s.success())
         });
     Ok(WtStatus { dirty, commits, target, merged })
 }
@@ -82,7 +82,7 @@ pub fn merge(wt: &Worktree) -> Result<String, WorktreeError> {
 }
 
 fn has(cmd: &str) -> bool {
-    std::process::Command::new("sh").args(["-c", &format!("command -v {cmd} >/dev/null 2>&1")]).status().is_ok_and(|s| s.success())
+    crate::has_program(cmd)
 }
 
 /// Pushes the branch to origin and opens a GitHub PR (via gh). Returns the PR URL
@@ -114,7 +114,7 @@ pub fn create_pr(wt: &Worktree, title: &str) -> Result<String, WorktreeError> {
     if let Some(t) = st.target.as_deref() {
         args.extend(["--base", t]);
     }
-    let out = std::process::Command::new("gh").args(&args).current_dir(&wt.path).output()?;
+    let out = crate::command("gh").args(&args).current_dir(&wt.path).output()?;
     if !out.status.success() {
         return Err(fail(plyfold_i18n::tr!(
             "PR を作れませんでした（枝は push 済みです）: {}",
@@ -139,17 +139,31 @@ pub fn open_in_editor(wt: &Worktree, prefer: &str) -> Result<String, WorktreeErr
                 "找不到 {name} 的命令（{cmd}）。请在设置中重新选择编辑器"
             )));
         }
-        std::process::Command::new(cmd).arg(&path).spawn()?;
+        crate::command(cmd).arg(&path).spawn()?;
         return Ok((*name).into());
     }
     for (cmd, name) in editors.iter().filter(|_| prefer != "finder") {
         if has(cmd) {
-            std::process::Command::new(*cmd).arg(&path).spawn()?;
+            crate::command(cmd).arg(&path).spawn()?;
             return Ok((*name).into());
         }
     }
-    std::process::Command::new("open").arg(&path).spawn()?;
-    Ok("Finder".into())
+    // No editor: show the folder in Finder / File Explorer
+    #[cfg(target_os = "macos")]
+    {
+        crate::command("open").arg(&path).spawn()?;
+        Ok("Finder".into())
+    }
+    #[cfg(windows)]
+    {
+        crate::command("explorer").arg(&path).spawn()?;
+        Ok("File Explorer".into())
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        crate::command("xdg-open").arg(&path).spawn()?;
+        Ok("Files".into())
+    }
 }
 
 /// Resets to the base commit (drops commits, uncommitted changes and untracked files; ignored files are kept)
@@ -171,7 +185,8 @@ mod tests {
         let d = std::env::temp_dir().join(format!("plyfold-ops-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
-        d.canonicalize().unwrap()
+        // macOS: resolve /var → /private/var. Windows: keep the path as is (canonicalize adds a \\?\ prefix git rejects)
+        if cfg!(windows) { d } else { d.canonicalize().unwrap() }
     }
 
     fn g(dir: &Path, args: &[&str]) {
@@ -184,6 +199,8 @@ mod tests {
         let repo = base.join("repo");
         std::fs::create_dir_all(&repo).unwrap();
         g(&repo, &["init", "-q", "-b", "main"]);
+        // Keep line endings as written (Windows runners convert to CRLF on checkout otherwise)
+        g(&repo, &["config", "core.autocrlf", "false"]);
         // Commits made in tests take their author from this repository's config
         g(&repo, &["config", "user.name", "t"]);
         g(&repo, &["config", "user.email", "t@example.invalid"]);

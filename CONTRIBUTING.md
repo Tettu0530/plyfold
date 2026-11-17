@@ -7,7 +7,7 @@ By taking part you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md). Se
 ## Before you start
 
 - For bugs, open an issue with the bug report template first, unless the fix is small and obvious.
-- For new features or larger changes, open a feature request and discuss it before writing code. Plyfold has a few fixed directions (see [DESIGN.md](DESIGN.md)): macOS only, an ACP client rather than its own agent loop, multiple keys per CLI as a core feature, and a custom UI rather than native Liquid Glass. Changes that go against these are unlikely to be merged.
+- For new features or larger changes, open a feature request and discuss it before writing code. Plyfold has a few fixed directions (see [DESIGN.md](DESIGN.md)): macOS first (Windows is supported too), an ACP client rather than its own agent loop, multiple keys per CLI as a core feature, and a custom UI rather than native Liquid Glass. Changes that go against these are unlikely to be merged.
 
 ## Development setup
 
