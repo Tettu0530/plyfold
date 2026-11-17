@@ -9,7 +9,7 @@
 - 前提: 1 つの CLI で複数のキーを分けて使う（プロファイル）
 - macOS 専用。Tauri v2 + React + TypeScript。見た目は shadcn/ui（Tailwind v4、Radix）、ニュートラルなダークのトークン
 - ネイティブのガラスは使わない。ただし動きは Apple（Liquid Glass）を再現する
-- リポジトリ: `~/projects/plyfold`、枝 `main`（push はしていない）
+- リポジトリ: `~/projects/plyfold`、枝 `main`。GitHub の非公開のリポジトリ https://github.com/Tettu0530/plyfold に push している（2026-11-17）
 
 ## 作業の決まり（ユーザーから）
 
