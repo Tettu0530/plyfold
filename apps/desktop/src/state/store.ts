@@ -564,8 +564,11 @@ export const useStore = create<State>((set, get) => ({
 
   closePane: (pane) => {
     const id = get().panes[pane];
-    // On close, shrink out of the pane back behind the anchor (the sidebar row)
-    if (id) liquidCloseFrom(`pane-${pane}`, { anchor: anchorOf(id), target: () => paneEl(pane), toLook: PANE_LOOK });
+    // On close, shrink out of the pane back behind the anchor (the sidebar row). The pane itself goes away at once
+    // (its neighbours grow into the space), so the blob starts from where the pane was
+    const was = paneEl(pane)?.getBoundingClientRect();
+    const ghost = was ? ({ getBoundingClientRect: () => was } as unknown as HTMLElement) : null;
+    if (id) liquidCloseFrom(`pane-${pane}`, { anchor: anchorOf(id), target: () => ghost ?? paneEl(pane), toLook: PANE_LOOK });
     set((s) => {
       const panes = [...s.panes];
       panes[pane] = null;
@@ -573,7 +576,10 @@ export const useStore = create<State>((set, get) => ({
       if (isDraft(id)) delete drafts[id];
       const previews = { ...s.previews };
       if (isPreview(id)) delete previews[id];
-      return { panes, drafts, previews };
+      // Closing a pane removes it from the layout; the last pane stays, empty
+      const layout = leaves(s.layout).length > 1 ? (removeSlot(s.layout, pane) ?? s.layout) : s.layout;
+      const shown = leaves(layout);
+      return { panes, drafts, previews, layout, paneCount: shown.length, focusedPane: shown.includes(s.focusedPane) ? s.focusedPane : shown[0] };
     });
   },
 

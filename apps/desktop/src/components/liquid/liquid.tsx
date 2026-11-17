@@ -70,19 +70,74 @@ function edgesOf(el: Element | null | undefined, radius: number): Edges | null {
 
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 
-/** At the moment of separation, tug the anchor slightly toward the blob, then spring it back */
-function wobble(el: HTMLElement | undefined, dir: { x: number; y: number }) {
-  if (!el?.animate) return;
-  const { easing, ms } = springToCss({ duration: 0.45, bounce: 0.45 });
-  el.animate(
-    [
-      {
-        transform: `translate(${(dir.x * 3).toFixed(1)}px, ${(dir.y * 3).toFixed(1)}px) scale(${(1 + 0.05 * Math.abs(dir.x)).toFixed(3)}, ${(1 + 0.05 * Math.abs(dir.y)).toFixed(3)})`,
-      },
-      { transform: "translate(0px, 0px) scale(1, 1)" },
-    ],
-    { duration: ms, easing, composite: "add" },
-  );
+type Dir = { x: number; y: number };
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+const tf = (x: number, y: number, sx: number, sy: number) => `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) scale(${sx.toFixed(4)}, ${sy.toFixed(4)})`;
+
+/**
+ * The anchor's own body in a separation. It is part of the liquid, not a fixed backdrop:
+ * - while the blob is still joined to it by the neck, the anchor is drawn toward the blob and stretched along the pull
+ *   (part of it is leaving), and when the neck breaks it springs back from there
+ * - when a blob comes home, the anchor takes the impact: pushed away along the blob's direction and squashed, then it
+ *   springs back (harder arrivals, bigger reaction)
+ * Additive Web Animations, so the anchor's own transforms (press feedback, layout) keep working underneath
+ */
+class AnchorBody {
+  private holding: Animation | null = null;
+  private last = { x: 0, y: 0, sx: 1, sy: 1 };
+  constructor(private el: HTMLElement | null | undefined) {}
+
+  /** While joined: `dir` points from the anchor to the blob, `amount` (0..1) is how hard the neck pulls */
+  pull(dir: Dir, amount: number) {
+    if (!this.el?.animate) return;
+    const a = clamp01(amount);
+    const ax = Math.abs(dir.x);
+    const ay = Math.abs(dir.y);
+    // Up to 4px toward the blob, 10% longer along the pull and slightly thinner across it
+    this.last = { x: dir.x * 4 * a, y: dir.y * 4 * a, sx: 1 + a * (0.1 * ax - 0.04 * ay), sy: 1 + a * (0.1 * ay - 0.04 * ax) };
+    const t = tf(this.last.x, this.last.y, this.last.sx, this.last.sy);
+    const frames = [{ transform: t }, { transform: t }];
+    if (!this.holding) {
+      this.holding = this.el.animate(frames, { duration: 1000, composite: "add" });
+      this.holding.pause();
+    } else (this.holding.effect as KeyframeEffect).setKeyframes(frames);
+  }
+
+  /** The neck broke: spring back from where the pull left the anchor */
+  release(dir: Dir) {
+    if (!this.el?.animate) return;
+    // At least a clear tug: menus that open over their own button break the neck almost at once, so the pull alone
+    // would leave the anchor barely moving
+    const ax = Math.abs(dir.x);
+    const ay = Math.abs(dir.y);
+    const base = { x: dir.x * 3.5, y: dir.y * 3.5, sx: 1 + 0.08 * ax - 0.03 * ay, sy: 1 + 0.08 * ay - 0.03 * ax };
+    const from = this.holding && Math.hypot(this.last.x, this.last.y) > 3.5 ? this.last : base;
+    this.stop();
+    const { easing, ms } = springToCss({ duration: 0.45, bounce: 0.45 });
+    this.el.animate([{ transform: tf(from.x, from.y, from.sx, from.sy) }, { transform: tf(0, 0, 1, 1) }], { duration: ms, easing, composite: "add" });
+  }
+
+  /** A blob arrived from `dir` (anchor → blob) at `speed` px/s: take the impact */
+  absorb(dir: Dir, speed: number) {
+    if (!this.el?.animate) return;
+    this.stop();
+    const m = Math.min(1, Math.max(0.6, speed / 1000));
+    const ax = Math.abs(dir.x);
+    const ay = Math.abs(dir.y);
+    // Pushed away from the blob and squashed along the hit, bulging across it
+    const x = -dir.x * 5 * m;
+    const y = -dir.y * 5 * m;
+    const sx = 1 + m * (0.08 * ay - 0.12 * ax);
+    const sy = 1 + m * (0.08 * ax - 0.12 * ay);
+    const { easing, ms } = springToCss({ duration: 0.5, bounce: 0.5 });
+    this.el.animate([{ transform: tf(x, y, sx, sy) }, { transform: tf(0, 0, 1, 1) }], { duration: ms, easing, composite: "add" });
+  }
+
+  /** Drop the pull without springing (another animation takes over) */
+  stop() {
+    this.holding?.cancel();
+    this.holding = null;
+  }
 }
 
 const motionValueOf = (v: number) => motionValue(v);
@@ -184,11 +239,15 @@ export function useLiquidMorph(
   const running = useRef<{ stop(): void }[]>([]);
   const run = useRef(0);
 
+  /** The anchor's own motion during this animation (pulled while joined, takes the impact on return) */
+  const body = useRef<AnchorBody | null>(null);
+
   const stopAll = () => {
     running.current.forEach((c) => c.stop());
     running.current = [];
     blobOff.current?.();
     blobOff.current = null;
+    body.current?.stop();
   };
   /** Drive mv 0 -> 1 with a soft-start spring (peels off slowly while connected, then accelerates) */
   const peel = (mv: MotionValue<number>) =>
@@ -307,14 +366,24 @@ export function useLiquidMorph(
         const anchorC = { x: (src.l + src.r) / 2, y: (src.t + src.b) / 2 };
         const kMax = mergeWidth(Math.min(src.r - src.l, src.b - src.t));
         const adh = new Adhesion(opening);
-        adh.onSnap = () => {
+        const anchorBody = new AnchorBody(anchors.get(anchor));
+        body.current = anchorBody;
+        /** Unit vector from the anchor to the blob */
+        const dirToBlob = (): Dir => {
           const raw = rawRef.current;
-          if (!raw) return;
+          if (!raw) return { x: 0, y: 0 };
           const dx = (raw.l + raw.r) / 2 - anchorC.x;
           const dy = (raw.t + raw.b) / 2 - anchorC.y;
           const d = Math.hypot(dx, dy) || 1;
-          wobble(anchors.get(anchor), { x: dx / d, y: dy / d });
+          return { x: dx / d, y: dy / d };
         };
+        adh.onSnap = () => anchorBody.release(dirToBlob());
+        // Closing: the anchor takes the impact once, when the blob comes back into it. A blob that started apart
+        // touches it; one that never left (a menu over its own row) arrives when its size is nearly back
+        let absorbed = opening;
+        let apart = false;
+        let prev: { d: number; size: number } | null = null;
+        let speed = 0;
         tension.set(0);
         const fillA = parseColor(fromLook.background);
         const lineA = parseColor(fromLook.border);
@@ -331,17 +400,52 @@ export function useLiquidMorph(
               const sy = popScaleY.get();
               const cx = (L.get() + R.get()) / 2;
               const cy = (T.get() + B.get()) / 2;
-              // Don't merge while overlapping (exact overlap bulges the whole shape, making it look larger than the anchor)
-              const sep = separation(Math.hypot(cx - (a.l + a.r) / 2, cy - (a.t + a.b) / 2), Math.min(a.r - a.l, a.b - a.t));
               // When closing, widen the merge distance as it returns (gets sucked back in)
-              const k = (opening ? mergeAt(kMax, grown) : kMax * Math.min(1, Math.max(0, (grown - 0.25) / 0.5))) * sep;
-              const pull = adh.update(dt, rectGap(a, raw), k);
-              if (opening) tension.set(pull);
+              const kBase = opening ? mergeAt(kMax, grown) : kMax * Math.min(1, Math.max(0, (grown - 0.25) / 0.5));
+              const thick = Math.min(a.r - a.l, a.b - a.t);
+              // Don't merge while overlapping (exact overlap bulges the whole shape, making it look larger than the anchor).
+              // The adhesion follows where the blob really is; the drawing follows the fused shape below
+              const kRaw = kBase * separation(Math.hypot(cx - (a.l + a.r) / 2, cy - (a.t + a.b) / 2), thick);
+              const gap = rectGap(a, raw);
+              const pull = adh.update(dt, gap, kRaw);
+              if (opening) {
+                tension.set(pull);
+                // While joined, the anchor itself is drawn toward the blob as the neck stretches
+                if (adh.connected && kMax > 0) anchorBody.pull(dirToBlob(), pull / (kMax * 0.8));
+              } else if (!absorbed) {
+                // How fast the blob is coming home: its center closing in, plus its size shrinking
+                const d = Math.hypot((raw.l + raw.r) / 2 - anchorC.x, (raw.t + raw.b) / 2 - anchorC.y);
+                const size = raw.r - raw.l + (raw.b - raw.t);
+                if (prev && dt > 0) speed = Math.max(0, (prev.d - d) / dt) + Math.max(0, (prev.size - size) / dt) / 2;
+                prev = { d, size };
+                if (gap > 2) apart = true;
+                if ((apart && gap <= 0.5) || (!apart && grown >= 0.85)) {
+                  absorbed = true;
+                  anchorBody.absorb(dirToBlob(), speed);
+                }
+              }
               const hw = ((R.get() - L.get()) * sx) / 2;
               const hh = ((B.get() - T.get()) * sy) / 2;
+              const blob = { l: cx - hw, t: cy - hh, r: cx + hw, b: cy + hh, radius: rad.get() * Math.min(sx, sy) };
+              // Fusion: next to the button the blob takes the button's own shape (it reads its live rect, so it follows
+              // the button's tug and squash). Opening, it leaves from the button; closing, it becomes the button again,
+              // so no edge of it ever shows around the button behind it
+              const fuse = opening ? 1 - smoothstep(0, 0.3, grown) : smoothstep(0.6, 1, grown);
+              const fused =
+                fuse > 0
+                  ? {
+                      l: lerp(blob.l, a.l, fuse),
+                      t: lerp(blob.t, a.t, fuse),
+                      r: lerp(blob.r, a.r, fuse),
+                      b: lerp(blob.b, a.b, fuse),
+                      radius: lerp(blob.radius, anchorRadius, fuse),
+                    }
+                  : blob;
+              // Merge width for what is drawn: from the fused shape, so a blob that has become the button doesn't bulge
+              const k = kBase * separation(Math.hypot((fused.l + fused.r) / 2 - (a.l + a.r) / 2, (fused.t + fused.b) / 2 - (a.t + a.b) / 2), thick);
               return {
                 a: { ...a, radius: anchorRadius },
-                s: { l: cx - hw, t: cy - hh, r: cx + hw, b: cy + hh, radius: rad.get() * Math.min(sx, sy) },
+                s: fused,
                 k,
                 fillA,
                 fillS: parseColor(background.get()),
@@ -445,9 +549,9 @@ export function useLiquidMorph(
         setPhase("open");
         await go(opacity, 0, { duration: 0.12 });
       } else {
-        // Merge into the anchor and disappear
+        // Fused with the anchor and drawn over it: its color fades out on top of the button
         ghostOpacity.set(0);
-        await go(opacity, 0, { duration: 0.12 });
+        await go(opacity, 0, { duration: 0.22, ease: [0.25, 0.1, 0.25, 1] });
         if (alive()) setPhase("closed");
       }
       if (alive()) {
@@ -532,8 +636,11 @@ export function useLiquidMorph(
     return {
       revealed: phase === "open",
       mounted: phase !== "closed",
-      /** The blob remains as the frame after opening (stage keeps it registered) */
-      holding: hold && gl && phase === "open",
+      /**
+       * The blob remains as the frame after opening (stage keeps it registered). Not with reduced motion: no blob was
+       * drawn, so the surface shows its own frame (holding on would hide it and clip it to a shape that never appears)
+       */
+      holding: hold && gl && !reduced && phase === "open",
       layer: surface,
       edges: edgesRef,
       /** Something is still moving after opening (currently unused; hook for stage's lingering) */

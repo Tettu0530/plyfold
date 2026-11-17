@@ -98,7 +98,7 @@ Prioritize **moving the way Apple's UI moves** over the glass look. The implemen
 - Don't animate when macOS "Reduce motion" is on (Motion's `reducedMotion="user"`; in CSS, a 150ms fade)
 - Animate only transform and opacity. Don't animate width / height / top / left directly
   - **Exception: when a region containing text changes size** (e.g. splitting panes), don't use Motion's `layout` (it scales, so the contents stretch). Spring the actual width and height and re-lay out the contents every frame (like Apple's Split View). For rows that only change position when reordered, use `layout="position"`
-- When changing values, compare side by side with Finder and System Settings using the app's motion tuning panel (⌘,)
+- When changing values, compare side by side with Finder and System Settings using the app's Motion lab (Settings → Motion, development builds only)
 
 ## 5. Choosing components
 

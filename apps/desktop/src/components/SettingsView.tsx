@@ -336,16 +336,19 @@ export function SettingsView() {
                     ]}
                   />
                 </Row>
-                <Row label={t("settings.motionLab")} detail={t("settings.motionLabDetail")}>
-                  <button
-                    type="button"
-                    onClick={() => setLabOpen(true)}
-                    className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent"
-                  >
-                    <Sparkles className="size-3.5" aria-hidden />
-                    {t("settings.open")}
-                  </button>
-                </Row>
+                {/* Development builds only (see App.tsx) */}
+                {import.meta.env.DEV && (
+                  <Row label={t("settings.motionLab")} detail={t("settings.motionLabDetail")}>
+                    <button
+                      type="button"
+                      onClick={() => setLabOpen(true)}
+                      className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent"
+                    >
+                      <Sparkles className="size-3.5" aria-hidden />
+                      {t("settings.open")}
+                    </button>
+                  </Row>
+                )}
               </Section>
 
               {error && <p className="text-xs whitespace-pre-wrap text-error">{t("settings.saveFailed", { error })}</p>}

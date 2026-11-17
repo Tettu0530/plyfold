@@ -129,15 +129,11 @@ export function ControlRow({
   const raised = useLiquidActiveAnchors();
   const modelMenu = useLiquidMenu(`menu:${scope}:model`, `${scope}:model`);
   const effortMenu = useLiquidMenu(`menu:${scope}:effort`, `${scope}:effort`);
+  const modeMenu = useLiquidMenu(`menu:${scope}:mode`, `${scope}:mode`);
   const model = option(info, "model");
   const effort = option(info, "thought_level");
   const mode = currentMode(info);
   const modes = modeChoices(info);
-  const nextMode = () => {
-    if (modes.length === 0) return;
-    const i = mode ? modes.indexOf(mode) : -1;
-    onSet("mode", modes[(i + 1) % modes.length]);
-  };
   const ctxPct = info?.context_used != null && info.context_size ? Math.round((info.context_used / info.context_size) * 100) : null;
 
   return (
@@ -205,27 +201,49 @@ export function ControlRow({
           </SelectContent>
         </Select>
       )}
+      {/* Mode: a picker like model and effort; ⇧⇥ in the input still cycles through the modes (the label flips) */}
       {modes.length > 0 && (
-        <button
-          type="button"
-          onClick={nextMode}
-          aria-label={t("composer.switchMode", { mode: modeLabel(mode) })}
-          className={cn(
-            "flex h-6 items-center gap-1.5 rounded-md border px-1.5 hover:bg-accent",
-            isDangerMode(mode) ? "border-error/40 text-error" : "border-border",
-          )}
-        >
-          <SplitFlap
-            value={mode ?? ""}
-            render={(m) => (
-              <>
-                <ModeIcon mode={m || null} />
-                {modeLabel(m || null)}
-              </>
+        <Select value={mode ?? undefined} onValueChange={(v) => onSet("mode", v)} onOpenChange={modeMenu.onOpenChange}>
+          <SelectTrigger
+            ref={liquidAnchor(`${scope}:mode`)}
+            aria-label={t("composer.switchMode", { mode: modeLabel(mode) })}
+            className={cn(
+              CHIP_TRIGGER,
+              "relative gap-1.5 border",
+              isDangerMode(mode) ? "border-error/40 text-error" : "border-border",
+              raised.has(`${scope}:mode`) && "z-[57]",
             )}
-          />
-          <Keys keys={["shift", "tab"]} />
-        </button>
+          >
+            <SplitFlap
+              value={mode ?? ""}
+              render={(m) => (
+                <>
+                  <ModeIcon mode={m || null} />
+                  {modeLabel(m || null)}
+                </>
+              )}
+            />
+            <Keys keys={["shift", "tab"]} />
+          </SelectTrigger>
+          <SelectContent
+            ref={modeMenu.ref as React.Ref<HTMLDivElement>}
+            style={modeMenu.style}
+            position="popper"
+            side="top"
+            align="start"
+            sideOffset={6}
+            className={cn("z-[58]", modeMenu.moving && "opacity-0")}
+          >
+            {modes.map((m) => (
+              <SelectItem key={m} value={m} className={cn(isDangerMode(m) && "text-error")}>
+                <span className="flex items-center gap-1.5">
+                  <ModeIcon mode={m} />
+                  {modeLabel(m)}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       )}
       {empty && !model && !effort && modes.length === 0 && <span className="px-1.5 text-muted-foreground">{empty}</span>}
       <span className="grow" />

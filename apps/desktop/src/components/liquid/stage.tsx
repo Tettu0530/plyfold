@@ -218,6 +218,9 @@ export function useLiquidClip(id: string, ref: React.RefObject<HTMLElement | nul
 const CHIP_LOOK: Look = { background: "rgba(38, 38, 38, 1)", border: "rgba(255, 255, 255, 0)", shadow: "0px 0px 0px rgba(0, 0, 0, 0)", blur: 0 };
 const MENU_LOOK: Look = { background: "rgba(23, 23, 23, 1)", border: "rgba(255, 255, 255, 0.1)", shadow: "0px 4px 12px rgba(0, 0, 0, 0.45)", blur: 0 };
 
+/** How strongly a closing blob is painted over its anchor (0..1): enough to see it merge, light enough to keep the icon */
+const CLOSE_OVER = 0.5;
+
 /** Always disable Radix's default fade/zoom (inline, since classes can't override it).
  * Without an animation, Radix unmounts content immediately on close (it doesn't linger for its own fade) */
 const NO_ANIMATION: React.CSSProperties = { animation: "none" };
@@ -322,13 +325,21 @@ function JobView({ job }: { job: Job }) {
 
   // Lower the anchor (put the blob on top). While lowered, the GPU renderer also paints the blob over the anchor
   useEffect(() => {
-    if (!job.cover && !job.rise) return;
     const setLowered = (lowered: boolean) =>
       useStage.setState((s) => {
         const j = s.jobs[job.id];
         if (j?.nonce !== job.nonce || !!j.lowered === lowered) return s;
         return { jobs: { ...s.jobs, [job.id]: { ...j, lowered } } };
       });
+    // Closing (any surface): the blob stays on top all the way home. It fuses into the anchor's shape and its color
+    // fades out over the button, rather than slipping underneath it. Half strength over the button, so its icon still
+    // shows through
+    if (!job.open) {
+      over.set(CLOSE_OVER);
+      setLowered(true);
+      return;
+    }
+    if (!job.cover && !job.rise) return;
     if (job.rise) {
       // Menus: move on top midway based on open amount (blended over 0.2-0.5 rather than switched instantly)
       const update = (v: number) => {
@@ -340,13 +351,13 @@ function JobView({ job }: { job: Job }) {
       update(edges.look.get());
       return edges.look.on("change", update);
     }
-    // Full screens: raise the anchor only while emerging from behind it at the start or returning at the end
+    // Full screens: raise the anchor only while emerging from behind it at the start
     const lower = (lowered: boolean) => {
       over.set(lowered ? 1 : 0);
       setLowered(lowered);
     };
-    lower(!job.open);
-    const t = setTimeout(() => lower(job.open), job.open ? 150 : 300);
+    lower(false);
+    const t = setTimeout(() => lower(true), 150);
     return () => clearTimeout(t);
   }, [job.cover, job.rise, job.open, job.id, job.nonce, edges, over]);
 

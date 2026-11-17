@@ -10,7 +10,7 @@ export const composer: Record<keyof typeof source, string> = {
   contextUsage: "Context usage",
   context: "Context",
   reportedModel: "Reported model",
-  switchMode: "Switch mode (current: {mode}, ⇧⇥)",
+  switchMode: "Mode ({mode}; ⇧⇥ cycles through modes)",
   queueSendAfterTurn: "Queued until the turn ends",
   queueUnsent: "Unsent messages",
   sendFirst: "Send next",

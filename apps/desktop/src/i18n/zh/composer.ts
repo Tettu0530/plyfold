@@ -10,7 +10,7 @@ export const composer: Record<keyof typeof source, string> = {
   contextUsage: "上下文用量",
   context: "上下文",
   reportedModel: "响应模型",
-  switchMode: "切换 mode（当前：{mode}，⇧⇥）",
+  switchMode: "模式（当前为{mode}；⇧⇥ 依次切换）",
   queueSendAfterTurn: "本轮结束后发送",
   queueUnsent: "未发送的消息",
   sendFirst: "发送第一条",

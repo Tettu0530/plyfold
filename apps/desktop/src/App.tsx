@@ -1,6 +1,6 @@
 import { PanelLeft } from "lucide-react";
 import { motion, MotionConfig } from "motion/react";
-import { useEffect } from "react";
+import { Suspense, lazy, useEffect } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { GooDefs } from "./components/liquid/liquid";
@@ -10,7 +10,6 @@ import { ImagePreview } from "./components/ImagePreview";
 import { ProfilesView } from "./components/ProfilesView";
 import { Notifications } from "./components/Notifications";
 import { SettingsView } from "./components/SettingsView";
-import { MotionLab } from "./components/MotionLab";
 import { PaneGrid } from "./components/pane/PaneGrid";
 import { SearchCard } from "./components/SearchCard";
 import { Sidebar } from "./components/Sidebar";
@@ -28,6 +27,10 @@ import { BrowserButton } from "./components/BrowserButton";
 import { PlyfoldMark } from "./components/Logo";
 import { isMac, primaryKey } from "./lib/platform";
 import { cn } from "./lib/utils";
+
+// The Motion lab (tuning springs and the liquid motion) is a development tool: only in `npm run tauri dev` builds,
+// and left out of release bundles entirely
+const MotionLab = import.meta.env.DEV ? lazy(() => import("./components/MotionLab").then((m) => ({ default: m.MotionLab }))) : null;
 
 function useShortcuts() {
   useEffect(() => {
@@ -107,7 +110,7 @@ export default function App() {
       <TooltipProvider>
         <div className="flex h-full flex-col">
           {/* On macOS the window's traffic lights sit over the header's left end; Windows has a regular title bar */}
-          <header data-tauri-drag-region className={cn("flex h-10 shrink-0 items-center gap-2 border-b pr-2", isMac ? "pl-[84px]" : "pl-2")}>
+          <header data-tauri-drag-region className={cn("relative flex h-10 shrink-0 items-center gap-2 border-b pr-2", isMac ? "pl-[84px]" : "pl-2")}>
             <button
               type="button"
               aria-label={sidebarOpen ? t("app.hideSidebar") : t("app.showSidebar")}
@@ -118,10 +121,14 @@ export default function App() {
             >
               <PanelLeft className="size-4" aria-hidden />
             </button>
-            {/* The repository of the focused session, or the app's name and mark when there is none */}
-            <span data-tauri-drag-region className="flex items-center gap-1.5 font-medium">
-              {!focusedRepo && <PlyfoldMark className="size-4" />}
-              {focusedRepo ? repoName(focusedRepo) : "Plyfold"}
+            {/* The repository of the focused session, or the app's name and mark when there is none. Centred in the
+                window like a macOS title (clicks pass through to the drag region; long names are cut off) */}
+            <span
+              data-tauri-drag-region
+              className="pointer-events-none absolute top-1/2 left-1/2 flex max-w-[40%] -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 font-medium"
+            >
+              {!focusedRepo && <PlyfoldMark className="size-4 shrink-0" />}
+              <span className="truncate">{focusedRepo ? repoName(focusedRepo) : "Plyfold"}</span>
             </span>
             <span data-tauri-drag-region className="grow" />
             <BrowserButton />
@@ -152,7 +159,11 @@ export default function App() {
         <SearchCard />
         <ImagePreview />
         <DragLayer />
-        <MotionLab />
+        {MotionLab && (
+          <Suspense fallback={null}>
+            <MotionLab />
+          </Suspense>
+        )}
       </TooltipProvider>
     </MotionConfig>
   );
