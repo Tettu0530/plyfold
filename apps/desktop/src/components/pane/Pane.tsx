@@ -207,6 +207,8 @@ function SessionPane({ index }: { index: number }) {
         onUnqueue={(k) => unqueue(id, k)}
         onSendQueued={() => sendQueued(id)}
         root={r.worktree_path ?? r.repo_path}
+        // The running agent's list, else the last one in this session's log, else the one remembered for the profile
+        commands={view.info?.commands?.length ? view.info.commands : view.commands?.length ? view.commands : (cached?.commands ?? [])}
         onSet={(c, v) => void setCategory(id, c, v)}
       />
     </section>

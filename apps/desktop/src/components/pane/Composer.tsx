@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { money, tokens } from "@/lib/format";
-import type { Category, ConfigOption, SessionInfo } from "@/lib/types";
+import type { Category, ConfigOption, SessionInfo, SlashCommand } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { isDangerMode, ModeIcon, modeLabel, ProviderLogo } from "../icons";
 import { Keys } from "../Keys";
@@ -262,6 +262,7 @@ export function Composer({
   onUnqueue,
   onSendQueued,
   root = null,
+  commands,
 }: {
   scope: string;
   agent: string;
@@ -278,6 +279,8 @@ export function Composer({
   onSendQueued?: () => void;
   /** Working directory for @-mentions (the session's worktree or repository) */
   root?: string | null;
+  /** Slash commands to complete after "/" */
+  commands?: SlashCommand[];
 }) {
   const t = useT();
   const [text, setText] = useState("");
@@ -287,7 +290,7 @@ export function Composer({
   const textRef = useAutoGrow(text);
   const mention = useMention({ root, text, setText, textRef, boxRef: att.boxRef, scope, onPick: (h) => att.addMention(h.abs, h.path) });
   // "/" at the start lists the agent's slash commands
-  const slash = useSlash({ commands: info?.commands ?? [], text, setText, textRef, boxRef: att.boxRef, scope });
+  const slash = useSlash({ commands: commands ?? info?.commands ?? [], text, setText, textRef, boxRef: att.boxRef, scope });
   useEffect(() => {
     att.syncMentions(text);
     // eslint-disable-next-line react-hooks/exhaustive-deps

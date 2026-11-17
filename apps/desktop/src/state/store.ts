@@ -10,6 +10,8 @@ import { resolveLang, setLang, t } from "@/i18n";
 import { api, inTauri, onEngineEvent } from "@/lib/api";
 import { notify } from "@/lib/notify";
 import { loadInfoCache, saveInfoCache, snapshot, type InfoCache } from "./infoCache";
+import { commandsFromHistory } from "@/lib/commands";
+import type { SlashCommand } from "@/lib/types";
 import type { AppSettings, Category, SessionStatus, EngineEvent, ProfileSummary, ProfileUsage, SessionInfo, SessionRecord } from "@/lib/types";
 import {
   addNotice,
@@ -32,6 +34,8 @@ export interface SessionView {
   lastError: string | null;
   /** model / effort / mode chosen while the agent wasn't running (applied right after the next start) */
   pending: Partial<Record<Category, string>>;
+  /** Slash commands from the session's log (used while the agent isn't running) */
+  commands?: SlashCommand[];
 }
 
 
@@ -725,9 +729,18 @@ async function loadSession(id: string) {
   if (!v) return;
   if (!v.historyLoaded) {
     const events = await api.sessionHistory(id);
-    useStore.setState((st) =>
-      st.sessions[id] ? { sessions: { ...st.sessions, [id]: { ...st.sessions[id], transcript: fromHistory(events), historyLoaded: true } } } : st,
-    );
+    const commands = commandsFromHistory(events);
+    useStore.setState((st) => {
+      if (!st.sessions[id]) return st;
+      const sessions = { ...st.sessions, [id]: { ...st.sessions[id], transcript: fromHistory(events), historyLoaded: true, commands } };
+      // New sessions with this profile can offer the same commands (when the profile's options are already remembered)
+      const profile = st.sessions[id].record.profile;
+      const known = st.infoCache[profile];
+      if (!commands.length || !known || known.commands?.length) return { sessions };
+      const infoCache = { ...st.infoCache, [profile]: { ...known, commands } };
+      saveInfoCache(infoCache);
+      return { sessions, infoCache };
+    });
   }
   if (v.info === null) {
     const info = await api.sessionInfo(id);
