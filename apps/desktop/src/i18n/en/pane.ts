@@ -41,8 +41,6 @@ export const pane: Record<keyof typeof source, string> = {
   previewLoading: "Loading",
   previewSlow: "If nothing shows, the site may forbid embedding, or the server isn't up yet. Open it in a browser or reload.",
   preview: "Preview",
-  previewEmpty: "No localhost URL has appeared yet. Type one to open it.",
-  previewOpen: "Open",
   previewPlaceholder: "localhost:3000",
   previewFound: "URLs in the output",
   removePane: "Close pane",
@@ -91,4 +89,6 @@ export const pane: Record<keyof typeof source, string> = {
   gitNoCommitsSinceBase: "No commits that aren't in {base} yet",
   gitNoCommits: "No commits yet",
   gitUnpushed: "Not pushed yet",
+  previewNew: "New browser",
+  previewStart: "Type a URL in the field above to open it",
 };

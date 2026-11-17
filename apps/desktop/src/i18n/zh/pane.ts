@@ -41,8 +41,6 @@ export const pane: Record<keyof typeof source, string> = {
   previewLoading: "正在加载",
   previewSlow: "如果没有显示，可能是网站禁止嵌入，或服务器尚未启动。请在浏览器中打开或重新加载。",
   preview: "预览",
-  previewEmpty: "还没有出现 localhost 的 URL。可以输入 URL 打开。",
-  previewOpen: "打开",
   previewPlaceholder: "localhost:3000",
   previewFound: "输出中的 URL",
   removePane: "关闭窗格",
@@ -91,4 +89,6 @@ export const pane: Record<keyof typeof source, string> = {
   gitNoCommitsSinceBase: "还没有 {base} 中没有的提交",
   gitNoCommits: "还没有提交",
   gitUnpushed: "尚未推送",
+  previewNew: "新建浏览器",
+  previewStart: "在上方输入 URL 即可打开",
 };

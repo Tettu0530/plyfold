@@ -9,6 +9,7 @@ import { api, inTauri } from "@/lib/api";
 import { normalizeUrl } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
+import { useFoundUrls } from "../BrowserButton";
 import { startDrag } from "./dnd";
 import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
 
@@ -35,6 +36,8 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
   }, [url, nonce]);
 
   if (!page) return null;
+  // A new pane starts empty: the URL field is focused and the page lists the URLs agents printed
+  const empty = !url;
   const go = () => {
     const next = normalizeUrl(draft);
     if (!next) return;
@@ -47,7 +50,7 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
   };
 
   return (
-    <section aria-label={t("pane.previewLabel", { url })} onMouseDown={() => focusPane(index)} className="flex min-w-0 flex-col">
+    <section aria-label={url ? t("pane.previewLabel", { url }) : t("pane.previewNew")} onMouseDown={() => focusPane(index)} className="flex min-w-0 flex-col">
       {/* Right-click: split, even out, close */}
       <PaneMenu slot={index}>
         <div
@@ -72,12 +75,14 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
               }
             }}
             onFocus={(e) => e.currentTarget.select()}
+            autoFocus={empty}
+            placeholder={t("pane.previewPlaceholder")}
             className="h-6 min-w-0 grow rounded-md bg-transparent px-1.5 font-mono text-xs outline-none focus:bg-background focus:outline focus:outline-ring"
           />
-          <button type="button" aria-label={t("pane.previewReload")} title={t("pane.previewReload")} onClick={() => setNonce((n) => n + 1)} className={ICON}>
+          <button type="button" disabled={empty} aria-label={t("pane.previewReload")} title={t("pane.previewReload")} onClick={() => setNonce((n) => n + 1)} className={ICON}>
             <RotateCw className="size-3.5" aria-hidden />
           </button>
-          <button type="button" aria-label={t("pane.previewExternal")} title={t("pane.previewExternal")} onClick={openOutside} className={ICON}>
+          <button type="button" disabled={empty} aria-label={t("pane.previewExternal")} title={t("pane.previewExternal")} onClick={openOutside} className={ICON}>
             <ExternalLink className="size-3.5" aria-hidden />
           </button>
           <button type="button" aria-label={t("common.close")} onClick={() => closePane(index)} className={ICON}>
@@ -85,6 +90,9 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
           </button>
         </div>
       </PaneMenu>
+      {empty ? (
+        <StartPage onOpen={(u) => setPreviewUrl(id, u)} />
+      ) : (
       <div className="relative min-h-0 grow bg-white">
         <iframe
           key={`${url}#${nonce}`}
@@ -102,8 +110,31 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
           </div>
         )}
       </div>
+      )}
     </section>
   );
 }
 
-const ICON = "flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground";
+/** What an empty browser pane shows: the URLs agents printed in the sessions on screen */
+function StartPage({ onOpen }: { onOpen: (url: string) => void }) {
+  const t = useT();
+  const urls = useFoundUrls();
+  return (
+    <div className="flex min-h-0 grow flex-col gap-2 overflow-y-auto px-4 py-4">
+      <p className="m-0 text-xs text-muted-foreground">{t("pane.previewStart")}</p>
+      {urls.length > 0 && (
+        <div className="flex flex-col">
+          <span className="pb-1 text-xs font-medium text-muted-foreground">{t("pane.previewFound")}</span>
+          {urls.map((u) => (
+            <button key={u} type="button" onClick={() => onOpen(u)} className="-mx-1.5 flex h-7 items-center gap-2 rounded-md px-1.5 text-left hover:bg-accent">
+              <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              <span className="min-w-0 truncate font-mono text-xs">{u}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const ICON = "flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40";

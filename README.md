@@ -25,7 +25,7 @@ Plyfold does not implement its own agent loop. It is an ACP client: the agent CL
 - Settings also cover the display size (⌘= / ⌘- / ⌘0), reducing motion, the profile new sessions start with, reopening panes at launch, and whether the agent's thinking starts expanded
 - Transcript with messages, thoughts, tool calls, inline diffs and the agent's plan; it follows new output only while you are at the bottom, with a button to jump back down
 - Click an image (attached or sent) to view it large
-- Preview pane (the globe button next to the notifications): open a dev server the agent started (localhost URLs found in command output, including background shells) or any URL in a pane, in a sandboxed frame with reload and "open in browser"
+- Preview pane: the globe button next to the notifications opens an empty one right away, listing the URLs agents printed. Open a dev server the agent started (localhost URLs found in command output, including background shells) or any URL in a pane, in a sandboxed frame with reload and "open in browser"
 - Git in each session pane: the branch, how far it is ahead of the branch it will be merged into and of its upstream, the commits on it (unpushed ones marked) and the pull request with its checks and review state. Fetch, push, pull (fast-forward only) and create a PR from the same menu; network commands never wait for a password prompt and stop after 60 seconds
 - Model, effort and mode switches under the composer (⇧⇥ cycles modes), plus context usage, tokens in and out, tok/s and cost where the agent reports them
 - Messages typed during a turn are queued and sent when the turn ends; images and files can be attached from the + menu or with ⌘U, by pasting, or by dropping them on a pane

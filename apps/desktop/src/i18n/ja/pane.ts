@@ -39,8 +39,6 @@ export const pane = {
   previewLoading: "読み込んでいます",
   previewSlow: "表示されないときは、サイトが埋め込みを禁じているか、サーバーがまだ起動していません。ブラウザで開くか、再読み込みしてください",
   preview: "プレビュー",
-  previewEmpty: "まだ localhost の URL は出ていません。URL を打って開けます",
-  previewOpen: "開く",
   previewPlaceholder: "localhost:3000",
   previewFound: "出力に出た URL",
   removePane: "ペインを閉じる",
@@ -89,4 +87,6 @@ export const pane = {
   gitNoCommitsSinceBase: "{base} にないコミットはまだありません",
   gitNoCommits: "コミットはまだありません",
   gitUnpushed: "まだ push していません",
+  previewNew: "新しいブラウザ",
+  previewStart: "上の欄に URL を入れると開きます",
 } satisfies Record<string, string>;

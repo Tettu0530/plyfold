@@ -8,7 +8,7 @@ import { useT, type MessageKey } from "@/i18n";
 import { api, inTauri } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { backgroundShells, currentPlan, touchedFiles, type BackgroundShell, type ShellState } from "@/state/paneData";
-import { localUrls, normalizeUrl } from "@/lib/urls";
+import { localUrls } from "@/lib/urls";
 import { useStore } from "@/state/store";
 import type { TranscriptItem } from "@/state/transcript";
 import { liquidAnchor } from "../liquid/liquid";
@@ -115,52 +115,6 @@ const PLAN_ICON: Record<string, { Icon: typeof Check; className: string; spin?: 
 };
 
 /** Open a typed URL, or one of the localhost URLs the commands printed */
-export function PreviewMenu({ urls, anchor }: { urls: string[]; anchor: string }) {
-  const t = useT();
-  const [typed, setTyped] = useState("");
-  const close = useContext(CloseMenu);
-  const open = (url: string) => {
-    close();
-    useStore.getState().openPreview(url, anchor);
-  };
-  return (
-    <>
-      {urls.length > 0 ? (
-        <>
-          <div className="px-1.5 pb-0.5 text-xs text-muted-foreground">{t("pane.previewFound")}</div>
-          {urls.map((u) => (
-            <button key={u} type="button" onClick={() => open(u)} className="flex h-7 w-full items-center gap-2 rounded-md px-1.5 text-left hover:bg-accent">
-              <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-              <span className="min-w-0 truncate font-mono text-xs">{u}</span>
-            </button>
-          ))}
-        </>
-      ) : (
-        <Empty>{t("pane.previewEmpty")}</Empty>
-      )}
-      <form
-        className="mt-1 flex items-center gap-1.5 border-t px-0.5 pt-1.5"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const url = normalizeUrl(typed);
-          if (url) open(url);
-        }}
-      >
-        <input
-          aria-label={t("pane.previewUrl")}
-          value={typed}
-          spellCheck={false}
-          placeholder={t("pane.previewPlaceholder")}
-          onChange={(e) => setTyped(e.target.value)}
-          className="h-7 min-w-0 grow rounded-md border border-input bg-transparent px-2 font-mono text-xs outline-none focus:border-ring"
-        />
-        <button type="submit" disabled={!normalizeUrl(typed)} className="flex h-7 items-center rounded-md bg-primary px-2 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-40">
-          {t("pane.previewOpen")}
-        </button>
-      </form>
-    </>
-  );
-}
 
 export function PaneTools({
   scope,
