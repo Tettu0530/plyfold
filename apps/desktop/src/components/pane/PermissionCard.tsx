@@ -7,6 +7,7 @@ import { Keys } from "../Keys";
 import { dropIn } from "../motion";
 import { isImeKey } from "@/lib/keys";
 import { useT } from "@/i18n";
+import { useKeys } from "@/state/keys";
 
 /** Whether "reject" ends the turn differs by agent (docs/probe-findings.md) */
 const REJECT_ENDS_TURN = new Set(["codex"]);
@@ -23,6 +24,7 @@ export function PermissionCard({
   onStop: () => void;
 }) {
   const t = useT();
+  const stopKeys = useKeys("stop");
   const once = permission.options.find((o) => o.kind === "allow_once");
   const always = permission.options.find((o) => o.kind === "allow_always");
   const reject = permission.options.find((o) => o.kind.startsWith("reject"));
@@ -60,7 +62,7 @@ export function PermissionCard({
           <span className="grow" />
           <Button size="sm" variant="ghost" onClick={onStop} className="h-7 gap-1.5 px-2 text-error hover:text-error">
             {t("permission.stop")}
-            <Keys keys={["cmd", "."]} />
+            <Keys keys={stopKeys} />
           </Button>
         </div>
       </div>

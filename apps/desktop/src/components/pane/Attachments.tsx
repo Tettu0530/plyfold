@@ -17,6 +17,8 @@ import { Keys } from "../Keys";
 import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 import { useT } from "@/i18n";
+import { actionFor } from "@/lib/keymap";
+import { currentBindings, useKeys } from "@/state/keys";
 
 /**
  * onMentionRemoved: called with the path when a chip that came from an @-mention is removed, so the caller can
@@ -59,7 +61,7 @@ export function useAttachments({ onMentionRemoved, scope }: { onMentionRemoved?:
   useEffect(() => {
     if (!scope) return;
     const onKey = (e: KeyboardEvent) => {
-      if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey || e.key.toLowerCase() !== "u") return;
+      if (actionFor(e, currentBindings()) !== "attach") return;
       const s = useStore.getState();
       if (s.panes[s.focusedPane] !== scope) return;
       e.preventDefault();
@@ -147,6 +149,7 @@ const MENU_ITEM = "flex h-8 cursor-default items-center gap-2 rounded-md px-2 te
 /** The + left of the input: attachment menu (opens with the same separation animation as other menus) */
 function AddMenu({ att }: { att: AttachmentsState }) {
   const t = useT();
+  const attachKeys = useKeys("attach");
   // Where the keys sit in the sentence depends on the language, so split around {keys} and put Keys in between
   const [hintBefore, hintAfter = ""] = t("attach.pasteHint").split("{keys}").map((s) => s.trim());
   const anchor = `add:${useId()}`;
@@ -179,7 +182,7 @@ function AddMenu({ att }: { att: AttachmentsState }) {
           <DropdownMenu.Item className={MENU_ITEM} onSelect={() => void att.pick()}>
             <Paperclip className="size-3.5 text-muted-foreground" aria-hidden />
             {t("attach.attachFiles")}
-            <Keys keys={["cmd", "u"]} className="ml-auto pl-4 opacity-70" />
+            <Keys keys={attachKeys} className="ml-auto pl-4 opacity-70" />
           </DropdownMenu.Item>
           <DropdownMenu.Separator className="my-0.5 h-px bg-border" />
           <p className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-muted-foreground">

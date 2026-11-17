@@ -140,6 +140,12 @@ export interface AppSettings {
   language: "auto" | "ja" | "en" | "zh";
   /** Sidebar density */
   sidebar_density: "comfortable" | "compact";
+  /** Notify when a turn finishes in a session you are not looking at */
+  notify_turn_end: boolean;
+  /** Notify when an agent asks for permission in a session you are not looking at */
+  notify_permission: boolean;
+  /** Changed keyboard shortcuts (action → combo; "" unbinds). See lib/keymap.ts */
+  keybindings: Record<string, string>;
 }
 
 export interface SettingsView {

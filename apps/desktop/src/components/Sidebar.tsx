@@ -14,9 +14,13 @@ import { useLiquidActiveAnchors, useLiquidMovingAnchors } from "./liquid/stage";
 import { smooth, snappy } from "./motion";
 import { isImeKey } from "@/lib/keys";
 import { startDrag } from "./pane/dnd";
+import { keysOf } from "@/lib/keymap";
+import { useBindings } from "@/state/keys";
 
 export function Sidebar() {
   const t = useT();
+  const bindings = useBindings();
+  const keys = { newSession: keysOf(bindings.newSession), search: keysOf(bindings.search), settings: keysOf(bindings.settings) };
   const sessions = useStore((s) => s.sessions);
   const panes = useStore((s) => s.panes);
   const layout = useStore((s) => s.layout);
@@ -72,7 +76,7 @@ export function Sidebar() {
         >
           <Plus className="size-4" aria-hidden />
           <span className="grow text-left">{t("sidebar.newSession")}</span>
-          <Keys keys={["cmd", "n"]} />
+          <Keys keys={keys.newSession} />
         </motion.button>
         <motion.button
           ref={liquidAnchor("search")}
@@ -91,7 +95,7 @@ export function Sidebar() {
         >
           <Search className="size-4" aria-hidden />
           <span className="grow text-left">{t("sidebar.search")}</span>
-          <Keys keys={["cmd", "k"]} />
+          <Keys keys={keys.search} />
         </motion.button>
       </div>
 
@@ -225,7 +229,7 @@ export function Sidebar() {
         >
           <Settings className="size-4" aria-hidden />
           <span className="grow text-left">{t("sidebar.settings")}</span>
-          <Keys keys={["cmd", ","]} />
+          <Keys keys={keys.settings} />
         </motion.button>
       </div>
     </nav>

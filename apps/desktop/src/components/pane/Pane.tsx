@@ -20,10 +20,12 @@ import { Transcript } from "./Transcript";
 import { PaneTools } from "./PaneTools";
 import { startDrag } from "./dnd";
 import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
+import { useKeys } from "@/state/keys";
 
 function EmptyPane({ index }: { index: number }) {
   const t = useT();
   const newDraft = useStore((s) => s.newDraft);
+  const newKeys = useKeys("newSession");
   const focusPane = useStore((s) => s.focusPane);
   const removePane = useStore((s) => s.removePane);
   // The last pane can't be removed (there is always at least one)
@@ -51,7 +53,7 @@ function EmptyPane({ index }: { index: number }) {
           }}
           className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent hover:text-foreground"
         >
-          {t("pane.newSession")} <Keys keys={["cmd", "n"]} />
+          {t("pane.newSession")} <Keys keys={newKeys} />
         </button>
       </section>
     </PaneMenu>

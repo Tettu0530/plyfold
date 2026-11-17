@@ -21,6 +21,7 @@ Plyfold does not implement its own agent loop. It is an ACP client: the agent CL
 - Free pane layout: split any pane left, right, up or down, as many times as you like (⌘\ right, ⌘⇧\ down, or right-click a pane header). Drag the boundary between panes to resize them (double-click to split evenly), or even out every pane from the same menu
 - Drag a session from the sidebar onto a pane to open it there, or onto a pane's edge to open it in a new split. Drag a pane by its header to move it next to another pane or swap the two; the drop area is outlined before you let go
 - A resizable, collapsible sidebar (drag its edge; ⌘B to toggle), with a compact one-line-per-session layout in Settings
+- Keyboard shortcuts can be changed in Settings → Keyboard (click one and press the new keys); macOS notifications for finished turns and permission requests can be turned off there too
 - Transcript with messages, thoughts, tool calls, inline diffs and the agent's plan; it follows new output only while you are at the bottom, with a button to jump back down
 - Click an image (attached or sent) to view it large
 - Preview pane: open a dev server the agent started (localhost URLs found in command output, including background shells) or any URL in a pane, in a sandboxed frame with reload and "open in browser"
@@ -100,7 +101,7 @@ Everything is under `~/Library/Application Support/plyfold/`:
 | Path | Contents |
 |---|---|
 | `config.toml` | Profiles and agent overrides |
-| `settings.json` | App settings (language, send key, editor, stall timeout, worktree defaults) |
+| `settings.json` | App settings (language, send key, keyboard shortcuts, notifications, editor, stall timeout, worktree defaults) |
 | `plyfold.db` | Sessions and the ACP event log (SQLite) |
 | `worktrees/` | One git worktree per session |
 | `profiles/<name>/` | Separate config directories for profiles that use one |

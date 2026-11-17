@@ -20,6 +20,7 @@ const TEXT: Record<string, string> = { esc: "esc", ",": ",", ".": "." };
 
 /** e.g. <Keys keys={["cmd", "k"]} /> */
 export function Keys({ keys, className, onPrimary }: { keys: string[]; className?: string; onPrimary?: boolean }) {
+  if (keys.length === 0) return null;
   const label = keys.map((k) => ICONS[k]?.label ?? (TEXT[k] ?? k).toUpperCase()).join("+");
   return (
     <kbd aria-label={label} className={cn("inline-flex shrink-0 items-center gap-0.5", className)}>

@@ -21,43 +21,46 @@ import { repoName } from "./lib/format";
 import { leaves } from "./state/layout";
 import { useStore } from "./state/store";
 import { DragLayer } from "./components/pane/dnd";
+import { actionFor, type Action } from "./lib/keymap";
+import { currentBindings } from "./state/keys";
 
 function useShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!e.metaKey) return;
       const s = useStore.getState();
-      if (e.key === "k") {
-        e.preventDefault();
-        s.setSearchOpen(!s.searchOpen);
-      } else if (e.key === ",") {
-        e.preventDefault();
-        if (s.settingsView) s.closeSettings();
-        else s.openSettings();
-      } else if (e.key === "b") {
-        e.preventDefault();
-        s.toggleSidebar();
-      } else if (e.key === "n") {
-        e.preventDefault();
-        s.newDraft();
-      } else if (e.key === ".") {
-        const id = s.panes[s.focusedPane];
-        if (id) {
-          e.preventDefault();
-          void s.cancel(id);
-        }
-      } else if (e.code === "Backslash" || e.code === "IntlYen" || e.key === "\\" || e.key === "|" || e.key === "¥") {
-        // ⌘\ splits the focused pane to the right, ⌘⇧\ downward (the ¥ key on Japanese keyboards works too)
-        e.preventDefault();
-        s.splitFocused(e.shiftKey ? "bottom" : "right");
-      } else if (/^[1-9]$/.test(e.key)) {
-        // ⌘1–⌘9 focus panes in layout order (left to right, top to bottom)
-        const slot = leaves(s.layout)[Number(e.key) - 1];
+      // ⌘1–⌘9 focus panes in layout order (left to right, top to bottom); fixed, not in the keymap
+      if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
+        const slot = leaves(s.layout)[Number(e.code.slice(5)) - 1];
         if (slot !== undefined) {
           e.preventDefault();
           s.focusPane(slot);
         }
+        return;
       }
+      const action = actionFor(e, currentBindings());
+      // ⌘U (attach) is handled by the focused composer
+      if (!action || action === "attach") return;
+      e.preventDefault();
+      const shown = leaves(s.layout);
+      const step = (d: number) => s.focusPane(shown[(shown.indexOf(s.focusedPane) + d + shown.length) % shown.length]);
+      const run: Record<Exclude<Action, "attach">, () => void> = {
+        search: () => s.setSearchOpen(!s.searchOpen),
+        settings: () => (s.settingsView ? s.closeSettings() : s.openSettings()),
+        toggleSidebar: () => s.toggleSidebar(),
+        newSession: () => s.newDraft(),
+        stop: () => {
+          const id = s.panes[s.focusedPane];
+          if (id) void s.cancel(id);
+        },
+        // The ¥ key on Japanese keyboards counts as \ (see lib/keymap.ts)
+        splitRight: () => s.splitFocused("right"),
+        splitDown: () => s.splitFocused("bottom"),
+        evenLayout: () => s.evenLayout(),
+        closePane: () => s.paneCount > 1 && s.removePane(s.focusedPane),
+        focusNext: () => step(1),
+        focusPrev: () => step(-1),
+      };
+      run[action]();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

@@ -46,11 +46,17 @@ struct AppSettings {
     language: String,
     /// Sidebar density: "comfortable" (two lines per session) / "compact" (one line)
     sidebar_density: String,
+    /// Notify when a turn finishes in a session you are not looking at
+    notify_turn_end: bool,
+    /// Notify when an agent asks for permission in a session you are not looking at
+    notify_permission: bool,
+    /// Changed keyboard shortcuts: action → combo ("cmd+shift+k"; "" unbinds). Defaults live in the UI (lib/keymap.ts)
+    keybindings: std::collections::BTreeMap<String, String>,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
-        Self { editor: "auto".into(), cleanup_after_merge: false, stall_seconds: 120, worktree_default: true, send_key: "enter".into(), language: "auto".into(), sidebar_density: "comfortable".into() }
+        Self { editor: "auto".into(), cleanup_after_merge: false, stall_seconds: 120, worktree_default: true, send_key: "enter".into(), language: "auto".into(), sidebar_density: "comfortable".into(), notify_turn_end: true, notify_permission: true, keybindings: Default::default() }
     }
 }
 
@@ -87,6 +93,11 @@ fn save_settings(state: State<'_, AppState>, settings: AppSettings) -> CmdResult
     }
     if !(30..=3600).contains(&settings.stall_seconds) {
         return Err(plyfold_i18n::tr!("無応答とみなすまでの時間は 30 秒から 1 時間までです", "The no-response timeout must be between 30 seconds and 1 hour", "判定为无响应的时间须在 30 秒到 1 小时之间"));
+    }
+    // Shortcuts are checked fully in the UI; here only keep the file small and plain
+    let plain = |s: &str, max: usize| s.len() <= max && s.chars().all(|c| c.is_ascii_graphic());
+    if settings.keybindings.len() > 64 || settings.keybindings.iter().any(|(a, c)| !plain(a, 32) || !(c.is_empty() || plain(c, 48))) {
+        return Err(plyfold_i18n::tr!("ショートカットの設定が正しくありません", "The keyboard shortcut settings are not valid", "快捷键设置无效"));
     }
     let path = state.state_dir.join("settings.json");
     let tmp = path.with_extension("json.tmp");

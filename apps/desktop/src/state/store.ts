@@ -345,7 +345,7 @@ export const useStore = create<State>((set, get) => ({
   settingsView: null,
   infoCache: loadInfoCache(),
   unread: {},
-  settings: { editor: "auto", cleanup_after_merge: false, stall_seconds: 120, worktree_default: true, send_key: "enter", language: "auto", sidebar_density: "comfortable" },
+  settings: { editor: "auto", cleanup_after_merge: false, stall_seconds: 120, worktree_default: true, send_key: "enter", language: "auto", sidebar_density: "comfortable", notify_turn_end: true, notify_permission: true, keybindings: {} },
   liquidStyle: "pop",
   searchLayerActive: false,
   liquidLag: 0.12,
@@ -365,8 +365,9 @@ export const useStore = create<State>((set, get) => ({
         const sessions = reduceEvent(s.sessions, e);
         // Also post a macOS notification when the app isn't in focus
         const title = s.sessions[(e as { session_id?: string }).session_id ?? ""]?.record.title ?? t("store.fallbackTitle");
-        if (e.type === "permission_requested") notify(title, t("store.notifyPermission"));
-        if (e.type === "turn_ended") notify(title, e.error ? t("store.notifyError", { error: e.error }) : t("store.notifyTurnEnded"));
+        const { notify_permission, notify_turn_end } = get().settings;
+        if (e.type === "permission_requested" && notify_permission !== false) notify(title, t("store.notifyPermission"));
+        if (e.type === "turn_ended" && notify_turn_end !== false) notify(title, e.error ? t("store.notifyError", { error: e.error }) : t("store.notifyTurnEnded"));
         // Record turn ends as notifications for sessions not on screen (or when the app isn't in focus)
         if (e.type === "turn_ended") {
           const shown = visibleSessions(s).includes(e.session_id) && document.hasFocus();

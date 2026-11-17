@@ -11,6 +11,8 @@ import { Keys } from "./Keys";
 import { useLiquidMorph } from "./liquid/liquid";
 import { smooth } from "./motion";
 import { isImeKey } from "@/lib/keys";
+import { keysOf } from "@/lib/keymap";
+import { useBindings } from "@/state/keys";
 
 interface Entry {
   key: string;
@@ -24,6 +26,7 @@ interface Entry {
 /** The ⌘K search card. A blob splits off the sidebar's Search item like a droplet, travels over and expands */
 export function SearchCard() {
   const t = useT();
+  const bindings = useBindings();
   const open = useStore((s) => s.searchOpen);
   const sessions = useStore((s) => s.sessions);
   const { setSearchOpen, openInPane, newDraft, cancel, openSettings, openProfiles } = useStore.getState();
@@ -64,20 +67,20 @@ export function SearchCard() {
         run: () => void openInPane(v.record.id),
       }));
     const commands: Entry[] = [
-      { key: "new", label: t("search.newSession"), keys: ["cmd", "n"], icon: <Plus className="size-3.5" />, run: () => newDraft() },
+      { key: "new", label: t("search.newSession"), keys: keysOf(bindings.newSession), icon: <Plus className="size-3.5" />, run: () => newDraft() },
       { key: "mode", label: t("search.switchMode"), keys: ["shift", "tab"], icon: <ListChecks className="size-3.5" />, run: () => {} },
-      { key: "stop", label: t("search.stopTurn"), keys: ["cmd", "."], icon: <Square className="size-3.5" />, run: () => focusedId && void cancel(focusedId) },
-      { key: "splitRight", label: t("pane.splitRight"), keys: ["cmd", "\\"], icon: <PanelRight className="size-3.5" />, run: () => useStore.getState().splitFocused("right") },
-      { key: "splitDown", label: t("pane.splitDown"), keys: ["cmd", "shift", "\\"], icon: <PanelBottom className="size-3.5" />, run: () => useStore.getState().splitFocused("bottom") },
-      { key: "even", label: t("pane.evenLayout"), icon: <Equal className="size-3.5" />, run: () => useStore.getState().evenLayout() },
-      { key: "settings", label: t("search.settings"), keys: ["cmd", ","], icon: <Settings className="size-3.5" />, run: () => openSettings() },
+      { key: "stop", label: t("search.stopTurn"), keys: keysOf(bindings.stop), icon: <Square className="size-3.5" />, run: () => focusedId && void cancel(focusedId) },
+      { key: "splitRight", label: t("pane.splitRight"), keys: keysOf(bindings.splitRight), icon: <PanelRight className="size-3.5" />, run: () => useStore.getState().splitFocused("right") },
+      { key: "splitDown", label: t("pane.splitDown"), keys: keysOf(bindings.splitDown), icon: <PanelBottom className="size-3.5" />, run: () => useStore.getState().splitFocused("bottom") },
+      { key: "even", label: t("pane.evenLayout"), keys: keysOf(bindings.evenLayout), icon: <Equal className="size-3.5" />, run: () => useStore.getState().evenLayout() },
+      { key: "settings", label: t("search.settings"), keys: keysOf(bindings.settings), icon: <Settings className="size-3.5" />, run: () => openSettings() },
       { key: "profiles", label: t("search.profiles"), icon: <KeyRound className="size-3.5" />, run: () => openProfiles() },
     ].filter((c) => match(c.label));
     return [
       { title: t("search.recent"), items: recent },
       { title: t("search.commands"), items: commands },
     ].filter((g) => g.items.length > 0);
-  }, [q, sessions, focusedId, openInPane, newDraft, cancel, openSettings, openProfiles, t]);
+  }, [q, sessions, focusedId, openInPane, newDraft, cancel, openSettings, openProfiles, t, bindings]);
 
   const flat = entries.flatMap((g) => g.items);
   const choose = (e: Entry | undefined) => {
