@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, inTauri } from "@/lib/api";
 import type { DirCandidate } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useStore } from "@/state/store";
+import { useStore, isListed } from "@/state/store";
 import { Keys } from "../Keys";
 import { isImeKey } from "@/lib/keys";
 import { useT } from "@/i18n";
@@ -19,7 +19,9 @@ function useRecent(current: string): DirCandidate[] {
   return useMemo(() => {
     const seen = new Set<string>();
     const out: DirCandidate[] = [];
-    const list = Object.values(sessions).sort((a, b) => b.record.updated_at - a.record.updated_at);
+    const list = Object.values(sessions)
+      .filter(isListed)
+      .sort((a, b) => b.record.updated_at - a.record.updated_at);
     // The current value is already in the input, so don't list it
     seen.add(current);
     for (const p of list.map((v) => v.record.repo_path)) {

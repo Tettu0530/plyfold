@@ -19,6 +19,7 @@ import { diff } from "./diff";
 import { settings } from "./settings";
 import { motionLab } from "./motionLab";
 import { store } from "./store";
+import { side } from "./side";
 
 export const en = {
   common,
@@ -41,4 +42,5 @@ export const en = {
   settings,
   motionLab,
   store,
+  side,
 };

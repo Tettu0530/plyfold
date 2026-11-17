@@ -22,6 +22,7 @@ import { startDrag } from "./dnd";
 import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
 import { useKeys } from "@/state/keys";
 import { PlyfoldMark } from "../Logo";
+import { SideChatButton, SideChatColumn } from "./SideChat";
 
 function EmptyPane({ index }: { index: number }) {
   const t = useT();
@@ -92,6 +93,7 @@ function SessionPane({ index }: { index: number }) {
   const diffOpen = useStore((s) => s.diff?.id === id);
   const diffVersion = useStore((s) => s.diffVersion);
   const cached = useStore((s) => (view ? s.infoCache[view.record.profile] : undefined));
+  const paneRef = useRef<HTMLElement>(null);
 
   const status = view?.record.status;
   // The worktree's change count: on every status change and after worktree actions, when the window comes back,
@@ -125,6 +127,7 @@ function SessionPane({ index }: { index: number }) {
 
   return (
     <section
+      ref={paneRef}
       aria-label={t("pane.label", { n: index + 1, title: r.title })}
       onMouseDown={() => focusPane(index)}
       // A container, so the header can drop its tool buttons when the pane is narrow
@@ -192,6 +195,8 @@ function SessionPane({ index }: { index: number }) {
               )}
             </button>
           )}
+          {/* Side chat: a read-only fork for questions that stay out of this conversation (Gemini CLI cannot fork) */}
+          {r.acp_session_id && r.agent !== "gemini" && <SideChatButton mainId={id} />}
           {working && (
             <button
               type="button"
@@ -213,58 +218,63 @@ function SessionPane({ index }: { index: number }) {
         </div>
       </PaneMenu>
 
-      <Transcript
-        items={view.transcript.items}
-        info={view.info}
-        streaming={r.status === "working"}
-        busy={view.transcript.inTurn}
-        onResend={(t, a) => void sendPrompt(id, t, a)}
-      />
+      <div className="flex min-h-0 grow">
+        <div className="flex min-w-0 grow flex-col">
+          <Transcript
+            items={view.transcript.items}
+            info={view.info}
+            streaming={r.status === "working"}
+            busy={view.transcript.inTurn}
+            onResend={(t, a) => void sendPrompt(id, t, a)}
+          />
 
-      <div className="px-5">
-        <AnimatePresence>
-          {view.permission && (
-            <PermissionCard
-              key={view.permission.permissionId}
-              permission={view.permission}
-              agent={r.agent}
-              onRespond={(o) => void respondPermission(id, o)}
-              onStop={() => void cancel(id)}
-            />
-          )}
-        </AnimatePresence>
+          <div className="px-5">
+            <AnimatePresence>
+              {view.permission && (
+                <PermissionCard
+                  key={view.permission.permissionId}
+                  permission={view.permission}
+                  agent={r.agent}
+                  onRespond={(o) => void respondPermission(id, o)}
+                  onStop={() => void cancel(id)}
+                />
+              )}
+            </AnimatePresence>
+          </div>
+
+          <Composer
+            scope={id}
+            agent={r.agent}
+            info={(() => {
+              // While not running, show the last known values (remembered for this profile) with the chosen values applied on top
+              const base = r.status === "closed" || r.status === "error" || r.status === "starting" ? (view.info ?? cached ?? null) : view.info;
+              return base && Object.keys(view.pending).length > 0 ? withChoices(base, view.pending) : base;
+            })()}
+            disabled={r.status === "starting"}
+            busy={view.transcript.inTurn}
+            placeholder={
+              r.status === "closed" || r.status === "error"
+                ? t("pane.placeholderRestart")
+                : view.permission
+                  ? t("pane.placeholderPermission")
+                  : view.transcript.inTurn
+                    ? t("pane.placeholderWorking")
+                    : t("pane.placeholder")
+            }
+            // Messages sent mid-turn are queued and sent later
+            onSend={(t, a) => (view.transcript.inTurn ? enqueue(id, t, a) : void sendPrompt(id, t, a))}
+            onStop={() => void cancel(id)}
+            queue={queue ?? []}
+            onUnqueue={(k) => unqueue(id, k)}
+            onSendQueued={() => sendQueued(id)}
+            root={r.worktree_path ?? r.repo_path}
+            // The running agent's list, else the last one in this session's log, else the one remembered for the profile
+            commands={view.info?.commands?.length ? view.info.commands : view.commands?.length ? view.commands : (cached?.commands ?? [])}
+            onSet={(c, v) => void setCategory(id, c, v)}
+          />
+        </div>
+        <SideChatColumn mainId={id} pane={paneRef} />
       </div>
-
-      <Composer
-        scope={id}
-        agent={r.agent}
-        info={(() => {
-          // While not running, show the last known values (remembered for this profile) with the chosen values applied on top
-          const base = r.status === "closed" || r.status === "error" || r.status === "starting" ? (view.info ?? cached ?? null) : view.info;
-          return base && Object.keys(view.pending).length > 0 ? withChoices(base, view.pending) : base;
-        })()}
-        disabled={r.status === "starting"}
-        busy={view.transcript.inTurn}
-        placeholder={
-          r.status === "closed" || r.status === "error"
-            ? t("pane.placeholderRestart")
-            : view.permission
-              ? t("pane.placeholderPermission")
-              : view.transcript.inTurn
-                ? t("pane.placeholderWorking")
-                : t("pane.placeholder")
-        }
-        // Messages sent mid-turn are queued and sent later
-        onSend={(t, a) => (view.transcript.inTurn ? enqueue(id, t, a) : void sendPrompt(id, t, a))}
-        onStop={() => void cancel(id)}
-        queue={queue ?? []}
-        onUnqueue={(k) => unqueue(id, k)}
-        onSendQueued={() => sendQueued(id)}
-        root={r.worktree_path ?? r.repo_path}
-        // The running agent's list, else the last one in this session's log, else the one remembered for the profile
-        commands={view.info?.commands?.length ? view.info.commands : view.commands?.length ? view.commands : (cached?.commands ?? [])}
-        onSet={(c, v) => void setCategory(id, c, v)}
-      />
     </section>
   );
 }

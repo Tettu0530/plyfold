@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "@/i18n";
 import { repoName } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { useStore } from "@/state/store";
+import { useStore, isListed } from "@/state/store";
 import { ProviderLogo } from "./icons";
 import { Keys } from "./Keys";
 import { useLiquidMorph } from "./liquid/liquid";
@@ -65,6 +65,7 @@ export function SearchCard() {
     const needle = q.trim().toLowerCase();
     const match = (s: string) => !needle || s.toLowerCase().includes(needle);
     const recent = Object.values(sessions)
+      .filter(isListed)
       .sort((a, b) => b.record.updated_at - a.record.updated_at)
       .filter((v) => match(v.record.title) || match(v.record.profile))
       .slice(0, needle ? 8 : 4)

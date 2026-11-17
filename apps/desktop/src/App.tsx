@@ -79,6 +79,15 @@ function useShortcuts() {
           const id = s.panes[s.focusedPane];
           if (id && s.sessions[id]?.record.worktree_path) s.openDiff(id);
         },
+        // The focused session's side chat: open it, or put the cursor in it when it is open (closing clears it, so only the × button does)
+        sideChat: () => {
+          const id = s.panes[s.focusedPane];
+          const v = id ? s.sessions[id] : undefined;
+          if (!id || !v || !v.record.acp_session_id || v.record.agent === "gemini") return;
+          const side = s.sideChats[id];
+          if (!side) void s.openSideChat(id);
+          else if (side.id) s.insertIntoComposer(side.id, "");
+        },
       };
       run[action]();
     };

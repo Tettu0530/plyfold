@@ -15,6 +15,17 @@ import type { SlashCommand } from "@/lib/types";
 import type { AppSettings, Category, SessionStatus, EngineEvent, ProfileSummary, ProfileUsage, SessionInfo, SessionRecord } from "@/lib/types";
 import { addNotice, applyUpdate, beginTurn, emptyTranscript, endTurn, fromHistory, type PendingPermission, type Transcript } from "./transcript";
 
+export interface SideChat {
+  /** The fork's session id, once it has started */
+  id: string | null;
+  /** When the main conversation was copied (shown as the age of its context) */
+  openedAt: number;
+  error: string | null;
+}
+
+/** Sessions listed in the UI (side chats live only inside their pane) */
+export const isListed = (v: SessionView) => !v.record.side_of;
+
 export interface SessionView {
   record: SessionRecord;
   info: SessionInfo | null;
@@ -236,6 +247,17 @@ interface State {
   startSession: (args: { profile: string; repo: string; title: string; worktree: boolean; prompt?: string }) => Promise<void>;
   /** Fork into a new session. newWorktree is false only when the source agent is stopped */
   forkSession: (id: string, newWorktree: boolean) => Promise<void>;
+  /** Side chats, by the session they belong to. `id` is null while the fork starts */
+  sideChats: Record<string, SideChat>;
+  /** Open (or show again) the side chat of a session */
+  openSideChat: (mainId: string) => Promise<void>;
+  /** Close it: the fork is stopped and deleted */
+  closeSideChat: (mainId: string) => Promise<void>;
+  /** Start it again from the main conversation as it is now (the side conversation is dropped) */
+  refreshSideChat: (mainId: string) => Promise<void>;
+  /** Text to add to a session's input (an answer from its side chat); `n` makes each request distinct */
+  composerInsert: { scope: string; text: string; n: number } | null;
+  insertIntoComposer: (scope: string, text: string) => void;
   /** Open a conversation the CLI already has. The draft pane is replaced by the new session */
   adoptCliSession: (draftId: string, acpSessionId: string, title: string) => Promise<void>;
   sendPrompt: (id: string, text: string, attachments?: Attached[]) => Promise<void>;
@@ -393,7 +415,10 @@ export const useStore = create<State>((set, get) => ({
       set((s) => {
         const sessions = reduceEvent(s.sessions, e);
         // Also post a macOS notification when the app isn't in focus
-        const title = s.sessions[(e as { session_id?: string }).session_id ?? ""]?.record.title ?? t("store.fallbackTitle");
+        const subject = s.sessions[(e as { session_id?: string }).session_id ?? ""];
+        // A side chat is answered in front of the user, and never asks for permission
+        if (subject?.record.side_of) return { sessions };
+        const title = subject?.record.title ?? t("store.fallbackTitle");
         const { notify_permission, notify_turn_end } = get().settings;
         if (e.type === "permission_requested" && notify_permission !== false) notify(title, t("store.notifyPermission"));
         if (e.type === "turn_ended" && notify_turn_end !== false)
@@ -568,6 +593,8 @@ export const useStore = create<State>((set, get) => ({
 
   closePane: (pane) => {
     const id = get().panes[pane];
+    // A side chat lives only beside its pane
+    if (id && get().sideChats[id]) void get().closeSideChat(id);
     // On close, shrink out of the pane back behind the anchor (the sidebar row). The pane itself goes away at once
     // (its neighbours grow into the space), so the blob starts from where the pane was
     const was = paneEl(pane)?.getBoundingClientRect();
@@ -585,6 +612,50 @@ export const useStore = create<State>((set, get) => ({
       const shown = leaves(layout);
       return { panes, drafts, previews, layout, paneCount: shown.length, focusedPane: shown.includes(s.focusedPane) ? s.focusedPane : shown[0] };
     });
+  },
+
+  sideChats: {},
+  composerInsert: null,
+  insertIntoComposer: (scope, text) => set((s) => ({ composerInsert: { scope, text, n: (s.composerInsert?.n ?? 0) + 1 } })),
+
+  openSideChat: async (mainId) => {
+    if (get().sideChats[mainId]) return;
+    set((s) => ({ sideChats: { ...s.sideChats, [mainId]: { id: null, openedAt: Date.now(), error: null } } }));
+    try {
+      const rec = await api.openSideChat(mainId);
+      set((s) => {
+        // Closed while it was starting
+        if (!s.sideChats[mainId]) {
+          void api.closeSideChat(rec.id);
+          return s;
+        }
+        const cur = s.sessions[rec.id] ?? { ...newView(rec), historyLoaded: true };
+        return {
+          sessions: { ...s.sessions, [rec.id]: { ...cur, record: rec } },
+          sideChats: { ...s.sideChats, [mainId]: { id: rec.id, openedAt: Date.now(), error: null } },
+        };
+      });
+    } catch (e) {
+      set((s) => (s.sideChats[mainId] ? { sideChats: { ...s.sideChats, [mainId]: { ...s.sideChats[mainId], error: String(e) } } } : s));
+    }
+  },
+
+  closeSideChat: async (mainId) => {
+    const side = get().sideChats[mainId];
+    if (!side) return;
+    set((s) => {
+      const sideChats = { ...s.sideChats };
+      delete sideChats[mainId];
+      const sessions = { ...s.sessions };
+      if (side.id) delete sessions[side.id];
+      return { sideChats, sessions };
+    });
+    if (side.id) await api.closeSideChat(side.id).catch(() => {});
+  },
+
+  refreshSideChat: async (mainId) => {
+    await get().closeSideChat(mainId);
+    await get().openSideChat(mainId);
   },
 
   queues: {},
@@ -774,9 +845,14 @@ export const useStore = create<State>((set, get) => ({
     set((s) => {
       const sessions = { ...s.sessions };
       delete sessions[id];
+      // The engine deletes its side chat with it
+      const sideChats = { ...s.sideChats };
+      const side = sideChats[id]?.id;
+      if (side) delete sessions[side];
+      delete sideChats[id];
       const unread = { ...s.unread };
       delete unread[id];
-      return { sessions, unread, panes: s.panes.map((p) => (p === id ? null : p)) };
+      return { sessions, unread, sideChats, panes: s.panes.map((p) => (p === id ? null : p)) };
     });
   },
 }));

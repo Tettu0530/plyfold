@@ -359,6 +359,14 @@ export function Composer({
     att.syncMentions(text);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
+  // Text sent here from elsewhere (an answer from the side chat), or just a request for focus (empty text)
+  const insert = useStore((s) => (s.composerInsert?.scope === scope ? s.composerInsert : null));
+  useEffect(() => {
+    if (!insert) return;
+    if (insert.text) setText((cur) => (cur.trim() ? `${cur.trimEnd()}\n\n${insert.text}` : insert.text));
+    textRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [insert?.n]);
   const canSend = !disabled && (!!text.trim() || att.items.length > 0);
   // Mid-turn with empty text, the send button becomes stop
   const stopMode = busy && !text.trim() && att.items.length === 0 && !!onStop;

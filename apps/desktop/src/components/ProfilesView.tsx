@@ -8,7 +8,7 @@ import { api } from "@/lib/api";
 import { seconds } from "@/lib/format";
 import type { AuthKind, CheckResult, ProfileDetail, ProfileForm, ProfileSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useStore } from "@/state/store";
+import { useStore, isListed } from "@/state/store";
 import { AGENT_NAMES, ProviderLogo } from "./icons";
 import { Keys } from "./Keys";
 import { useLiquidClip, useLiquidRevealed } from "./liquid/stage";
@@ -70,7 +70,7 @@ export function ProfilesView() {
   const rows = profiles
     .filter((p) => p.agent === agent)
     .sort((a, b) => Number(b.name === b.agent) - Number(a.name === a.agent) || a.name.localeCompare(b.name));
-  const sessionCount = (name: string) => Object.values(sessions).filter((v) => v.record.profile === name).length;
+  const sessionCount = (name: string) => Object.values(sessions).filter((v) => isListed(v) && v.record.profile === name).length;
   const pickAgent = (a: string) => {
     setAgent(a);
     setSelected(a);

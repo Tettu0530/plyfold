@@ -25,6 +25,7 @@ export const ACTIONS = [
   "zoomOut",
   "zoomReset",
   "openDiff",
+  "sideChat",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 export type Bindings = Record<Action, string>;
@@ -46,6 +47,7 @@ export const DEFAULT_BINDINGS: Bindings = {
   zoomOut: "cmd+-",
   zoomReset: "cmd+0",
   openDiff: "cmd+shift+d",
+  sideChat: "cmd+j",
 };
 
 const MODS = ["cmd", "ctrl", "option", "shift"] as const;

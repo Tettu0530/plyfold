@@ -33,6 +33,8 @@ export const api = {
   startSession: (args: { profile: string; repo: string; title: string; worktree: boolean }) => invoke<SessionRecord>("start_session", args),
   reopenSession: (id: string) => invoke<void>("reopen_session", { id }),
   forkSession: (id: string, newWorktree: boolean) => invoke<SessionRecord>("fork_session", { id, newWorktree }),
+  openSideChat: (id: string) => invoke<SessionRecord>("open_side_chat", { id }),
+  closeSideChat: (id: string) => invoke<void>("close_side_chat", { id }),
   listCliSessions: (profile: string, repo: string) => invoke<CliSession[]>("list_cli_sessions", { profile, repo }),
   adoptCliSession: (profile: string, repo: string, acpSessionId: string, title: string) =>
     invoke<SessionRecord>("adopt_cli_session", { profile, repo, acpSessionId, title }),

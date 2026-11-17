@@ -15,6 +15,8 @@ export interface SessionRecord {
   status: SessionStatus;
   created_at: number;
   updated_at: number;
+  /** A side chat: the session it was forked from (read-only, not listed, deleted when closed) */
+  side_of?: string | null;
 }
 
 export type Category = "model" | "thought_level" | "mode" | "other";

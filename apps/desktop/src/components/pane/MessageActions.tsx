@@ -1,7 +1,7 @@
 // Message actions in the transcript (copy, edit and send, send again) and the generating indicator
 //
 // ACP has no way to rewind the agent's history. Edit and send-again go out as new turns (earlier exchanges stay)
-import { Check, Copy, Pencil, RotateCcw } from "lucide-react";
+import { ArrowLeftToLine, Check, Copy, Pencil, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
@@ -32,6 +32,15 @@ export function CopyButton({ text, label }: { text: string; label?: string }) {
       className={ICON_BUTTON}
     >
       {done ? <Check className="size-3.5 text-working" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
+    </button>
+  );
+}
+
+/** Put this text into another input (a side chat's answer into the main session's input) */
+export function QuoteButton({ text, label, onQuote }: { text: string; label: string; onQuote: (text: string) => void }) {
+  return (
+    <button type="button" aria-label={label} title={label} onClick={() => onQuote(text)} className={ICON_BUTTON}>
+      <ArrowLeftToLine className="size-3.5" aria-hidden />
     </button>
   );
 }
