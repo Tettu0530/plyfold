@@ -1,5 +1,5 @@
 // ペインの見出しのボタン: 触ったファイル、バックグラウンドのシェル、計画。押すと液体のメニューで中身を出す
-// どれも中身があるときだけ出す（いつも並べると見出しの情報が多すぎる）
+// いつも出す（どこにあるか分かるように）。中身がなければアイコンだけで、数は出さない
 import { Check, Circle, FileText, LoaderCircle, Pencil, SquareStop, SquareTerminal, CircleX, ListChecks, CircleHelp } from "lucide-react";
 import { useMemo } from "react";
 
@@ -14,7 +14,7 @@ import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 const TRIGGER = "relative flex h-6 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground";
 
 /** 見出しのボタンと、そこから開く欄 */
-function ToolButton({ scope, name, label, icon, badge, width, children }: { scope: string; name: string; label: string; icon: React.ReactNode; badge: React.ReactNode; width: string; children: React.ReactNode }) {
+function ToolButton({ scope, name, label, icon, badge, width, children }: { scope: string; name: string; label: string; icon: React.ReactNode; badge: React.ReactNode | null; width: string; children: React.ReactNode }) {
   const anchor = `${scope}:${name}`;
   const menu = useLiquidMenu(`menu:${anchor}`, anchor);
   const raised = useLiquidActiveAnchors().has(anchor);
@@ -23,7 +23,7 @@ function ToolButton({ scope, name, label, icon, badge, width, children }: { scop
       <PopoverTrigger asChild>
         <button ref={liquidAnchor(anchor)} type="button" aria-label={label} title={label} className={cn(TRIGGER, raised && "z-[57]")}>
           {icon}
-          <span className="font-mono tabular">{badge}</span>
+          {badge !== null && <span className="font-mono tabular">{badge}</span>}
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -39,6 +39,10 @@ function ToolButton({ scope, name, label, icon, badge, width, children }: { scop
       </PopoverContent>
     </Popover>
   );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="m-0 px-1.5 pb-1 text-xs text-muted-foreground">{children}</p>;
 }
 
 const relative = (path: string, base: string | null) => (base && path.startsWith(`${base}/`) ? path.slice(base.length + 1) : path);
@@ -87,8 +91,8 @@ export function PaneTools({ scope, items, worktree, alive }: { scope: string; it
 
   return (
     <>
-      {plan.length > 0 && (
-        <ToolButton scope={scope} name="plan" label="計画" icon={<ListChecks className="size-3.5" aria-hidden />} badge={`${done}/${plan.length}`} width="w-80">
+      <ToolButton scope={scope} name="plan" label="計画" icon={<ListChecks className="size-3.5" aria-hidden />} badge={plan.length ? `${done}/${plan.length}` : null} width="w-80">
+          {plan.length === 0 && <Empty>まだ計画はありません。エージェントがタスクの一覧を作ると、ここに出ます</Empty>}
           {plan.map((e, i) => {
             const p = PLAN_ICON[e.status] ?? PLAN_ICON.pending;
             return (
@@ -99,23 +103,21 @@ export function PaneTools({ scope, items, worktree, alive }: { scope: string; it
             );
           })}
         </ToolButton>
-      )}
-      {shells.length > 0 && (
         <ToolButton
           scope={scope}
           name="shells"
           label="バックグラウンドのシェル"
           icon={<SquareTerminal className={cn("size-3.5", running > 0 && "text-working")} aria-hidden />}
-          badge={running > 0 ? running : shells.length}
+          badge={shells.length ? (running > 0 ? running : shells.length) : null}
           width="w-96"
         >
+          {shells.length === 0 && <Empty>バックグラウンドで動いているシェルはありません</Empty>}
           {shells.map((s, i) => (
             <ShellRow key={s.id ?? i} s={s} />
           ))}
         </ToolButton>
-      )}
-      {files.length > 0 && (
-        <ToolButton scope={scope} name="files" label="触ったファイル" icon={<FileText className="size-3.5" aria-hidden />} badge={files.length} width="w-96">
+        <ToolButton scope={scope} name="files" label="触ったファイル" icon={<FileText className="size-3.5" aria-hidden />} badge={files.length || null} width="w-96">
+          {files.length === 0 && <Empty>まだファイルを読んだり書いたりしていません</Empty>}
           {files.map((f) => (
             <button
               key={f.path}
@@ -130,7 +132,6 @@ export function PaneTools({ scope, items, worktree, alive }: { scope: string; it
             </button>
           ))}
         </ToolButton>
-      )}
     </>
   );
 }
