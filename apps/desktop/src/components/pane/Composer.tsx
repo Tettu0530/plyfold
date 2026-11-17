@@ -1,6 +1,6 @@
 import { ArrowUp, ChevronsUpDown, CornerDownRight, ListOrdered, ListPlus, Paperclip, Square, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
@@ -16,7 +16,7 @@ import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 import type { Attached } from "@/lib/attachments";
 import { AttachBox, useAttachments } from "./Attachments";
-import { MentionMenu, useMention } from "./Mention";
+import { MentionMenu, removeMention, useMention } from "./Mention";
 import { useAutoGrow } from "./autoGrow";
 import { isImeKey, isSendKey } from "@/lib/keys";
 import { useStore, type Queued } from "@/state/store";
@@ -280,10 +280,15 @@ export function Composer({
 }) {
   const t = useT();
   const [text, setText] = useState("");
-  const att = useAttachments();
+  // A chip added with @ and its "@path" in the text are kept together: removing either removes the other
+  const att = useAttachments({ onMentionRemoved: (path) => setText((cur) => removeMention(cur, path)) });
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
   const textRef = useAutoGrow(text);
-  const mention = useMention({ root, text, setText, textRef, boxRef: att.boxRef, scope, onPick: (h) => att.addPath(h.abs) });
+  const mention = useMention({ root, text, setText, textRef, boxRef: att.boxRef, scope, onPick: (h) => att.addMention(h.abs, h.path) });
+  useEffect(() => {
+    att.syncMentions(text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
   const canSend = !disabled && (!!text.trim() || att.items.length > 0);
   // Mid-turn with empty text, the send button becomes stop
   const stopMode = busy && !text.trim() && att.items.length === 0 && !!onStop;

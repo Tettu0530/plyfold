@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { insertMention, mentionAt } from "./Mention";
+import { hasMention, insertMention, mentionAt, removeMention } from "./Mention";
 
 describe("mentions", () => {
   it("finds the @query right before the caret", () => {
@@ -21,5 +21,21 @@ describe("mentions", () => {
     const end = insertMention("look at @comp", 8, 13, "src/Composer.tsx");
     expect(end.text).toBe("look at @src/Composer.tsx ");
     expect(end.caret).toBe(end.text.length);
+  });
+
+  it("knows whether a path is still mentioned, as a whole token", () => {
+    expect(hasMention("fix @src/a.ts now", "src/a.ts")).toBe(true);
+    expect(hasMention("fix @src/a.ts", "src/a.ts")).toBe(true);
+    // Partly deleted, or part of a longer path, no longer counts
+    expect(hasMention("fix @src/a.t", "src/a.ts")).toBe(false);
+    expect(hasMention("fix @src/a.tsx", "src/a.ts")).toBe(false);
+    // Regex characters in paths are literal
+    expect(hasMention("see @a+b(1).ts", "a+b(1).ts")).toBe(true);
+  });
+
+  it("removes every mention of a path and tidies the spaces", () => {
+    expect(removeMention("look at @src/a.ts please", "src/a.ts")).toBe("look at please");
+    expect(removeMention("@src/a.ts and @src/a.ts again", "src/a.ts")).toBe("and again");
+    expect(removeMention("keep @src/a.tsx", "src/a.ts")).toBe("keep @src/a.tsx");
   });
 });

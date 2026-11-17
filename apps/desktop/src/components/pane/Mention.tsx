@@ -30,6 +30,22 @@ export function insertMention(text: string, start: number, caret: number, path: 
   return { text: text.slice(0, start) + token + rest, caret: caretAt };
 }
 
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** "@path" as a whole token: at the start or after whitespace, and followed by whitespace or the end */
+const mentionRe = (path: string, flags = "") => new RegExp(`(^|\\s)@${escapeRe(path)}(?=\\s|$)`, flags);
+
+/** Whether the text still mentions this path */
+export function hasMention(text: string, path: string): boolean {
+  return mentionRe(path).test(text);
+}
+
+/** Delete every "@path" token (and the space after it) from the text */
+export function removeMention(text: string, path: string): string {
+  const out = text.replace(mentionRe(path, "g"), "$1").replace(/(^|\s) (?=\s|$)/g, "$1").replace(/ {2,}/g, " ");
+  // A mention at the very start leaves a leading space behind
+  return /^\s/.test(text) ? out : out.replace(/^ +/, "");
+}
+
 interface Options {
   /** Directory to search (the session's worktree, or the repository for a new session) */
   root: string | null;

@@ -8,7 +8,7 @@ import { useStore } from "@/state/store";
 import { AGENT_NAMES, ProviderLogo } from "../icons";
 import { ControlRow } from "./Composer";
 import { AttachBox, useAttachments } from "./Attachments";
-import { MentionMenu, useMention } from "./Mention";
+import { MentionMenu, removeMention, useMention } from "./Mention";
 import { useAutoGrow } from "./autoGrow";
 import { RepoPicker } from "./RepoPicker";
 import { liquidAnchor } from "../liquid/liquid";
@@ -95,11 +95,16 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const profiles = useStore((s) => s.profiles);
   const { updateDraft, startDraft, closePane, focusPane } = useStore.getState();
   const [text, setText] = useState("");
-  const att = useAttachments();
+  // A chip added with @ and its "@path" in the text are kept together: removing either removes the other
+  const att = useAttachments({ onMentionRemoved: (path) => setText((cur) => removeMention(cur, path)) });
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
   const textRef = useAutoGrow(text);
   // @-mentions search the repository the session will start in
-  const mention = useMention({ root: draft?.repo ?? null, text, setText, textRef, boxRef: att.boxRef, scope: id, onPick: (h) => att.addPath(h.abs) });
+  const mention = useMention({ root: draft?.repo ?? null, text, setText, textRef, boxRef: att.boxRef, scope: id, onPick: (h) => att.addMention(h.abs, h.path) });
+  useEffect(() => {
+    att.syncMentions(text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
   const [repoOpen, setRepoOpen] = useState(false);
   // The repository picker also pops out of its button and returns to it on close (same separation animation as other menus)
   const repoAnchor = `${id}:repo`;

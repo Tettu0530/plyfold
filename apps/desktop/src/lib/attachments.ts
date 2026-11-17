@@ -17,6 +17,11 @@ export interface Attached {
   key: string;
   wire: AttachmentWire;
   preview: AttachmentPreview;
+  /**
+   * Set when the file was added with an @-mention: the path written as "@path" in the text. Such a chip goes away
+   * when the "@path" is deleted from the text, and removing the chip deletes the "@path" (other chips are independent)
+   */
+  mention?: string;
 }
 
 let seq = 0;

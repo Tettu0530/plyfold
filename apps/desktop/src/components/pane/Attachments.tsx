@@ -8,6 +8,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { inTauri } from "@/lib/api";
 import { fromPath, readImage, type Attached } from "@/lib/attachments";
 import { addDropTarget } from "@/lib/drop";
+import { hasMention } from "./Mention";
 import { cn } from "@/lib/utils";
 import { bouncy, smooth } from "../motion";
 import { Keys } from "../Keys";
@@ -15,9 +16,15 @@ import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 import { useT } from "@/i18n";
 
-export function useAttachments() {
+/**
+ * onMentionRemoved: called with the path when a chip that came from an @-mention is removed, so the caller can
+ * delete "@path" from the text too
+ */
+export function useAttachments({ onMentionRemoved }: { onMentionRemoved?: (path: string) => void } = {}) {
   const t = useT();
   const [items, setItems] = useState<Attached[]>([]);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
   const [over, setOver] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
   useEffect(
@@ -55,9 +62,20 @@ export function useAttachments() {
     boxRef,
     onPaste,
     pick,
-    remove: (key: string) => setItems((a) => a.filter((x) => x.key !== key)),
-    /** Attach a file by path unless it is already attached (used by @-mentions) */
-    addPath: (path: string) => setItems((a) => (a.some((x) => x.wire.kind === "file" && x.wire.path === path) ? a : [...a, fromPath(path)])),
+    remove: (key: string) => {
+      const gone = itemsRef.current.find((x) => x.key === key);
+      setItems((a) => a.filter((x) => x.key !== key));
+      if (gone?.mention) onMentionRemoved?.(gone.mention);
+    },
+    /** Attach a file mentioned as "@mention" in the text, unless it is already attached */
+    addMention: (path: string, mention: string) =>
+      setItems((a) => (a.some((x) => x.wire.kind === "file" && x.wire.path === path) ? a : [...a, { ...fromPath(path), mention }])),
+    /** Drop @-mention chips whose "@path" is no longer in the text (chips added other ways stay) */
+    syncMentions: (text: string) =>
+      setItems((a) => {
+        const kept = a.filter((x) => !x.mention || hasMention(text, x.mention));
+        return kept.length === a.length ? a : kept;
+      }),
     clear: () => setItems([]),
   };
 }
