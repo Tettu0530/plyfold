@@ -549,9 +549,9 @@ export function useLiquidMorph(
         setPhase("open");
         await go(opacity, 0, { duration: 0.12 });
       } else {
-        // Merge into the anchor and disappear
+        // Fused with the anchor and drawn over it: its color fades out on top of the button
         ghostOpacity.set(0);
-        await go(opacity, 0, { duration: 0.12 });
+        await go(opacity, 0, { duration: 0.22, ease: [0.25, 0.1, 0.25, 1] });
         if (alive()) setPhase("closed");
       }
       if (alive()) {
