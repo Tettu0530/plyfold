@@ -17,6 +17,7 @@ import { withChoices } from "@/state/infoCache";
 import type { Category, ProfileSummary, ProfileUsage } from "@/lib/types";
 import { isSendKey } from "@/lib/keys";
 import { useT, type MessageKey } from "@/i18n";
+import { startDrag } from "./dnd";
 
 /** Label for the auth type */
 function authLabel(p: { keyed: boolean; custom_provider: boolean }): MessageKey {
@@ -147,7 +148,10 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
 
   return (
     <section aria-label={t("draft.paneLabel", { n: index + 1 })} onMouseDown={() => focusPane(index)} className="flex min-w-0 flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b pr-1.5 pl-3">
+      <div
+        onPointerDown={(e) => startDrag(e, () => ({ kind: "pane", slot: index, title: t("draft.title") }))}
+        className="flex h-9 shrink-0 cursor-grab items-center gap-2 border-b pr-1.5 pl-3"
+      >
         <Plus className="size-3.5 text-muted-foreground" aria-hidden />
         <span className="font-medium">{t("draft.title")}</span>
         <span className="grow" />

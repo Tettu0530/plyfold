@@ -9,6 +9,7 @@ import { api, inTauri } from "@/lib/api";
 import { normalizeUrl } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
+import { startDrag } from "./dnd";
 
 /** After this long without a load event, suggest opening the page in a browser */
 const SLOW_MS = 8000;
@@ -46,7 +47,10 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
 
   return (
     <section aria-label={t("pane.previewLabel", { url })} onMouseDown={() => focusPane(index)} className="flex min-w-0 flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-1.5 border-b pr-1.5 pl-3">
+      <div
+        onPointerDown={(e) => startDrag(e, () => ({ kind: "pane", slot: index, title: url }))}
+        className="flex h-9 shrink-0 cursor-grab items-center gap-1.5 border-b pr-1.5 pl-3"
+      >
         <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
         <input
           aria-label={t("pane.previewUrl")}

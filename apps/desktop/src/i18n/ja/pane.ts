@@ -44,4 +44,10 @@ export const pane = {
   previewPlaceholder: "localhost:3000",
   previewFound: "出力に出た URL",
   removePane: "ペインを閉じる",
+  dropOpen: "ここで開く",
+  dropSwap: "入れ替える",
+  dropLeft: "左に分割",
+  dropRight: "右に分割",
+  dropTop: "上に分割",
+  dropBottom: "下に分割",
 } satisfies Record<string, string>;

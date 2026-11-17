@@ -13,6 +13,7 @@ import { liquidAnchor } from "./liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidMovingAnchors } from "./liquid/stage";
 import { smooth, snappy } from "./motion";
 import { isImeKey } from "@/lib/keys";
+import { startDrag } from "./pane/dnd";
 
 export function Sidebar() {
   const t = useT();
@@ -123,6 +124,11 @@ export function Sidebar() {
                       transition={smooth}
                       ref={liquidAnchor(`session:${r.id}`)}
                       href="#"
+                      // Drag a row onto a pane to open it there, or onto a pane's edge to open it in a new split
+                      draggable={false}
+                      onPointerDown={(e) => {
+                        if (renaming !== r.id) startDrag(e, () => ({ kind: "session", id: r.id, title: r.title, agent: r.agent }));
+                      }}
                       whileTap={{ scale: 1.03 }}
                       aria-current={open.has(r.id) ? "true" : undefined}
                       title={compact ? t("sidebar.rowTitle", { title: r.title, profile: r.profile === r.agent ? "default" : r.profile, age: age(r.updated_at) }) : undefined}

@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useIsPresent } from "motion/react";
 import { Fragment, useRef, useState } from "react";
 
 import { useT } from "@/i18n";
@@ -116,11 +116,34 @@ function Divider({ path, index, axis, sizes, container, onDragging }: { path: nu
  * One node of the layout tree. Like Apple's Split View, panes animate their actual size (flex-grow) rather than
  * scaling, so their content is laid out at the real width every frame and text never stretches
  */
-function Node({ node, path, dragging, setDragging }: { node: LayoutNode; path: number[]; dragging: boolean; setDragging: (d: boolean) => void }) {
+type NodeProps = { node: LayoutNode; path: number[]; dragging: boolean; setDragging: (d: boolean) => void; present: boolean };
+
+/**
+ * A child of a split. While it shrinks away (removed, or moved to another split) the same pane may already be
+ * growing in elsewhere, so a leaving child gives up its data-pane-index (drop targets and animations find one pane)
+ */
+function Child({ size, ...props }: NodeProps & { size: number }) {
+  const isPresent = useIsPresent();
+  return (
+    <motion.div
+      // A new pane grows from nothing; a removed one shrinks away
+      initial={{ flexGrow: 0, opacity: 0 }}
+      animate={{ flexGrow: size, opacity: 1 }}
+      exit={{ flexGrow: 0, opacity: 0 }}
+      transition={props.dragging ? { duration: 0 } : smooth}
+      style={{ flexBasis: 0 }}
+      className="flex min-h-0 min-w-0 overflow-hidden"
+    >
+      <Node {...props} present={props.present && isPresent} />
+    </motion.div>
+  );
+}
+
+function Node({ node, path, dragging, setDragging, present }: NodeProps) {
   const ref = useRef<HTMLDivElement>(null);
   if (node.kind === "leaf")
     return (
-      <div data-pane-index={node.slot} className="relative flex min-h-0 min-w-0 grow overflow-hidden border-r border-b [&>div>section]:min-w-0 [&>div>section]:grow" style={{ contain: "layout paint" }}>
+      <div data-pane-index={present ? node.slot : undefined} aria-hidden={present ? undefined : true} className="relative flex min-h-0 min-w-0 grow overflow-hidden border-r border-b [&>div>section]:min-w-0 [&>div>section]:grow" style={{ contain: "layout paint" }}>
         <Pane index={node.slot} />
       </div>
     );
@@ -130,17 +153,7 @@ function Node({ node, path, dragging, setDragging }: { node: LayoutNode; path: n
         {node.children.map((child, i) => (
           <Fragment key={keyOf(child)}>
             {i > 0 && <Divider path={path} index={i} axis={node.axis} sizes={node.sizes} container={ref} onDragging={setDragging} />}
-            <motion.div
-              // A new pane grows from nothing; a removed one shrinks away
-              initial={{ flexGrow: 0, opacity: 0 }}
-              animate={{ flexGrow: node.sizes[i], opacity: 1 }}
-              exit={{ flexGrow: 0, opacity: 0 }}
-              transition={dragging ? { duration: 0 } : smooth}
-              style={{ flexBasis: 0 }}
-              className="flex min-h-0 min-w-0 overflow-hidden"
-            >
-              <Node node={child} path={[...path, i]} dragging={dragging} setDragging={setDragging} />
-            </motion.div>
+            <Child size={node.sizes[i]} node={child} path={[...path, i]} dragging={dragging} setDragging={setDragging} present={present} />
           </Fragment>
         ))}
       </AnimatePresence>
@@ -154,7 +167,7 @@ export function PaneGrid() {
   const [dragging, setDragging] = useState(false);
   return (
     <main className="relative flex min-w-0 grow overflow-hidden">
-      <Node node={layout} path={[]} dragging={dragging} setDragging={setDragging} />
+      <Node node={layout} path={[]} dragging={dragging} setDragging={setDragging} present />
     </main>
   );
 }

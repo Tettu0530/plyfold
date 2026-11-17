@@ -175,3 +175,9 @@ body.resizing * {
   -webkit-user-select: none !important;
   user-select: none !important;
 }
+
+/* While a pane or session is dragged */
+body.dragging,
+body.dragging * {
+  cursor: grabbing !important;
+}

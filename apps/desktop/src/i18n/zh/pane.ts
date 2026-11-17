@@ -46,4 +46,10 @@ export const pane: Record<keyof typeof source, string> = {
   previewPlaceholder: "localhost:3000",
   previewFound: "输出中的 URL",
   removePane: "关闭窗格",
+  dropOpen: "在此打开",
+  dropSwap: "交换窗格",
+  dropLeft: "向左拆分",
+  dropRight: "向右拆分",
+  dropTop: "向上拆分",
+  dropBottom: "向下拆分",
 };

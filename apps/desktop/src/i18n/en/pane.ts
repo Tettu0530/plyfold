@@ -46,4 +46,10 @@ export const pane: Record<keyof typeof source, string> = {
   previewPlaceholder: "localhost:3000",
   previewFound: "URLs in the output",
   removePane: "Close pane",
+  dropOpen: "Open here",
+  dropSwap: "Swap panes",
+  dropLeft: "Split left",
+  dropRight: "Split right",
+  dropTop: "Split up",
+  dropBottom: "Split down",
 };

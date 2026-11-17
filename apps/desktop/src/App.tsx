@@ -21,6 +21,7 @@ import { inTauri } from "./lib/api";
 import { repoName } from "./lib/format";
 import { leaves, presetOf } from "./state/layout";
 import { useStore, type PaneCount } from "./state/store";
+import { DragLayer } from "./components/pane/dnd";
 
 function useShortcuts() {
   useEffect(() => {
@@ -138,6 +139,7 @@ export default function App() {
         <LiquidStage />
         <SearchCard />
         <ImagePreview />
+        <DragLayer />
         <MotionLab />
       </TooltipProvider>
     </MotionConfig>

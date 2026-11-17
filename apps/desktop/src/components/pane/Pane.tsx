@@ -18,6 +18,7 @@ import { Composer } from "./Composer";
 import { PermissionCard } from "./PermissionCard";
 import { Transcript } from "./Transcript";
 import { PaneTools } from "./PaneTools";
+import { startDrag } from "./dnd";
 
 function EmptyPane({ index }: { index: number }) {
   const t = useT();
@@ -103,7 +104,11 @@ function SessionPane({ index }: { index: number }) {
       // A container, so the header can drop its tool buttons when the pane is narrow
       className={cn("@container flex min-w-0 flex-col", focused && "bg-white/[0.01]")}
     >
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b pr-1.5 pl-3">
+      {/* Drag the header to move the pane (onto another pane's edge to split, or its center to swap) */}
+      <div
+        onPointerDown={(e) => startDrag(e, () => ({ kind: "pane", slot: index, title: r.title, agent: r.agent }))}
+        className="flex h-9 shrink-0 cursor-grab items-center gap-2 border-b pr-1.5 pl-3"
+      >
         <StatusIcon status={r.status} />
         <PaneTitle id={id} title={r.title} />
         <span title={t("pane.profileTitle", { agent: r.agent, profile: r.profile })} className="hidden items-center gap-1 text-xs whitespace-nowrap text-muted-foreground @[22rem]:flex">
