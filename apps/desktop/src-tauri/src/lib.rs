@@ -2,6 +2,7 @@
 
 mod dirs;
 mod files;
+mod platform;
 mod shell_path;
 
 pub use shell_path::adopt_login_path;
@@ -123,7 +124,9 @@ struct AppInfo {
     license: String,
     repository: String,
     tauri: String,
-    /// macOS version (sw_vers)
+    /// "macOS" / "Windows"
+    os_name: String,
+    /// The OS version, when it can be read
     os: Option<String>,
     arch: String,
     agents: Vec<AgentLaunch>,
@@ -132,12 +135,7 @@ struct AppInfo {
 /// For Settings → Info
 #[tauri::command]
 fn app_info(state: State<'_, AppState>) -> AppInfo {
-    let os = std::process::Command::new("sw_vers")
-        .arg("-productVersion")
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+    let (os_name, os) = platform::os_version();
     let cfg = state.config.read().unwrap();
     let agents = cfg
         .agents
@@ -154,6 +152,7 @@ fn app_info(state: State<'_, AppState>) -> AppInfo {
         license: env!("CARGO_PKG_LICENSE").into(),
         repository: env!("CARGO_PKG_REPOSITORY").into(),
         tauri: tauri::VERSION.into(),
+        os_name: os_name.into(),
         os,
         arch: std::env::consts::ARCH.into(),
         agents,
@@ -201,16 +200,14 @@ fn save_settings(state: State<'_, AppState>, settings: AppSettings) -> CmdResult
     Ok(())
 }
 
-/// Reveal the config file (or the data folder if it does not exist) in Finder
+/// Reveal the config file (or the data folder if it does not exist) in Finder / File Explorer
 #[tauri::command]
 fn reveal_path(state: State<'_, AppState>, which: String) -> CmdResult<()> {
-    let mut cmd = std::process::Command::new("open");
     match which.as_str() {
-        "config" if state.config_path.exists() => cmd.arg("-R").arg(&state.config_path),
-        _ => cmd.arg(&state.state_dir),
-    };
-    cmd.spawn().map_err(err)?;
-    Ok(())
+        "config" if state.config_path.exists() => platform::reveal(&state.config_path),
+        _ => platform::open(&state.state_dir.display().to_string()),
+    }
+    .map_err(err)
 }
 
 impl AppState {
@@ -601,7 +598,7 @@ fn open_url(url: String) -> CmdResult<()> {
     if !ok || url.chars().any(char::is_control) {
         return Err(plyfold_i18n::tr!("このリンクは開けません", "This link cannot be opened", "无法打开此链接"));
     }
-    std::process::Command::new("open").arg(&url).spawn().map_err(err)?;
+    platform::open(&url).map_err(err)?;
     Ok(())
 }
 
@@ -612,8 +609,7 @@ fn reveal_file(path: String) -> CmdResult<()> {
     if !p.is_absolute() || !p.exists() {
         return Err(plyfold_i18n::tr!("ファイルが見つかりません", "File not found", "找不到文件"));
     }
-    std::process::Command::new("open").arg("-R").arg(p).spawn().map_err(err)?;
-    Ok(())
+    platform::reveal(p).map_err(err)
 }
 
 #[tauri::command]

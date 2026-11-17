@@ -101,6 +101,16 @@ impl Connection {
     pub async fn spawn(spec: &SpawnSpec, sink: Option<FrameSink>) -> Result<(Arc<Self>, mpsc::UnboundedReceiver<Incoming>), AcpError> {
         let redactor = Arc::new(Redactor::new(spec.secrets.clone()));
 
+        // On Windows `npx` is `npx.cmd`: look the program up the way a shell would, and don't flash a console window
+        #[cfg(windows)]
+        let mut cmd = {
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            let program = which::which(&spec.command).map(|p| p.into_os_string()).unwrap_or_else(|_| spec.command.clone().into());
+            let mut c = Command::new(program);
+            c.creation_flags(CREATE_NO_WINDOW);
+            c
+        };
+        #[cfg(not(windows))]
         let mut cmd = Command::new(&spec.command);
         cmd.args(&spec.args).current_dir(&spec.cwd).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
         for var in &spec.env_remove {
@@ -240,6 +250,13 @@ impl Connection {
 
     pub async fn kill(&self) {
         let mut child = self.child.lock().await;
+        // On Windows the agent runs under cmd.exe (npx.cmd) and node; ending only the first would leave the rest
+        // running, so end the whole process tree
+        #[cfg(windows)]
+        if let Some(pid) = child.id() {
+            use std::os::windows::process::CommandExt as _;
+            let _ = std::process::Command::new("taskkill").args(["/PID", &pid.to_string(), "/T", "/F"]).creation_flags(0x0800_0000).status();
+        }
         let _ = child.start_kill();
         let _ = tokio::time::timeout(Duration::from_secs(3), child.wait()).await;
     }

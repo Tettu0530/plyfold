@@ -7,7 +7,7 @@
 
 use std::io::Read;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -54,7 +54,7 @@ pub struct GitInfo {
 }
 
 fn git(dir: &Path, args: &[&str]) -> Result<String, WorktreeError> {
-    let out = Command::new("git").args(args).current_dir(dir).stdin(Stdio::null()).output()?;
+    let out = crate::command("git").args(args).current_dir(dir).stdin(Stdio::null()).output()?;
     if !out.status.success() {
         return Err(WorktreeError::Git { args: args.join(" "), stderr: String::from_utf8_lossy(&out.stderr).trim().to_string() });
     }
@@ -63,7 +63,7 @@ fn git(dir: &Path, args: &[&str]) -> Result<String, WorktreeError> {
 
 /// Run a command that may talk to the network: no prompts, and killed after the time limit
 fn run_network(program: &str, dir: &Path, args: &[&str]) -> Result<String, WorktreeError> {
-    let mut child = Command::new(program)
+    let mut child = crate::command(program)
         .args(args)
         .current_dir(dir)
         .env("GIT_TERMINAL_PROMPT", "0")
@@ -275,7 +275,7 @@ pub struct PullRequest {
 }
 
 pub fn has_gh() -> bool {
-    Command::new("sh").args(["-c", "command -v gh >/dev/null 2>&1"]).status().is_ok_and(|s| s.success())
+    crate::has_program("gh")
 }
 
 /// The pull request for the current branch (via gh). None when there is none, or gh isn't available
@@ -319,12 +319,16 @@ pub fn parse_pr(json: &str) -> Option<PullRequest> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::process::Command;
 
+    #[cfg(unix)]
     fn sh(dir: &Path, cmd: &str) {
         let ok = Command::new("sh").args(["-c", cmd]).current_dir(dir).status().unwrap().success();
         assert!(ok, "{cmd}");
     }
 
+    #[cfg(unix)]
     fn temp(name: &str) -> std::path::PathBuf {
         let d = std::env::temp_dir().join(format!(
             "plyfold-remote-{name}-{}-{}-{}",
@@ -340,6 +344,7 @@ mod tests {
         d
     }
 
+    #[cfg(unix)]
     const ID: &str = "git -c user.name=t -c user.email=t@example.com";
 
     #[test]
@@ -354,6 +359,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn reads_branch_commits_and_upstream() {
         let root = temp("info");
         let origin = root.join("origin.git");

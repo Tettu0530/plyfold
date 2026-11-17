@@ -5,6 +5,29 @@
 
 pub mod ops;
 pub mod remote;
+
+/// A command to run. On Windows the program is looked up the way a shell would (`gh` finds `gh.exe`, `code` finds
+/// `code.cmd`) and runs without flashing a console window; elsewhere this is `Command::new`
+pub(crate) fn command(program: &str) -> Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt as _;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let resolved = which::which(program).map(|p| p.into_os_string()).unwrap_or_else(|_| program.into());
+        let mut c = Command::new(resolved);
+        c.creation_flags(CREATE_NO_WINDOW);
+        c
+    }
+    #[cfg(not(windows))]
+    {
+        Command::new(program)
+    }
+}
+
+/// Whether a program is on the PATH
+pub(crate) fn has_program(program: &str) -> bool {
+    which::which(program).is_ok()
+}
 pub use ops::WtStatus;
 
 use std::path::{Path, PathBuf};
@@ -52,7 +75,7 @@ pub struct Diff {
 }
 
 fn git(dir: &Path, args: &[&str]) -> Result<String, WorktreeError> {
-    let out = Command::new("git").args(args).current_dir(dir).output()?;
+    let out = command("git").args(args).current_dir(dir).output()?;
     if !out.status.success() {
         return Err(WorktreeError::Git { args: args.join(" "), stderr: String::from_utf8_lossy(&out.stderr).trim().to_string() });
     }
@@ -61,7 +84,7 @@ fn git(dir: &Path, args: &[&str]) -> Result<String, WorktreeError> {
 
 /// Exit code 1 also counts as success (`git diff --no-index` returns 1 when there are differences)
 fn git_diff_ok(dir: &Path, args: &[&str]) -> Result<String, WorktreeError> {
-    let out = Command::new("git").args(args).current_dir(dir).output()?;
+    let out = command("git").args(args).current_dir(dir).output()?;
     match out.status.code() {
         Some(0) | Some(1) => Ok(String::from_utf8_lossy(&out.stdout).to_string()),
         _ => Err(WorktreeError::Git { args: args.join(" "), stderr: String::from_utf8_lossy(&out.stderr).trim().to_string() }),

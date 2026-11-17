@@ -59,7 +59,7 @@ impl FileIndex {
 }
 
 fn git_files(root: &Path) -> Option<Vec<String>> {
-    let out = std::process::Command::new("git").args(["ls-files", "--cached", "--others", "--exclude-standard", "-z"]).current_dir(root).output().ok()?;
+    let out = crate::platform::command("git").args(["ls-files", "--cached", "--others", "--exclude-standard", "-z"]).current_dir(root).output().ok()?;
     if !out.status.success() {
         return None;
     }

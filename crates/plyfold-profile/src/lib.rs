@@ -235,8 +235,9 @@ fn expand_home(p: &str) -> PathBuf {
 }
 
 /// Default state directory on macOS
+/// Where Plyfold keeps its state: ~/Library/Application Support/plyfold on macOS, %APPDATA%\plyfold on Windows
 pub fn default_state_dir() -> PathBuf {
-    expand_home("~/Library/Application Support/plyfold")
+    dirs::data_dir().map(|d| d.join("plyfold")).unwrap_or_else(|| expand_home("~/.plyfold"))
 }
 
 #[cfg(test)]
