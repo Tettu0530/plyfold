@@ -70,6 +70,8 @@ function Divider({ axis, value, area, onDragging }: { axis: "x" | "y"; value: nu
       animate={vertical ? { left: pos } : { top: pos }}
       transition={active ? { duration: 0 } : smooth}
       onPointerDown={(e) => {
+        // Don't start a text selection (it would select the panes' text while dragging)
+        e.preventDefault();
         try {
           e.currentTarget.setPointerCapture(e.pointerId);
         } catch {

@@ -257,6 +257,8 @@ function SidebarResizer() {
       title={t("sidebar.resizeHint")}
       tabIndex={0}
       onPointerDown={(e) => {
+        // Don't start a text selection (it would select the panes' text while dragging)
+        e.preventDefault();
         try {
           e.currentTarget.setPointerCapture(e.pointerId);
         } catch {

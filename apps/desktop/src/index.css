@@ -169,3 +169,9 @@
 body.resizing iframe {
   pointer-events: none;
 }
+/* Nothing becomes selected while a pane or sidebar edge (or a dragged tab) moves across text */
+body.resizing,
+body.resizing * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
