@@ -63,6 +63,7 @@ export const pane: Record<keyof typeof source, string> = {
   gitBehindBase: "{base} 有 {count} 个新提交",
   gitNoRemote: "没有 origin",
   gitNotPushed: "尚未推送",
+  gitUpstreamGone: "{upstream} 已被删除（例如 PR 合并之后）",
   gitUpToDate: "与 {upstream} 一致",
   gitAheadTitle: "尚未推送的提交",
   gitBehindTitle: "远程的新提交",

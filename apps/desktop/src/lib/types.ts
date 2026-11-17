@@ -201,6 +201,8 @@ export interface GitInfo {
   ahead_base: number;
   behind_base: number;
   upstream: string | null;
+  /** The upstream it was pushed to, since deleted on the remote (typically after its PR was merged) */
+  upstream_gone: string | null;
   ahead: number;
   behind: number;
   changed: number;

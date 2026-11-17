@@ -16,8 +16,11 @@ import { Spinner } from "../icons";
 /** Fetch again on open when the last fetch is older than this */
 const STALE_FETCH_S = 5 * 60;
 
-/** Commits not on the remote yet: against the upstream once pushed, else everything on top of the base */
-export const unpushed = (g: GitInfo) => (g.upstream ? g.ahead : g.ahead_base);
+/**
+ * Commits not on the remote yet: against the upstream once pushed, else everything on top of the base. None when the
+ * branch was pushed and its remote branch has since been deleted (merged on the host, for example)
+ */
+export const unpushed = (g: GitInfo) => (g.upstream ? g.ahead : g.upstream_gone ? 0 : g.ahead_base);
 
 export function useGitInfo(id: string, busy: boolean) {
   const [info, setInfo] = useState<GitInfo | null>(null);
@@ -128,6 +131,8 @@ export function GitPanel({ id, git, busy, title }: { id: string; git: GitState; 
         <span className="flex items-center gap-2 text-xs text-muted-foreground">
           {!info.remote_url ? (
             t("pane.gitNoRemote")
+          ) : info.upstream_gone ? (
+            t("pane.gitUpstreamGone", { upstream: info.upstream_gone })
           ) : !info.upstream ? (
             t("pane.gitNotPushed")
           ) : info.ahead === 0 && info.behind === 0 ? (

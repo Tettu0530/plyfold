@@ -63,6 +63,7 @@ export const pane: Record<keyof typeof source, string> = {
   gitBehindBase: "{base} has {count, plural, one {# new commit} other {# new commits}}",
   gitNoRemote: "No origin remote",
   gitNotPushed: "Not pushed yet",
+  gitUpstreamGone: "{upstream} was deleted (after its PR was merged, for example)",
   gitUpToDate: "Up to date with {upstream}",
   gitAheadTitle: "Commits not pushed yet",
   gitBehindTitle: "New commits on the remote",

@@ -61,6 +61,7 @@ export const pane = {
   gitBehindBase: "{base} には新しいコミットが {count} 件あります",
   gitNoRemote: "origin がありません",
   gitNotPushed: "まだ push していません",
+  gitUpstreamGone: "{upstream} は削除されています（PR のマージの後など）",
   gitUpToDate: "{upstream} と同じです",
   gitAheadTitle: "まだ push していないコミット",
   gitBehindTitle: "リモートにある新しいコミット",
