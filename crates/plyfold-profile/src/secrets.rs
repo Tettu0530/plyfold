@@ -41,9 +41,9 @@ impl SecretStore for KeychainStore {
             .stderr(Stdio::null())
             .output()?;
         if !out.status.success() {
-            return Err(err(account, plyfold_i18n::tr!("キーチェーンに登録されていません", "Not found in the keychain")));
+            return Err(err(account, plyfold_i18n::tr!("キーチェーンに登録されていません", "Not found in the keychain", "未在钥匙串中找到")));
         }
-        let s = String::from_utf8(out.stdout).map_err(|_| err(account, plyfold_i18n::tr!("UTF-8 ではありません", "Not valid UTF-8")))?;
+        let s = String::from_utf8(out.stdout).map_err(|_| err(account, plyfold_i18n::tr!("UTF-8 ではありません", "Not valid UTF-8", "不是有效的 UTF-8")))?;
         Ok(s.trim_end_matches('\n').to_string())
     }
 
@@ -63,7 +63,7 @@ impl SecretStore for KeychainStore {
             writeln!(stdin, "{value}")?;
         }
         if !child.wait()?.success() {
-            return Err(err(account, plyfold_i18n::tr!("登録に失敗しました", "Could not save to the keychain")));
+            return Err(err(account, plyfold_i18n::tr!("登録に失敗しました", "Could not save to the keychain", "保存到钥匙串失败")));
         }
         Ok(())
     }
@@ -75,7 +75,7 @@ impl SecretStore for KeychainStore {
             .stderr(Stdio::null())
             .status()?;
         if !status.success() {
-            return Err(err(account, plyfold_i18n::tr!("削除に失敗しました（登録されていない可能性があります）", "Could not delete (it may not be in the keychain)")));
+            return Err(err(account, plyfold_i18n::tr!("削除に失敗しました（登録されていない可能性があります）", "Could not delete (it may not be in the keychain)", "删除失败（可能不在钥匙串中）")));
         }
         Ok(())
     }
@@ -93,13 +93,13 @@ impl<const N: usize> From<[(&str, &str); N]> for MemoryStore {
 
 impl SecretStore for MemoryStore {
     fn get(&self, account: &str) -> Result<String, ProfileError> {
-        self.0.lock().unwrap().get(account).cloned().ok_or_else(|| err(account, plyfold_i18n::tr!("登録されていません", "Not found")))
+        self.0.lock().unwrap().get(account).cloned().ok_or_else(|| err(account, plyfold_i18n::tr!("登録されていません", "Not found", "未找到")))
     }
     fn set(&self, account: &str, value: &str) -> Result<(), ProfileError> {
         self.0.lock().unwrap().insert(account.into(), value.into());
         Ok(())
     }
     fn delete(&self, account: &str) -> Result<(), ProfileError> {
-        self.0.lock().unwrap().remove(account).map(|_| ()).ok_or_else(|| err(account, plyfold_i18n::tr!("登録されていません", "Not found")))
+        self.0.lock().unwrap().remove(account).map(|_| ()).ok_or_else(|| err(account, plyfold_i18n::tr!("登録されていません", "Not found", "未找到")))
     }
 }

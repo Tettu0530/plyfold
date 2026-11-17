@@ -1,0 +1,32 @@
+// pane/Pane.tsx、pane/PaneTools.tsx（ペインの見出しとボタン）
+import type { pane as source } from "../ja/pane";
+
+export const pane: Record<keyof typeof source, string> = {
+  emptyLabel: "窗格 {n}（空）",
+  emptyHint: "从侧边栏选择会话，或新建会话。",
+  newSession: "新建会话",
+  label: "窗格 {n}：{title}",
+  profileTitle: "{agent} 配置：{profile}",
+  modelMismatch: "API 返回的模型名称与设置的模型（{model}）不一致。",
+  openDiff: "查看更改（{branch}）",
+  stop: "停止 (⌘.)",
+  closePane: "关闭窗格（会话会保留）",
+  placeholderRestart: "发送后将重新启动代理并继续",
+  placeholderPermission: "回应权限请求后继续（消息稍后发送）",
+  placeholderWorking: "运行中，消息将在本轮结束后发送",
+  placeholder: "输入消息",
+  plan: "计划",
+  planEmpty: "还没有计划。代理创建任务列表后会显示在这里。",
+  shells: "后台 Shell",
+  shellsEmpty: "没有在后台运行的 Shell。",
+  files: "涉及的文件",
+  filesEmpty: "还没有读取或写入文件。",
+  revealInFinder: "{path}（在 Finder 中显示）",
+  fileEdited: "已编辑",
+  fileRead: "已读取",
+  shellRunning: "运行中",
+  shellDone: "已退出",
+  shellFailed: "失败",
+  shellStopped: "已停止",
+  shellUnknown: "未知",
+};

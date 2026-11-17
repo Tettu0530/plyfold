@@ -18,25 +18,26 @@ pub use secrets::{KeychainStore, MemoryStore, SecretStore};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProfileError {
-    #[error("{}", plyfold_i18n::tr!("'{}' はプロファイルにもエージェントにもありません", "'{}' is neither a profile nor an agent", .0))]
+    #[error("{}", plyfold_i18n::tr!("'{}' はプロファイルにもエージェントにもありません", "'{}' is neither a profile nor an agent", "'{}' 既不是配置，也不是代理", .0))]
     UnknownTarget(String),
-    #[error("{}", plyfold_i18n::tr!("プロファイル '{}' のエージェント '{}' が定義されていません", "Agent '{1}' for profile '{0}' is not defined", .profile, .agent))]
+    #[error("{}", plyfold_i18n::tr!("プロファイル '{}' のエージェント '{}' が定義されていません", "Agent '{1}' for profile '{0}' is not defined", "配置 '{}' 的代理 '{}' 未定义", .profile, .agent))]
     UnknownAgent { profile: String, agent: String },
-    #[error("{}", plyfold_i18n::tr!("エージェント '{}' は config_dir_env がないので isolate できません", "Agent '{}' has no config_dir_env, so it cannot be isolated", .0))]
+    #[error("{}", plyfold_i18n::tr!("エージェント '{}' は config_dir_env がないので isolate できません", "Agent '{}' has no config_dir_env, so it cannot be isolated", "代理 '{}' 没有 config_dir_env，无法 isolate", .0))]
     CannotIsolate(String),
-    #[error("{}", plyfold_i18n::tr!("{} のパスはプロファイルのディレクトリの中に限ります: {}", "{} paths must stay inside the profile directory: {}", .0, .1))]
+    #[error("{}", plyfold_i18n::tr!("{} のパスはプロファイルのディレクトリの中に限ります: {}", "{} paths must stay inside the profile directory: {}", "{} 的路径必须位于配置目录内：{}", .0, .1))]
     PathEscape(&'static str, String),
     #[error("{}", plyfold_i18n::tr!(
         "キーの取得元 '{}' は不明です（keychain / keychain:<名前>/<変数名> / env:VAR）",
         "Unknown key source '{}' (use keychain / keychain:<name>/<variable> / env:VAR)",
+        "未知的密钥来源 '{}'（keychain / keychain:<名称>/<变量名> / env:VAR）",
         .0
     ))]
     BadKeySource(String),
-    #[error("{}", plyfold_i18n::tr!("秘密の値を取得できません（{}）: {}", "Cannot get the secret ({}): {}", .account, .reason))]
+    #[error("{}", plyfold_i18n::tr!("秘密の値を取得できません（{}）: {}", "Cannot get the secret ({}): {}", "无法获取机密值（{}）：{}", .account, .reason))]
     Secret { account: String, reason: String },
-    #[error("{}", plyfold_i18n::tr!("設定ファイルを読めません: {}", "Cannot read the config file: {}", .0))]
+    #[error("{}", plyfold_i18n::tr!("設定ファイルを読めません: {}", "Cannot read the config file: {}", "无法读取设置文件：{}", .0))]
     Io(#[from] std::io::Error),
-    #[error("{}", plyfold_i18n::tr!("設定ファイルの形式が不正です: {}", "The config file is malformed: {}", .0))]
+    #[error("{}", plyfold_i18n::tr!("設定ファイルの形式が不正です: {}", "The config file is malformed: {}", "设置文件格式无效：{}", .0))]
     Parse(#[from] toml::de::Error),
     #[error("{0}")]
     Form(String),
@@ -209,7 +210,7 @@ impl Config {
             } else if let Some(other) = source.strip_prefix("env:") {
                 std::env::var(other).map_err(|_| ProfileError::Secret {
                     account: format!("env:{other}"),
-                    reason: plyfold_i18n::tr!("環境変数がありません", "The environment variable is not set"),
+                    reason: plyfold_i18n::tr!("環境変数がありません", "The environment variable is not set", "环境变量未设置"),
                 })?
             } else {
                 return Err(ProfileError::BadKeySource(source.clone()));

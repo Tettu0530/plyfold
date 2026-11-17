@@ -12,11 +12,11 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
-    #[error("{}", plyfold_i18n::tr!("データベースのエラー: {}", "Database error: {}", .0))]
+    #[error("{}", plyfold_i18n::tr!("データベースのエラー: {}", "Database error: {}", "数据库错误：{}", .0))]
     Sql(#[from] rusqlite::Error),
-    #[error("{}", plyfold_i18n::tr!("セッション {} がありません", "Session {} not found", .0))]
+    #[error("{}", plyfold_i18n::tr!("セッション {} がありません", "Session {} not found", "会话 {} 不存在", .0))]
     NotFound(String),
-    #[error("{}", plyfold_i18n::tr!("ディレクトリを作れません: {}", "Cannot create the directory: {}", .0))]
+    #[error("{}", plyfold_i18n::tr!("ディレクトリを作れません: {}", "Cannot create the directory: {}", "无法创建目录：{}", .0))]
     Io(#[from] std::io::Error),
 }
 

@@ -39,11 +39,11 @@ pub fn status(wt: &Worktree) -> Result<WtStatus, WorktreeError> {
 pub fn commit(wt: &Worktree, message: &str) -> Result<String, WorktreeError> {
     let message = message.trim();
     if message.is_empty() {
-        return Err(fail(plyfold_i18n::tr!("コミットのメッセージが空です", "The commit message is empty")));
+        return Err(fail(plyfold_i18n::tr!("コミットのメッセージが空です", "The commit message is empty", "提交信息为空")));
     }
     git(&wt.path, &["add", "-A"])?;
     if git(&wt.path, &["diff", "--cached", "--quiet"]).is_ok() {
-        return Err(fail(plyfold_i18n::tr!("コミットする変更がありません", "No changes to commit")));
+        return Err(fail(plyfold_i18n::tr!("コミットする変更がありません", "No changes to commit", "没有可提交的更改")));
     }
     git(&wt.path, &["commit", "-q", "-m", message])?;
     Ok(git(&wt.path, &["rev-parse", "--short", "HEAD"])?.trim().to_string())
@@ -54,24 +54,26 @@ pub fn commit(wt: &Worktree, message: &str) -> Result<String, WorktreeError> {
 pub fn merge(wt: &Worktree) -> Result<String, WorktreeError> {
     let st = status(wt)?;
     if st.dirty {
-        return Err(fail(plyfold_i18n::tr!("コミットしていない変更があります。先にコミットしてください", "There are uncommitted changes. Commit them first")));
+        return Err(fail(plyfold_i18n::tr!("コミットしていない変更があります。先にコミットしてください", "There are uncommitted changes. Commit them first", "有未提交的更改。请先提交")));
     }
     if st.commits == 0 {
-        return Err(fail(plyfold_i18n::tr!("取り込むコミットがありません", "No commits to merge")));
+        return Err(fail(plyfold_i18n::tr!("取り込むコミットがありません", "No commits to merge", "没有可合并的提交")));
     }
     let target = st.target.ok_or_else(|| fail(plyfold_i18n::tr!(
         "元のリポジトリの HEAD が枝を指していないので、取り込み先が決まりません",
-        "The original repository's HEAD is not on a branch, so there is no merge target"
+        "The original repository's HEAD is not on a branch, so there is no merge target",
+        "原仓库的 HEAD 不在分支上，无法确定合并目标"
     )))?;
     if st.merged {
-        return Err(fail(plyfold_i18n::tr!("{target} にはもう取り込んであります", "Already merged into {target}")));
+        return Err(fail(plyfold_i18n::tr!("{target} にはもう取り込んであります", "Already merged into {target}", "已合并到 {target}")));
     }
     let msg = format!("Merge {} (Plyfold)", wt.branch);
     if let Err(e) = git(&wt.repo, &["merge", "--no-ff", "--no-edit", "-m", &msg, &wt.branch]) {
         let _ = git(&wt.repo, &["merge", "--abort"]);
         return Err(fail(plyfold_i18n::tr!(
             "{target} に取り込めませんでした。変更がぶつかったか、元のリポジトリに未コミットの変更があります。元のリポジトリは取り込む前の状態に戻しました。\n{e}",
-            "Could not merge into {target}. The changes conflict, or the original repository has uncommitted changes. The original repository was restored to its state before the merge.\n{e}"
+            "Could not merge into {target}. The changes conflict, or the original repository has uncommitted changes. The original repository was restored to its state before the merge.\n{e}",
+            "无法合并到 {target}。更改存在冲突，或原仓库有未提交的更改。原仓库已恢复到合并前的状态。\n{e}"
         )));
     }
     Ok(target)
@@ -85,22 +87,23 @@ fn has(cmd: &str) -> bool {
 pub fn create_pr(wt: &Worktree, title: &str) -> Result<String, WorktreeError> {
     let st = status(wt)?;
     if st.dirty {
-        return Err(fail(plyfold_i18n::tr!("コミットしていない変更があります。先にコミットしてください", "There are uncommitted changes. Commit them first")));
+        return Err(fail(plyfold_i18n::tr!("コミットしていない変更があります。先にコミットしてください", "There are uncommitted changes. Commit them first", "有未提交的更改。请先提交")));
     }
     if st.commits == 0 {
-        return Err(fail(plyfold_i18n::tr!("PR にするコミットがありません", "No commits for a PR")));
+        return Err(fail(plyfold_i18n::tr!("PR にするコミットがありません", "No commits for a PR", "没有可用于创建 PR 的提交")));
     }
     if !has("gh") {
         return Err(fail(plyfold_i18n::tr!(
             "gh（GitHub CLI）が見つかりません。brew install gh で入れて、gh auth login してください",
-            "gh (GitHub CLI) not found. Install it with brew install gh, then run gh auth login"
+            "gh (GitHub CLI) not found. Install it with brew install gh, then run gh auth login",
+            "找不到 gh（GitHub CLI）。请用 brew install gh 安装，然后运行 gh auth login"
         )));
     }
     if git(&wt.repo, &["remote", "get-url", "origin"]).is_err() {
-        return Err(fail(plyfold_i18n::tr!("このリポジトリには origin がありません", "This repository has no origin remote")));
+        return Err(fail(plyfold_i18n::tr!("このリポジトリには origin がありません", "This repository has no origin remote", "此仓库没有 origin")));
     }
     git(&wt.path, &["push", "-q", "-u", "origin", &wt.branch])?;
-    let body = plyfold_i18n::tr!("Plyfold のセッションで作った変更です。", "Changes made in a Plyfold session.");
+    let body = plyfold_i18n::tr!("Plyfold のセッションで作った変更です。", "Changes made in a Plyfold session.", "在 Plyfold 会话中做出的更改。");
     let mut args = vec!["pr", "create", "--head", &wt.branch, "--title", title, "--body", &body];
     if let Some(t) = st.target.as_deref() {
         args.extend(["--base", t]);
@@ -110,6 +113,7 @@ pub fn create_pr(wt: &Worktree, title: &str) -> Result<String, WorktreeError> {
         return Err(fail(plyfold_i18n::tr!(
             "PR を作れませんでした（枝は push 済みです）: {}",
             "Could not create the PR (the branch was pushed): {}",
+            "无法创建 PR（分支已推送）：{}",
             String::from_utf8_lossy(&out.stderr).trim()
         )));
     }
@@ -125,7 +129,8 @@ pub fn open_in_editor(wt: &Worktree, prefer: &str) -> Result<String, WorktreeErr
         if !has(cmd) {
             return Err(fail(plyfold_i18n::tr!(
                 "{name} のコマンド（{cmd}）が見つかりません。設定でエディタを選び直してください",
-                "{name} command ({cmd}) not found. Choose another editor in Settings"
+                "{name} command ({cmd}) not found. Choose another editor in Settings",
+                "找不到 {name} 的命令（{cmd}）。请在设置中重新选择编辑器"
             )));
         }
         std::process::Command::new(cmd).arg(&path).spawn()?;

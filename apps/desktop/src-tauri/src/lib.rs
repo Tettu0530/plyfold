@@ -80,10 +80,10 @@ fn set_ui_lang(lang: String) {
 #[tauri::command]
 fn save_settings(state: State<'_, AppState>, settings: AppSettings) -> CmdResult<()> {
     if !["auto", "zed", "cursor", "code", "finder"].contains(&settings.editor.as_str()) {
-        return Err(plyfold_i18n::tr!("エディタ '{}' は選べません", "Editor '{}' is not available", settings.editor));
+        return Err(plyfold_i18n::tr!("エディタ '{}' は選べません", "Editor '{}' is not available", "无法选择编辑器 '{}'", settings.editor));
     }
     if !(30..=3600).contains(&settings.stall_seconds) {
-        return Err(plyfold_i18n::tr!("無応答とみなすまでの時間は 30 秒から 1 時間までです", "The no-response timeout must be between 30 seconds and 1 hour"));
+        return Err(plyfold_i18n::tr!("無応答とみなすまでの時間は 30 秒から 1 時間までです", "The no-response timeout must be between 30 seconds and 1 hour", "判定为无响应的时间须在 30 秒到 1 小时之间"));
     }
     let path = state.state_dir.join("settings.json");
     let tmp = path.with_extension("json.tmp");
@@ -305,7 +305,7 @@ struct ProfileDetail {
 #[tauri::command]
 fn profile_detail(state: State<'_, AppState>, name: String) -> CmdResult<ProfileDetail> {
     let cfg = state.config.read().unwrap();
-    let def = cfg.profiles.get(&name).ok_or_else(|| plyfold_i18n::tr!("プロファイル '{name}' はありません", "Profile '{name}' not found"))?;
+    let def = cfg.profiles.get(&name).ok_or_else(|| plyfold_i18n::tr!("プロファイル '{name}' はありません", "Profile '{name}' not found", "配置 '{name}' 不存在"))?;
     let form = edit::describe(&name, def);
     let account = edit::key_account(&name, def);
     let value = account.as_ref().and_then(|(_, a)| state.secrets.get(a).ok());
@@ -339,11 +339,11 @@ fn save_profile(state: State<'_, AppState>, form: ProfileForm, original: Option<
         if original.is_none() || renaming {
             edit::validate_name(&form.name, &cfg).map_err(err)?;
             if cfg.profiles.contains_key(&form.name) {
-                return Err(plyfold_i18n::tr!("'{}' という名前のプロファイルはもうあります", "A profile named '{}' already exists", form.name));
+                return Err(plyfold_i18n::tr!("'{}' という名前のプロファイルはもうあります", "A profile named '{}' already exists", "名为 '{}' 的配置已存在", form.name));
             }
         }
         if !cfg.agents.contains_key(&form.agent) {
-            return Err(plyfold_i18n::tr!("エージェント '{}' はありません", "Agent '{}' not found", form.agent));
+            return Err(plyfold_i18n::tr!("エージェント '{}' はありません", "Agent '{}' not found", "代理 '{}' 不存在", form.agent));
         }
         let existing = original.as_ref().and_then(|o| cfg.profiles.get(o));
         let def = edit::to_def(&form, existing).map_err(err)?;
@@ -372,11 +372,11 @@ fn save_profile(state: State<'_, AppState>, form: ProfileForm, original: Option<
 fn set_profile_key(state: State<'_, AppState>, name: String, value: String) -> CmdResult<()> {
     let value = value.trim();
     if value.is_empty() {
-        return Err(plyfold_i18n::tr!("キーが空です", "The key is empty"));
+        return Err(plyfold_i18n::tr!("キーが空です", "The key is empty", "密钥为空"));
     }
     let cfg = state.config.read().unwrap();
-    let def = cfg.profiles.get(&name).ok_or_else(|| plyfold_i18n::tr!("プロファイル '{name}' はありません", "Profile '{name}' not found"))?;
-    let (_, account) = edit::key_account(&name, def).ok_or_else(|| plyfold_i18n::tr!("このプロファイルはキーを使いません", "This profile does not use a key"))?;
+    let def = cfg.profiles.get(&name).ok_or_else(|| plyfold_i18n::tr!("プロファイル '{name}' はありません", "Profile '{name}' not found", "配置 '{name}' 不存在"))?;
+    let (_, account) = edit::key_account(&name, def).ok_or_else(|| plyfold_i18n::tr!("このプロファイルはキーを使いません", "This profile does not use a key", "此配置不使用密钥"))?;
     state.secrets.set(&account, value).map_err(err)
 }
 
@@ -385,7 +385,7 @@ fn set_profile_key(state: State<'_, AppState>, name: String, value: String) -> C
 fn delete_profile(state: State<'_, AppState>, name: String) -> CmdResult<()> {
     let own = {
         let cfg = state.config.read().unwrap();
-        let def = cfg.profiles.get(&name).ok_or_else(|| plyfold_i18n::tr!("プロファイル '{name}' はありません", "Profile '{name}' not found"))?;
+        let def = cfg.profiles.get(&name).ok_or_else(|| plyfold_i18n::tr!("プロファイル '{name}' はありません", "Profile '{name}' not found", "配置 '{name}' 不存在"))?;
         edit::key_account(&name, def).filter(|(var, a)| *a == format!("{name}/{var}"))
     };
     edit::remove_profile(&state.config_path, &name).map_err(err)?;
@@ -417,7 +417,7 @@ async fn merge_session(state: State<'_, AppState>, id: String) -> CmdResult<Merg
     let target = state.engine.merge(&id).map_err(err)?;
     let cleanup = state.settings.read().unwrap().cleanup_after_merge;
     if cleanup {
-        state.engine.cleanup_worktree(&id).await.map_err(|e| plyfold_i18n::tr!("{target} には取り込みましたが、片付けに失敗しました: {e}", "Merged into {target}, but cleanup failed: {e}"))?;
+        state.engine.cleanup_worktree(&id).await.map_err(|e| plyfold_i18n::tr!("{target} には取り込みましたが、片付けに失敗しました: {e}", "Merged into {target}, but cleanup failed: {e}", "已合并到 {target}，但清理失败：{e}"))?;
     }
     Ok(MergeResult { target, cleaned: cleanup })
 }
@@ -433,7 +433,7 @@ async fn create_pr(state: State<'_, AppState>, id: String) -> CmdResult<String> 
 fn open_url(url: String) -> CmdResult<()> {
     let ok = ["http://", "https://", "mailto:"].iter().any(|p| url.starts_with(p));
     if !ok || url.chars().any(char::is_control) {
-        return Err(plyfold_i18n::tr!("このリンクは開けません", "This link cannot be opened"));
+        return Err(plyfold_i18n::tr!("このリンクは開けません", "This link cannot be opened", "无法打开此链接"));
     }
     std::process::Command::new("open").arg(&url).spawn().map_err(err)?;
     Ok(())
@@ -444,7 +444,7 @@ fn open_url(url: String) -> CmdResult<()> {
 fn reveal_file(path: String) -> CmdResult<()> {
     let p = std::path::Path::new(&path);
     if !p.is_absolute() || !p.exists() {
-        return Err(plyfold_i18n::tr!("ファイルが見つかりません", "File not found"));
+        return Err(plyfold_i18n::tr!("ファイルが見つかりません", "File not found", "找不到文件"));
     }
     std::process::Command::new("open").arg("-R").arg(p).spawn().map_err(err)?;
     Ok(())
@@ -466,7 +466,7 @@ async fn discard_session_changes(state: State<'_, AppState>, id: String) -> CmdR
 fn rename_session(state: State<'_, AppState>, id: String, title: String) -> CmdResult<()> {
     let title = title.trim();
     if title.is_empty() {
-        return Err(plyfold_i18n::tr!("名前が空です", "The name is empty"));
+        return Err(plyfold_i18n::tr!("名前が空です", "The name is empty", "名称为空"));
     }
     state.engine.store().rename_by_user(&id, title).map_err(err)
 }

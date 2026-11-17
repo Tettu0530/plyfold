@@ -40,19 +40,19 @@ pub enum CoreError {
     Worktree(#[from] WorktreeError),
     #[error(transparent)]
     Acp(#[from] AcpError),
-    #[error("{}", plyfold_i18n::tr!("セッション {} のエージェントは動いていません", "The agent for session {} is not running", .0))]
+    #[error("{}", plyfold_i18n::tr!("セッション {} のエージェントは動いていません", "The agent for session {} is not running", "会话 {} 的代理未在运行", .0))]
     NotRunning(String),
-    #[error("{}", plyfold_i18n::tr!("セッション {} のエージェントはもう動いています", "The agent for session {} is already running", .0))]
+    #[error("{}", plyfold_i18n::tr!("セッション {} のエージェントはもう動いています", "The agent for session {} is already running", "会话 {} 的代理已在运行", .0))]
     AlreadyRunning(String),
-    #[error("{}", plyfold_i18n::tr!("セッション {} はターンの途中です", "Session {} is in the middle of a turn", .0))]
+    #[error("{}", plyfold_i18n::tr!("セッション {} はターンの途中です", "Session {} is in the middle of a turn", "会话 {} 的轮次尚未结束", .0))]
     Busy(String),
-    #[error("{}", plyfold_i18n::tr!("権限確認 {} は見つかりません（すでに返事済みか、ターンが終わっています）", "Permission request {} not found (already answered, or the turn has ended)", .0))]
+    #[error("{}", plyfold_i18n::tr!("権限確認 {} は見つかりません（すでに返事済みか、ターンが終わっています）", "Permission request {} not found (already answered, or the turn has ended)", "找不到权限请求 {}（已答复，或轮次已结束）", .0))]
     UnknownPermission(String),
-    #[error("{}", plyfold_i18n::tr!("セッション {} には作業場所がありません", "Session {} has no workspace", .0))]
+    #[error("{}", plyfold_i18n::tr!("セッション {} には作業場所がありません", "Session {} has no workspace", "会话 {} 没有工作区", .0))]
     NoWorkspace(String),
-    #[error("{}", plyfold_i18n::tr!("このエージェントには {:?} の設定項目がありません", "This agent has no {:?} option", .0))]
+    #[error("{}", plyfold_i18n::tr!("このエージェントには {:?} の設定項目がありません", "This agent has no {:?} option", "此代理没有 {:?} 设置项", .0))]
     NoSuchOption(Category),
-    #[error("{}", plyfold_i18n::tr!("添えたものを読めません: {}", "Cannot read the attachment: {}", .0))]
+    #[error("{}", plyfold_i18n::tr!("添えたものを読めません: {}", "Cannot read the attachment: {}", "无法读取附件：{}", .0))]
     Attachment(String),
 }
 
@@ -271,7 +271,7 @@ impl Engine {
         let cwd = match prepared {
             Ok(c) => c,
             Err(e) => {
-                inner.notice(&rec.id, plyfold_i18n::tr!("作業場所を用意できません: {e}", "Cannot prepare the workspace: {e}"));
+                inner.notice(&rec.id, plyfold_i18n::tr!("作業場所を用意できません: {e}", "Cannot prepare the workspace: {e}", "无法准备工作区：{e}"));
                 inner.set_status(&rec.id, SessionStatus::Error);
                 return Err(e);
             }
@@ -342,14 +342,15 @@ impl Engine {
                             Ok((resp, barrier)) => {
                                 live.wait_processed(barrier).await;
                                 live.info.lock().unwrap().apply_session_response(&resp);
-                                inner.notice(id, plyfold_i18n::tr!("session/load で開き直しました（履歴はエージェントから再送されます）", "Reopened with session/load (the agent resends the history)"));
+                                inner.notice(id, plyfold_i18n::tr!("session/load で開き直しました（履歴はエージェントから再送されます）", "Reopened with session/load (the agent resends the history)", "已通过 session/load 重新打开（历史记录由代理重新发送）"));
                                 return Ok(old.clone());
                             }
                             // エージェントの側に会話の記録がない（書き残す前に終わったなど）。新しいセッションで続ける
                             Err(AcpError::Rpc { code: -32002, .. }) => {
                                 fallback = Some(plyfold_i18n::tr!(
                                     "エージェントの側にこの会話の記録が見つからないため、新しいセッションを作りました（文脈は引き継がれません。Plyfold の記録は残っています）",
-                                    "The agent has no record of this conversation, so a new session was created (context is not carried over; Plyfold keeps its own record)"
+                                    "The agent has no record of this conversation, so a new session was created (context is not carried over; Plyfold keeps its own record)",
+                                    "代理端找不到此对话的记录，因此新建了会话（上下文不会延续。Plyfold 的记录仍会保留）"
                                 ));
                             }
                             Err(e) => return Err(e.into()),
@@ -357,7 +358,8 @@ impl Engine {
                     } else {
                         fallback = Some(plyfold_i18n::tr!(
                             "このエージェントは開き直しに対応していないため、新しいセッションを作りました（文脈は引き継がれません）",
-                            "This agent cannot reopen sessions, so a new session was created (context is not carried over)"
+                            "This agent cannot reopen sessions, so a new session was created (context is not carried over)",
+                            "此代理不支持重新打开会话，因此新建了会话（上下文不会延续）"
                         ));
                     }
                 }
@@ -386,7 +388,7 @@ impl Engine {
                     let tail = live.client.connection().stderr_tail();
                     live.client.shutdown().await;
                     if !tail.is_empty() {
-                        inner.notice(id, plyfold_i18n::tr!("stderr の最後:\n{}", "Last stderr output:\n{}", tail.join("\n")));
+                        inner.notice(id, plyfold_i18n::tr!("stderr の最後:\n{}", "Last stderr output:\n{}", "stderr 的最后几行：\n{}", tail.join("\n")));
                     }
                     return Err(e);
                 }
@@ -403,7 +405,7 @@ impl Engine {
                 Ok(())
             }
             Err(e) => {
-                inner.notice(id, plyfold_i18n::tr!("エージェントを起動できません: {e}", "Cannot start the agent: {e}"));
+                inner.notice(id, plyfold_i18n::tr!("エージェントを起動できません: {e}", "Cannot start the agent: {e}", "无法启动代理：{e}"));
                 inner.set_status(id, SessionStatus::Error);
                 Err(e)
             }
@@ -445,7 +447,7 @@ impl Engine {
                 }
                 Err(e) => {
                     finish_turn(&inner, &id, &live, &Value::Null);
-                    inner.notice(&id, plyfold_i18n::tr!("ターンがエラーで終わりました: {e}", "The turn ended with an error: {e}"));
+                    inner.notice(&id, plyfold_i18n::tr!("ターンがエラーで終わりました: {e}", "The turn ended with an error: {e}", "轮次因错误而结束：{e}"));
                     inner.emit(EngineEvent::TurnEnded { session_id: id.clone(), stop_reason: None, error: Some(e.to_string()) });
                 }
             }
@@ -571,7 +573,7 @@ impl Engine {
     pub fn commit(&self, id: &str, message: &str) -> Result<String, CoreError> {
         let wt = self.idle_worktree(id)?;
         let hash = plyfold_worktree::ops::commit(&wt, message)?;
-        self.inner.notice(id, plyfold_i18n::tr!("コミットしました: {hash} {}", "Committed: {hash} {}", message.lines().next().unwrap_or("")));
+        self.inner.notice(id, plyfold_i18n::tr!("コミットしました: {hash} {}", "Committed: {hash} {}", "已提交：{hash} {}", message.lines().next().unwrap_or("")));
         Ok(hash)
     }
 
@@ -579,7 +581,7 @@ impl Engine {
     pub fn merge(&self, id: &str) -> Result<String, CoreError> {
         let wt = self.idle_worktree(id)?;
         let target = plyfold_worktree::ops::merge(&wt)?;
-        self.inner.notice(id, plyfold_i18n::tr!("{} を {target} に取り込みました", "Merged {} into {target}", wt.branch));
+        self.inner.notice(id, plyfold_i18n::tr!("{} を {target} に取り込みました", "Merged {} into {target}", "已将 {} 合并到 {target}", wt.branch));
         Ok(target)
     }
 
@@ -588,7 +590,7 @@ impl Engine {
         let wt = self.idle_worktree(id)?;
         let title = self.inner.store.get_session(id)?.title;
         let url = plyfold_worktree::ops::create_pr(&wt, &title)?;
-        self.inner.notice(id, plyfold_i18n::tr!("PR を作りました: {url}", "Created a PR: {url}"));
+        self.inner.notice(id, plyfold_i18n::tr!("PR を作りました: {url}", "Created a PR: {url}", "已创建 PR：{url}"));
         Ok(url)
     }
 
@@ -605,7 +607,7 @@ impl Engine {
         self.close_session(id).await?;
         self.inner.worktrees.remove(&wt, true)?;
         self.inner.store.set_workspace(id, rec.repo_path.as_deref(), None, None, None)?;
-        self.inner.notice(id, plyfold_i18n::tr!("worktree と枝 {} を片付けました", "Removed the worktree and branch {}", wt.branch));
+        self.inner.notice(id, plyfold_i18n::tr!("worktree と枝 {} を片付けました", "Removed the worktree and branch {}", "已清理 worktree 和分支 {}", wt.branch));
         Ok(())
     }
 
@@ -618,7 +620,7 @@ impl Engine {
     pub fn discard(&self, id: &str) -> Result<(), CoreError> {
         let wt = self.idle_worktree(id)?;
         plyfold_worktree::ops::discard(&wt)?;
-        self.inner.notice(id, plyfold_i18n::tr!("変更を破棄して、{} に戻しました", "Discarded the changes and reset to {}", &wt.base[..wt.base.len().min(7)]));
+        self.inner.notice(id, plyfold_i18n::tr!("変更を破棄して、{} に戻しました", "Discarded the changes and reset to {}", "已放弃更改，并恢复到 {}", &wt.base[..wt.base.len().min(7)]));
         Ok(())
     }
 }
@@ -703,23 +705,23 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
                 inner.emit(EngineEvent::PermissionRequested {
                     session_id: id.clone(),
                     permission_id: pid,
-                    title: v["toolCall"]["title"].as_str().map(str::to_string).unwrap_or_else(|| plyfold_i18n::tr!("（タイトルなし）", "(untitled)")),
+                    title: v["toolCall"]["title"].as_str().map(str::to_string).unwrap_or_else(|| plyfold_i18n::tr!("（タイトルなし）", "(untitled)", "（无标题）")),
                     tool_call: v["toolCall"].clone(),
                     options,
                 });
             }
             AgentMessage::OtherRequest { request_id, method, .. } => {
                 let _ = live.client.respond_unsupported(request_id).await;
-                inner.notice(&id, plyfold_i18n::tr!("未対応のリクエスト {method} を断りました", "Declined the unsupported request {method}"));
+                inner.notice(&id, plyfold_i18n::tr!("未対応のリクエスト {method} を断りました", "Declined the unsupported request {method}", "已拒绝不支持的请求 {method}"));
             }
             AgentMessage::OtherNotification { .. } => {}
             AgentMessage::Closed => {
                 inner.live.lock().unwrap().remove(&id);
                 if !live.closing.load(Ordering::SeqCst) {
                     let tail = live.client.connection().stderr_tail();
-                    let mut msg = plyfold_i18n::tr!("エージェントのプロセスが終了しました", "The agent process exited");
+                    let mut msg = plyfold_i18n::tr!("エージェントのプロセスが終了しました", "The agent process exited", "代理进程已退出");
                     if !tail.is_empty() {
-                        msg += &plyfold_i18n::tr!("\nstderr の最後:\n{}", "\nLast stderr output:\n{}", tail.iter().rev().take(20).rev().cloned().collect::<Vec<_>>().join("\n"));
+                        msg += &plyfold_i18n::tr!("\nstderr の最後:\n{}", "\nLast stderr output:\n{}", "\nstderr 的最后几行：\n{}", tail.iter().rev().take(20).rev().cloned().collect::<Vec<_>>().join("\n"));
                     }
                     inner.notice(&id, msg);
                     inner.set_status(&id, SessionStatus::Error);
@@ -743,7 +745,7 @@ async fn watchdog(inner: Arc<Inner>, id: String, live: Arc<Live>) {
             && !live.stalled.swap(true, Ordering::SeqCst)
         {
             inner.set_status(&id, SessionStatus::Stalled);
-            inner.notice(&id, plyfold_i18n::tr!("{} 秒間、エージェントから何も届いていません", "Nothing has arrived from the agent for {} seconds", idle.as_secs()));
+            inner.notice(&id, plyfold_i18n::tr!("{} 秒間、エージェントから何も届いていません", "Nothing has arrived from the agent for {} seconds", "已有 {} 秒没有收到代理的任何消息", idle.as_secs()));
         }
     }
 }

@@ -2,7 +2,7 @@ import { ChevronLeft, FolderOpen, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Switch } from "@/components/ui/switch";
-import { useT } from "@/i18n";
+import { useT, LANGS, type Lang } from "@/i18n";
 import { api } from "@/lib/api";
 import type { AppSettings, EditorChoice, SettingsView as Paths } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -87,15 +87,12 @@ export function SettingsView() {
               />
             </Row>
             <Row label={t("settings.language")} detail={settings.language === "auto" || !settings.language ? t("settings.languageAuto") : t("settings.languageFixed")}>
-              <Segmented<"auto" | "ja" | "en">
+              <Segmented<"auto" | Lang>
                 label={t("settings.language")}
                 value={settings.language ?? "auto"}
                 onChange={(v) => change({ language: v })}
-                options={[
-                  { value: "auto", label: <span className="px-2">{t("settings.auto")}</span> },
-                  { value: "ja", label: <span className="px-2">日本語</span> },
-                  { value: "en", label: <span className="px-2">English</span> },
-                ]}
+                // 言語の名前は、その言語自身の表記で出す（どの画面でも同じ）
+                options={[{ value: "auto" as const, label: <span className="px-2">{t("settings.auto")}</span> }, ...LANGS.map((l) => ({ value: l.value, label: <span className="px-2">{l.label}</span> }))]}
               />
             </Row>
             <Row label={t("settings.sendKey")} detail={settings.send_key === "cmd_enter" ? t("settings.sendCmdEnter") : t("settings.sendEnter")}>

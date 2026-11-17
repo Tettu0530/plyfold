@@ -1,0 +1,30 @@
+// pane/DraftPane.tsx、pane/RepoPicker.tsx（新しいセッション）
+import type { draft as source } from "../ja/draft";
+
+export const draft: Record<keyof typeof source, string> = {
+  authCustom: "自定义提供方",
+  authKeyed: "官方 API",
+  authLogin: "现有登录",
+  turnsTitle: "{turns} 轮（{sessions} 个会话）",
+  tokensTitle: "输入 {input}，输出 {output}",
+  cost: "费用",
+  unused: "最近 30 天未使用",
+  paneLabel: "窗格 {n}：新建会话",
+  title: "新建会话",
+  profiles: "配置",
+  last30Days: "最近 30 天",
+  noProfiles: "还没有配置。请在侧边栏的「配置」中添加。",
+  starting: "正在启动代理",
+  repo: "仓库",
+  worktreeOn: "在此会话专用的 worktree 中工作",
+  worktreeOff: "直接在仓库中工作（可能与其他会话冲突）",
+  inPlace: "直接",
+  choicesAfterStart: "启动后可选择 model 和 effort",
+  firstPrompt: "初始提示词",
+  firstPromptPlaceholder: "输入初始提示词以开始",
+  start: "开始",
+  repoPath: "仓库路径",
+  repoSuggestions: "仓库建议",
+  recent: "最近",
+  folders: "文件夹",
+};

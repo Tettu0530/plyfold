@@ -37,8 +37,9 @@
 }
 
 @theme inline {
-  --font-sans: "Geist Variable", "Hiragino Sans", system-ui, sans-serif;
-  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+  /* 漢字やかなは言語ごとのフォントに回す（--font-cjk。:root:lang() で切り替える） */
+  --font-sans: "Geist Variable", var(--font-cjk), system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, var(--font-cjk), monospace;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -140,4 +141,23 @@
     background: var(--foreground);
     transform: translateY(2px);
   }
+}
+
+/* 漢字とかなのフォント。同じ漢字でも日本語と中国語（簡体）で字形が違う（「骨」「直」「誤」など）ので、
+   画面の言語（<html lang>）で並びを替える。英語の画面では、会話に出る日本語を日本語の字形で出す */
+:root {
+  --font-cjk: "Hiragino Sans", "Hiragino Kaku Gothic ProN";
+}
+:root:lang(zh) {
+  --font-cjk: "PingFang SC", "Hiragino Sans GB", "Heiti SC";
+}
+
+/* 会話の本文は、本文の言語の字形で描く（lang は contentLang で付ける）。属性の付いた要素だけに効かせ、
+   中のコード（font-mono のクラス）は自分のフォントのまま */
+[lang="ja"]:not(:root) {
+  font-family: "Geist Variable", "Hiragino Sans", "Hiragino Kaku Gothic ProN", system-ui, sans-serif;
+}
+[lang="zh-CN"]:not(:root),
+[lang="zh"]:not(:root) {
+  font-family: "Geist Variable", "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
 }

@@ -1,0 +1,32 @@
+// MotionLab.tsx（動きの見本）
+import type { motionLab as source } from "../ja/motionLab";
+
+export const motionLab: Record<keyof typeof source, string> = {
+  curveLabel: "弹簧位置随时间的变化",
+  throwCardLabel: "可抛向四角吸附的卡片",
+  stylePop: "弹出",
+  stylePopNote: "保持起点的形状向侧面弹出，移到目标上方附近后再展开（默认）。",
+  styleMorph: "变形",
+  styleMorphNote: "保持起点的形状，朝向目标的一边先伸展，另一边随后跟上并归位。",
+  styleTear: "撕离",
+  styleTearNote: "粘在起点上被拉长，到达极限时撕开，借势飞向目标的形状。",
+  styleDroplet: "水滴",
+  styleDropletNote: "缩成圆形水滴后脱离，移动后再展开。",
+  separationStyle: "分离样式",
+  sizeLag: "尺寸延迟",
+  open: "打开",
+  close: "关闭",
+  openedSurface: "已打开的面板",
+  openedSurfaceNote: "真正的内容会在完全展开后出现。",
+  title: "动效调整",
+  description: "弹簧使用与 SwiftUI 相同的公式。可与这台 Mac 上 Finder 和系统设置的动效对比来调整。",
+  frameRate: "帧率",
+  measuring: "测量中",
+  throttled: "如果是 120Hz 屏幕，说明 WebView 被限制在 60Hz。",
+  preset: "预设",
+  settle: "稳定时间",
+  move: "移动",
+  pressToGrow: "按下放大",
+  cssSwitch: "开关（CSS 弹簧）",
+  throwNote: "抛出卡片后，它会延续手指的惯性吸附到四角。拖出边框时会像橡皮一样拉伸。",
+};

@@ -9,40 +9,47 @@ import { create } from "zustand";
 
 import { en } from "./en";
 import { ja } from "./ja";
+import { zh } from "./zh";
 
-export type Lang = "ja" | "en";
+export type Lang = "ja" | "en" | "zh";
 export type LangSetting = "auto" | Lang;
 
 export const LANGS: { value: Lang; label: string }[] = [
   { value: "ja", label: "日本語" },
   { value: "en", label: "English" },
+  { value: "zh", label: "简体中文" },
 ];
+
+/** <html lang> に入れる値（WebKit が漢字の字形とフォントを選ぶ手がかりになる） */
+const HTML_LANG: Record<Lang, string> = { ja: "ja", en: "en", zh: "zh-CN" };
 
 type Dict = typeof ja;
 /** "名前空間.キー" の一覧（型でキーの打ち間違いを防ぐ） */
 export type MessageKey = { [N in keyof Dict]: `${N & string}.${keyof Dict[N] & string}` }[keyof Dict];
 export type Params = Record<string, string | number>;
 
-const DICTS: Record<Lang, Record<string, Record<string, string>>> = { ja, en };
+const DICTS: Record<Lang, Record<string, Record<string, string>>> = { ja, en, zh };
 
-/** macOS（WebView）の言語から決める。分からなければ英語 */
+/** macOS（WebView）の言語から決める。分からなければ英語。中国語は簡体字だけ（繁体字の地域はまだないので次の候補へ） */
 export function detectLang(): Lang {
   const langs = typeof navigator === "undefined" ? [] : [...(navigator.languages ?? []), navigator.language];
   for (const l of langs) {
-    const base = l?.toLowerCase().split("-")[0];
+    const tag = l?.toLowerCase() ?? "";
+    const base = tag.split("-")[0];
     if (base === "ja" || base === "en") return base;
+    if (base === "zh" && !/hant|-tw|-hk|-mo/.test(tag)) return "zh";
   }
   return "en";
 }
 
-export const resolveLang = (s: LangSetting | undefined | null): Lang => (s === "ja" || s === "en" ? s : detectLang());
+export const resolveLang = (s: LangSetting | undefined | null): Lang => (s === "ja" || s === "en" || s === "zh" ? s : detectLang());
 
 const useLangStore = create<{ lang: Lang }>(() => ({ lang: detectLang() }));
 
 /** 今の言語を変える（設定を読んだとき、変えたとき） */
 export function setLang(lang: Lang) {
   useLangStore.setState({ lang });
-  if (typeof document !== "undefined") document.documentElement.lang = lang;
+  if (typeof document !== "undefined") document.documentElement.lang = HTML_LANG[lang];
 }
 
 export const currentLang = () => useLangStore.getState().lang;
@@ -85,4 +92,14 @@ export function useT(): T {
 
 export function useLang(): Lang {
   return useLangStore((s) => s.lang);
+}
+
+/**
+ * 会話の本文（エージェントの出力や自分の発言）の言語の見当。画面の言語とは別に、本文の字形を正しくするため lang に入れる
+ * （中国語の画面で日本語の本文を中国語の字形で描かない）。かなを含めば日本語、ハングルなら韓国語、ほかは決めない
+ */
+export function contentLang(text: string): string | undefined {
+  if (/[\u3040-\u30ff]/.test(text)) return "ja";
+  if (/[\uac00-\ud7af]/.test(text)) return "ko";
+  return undefined;
 }

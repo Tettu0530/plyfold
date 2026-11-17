@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, ChevronRight, Clock, Coins, Gauge, Info, ListChecks } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { useT } from "@/i18n";
+import { useT, contentLang } from "@/i18n";
 import { money, seconds, tokens } from "@/lib/format";
 import type { SessionInfo, TurnStats } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -84,7 +84,7 @@ function Thought({ text }: { text: string }) {
         <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} aria-hidden />
         {t("transcript.thought")}
       </button>
-      {open && <p className="mt-1 border-l pl-3 text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">{text}</p>}
+      {open && <p lang={contentLang(text)} className="mt-1 border-l pl-3 text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">{text}</p>}
     </div>
   );
 }
@@ -142,7 +142,7 @@ export function Transcript({
                   />
                 ) : (
                   <>
-                    {b.text && <div className="rounded-[10px] bg-muted px-3 py-1.5 leading-relaxed whitespace-pre-wrap select-text">{b.text}</div>}
+                    {b.text && <div lang={contentLang(b.text)} className="rounded-[10px] bg-muted px-3 py-1.5 leading-relaxed whitespace-pre-wrap select-text">{b.text}</div>}
                     {onResend && (
                       <UserActions
                         text={b.text}

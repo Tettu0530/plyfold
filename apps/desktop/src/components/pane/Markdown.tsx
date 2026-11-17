@@ -8,7 +8,7 @@ import { memo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import { useT } from "@/i18n";
+import { useT, contentLang } from "@/i18n";
 import { api, inTauri } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "./MessageActions";
@@ -116,7 +116,7 @@ const components: Components = {
 /** Markdown の本文。streaming のあいだは、最後の要素の後ろに書いている印を出す */
 export const Markdown = memo(function Markdown({ text, streaming }: { text: string; streaming?: boolean }) {
   return (
-    <div className={cn("min-w-0 break-words select-text", streaming && "md-streaming")}>
+    <div lang={contentLang(text)} className={cn("min-w-0 break-words select-text", streaming && "md-streaming")}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {text}
       </ReactMarkdown>

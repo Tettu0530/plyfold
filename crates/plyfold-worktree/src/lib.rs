@@ -13,11 +13,11 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]
 pub enum WorktreeError {
-    #[error("{}", plyfold_i18n::tr!("git {} に失敗しました: {}", "git {} failed: {}", .args, .stderr))]
+    #[error("{}", plyfold_i18n::tr!("git {} に失敗しました: {}", "git {} failed: {}", "git {} 失败：{}", .args, .stderr))]
     Git { args: String, stderr: String },
-    #[error("{}", plyfold_i18n::tr!("git を実行できません: {}", "Cannot run git: {}", .0))]
+    #[error("{}", plyfold_i18n::tr!("git を実行できません: {}", "Cannot run git: {}", "无法运行 git：{}", .0))]
     Io(#[from] std::io::Error),
-    #[error("{}", plyfold_i18n::tr!("{} は git リポジトリではありません", "{} is not a git repository", .0.display()))]
+    #[error("{}", plyfold_i18n::tr!("{} は git リポジトリではありません", "{} is not a git repository", "{} 不是 git 仓库", .0.display()))]
     NotARepo(PathBuf),
     #[error("{0}")]
     Op(String),
