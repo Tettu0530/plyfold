@@ -45,6 +45,7 @@ async fn echo_turn() {
     let dir = tempdir("echo");
     let (client, mut rx) = AcpClient::connect(&spec(&dir), None).await.unwrap();
     assert!(client.supports_load_session());
+    assert!(client.supports_fork());
     let s = client.new_session(&dir).await.unwrap();
     let r = client.prompt(&s.session_id.0, "hello").await.unwrap();
     assert_eq!(r.response.stop_reason, StopReason::EndTurn);
@@ -114,6 +115,34 @@ async fn load_session_replays_history_in_new_process() {
     let msgs = drain(&mut rx);
     assert_eq!(agent_text(&msgs), "echo: first");
     assert!(msgs.iter().any(|m| matches!(m, AgentMessage::Update { typed: Some(u), .. } if matches!(u.as_ref(), SessionUpdate::UserMessageChunk(_)))));
+    client.shutdown().await;
+}
+
+#[tokio::test]
+async fn fork_session_copies_history_into_a_new_process() {
+    let dir = tempdir("fork");
+    let other = tempdir("fork-cwd");
+    let sid = {
+        let (client, _rx) = AcpClient::connect(&spec(&dir), None).await.unwrap();
+        let sid = client.new_session(&dir).await.unwrap().session_id.0.to_string();
+        client.prompt(&sid, "remember this").await.unwrap();
+        client.shutdown().await;
+        sid
+    };
+    let (client, mut rx) = AcpClient::connect(&spec(&other), None).await.unwrap();
+    let (resp, _) = client.fork_session(&sid, &other).await.unwrap();
+    let new_id = resp["sessionId"].as_str().unwrap().to_string();
+    assert_ne!(new_id, sid);
+    // Fork does not resend the conversation
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(drain(&mut rx).is_empty());
+    let copied = std::fs::read_to_string(other.join(".plyfold-mock").join(format!("{new_id}.jsonl"))).unwrap();
+    assert!(copied.contains("remember this"));
+    client.prompt(&new_id, "next").await.unwrap();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(agent_text(&drain(&mut rx)), "echo: next");
+    let missing = client.fork_session("no-such-session", &other).await;
+    assert!(matches!(missing, Err(plyfold_acp::AcpError::Rpc { code: -32002, .. })));
     client.shutdown().await;
 }
 

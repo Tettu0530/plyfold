@@ -100,6 +100,10 @@ pub enum EventKind {
     FrameIn,
     /// JSON-RPC sent to the agent (redacted)
     FrameOut,
+    /// A frame copied from the session this one was forked from. Kept out of usage totals
+    ForkIn,
+    /// A frame copied from the session this one was forked from. Kept out of usage totals
+    ForkOut,
     /// A status change
     Status,
     /// Plyfold's own notes (launch, errors, stall detection, ...)
@@ -111,6 +115,8 @@ impl EventKind {
         match self {
             Self::FrameIn => "frame_in",
             Self::FrameOut => "frame_out",
+            Self::ForkIn => "fork_in",
+            Self::ForkOut => "fork_out",
             Self::Status => "status",
             Self::Note => "note",
         }
@@ -119,6 +125,8 @@ impl EventKind {
         match s {
             "frame_in" => Self::FrameIn,
             "frame_out" => Self::FrameOut,
+            "fork_in" => Self::ForkIn,
+            "fork_out" => Self::ForkOut,
             "status" => Self::Status,
             _ => Self::Note,
         }
@@ -343,6 +351,19 @@ impl Store {
         Ok(conn.last_insert_rowid())
     }
 
+    /// Copies the source session's ACP frames so the fork shows the same conversation.
+    /// Stored as `fork_in` / `fork_out` so usage totals are not counted twice. Timestamps are kept.
+    pub fn copy_transcript(&self, from: &str, to: &str) -> Result<usize, StoreError> {
+        let n = self.conn.lock().unwrap().execute(
+            "INSERT INTO events (session_id, ts, kind, payload)
+             SELECT ?1, ts, CASE kind WHEN 'frame_in' THEN 'fork_in' ELSE 'fork_out' END, payload
+             FROM events WHERE session_id = ?2 AND kind IN ('frame_in', 'frame_out')
+             ORDER BY id",
+            params![to, from],
+        )?;
+        Ok(n)
+    }
+
     /// Events after `after`, oldest first (from the start if `after` is None)
     pub fn events(&self, session_id: &str, after: Option<i64>, limit: usize) -> Result<Vec<EventRecord>, StoreError> {
         let conn = self.conn.lock().unwrap();
@@ -468,6 +489,24 @@ mod tests {
         store.delete_session(&s.id).unwrap();
         assert!(store.events(&s.id, None, 100).unwrap().is_empty());
         assert_eq!(store.events(&other.id, None, 100).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn copied_transcript_keeps_the_text_and_stays_out_of_usage() {
+        let store = Store::open_in_memory().unwrap();
+        let src = new(&store, "src");
+        let prompt = r#"{"method":"session/prompt"}"#;
+        store.append_event(&src.id, EventKind::FrameOut, prompt).unwrap();
+        store.append_event(&src.id, EventKind::Note, "skip").unwrap();
+        let dst = new(&store, "dst");
+        assert_eq!(store.copy_transcript(&src.id, &dst.id).unwrap(), 1);
+        let copied = store.events(&dst.id, None, 10).unwrap();
+        assert_eq!(copied.len(), 1);
+        assert_eq!(copied[0].kind, EventKind::ForkOut);
+        assert_eq!(copied[0].payload, prompt);
+        assert_eq!(copied[0].session_id, dst.id);
+        let usage = store.usage_events(0).unwrap();
+        assert!(usage.iter().all(|e| e.session_id == src.id));
     }
 
     #[test]

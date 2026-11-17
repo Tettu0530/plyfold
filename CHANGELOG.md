@@ -2,6 +2,12 @@
 
 All notable changes to Plyfold are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org). While the version starts with 0, any release may change `config.toml`, `settings.json` or the database.
 
+## [Unreleased]
+
+### Sessions
+
+- Fork a session from its sidebar menu. The new session keeps the conversation, in its own worktree or, once the source agent has stopped, in the same workspace
+
 ## [0.1.0] - 2026-11-17
 
 The first release.

@@ -31,6 +31,7 @@ export const api = {
   sessionHistory: (id: string) => invoke<EventRecord[]>("session_history", { id }),
   startSession: (args: { profile: string; repo: string; title: string; worktree: boolean }) => invoke<SessionRecord>("start_session", args),
   reopenSession: (id: string) => invoke<void>("reopen_session", { id }),
+  forkSession: (id: string, newWorktree: boolean) => invoke<SessionRecord>("fork_session", { id, newWorktree }),
   renameSession: (id: string, title: string) => invoke<void>("rename_session", { id, title }),
   closeSession: (id: string) => invoke<void>("close_session", { id }),
   deleteSession: (id: string, removeWorktree: boolean) => invoke<void>("delete_session", { id, removeWorktree }),

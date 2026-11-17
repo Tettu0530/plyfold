@@ -148,6 +148,23 @@ describe("transcript", () => {
     if (stats.kind === "stats") expect(stats.stats?.usage?.input).toBe(100);
   });
 
+  it("rebuilds a forked conversation from the copied frames", () => {
+    const ev = (id: number, kind: EventRecord["kind"], payload: unknown): EventRecord => ({
+      id,
+      session_id: "s",
+      ts: 0,
+      kind,
+      payload: JSON.stringify(payload),
+    });
+    const t = fromHistory([
+      ev(1, "fork_out", { method: "session/prompt", params: { prompt: [{ type: "text", text: "hi" }] } }),
+      ev(2, "fork_in", { method: "session/update", params: { update: chunk("agent_message_chunk", "echo: hi") } }),
+      ev(3, "fork_in", { id: 1, result: { stopReason: "end_turn" } }),
+    ]);
+    expect(t.items.map((i) => i.kind)).toEqual(["user", "agent", "stats"]);
+    expect(t.items[0]).toMatchObject({ kind: "user", text: "hi" });
+  });
+
   it("skips history resent by session/load between the replay markers", () => {
     const ev = (id: number, kind: EventRecord["kind"], payload: unknown): EventRecord => ({
       id,

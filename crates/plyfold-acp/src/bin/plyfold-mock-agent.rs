@@ -7,6 +7,7 @@
 //! - otherwise    : answers `echo: <prompt>`
 //!
 //! History is kept in `<cwd>/.plyfold-mock/<sessionId>.jsonl` and replayed on session/load.
+//! A pointer in the temp dir lets a later process `session/fork` that id (agents persist sessions outside the worktree).
 //! Also reports config options (model / effort / mode) and usage (usage_update, per-turn usage).
 
 use std::collections::{HashMap, HashSet};
@@ -87,6 +88,20 @@ impl State {
 
     fn is_cancelled(&self, sid: &str) -> bool {
         self.cancelled.lock().unwrap().contains(sid)
+    }
+
+    /// Remember where this session's history file lives, including for a process that starts later
+    fn bind(&self, sid: &str, cwd: PathBuf) {
+        let pointer = std::env::temp_dir().join("plyfold-mock-sessions").join(sid);
+        if let Some(parent) = pointer.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(&pointer, cwd.display().to_string());
+        self.cwds.lock().unwrap().insert(sid.to_string(), cwd);
+    }
+
+    fn known(&self, sid: &str) -> bool {
+        self.cwds.lock().unwrap().contains_key(sid) || std::env::temp_dir().join("plyfold-mock-sessions").join(sid).is_file()
     }
 }
 
@@ -176,7 +191,7 @@ fn handle_request(st: &Arc<State>, id: Value, method: &str, params: Value) {
     match method {
         "initialize" => reply(json!({
             "protocolVersion": 1,
-            "agentCapabilities": {"loadSession": true, "promptCapabilities": {}, "mcpCapabilities": {}},
+            "agentCapabilities": {"loadSession": true, "promptCapabilities": {}, "mcpCapabilities": {}, "sessionCapabilities": {"fork": {}}},
             "authMethods": [],
             "agentInfo": {"name": "plyfold-mock-agent", "version": env!("CARGO_PKG_VERSION")}
         })),
@@ -184,7 +199,7 @@ fn handle_request(st: &Arc<State>, id: Value, method: &str, params: Value) {
             let n = st.seq.fetch_add(1, Ordering::SeqCst);
             let sid = format!("mock-{}-{n}", std::process::id());
             let cwd = PathBuf::from(params["cwd"].as_str().unwrap_or("."));
-            st.cwds.lock().unwrap().insert(sid.clone(), cwd);
+            st.bind(&sid, cwd);
             st.config.lock().unwrap().insert(sid.clone(), HashMap::new());
             reply(json!({
                 "sessionId": sid,
@@ -206,8 +221,36 @@ fn handle_request(st: &Arc<State>, id: Value, method: &str, params: Value) {
                     st.send(json!({"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": sid, "update": update}}));
                 }
             }
-            st.cwds.lock().unwrap().insert(sid, cwd);
+            st.bind(&sid, cwd);
             reply(json!({}));
+        }
+        "session/fork" => {
+            let old = params["sessionId"].as_str().unwrap_or_default().to_string();
+            if !st.known(&old) {
+                st.send(json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32002, "message": "session not found"}}));
+                return;
+            }
+            let n = st.seq.fetch_add(1, Ordering::SeqCst);
+            let sid = format!("mock-{}-{n}", std::process::id());
+            let cwd = PathBuf::from(params["cwd"].as_str().unwrap_or("."));
+            if let Some(src) = st.history_path(&old).filter(|p| p.is_file()).or_else(|| {
+                let pointer = std::env::temp_dir().join("plyfold-mock-sessions").join(&old);
+                let dir = std::fs::read_to_string(pointer).ok()?;
+                let path = PathBuf::from(dir.trim()).join(".plyfold-mock").join(format!("{old}.jsonl"));
+                path.is_file().then_some(path)
+            }) {
+                let dest_dir = cwd.join(".plyfold-mock");
+                let _ = std::fs::create_dir_all(&dest_dir);
+                let _ = std::fs::copy(src, dest_dir.join(format!("{sid}.jsonl")));
+            }
+            let values = st.config.lock().unwrap().get(&old).cloned().unwrap_or_default();
+            st.config.lock().unwrap().insert(sid.clone(), values.clone());
+            st.bind(&sid, cwd);
+            reply(json!({
+                "sessionId": sid,
+                "modes": {"currentModeId": "default", "availableModes": [{"id": "default", "name": "Default"}, {"id": "plan", "name": "Plan"}]},
+                "configOptions": config_options(&values)
+            }));
         }
         "session/set_mode" => {
             let sid = params["sessionId"].as_str().unwrap_or_default().to_string();

@@ -20,7 +20,7 @@ export function parseCommands(list: unknown): SlashCommand[] {
 export function commandsFromHistory(events: EventRecord[]): SlashCommand[] {
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i];
-    if (e.kind !== "frame_in" || !e.payload.includes("available_commands_update")) continue;
+    if ((e.kind !== "frame_in" && e.kind !== "fork_in") || !e.payload.includes("available_commands_update")) continue;
     try {
       const u = JSON.parse(e.payload)?.params?.update;
       if (u?.sessionUpdate === "available_commands_update") return parseCommands(u.availableCommands);

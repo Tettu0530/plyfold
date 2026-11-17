@@ -302,6 +302,11 @@ async fn reopen_session(state: State<'_, AppState>, id: String) -> CmdResult<()>
 }
 
 #[tauri::command]
+async fn fork_session(state: State<'_, AppState>, id: String, new_worktree: bool) -> CmdResult<SessionRecord> {
+    state.engine.fork_session(&id, new_worktree).await.map_err(err)
+}
+
+#[tauri::command]
 async fn close_session(state: State<'_, AppState>, id: String) -> CmdResult<()> {
     state.engine.close_session(&id).await.map_err(err)
 }
@@ -690,6 +695,7 @@ pub fn run() {
             reveal_file,
             start_session,
             reopen_session,
+            fork_session,
             close_session,
             delete_session,
             prompt,

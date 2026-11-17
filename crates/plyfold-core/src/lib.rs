@@ -54,6 +54,20 @@ pub enum CoreError {
     NoSuchOption(Category),
     #[error("{}", plyfold_i18n::tr!("添えたものを読めません: {}", "Cannot read the attachment: {}", "无法读取附件：{}", .0))]
     Attachment(String),
+    #[error("{}", plyfold_i18n::tr!("このエージェントは分岐に対応していません", "This agent cannot fork a session", "此代理不支持分叉会话"))]
+    ForkUnsupported,
+    #[error("{}", plyfold_i18n::tr!("セッション {} には引き継げる会話がありません", "Session {} has no conversation to fork", "会话 {} 没有可分叉的对话", .0))]
+    NoConversation(String),
+    #[error(
+        "{}",
+        plyfold_i18n::tr!(
+            "セッション {} の作業場所ではエージェントが動いています。止めてから分岐するか、新しい worktree で分岐してください",
+            "An agent is running in session {}'s workspace. Stop it and fork again, or fork into a new worktree",
+            "会话 {} 的工作区里有代理在运行。请先停止再分叉，或在新 worktree 中分叉",
+            .0
+        )
+    )]
+    SharedWorkspace(String),
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -119,6 +133,15 @@ pub struct EngineOptions {
     pub secrets: Arc<dyn SecretStore>,
     /// Mark the session Stalled if nothing arrives for this long during a turn
     pub stall_after: Duration,
+}
+
+/// How the agent session is opened
+enum Resume {
+    New,
+    /// session/load. Falls back to a new session when the agent has no record
+    Load(String),
+    /// session/fork. No fallback: a blank session would drop the conversation
+    Fork(String),
 }
 
 pub struct StartSession {
@@ -298,7 +321,7 @@ impl Engine {
                 return Err(e);
             }
         };
-        self.launch(&rec.id, &req.profile, &cwd, None).await?;
+        self.launch(&rec.id, &req.profile, &cwd, Resume::New).await?;
         Ok(inner.store.get_session(&rec.id)?)
     }
 
@@ -309,10 +332,83 @@ impl Engine {
         }
         let rec = self.inner.store.get_session(id)?;
         let cwd = rec.worktree_path.clone().or(rec.repo_path.clone()).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
-        self.launch(id, &rec.profile, Path::new(&cwd), rec.acp_session_id.clone()).await
+        let resume = match rec.acp_session_id {
+            Some(id) => Resume::Load(id),
+            None => Resume::New,
+        };
+        self.launch(id, &rec.profile, Path::new(&cwd), resume).await
     }
 
-    async fn launch(&self, id: &str, profile: &str, cwd: &Path, reopen: Option<String>) -> Result<(), CoreError> {
+    /// A new session with the source conversation.
+    /// `new_worktree` gives it its own worktree (uncommitted files stay in the source).
+    /// The same workspace is refused while any agent is running there, so two agents never edit one directory.
+    pub async fn fork_session(&self, id: &str, new_worktree: bool) -> Result<SessionRecord, CoreError> {
+        let inner = &self.inner;
+        let src = inner.store.get_session(id)?;
+        let acp = src.acp_session_id.clone().ok_or_else(|| CoreError::NoConversation(id.into()))?;
+        if src.status == SessionStatus::Starting {
+            return Err(CoreError::Busy(id.into()));
+        }
+        if self.is_running(id) {
+            let live = inner.live(id)?;
+            if live.in_turn.load(Ordering::SeqCst) {
+                return Err(CoreError::Busy(id.into()));
+            }
+        }
+        let repo = src.repo_path.clone().ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
+        if !new_worktree {
+            let dir = src.worktree_path.clone().unwrap_or_else(|| repo.clone());
+            if workspace_in_use(inner, &dir) {
+                return Err(CoreError::SharedWorkspace(id.into()));
+            }
+        }
+        let t = src.title.clone();
+        let title = plyfold_i18n::tr!("「{t}」の分岐", "Fork of {t}", "「{t}」的分叉");
+        let rec = inner.store.create_session(NewSession { title, profile: src.profile.clone(), agent: src.agent.clone(), ..Default::default() })?;
+        inner.store.copy_transcript(id, &rec.id)?;
+
+        let cwd = if new_worktree {
+            let at = src.worktree_path.as_deref().unwrap_or(repo.as_str());
+            let base = head_commit(Path::new(at)).or(src.base_ref.clone());
+            match inner.worktrees.create(Path::new(&repo), &rec.id, base.as_deref()) {
+                Ok(wt) => {
+                    inner.store.set_workspace(
+                        &rec.id,
+                        Some(&wt.repo.display().to_string()),
+                        Some(&wt.path.display().to_string()),
+                        Some(&wt.branch),
+                        Some(&wt.base),
+                    )?;
+                    wt.path
+                }
+                Err(e) => {
+                    inner.notice(&rec.id, plyfold_i18n::tr!("作業場所を用意できません: {e}", "Cannot prepare the workspace: {e}", "无法准备工作区：{e}"));
+                    inner.set_status(&rec.id, SessionStatus::Error);
+                    inner.emit(EngineEvent::SessionCreated { session: inner.store.get_session(&rec.id)? });
+                    return Err(e.into());
+                }
+            }
+        } else {
+            let cwd = src.worktree_path.clone().unwrap_or_else(|| repo.clone());
+            inner.store.set_workspace(&rec.id, Some(&repo), src.worktree_path.as_deref(), src.branch.as_deref(), src.base_ref.as_deref())?;
+            PathBuf::from(cwd)
+        };
+        inner.emit(EngineEvent::SessionCreated { session: inner.store.get_session(&rec.id)? });
+        self.launch(&rec.id, &src.profile, &cwd, Resume::Fork(acp)).await?;
+        let note = if new_worktree {
+            plyfold_i18n::tr!(
+                "新しい worktree で分岐しました（未コミットの変更は含みません）",
+                "Forked into a new worktree (uncommitted changes are not included)",
+                "已在新 worktree 中分叉（不含未提交的更改）"
+            )
+        } else {
+            plyfold_i18n::tr!("同じ作業場所で分岐しました", "Forked in this workspace", "已在同一工作区中分叉")
+        };
+        inner.notice(&rec.id, note);
+        Ok(inner.store.get_session(&rec.id)?)
+    }
+
+    async fn launch(&self, id: &str, profile: &str, cwd: &Path, resume: Resume) -> Result<(), CoreError> {
         let inner = self.inner.clone();
         inner.set_status(id, SessionStatus::Starting);
         let result: Result<(), CoreError> = async {
@@ -353,9 +449,42 @@ impl Engine {
             tokio::spawn(pump(inner.clone(), id.to_string(), live.clone(), rx));
 
             let opened: Result<String, CoreError> = async {
+                if let Resume::Fork(old) = &resume {
+                    if !live.client.supports_fork() {
+                        return Err(CoreError::ForkUnsupported);
+                    }
+                    // Anything the agent sends before the response is a resend, not new output. The transcript already
+                    // has the conversation, copied from the source session's log
+                    let _ = inner.store.append_event(id, EventKind::Note, REPLAY_BEGIN);
+                    live.replaying.store(true, Ordering::SeqCst);
+                    let forked = live.client.fork_session(old, cwd).await;
+                    if let Ok((_, barrier)) = &forked {
+                        live.wait_processed(*barrier).await;
+                    }
+                    live.replaying.store(false, Ordering::SeqCst);
+                    let _ = inner.store.append_event(id, EventKind::Note, REPLAY_END);
+                    let resp = match forked {
+                        Ok((resp, _)) => resp,
+                        Err(AcpError::Rpc { code: AcpError::METHOD_NOT_FOUND, .. }) => return Err(CoreError::ForkUnsupported),
+                        Err(e) => return Err(e.into()),
+                    };
+                    let sid = resp["sessionId"].as_str().unwrap_or_default().to_string();
+                    if sid.is_empty() {
+                        return Err(CoreError::ForkUnsupported);
+                    }
+                    live.info.lock().unwrap().apply_session_response(&resp);
+                    inner.store.set_acp_session_id(id, &sid)?;
+                    if live.info.lock().unwrap().current_mode.is_none()
+                        && let Some(mode) = &resolved.default_mode
+                    {
+                        live.client.set_mode(&sid, mode).await?;
+                        live.info.lock().unwrap().current_mode = Some(mode.clone());
+                    }
+                    return Ok(sid);
+                }
                 // Why reopening failed (reported when continuing in a new session)
                 let mut fallback = None;
-                if let Some(old) = &reopen {
+                if let Resume::Load(old) = &resume {
                     if live.client.supports_load_session() {
                         // Mark the resent history in the event log so it is not rebuilt as a second copy of the conversation
                         let _ = inner.store.append_event(id, EventKind::Note, REPLAY_BEGIN);
@@ -702,6 +831,23 @@ impl Engine {
         );
         Ok(())
     }
+}
+
+/// True when a running session already uses this directory
+fn workspace_in_use(inner: &Inner, dir: &str) -> bool {
+    let running: Vec<String> = inner.live.lock().unwrap().keys().cloned().collect();
+    running.into_iter().any(|other| inner.store.get_session(&other).ok().and_then(|r| r.worktree_path.or(r.repo_path)).is_some_and(|path| path == dir))
+}
+
+/// HEAD of a worktree, so a fork branches from the source's latest commit rather than its original base
+fn head_commit(dir: &Path) -> Option<String> {
+    let out = std::process::Command::new("git").args(["rev-parse", "--verify", "HEAD"]).current_dir(dir).output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let s = String::from_utf8(out.stdout).ok()?;
+    let s = s.trim();
+    (!s.is_empty()).then(|| s.to_string())
 }
 
 fn worktree_of(rec: &SessionRecord) -> Option<Worktree> {

@@ -267,7 +267,9 @@ export function fromHistory(events: EventRecord[]): Transcript {
       if (!e.payload.startsWith("起動:")) t = addNotice(t, e.payload);
       continue;
     }
-    if (e.kind !== "frame_in" && e.kind !== "frame_out") continue;
+    const inbound = e.kind === "frame_in" || e.kind === "fork_in";
+    const outbound = e.kind === "frame_out" || e.kind === "fork_out";
+    if (!inbound && !outbound) continue;
     let msg: Record<string, unknown>;
     try {
       msg = JSON.parse(e.payload);
@@ -276,24 +278,24 @@ export function fromHistory(events: EventRecord[]): Transcript {
     }
     // The frames themselves also bracket the resend: from the session/load request to its response.
     // This catches logs written before the markers existed
-    if (e.kind === "frame_out" && msg.method === "session/load") {
+    if (outbound && msg.method === "session/load") {
       loadId = msg.id ?? null;
       continue;
     }
-    if (loadId !== null && e.kind === "frame_in" && msg.id === loadId && (msg.result !== undefined || msg.error !== undefined)) {
+    if (loadId !== null && inbound && msg.id === loadId && (msg.result !== undefined || msg.error !== undefined)) {
       loadId = null;
       continue;
     }
     if (replaying || loadId !== null) continue;
-    if (e.kind === "frame_out" && msg.method === "session/prompt") {
+    if (outbound && msg.method === "session/prompt") {
       const params = msg.params as { prompt?: { type?: string; text?: string }[] } | undefined;
       const blocks = params?.prompt ?? [];
       const prompt = blocks.map((b) => (b.type === undefined || b.type === "text" ? (b.text ?? "") : "")).join("");
       t = beginTurn(t, prompt, previewsOfPrompt(blocks));
-    } else if (e.kind === "frame_in" && msg.method === "session/update") {
+    } else if (inbound && msg.method === "session/update") {
       const params = msg.params as { update?: AcpUpdate } | undefined;
       if (params?.update) t = applyUpdate(t, params.update, e.ts || null);
-    } else if (e.kind === "frame_in" && t.inTurn && msg.result && typeof msg.result === "object") {
+    } else if (inbound && t.inTurn && msg.result && typeof msg.result === "object") {
       const result = msg.result as { stopReason?: string; usage?: Record<string, number> };
       if (typeof result.stopReason === "string") {
         const u = result.usage;

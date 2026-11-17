@@ -108,7 +108,7 @@ export interface EventRecord {
   id: number;
   session_id: string;
   ts: number;
-  kind: "frame_in" | "frame_out" | "status" | "note";
+  kind: "frame_in" | "frame_out" | "fork_in" | "fork_out" | "status" | "note";
   payload: string;
 }
 
