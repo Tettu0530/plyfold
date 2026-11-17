@@ -1,13 +1,15 @@
 // Pane header buttons: touched files, background shells, plan. Click to show the contents in a liquid menu
 // Always shown (so you know where they are). With nothing inside, only the icon is shown, no count
-import { Check, Circle, FileText, LoaderCircle, Pencil, SquareStop, SquareTerminal, CircleX, ListChecks, CircleHelp } from "lucide-react";
-import { useMemo } from "react";
+import { Check, Circle, CircleHelp, CircleX, FileText, Globe, ListChecks, LoaderCircle, Pencil, SquareStop, SquareTerminal } from "lucide-react";
+import { createContext, useContext, useMemo, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useT, type MessageKey } from "@/i18n";
 import { api, inTauri } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { backgroundShells, currentPlan, touchedFiles, type BackgroundShell, type ShellState } from "@/state/paneData";
+import { backgroundShells, currentPlan, previewUrls, touchedFiles, type BackgroundShell, type ShellState } from "@/state/paneData";
+import { localUrls, normalizeUrl } from "@/lib/urls";
+import { useStore } from "@/state/store";
 import type { TranscriptItem } from "@/state/transcript";
 import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
@@ -15,12 +17,21 @@ import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 const TRIGGER = "relative flex h-6 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground";
 
 /** Header button and the panel it opens */
+/** Lets menu contents close their own menu (after opening a preview, for example) */
+const CloseMenu = createContext<() => void>(() => {});
+
 function ToolButton({ scope, name, label, icon, badge, width, children }: { scope: string; name: string; label: string; icon: React.ReactNode; badge: React.ReactNode | null; width: string; children: React.ReactNode }) {
   const anchor = `${scope}:${name}`;
   const menu = useLiquidMenu(`menu:${anchor}`, anchor);
   const raised = useLiquidActiveAnchors().has(anchor);
+  const [open, setOpen] = useState(false);
+  const change = (o: boolean) => {
+    menu.onOpenChange(o);
+    setOpen(o);
+  };
   return (
-    <Popover onOpenChange={menu.onOpenChange}>
+    <CloseMenu.Provider value={() => change(false)}>
+    <Popover open={open} onOpenChange={change}>
       <PopoverTrigger asChild>
         <button ref={liquidAnchor(anchor)} type="button" aria-label={label} title={label} className={cn(TRIGGER, raised && "z-[57]")}>
           {icon}
@@ -39,6 +50,7 @@ function ToolButton({ scope, name, label, icon, badge, width, children }: { scop
         {children}
       </PopoverContent>
     </Popover>
+    </CloseMenu.Provider>
   );
 }
 
@@ -56,8 +68,9 @@ const SHELL: Record<ShellState, { label: MessageKey; Icon: typeof Check; classNa
   unknown: { label: "pane.shellUnknown", Icon: CircleHelp, className: "text-muted-foreground" },
 };
 
-function ShellRow({ s }: { s: BackgroundShell }) {
+function ShellRow({ s, anchor }: { s: BackgroundShell; anchor: string }) {
   const t = useT();
+  const close = useContext(CloseMenu);
   const st = SHELL[s.state];
   const last = s.output.trim().split("\n").slice(-3).join("\n");
   return (
@@ -73,7 +86,23 @@ function ShellRow({ s }: { s: BackgroundShell }) {
         </span>
       </div>
       {last && <pre className="m-0 overflow-hidden rounded-[6px] bg-background px-2 py-1 font-mono text-xs leading-5 whitespace-pre text-muted-foreground">{last}</pre>}
-      {s.id && <span className="font-mono text-xs text-muted-foreground">{s.id}</span>}
+      <div className="flex items-center gap-2">
+        {s.id && <span className="font-mono text-xs text-muted-foreground">{s.id}</span>}
+        {/* A dev server's address in its output can be opened in a preview pane */}
+        {localUrls(s.output)[0] && (
+          <button
+            type="button"
+            onClick={() => {
+              close();
+              useStore.getState().openPreview(localUrls(s.output)[0], anchor);
+            }}
+            className="ml-auto flex h-6 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <Globe className="size-3" aria-hidden />
+            {t("pane.preview")}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -84,16 +113,68 @@ const PLAN_ICON: Record<string, { Icon: typeof Check; className: string; spin?: 
   pending: { Icon: Circle, className: "text-muted-foreground" },
 };
 
+/** Open a typed URL, or one of the localhost URLs the commands printed */
+function PreviewMenu({ urls, anchor }: { urls: string[]; anchor: string }) {
+  const t = useT();
+  const [typed, setTyped] = useState("");
+  const close = useContext(CloseMenu);
+  const open = (url: string) => {
+    close();
+    useStore.getState().openPreview(url, anchor);
+  };
+  return (
+    <>
+      {urls.length > 0 ? (
+        <>
+          <div className="px-1.5 pb-0.5 text-xs text-muted-foreground">{t("pane.previewFound")}</div>
+          {urls.map((u) => (
+            <button key={u} type="button" onClick={() => open(u)} className="flex h-7 w-full items-center gap-2 rounded-md px-1.5 text-left hover:bg-accent">
+              <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              <span className="min-w-0 truncate font-mono text-xs">{u}</span>
+            </button>
+          ))}
+        </>
+      ) : (
+        <Empty>{t("pane.previewEmpty")}</Empty>
+      )}
+      <form
+        className="mt-1 flex items-center gap-1.5 border-t px-0.5 pt-1.5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const url = normalizeUrl(typed);
+          if (url) open(url);
+        }}
+      >
+        <input
+          aria-label={t("pane.previewUrl")}
+          value={typed}
+          spellCheck={false}
+          placeholder={t("pane.previewPlaceholder")}
+          onChange={(e) => setTyped(e.target.value)}
+          className="h-7 min-w-0 grow rounded-md border border-input bg-transparent px-2 font-mono text-xs outline-none focus:border-ring"
+        />
+        <button type="submit" disabled={!normalizeUrl(typed)} className="flex h-7 items-center rounded-md bg-primary px-2 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-40">
+          {t("pane.previewOpen")}
+        </button>
+      </form>
+    </>
+  );
+}
+
 export function PaneTools({ scope, items, worktree, alive }: { scope: string; items: TranscriptItem[]; worktree: string | null; alive: boolean }) {
   const t = useT();
   const files = useMemo(() => touchedFiles(items), [items]);
   const shells = useMemo(() => backgroundShells(items, alive), [items, alive]);
   const plan = useMemo(() => currentPlan(items), [items]);
+  const urls = useMemo(() => previewUrls(items), [items]);
   const running = shells.filter((s) => s.state === "running").length;
   const done = plan.filter((e) => e.status === "completed").length;
 
   return (
     <>
+      <ToolButton scope={scope} name="preview" label={t("pane.preview")} icon={<Globe className="size-3.5" aria-hidden />} badge={urls.length || null} width="w-96">
+        <PreviewMenu urls={urls} anchor={`${scope}:preview`} />
+      </ToolButton>
       <ToolButton scope={scope} name="plan" label={t("pane.plan")} icon={<ListChecks className="size-3.5" aria-hidden />} badge={plan.length ? `${done}/${plan.length}` : null} width="w-80">
           {plan.length === 0 && <Empty>{t("pane.planEmpty")}</Empty>}
           {plan.map((e, i) => {
@@ -116,7 +197,7 @@ export function PaneTools({ scope, items, worktree, alive }: { scope: string; it
         >
           {shells.length === 0 && <Empty>{t("pane.shellsEmpty")}</Empty>}
           {shells.map((s, i) => (
-            <ShellRow key={s.id ?? i} s={s} />
+            <ShellRow key={s.id ?? i} s={s} anchor={`${scope}:shells`} />
           ))}
         </ToolButton>
         <ToolButton scope={scope} name="files" label={t("pane.files")} icon={<FileText className="size-3.5" aria-hidden />} badge={files.length || null} width="w-96">

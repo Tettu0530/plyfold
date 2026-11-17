@@ -238,6 +238,7 @@ function SidebarResizer() {
   const end = () => {
     const d = dragging.current;
     dragging.current = null;
+    document.body.classList.remove("resizing");
     setActive(false);
     useStore.setState({ sidebarResizing: false });
     if (d?.collapse) {
@@ -263,6 +264,7 @@ function SidebarResizer() {
         }
         const nav = e.currentTarget.parentElement?.getBoundingClientRect();
         dragging.current = { left: nav?.left ?? 0, from: useStore.getState().sidebarWidth, collapse: false };
+        document.body.classList.add("resizing");
         setActive(true);
         useStore.setState({ sidebarResizing: true });
       }}

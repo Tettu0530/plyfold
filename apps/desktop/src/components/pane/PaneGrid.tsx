@@ -76,6 +76,7 @@ function Divider({ axis, value, area, onDragging }: { axis: "x" | "y"; value: nu
           // Synthetic events have no capturable pointer; dragging still works while the pointer stays over the boundary
         }
         dragging.current = true;
+        document.body.classList.add("resizing");
         setActive(true);
         onDragging(true);
       }}
@@ -84,11 +85,13 @@ function Divider({ axis, value, area, onDragging }: { axis: "x" | "y"; value: nu
       }}
       onPointerUp={() => {
         dragging.current = false;
+        document.body.classList.remove("resizing");
         setActive(false);
         onDragging(false);
       }}
       onPointerCancel={() => {
         dragging.current = false;
+        document.body.classList.remove("resizing");
         setActive(false);
         onDragging(false);
       }}

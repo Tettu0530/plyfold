@@ -164,3 +164,8 @@
 [lang="zh"]:not(:root) {
   font-family: "Geist Variable", "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
 }
+
+/* While a pane or sidebar edge is dragged, iframes (the preview pane) must not swallow the pointer */
+body.resizing iframe {
+  pointer-events: none;
+}

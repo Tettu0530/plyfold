@@ -47,6 +47,14 @@ export interface Draft {
 }
 
 export const isDraft = (id: string | null | undefined): id is string => !!id && id.startsWith("draft:");
+/** A pane showing a web page (a dev server the agent started, or any URL) */
+export const isPreview = (id: string | null | undefined): id is string => !!id && id.startsWith("preview:");
+
+export interface PreviewPage {
+  url: string;
+  /** liquidAnchor of the button it was opened from (the pane grows out of it and shrinks back into it) */
+  anchor: string;
+}
 
 /** Pane appearance (the target of separation animations) */
 const PANE_LOOK: Look = { background: "rgba(10, 10, 10, 1)", border: "rgba(255, 255, 255, 0.1)", shadow: "0px 0px 0px rgba(0, 0, 0, 0)", blur: 0 };
@@ -54,7 +62,8 @@ const settingsEl = () => document.querySelector<HTMLElement>("[data-settings-vie
 const profilesEl = () => document.querySelector<HTMLElement>("[data-profiles-view]");
 const diffEl = () => document.querySelector<HTMLElement>("[data-diff-view]");
 const paneEl = (i: number) => document.querySelector<HTMLElement>(`[data-pane-index="${i}"]`);
-const anchorOf = (id: string) => (isDraft(id) ? "new-session" : `session:${id}`);
+const anchorOf = (id: string) =>
+  isDraft(id) ? "new-session" : isPreview(id) ? (useStore.getState().previews[id]?.anchor ?? "new-session") : `session:${id}`;
 const LAST_REPO_KEY = "plyfold.lastRepo";
 function lastRepo(): string {
   try {
@@ -136,6 +145,10 @@ function readLayout(): unknown {
 interface State {
   sessions: Record<string, SessionView>;
   drafts: Record<string, Draft>;
+  previews: Record<string, PreviewPage>;
+  /** Open a web page in a pane (a free one, or one more pane), growing out of the given anchor */
+  openPreview: (url: string, anchor: string) => void;
+  setPreviewUrl: (id: string, url: string) => void;
   profiles: ProfileSummary[];
   panes: (string | null)[];
   paneCount: PaneCount;
@@ -288,6 +301,25 @@ export function reduceEvent(sessions: Record<string, SessionView>, e: EngineEven
 export const useStore = create<State>((set, get) => ({
   sessions: {},
   drafts: {},
+  previews: {},
+  openPreview: (url, anchor) => {
+    const s = get();
+    const id = `preview:${Date.now()}`;
+    set({ previews: { ...s.previews, [id]: { url, anchor } } });
+    // A free pane if there is one; otherwise one more pane (1 → 2 → 4); with four panes, the one after the focused pane
+    // Missing entries count as free too (the panes array may be shorter than the pane count)
+    const freeIn = (panes: (string | null)[], n: number) => Array.from({ length: n }, (_, i) => i).find((i) => !panes[i]) ?? -1;
+    let count = s.paneCount;
+    let target = freeIn(s.panes, count);
+    if (target < 0 && count < 4) {
+      count = count === 1 ? 2 : 4;
+      set({ paneCount: count });
+      target = freeIn(get().panes, count);
+    }
+    if (target < 0) target = (s.focusedPane + 1) % count;
+    void get().openInPane(id, target, anchor);
+  },
+  setPreviewUrl: (id, url) => set((s) => (s.previews[id] ? { previews: { ...s.previews, [id]: { ...s.previews[id], url } } } : s)),
   profiles: [],
   panes: [null, null, null, null],
   paneCount: 2,
@@ -374,9 +406,11 @@ export const useStore = create<State>((set, get) => ({
       if (from) liquidOpen(`pane-${target}`, { anchor: from, target: () => paneEl(target), toLook: PANE_LOOK, delay: displaced ? 140 : 0 });
       const drafts = { ...s.drafts };
       if (isDraft(displaced)) delete drafts[displaced!];
-      set({ panes, focusedPane: target, drafts });
+      const previews = { ...s.previews };
+      if (isPreview(displaced)) delete previews[displaced!];
+      set({ panes, focusedPane: target, drafts, previews });
     }
-    if (isDraft(id)) return;
+    if (isDraft(id) || isPreview(id)) return;
     await loadSession(id);
   },
 
@@ -455,7 +489,9 @@ export const useStore = create<State>((set, get) => ({
       panes[pane] = null;
       const drafts = { ...s.drafts };
       if (isDraft(id)) delete drafts[id];
-      return { panes, drafts };
+      const previews = { ...s.previews };
+      if (isPreview(id)) delete previews[id];
+      return { panes, drafts, previews };
     });
   },
 
@@ -634,7 +670,8 @@ useStore.subscribe((st, prev) => {
   )
     return;
   const layout: Layout = {
-    panes: st.panes.map((p) => (isDraft(p) ? null : p)),
+    // Drafts and previews are not restored on the next launch
+    panes: st.panes.map((p) => (isDraft(p) || isPreview(p) ? null : p)),
     paneCount: st.paneCount,
     focusedPane: st.focusedPane,
     split: st.split,

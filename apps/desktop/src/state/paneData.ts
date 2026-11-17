@@ -1,4 +1,5 @@
 // Builds the contents of the pane header buttons (files, background, plan) from the conversation. Pure functions only
+import { localUrls } from "@/lib/urls";
 import type { ToolCall, TranscriptItem } from "./transcript";
 
 const tools = (items: TranscriptItem[]) => items.filter((i): i is ToolCall => i.kind === "tool");
@@ -91,4 +92,20 @@ export function currentPlan(items: TranscriptItem[]): PlanEntry[] {
     if (it.kind === "plan") return it.entries;
   }
   return [];
+}
+
+/** localhost URLs printed by commands in this conversation (dev servers and the like), most recent first */
+export function previewUrls(items: TranscriptItem[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const all = tools(items);
+  for (let i = all.length - 1; i >= 0; i--) {
+    for (const url of localUrls(`${all[i].stream}\n${all[i].result}`)) {
+      if (!seen.has(url)) {
+        seen.add(url);
+        out.push(url);
+      }
+    }
+  }
+  return out;
 }
