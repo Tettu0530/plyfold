@@ -8,6 +8,7 @@ import { useStore } from "@/state/store";
 import { AGENT_NAMES, ProviderLogo } from "../icons";
 import { ControlRow } from "./Composer";
 import { AttachBox, useAttachments } from "./Attachments";
+import { MentionMenu, useMention } from "./Mention";
 import { useAutoGrow } from "./autoGrow";
 import { RepoPicker } from "./RepoPicker";
 import { liquidAnchor } from "../liquid/liquid";
@@ -97,6 +98,8 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const att = useAttachments();
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
   const textRef = useAutoGrow(text);
+  // @-mentions search the repository the session will start in
+  const mention = useMention({ root: draft?.repo ?? null, text, setText, textRef, boxRef: att.boxRef, scope: id, onPick: (h) => att.addPath(h.abs) });
   const [repoOpen, setRepoOpen] = useState(false);
   // The repository picker also pops out of its button and returns to it on close (same separation animation as other menus)
   const repoAnchor = `${id}:repo`;
@@ -215,6 +218,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
           <ControlRow scope={id} agent={current?.agent ?? ""} info={info} onSet={choose} empty={draft.profile ? t("draft.choicesAfterStart") : undefined} />
         </div>
 
+        <MentionMenu m={mention} boxRef={att.boxRef} />
         <AttachBox att={att}>
           <textarea
             ref={textRef}
@@ -223,8 +227,13 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
             autoFocus
             value={text}
             placeholder={t("draft.firstPromptPlaceholder")}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              mention.syncCaret();
+            }}
+            onSelect={mention.syncCaret}
             onKeyDown={(e) => {
+              if (mention.onKeyDown(e)) return;
               if (isSendKey(e, sendKey)) {
                 e.preventDefault();
                 send();

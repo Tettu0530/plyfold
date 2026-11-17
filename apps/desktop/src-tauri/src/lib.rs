@@ -1,6 +1,7 @@
 //! The Plyfold desktop app: exposes the engine as Tauri commands and streams EngineEvents to the UI
 
 mod dirs;
+mod files;
 
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -259,6 +260,17 @@ async fn session_diff(state: State<'_, AppState>, id: String) -> CmdResult<Diff>
 }
 
 /// Completion for the repository picker (dirs.rs)
+/// Files for @-mentions in the composer (files.rs). `root` is the session's worktree or repository
+#[tauri::command]
+async fn search_files(root: String, query: String) -> Vec<files::FileHit> {
+    static INDEX: std::sync::LazyLock<files::FileIndex> = std::sync::LazyLock::new(files::FileIndex::default);
+    let root = std::path::PathBuf::from(expand_home(&root));
+    if !root.is_dir() {
+        return Vec::new();
+    }
+    INDEX.search(&root, &query, 50)
+}
+
 #[tauri::command]
 async fn complete_dirs(input: String) -> Vec<dirs::DirCandidate> {
     let home = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default());
@@ -520,6 +532,7 @@ pub fn run() {
             session_history,
             usage_summary,
             complete_dirs,
+            search_files,
             open_url,
             reveal_file,
             start_session,

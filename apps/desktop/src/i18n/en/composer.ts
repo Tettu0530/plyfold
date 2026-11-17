@@ -21,4 +21,7 @@ export const composer: Record<keyof typeof source, string> = {
   addToQueue: "Add to queue",
   send: "Send",
   addToQueueHint: "Add to queue (sends when the turn ends)",
+  mentionLabel: "Files",
+  mentionEmpty: "No matching files",
+  mentionLoading: "Searching files",
 };

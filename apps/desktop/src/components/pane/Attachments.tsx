@@ -56,6 +56,8 @@ export function useAttachments() {
     onPaste,
     pick,
     remove: (key: string) => setItems((a) => a.filter((x) => x.key !== key)),
+    /** Attach a file by path unless it is already attached (used by @-mentions) */
+    addPath: (path: string) => setItems((a) => (a.some((x) => x.wire.kind === "file" && x.wire.path === path) ? a : [...a, fromPath(path)])),
     clear: () => setItems([]),
   };
 }

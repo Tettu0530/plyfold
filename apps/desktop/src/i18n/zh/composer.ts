@@ -21,4 +21,7 @@ export const composer: Record<keyof typeof source, string> = {
   addToQueue: "加入队列",
   send: "发送",
   addToQueueHint: "加入队列（本轮结束后发送）",
+  mentionLabel: "文件",
+  mentionEmpty: "没有匹配的文件",
+  mentionLoading: "正在搜索文件",
 };

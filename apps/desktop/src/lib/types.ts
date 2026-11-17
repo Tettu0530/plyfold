@@ -208,6 +208,13 @@ export interface ProfileUsage {
 }
 
 /** Completion candidates for the repository picker (apps/desktop/src-tauri/src/dirs.rs) */
+/** A file offered for an @-mention (apps/desktop/src-tauri/src/files.rs) */
+export interface FileHit {
+  /** Relative to the session's working directory */
+  path: string;
+  abs: string;
+}
+
 export interface DirCandidate {
   path: string;
   name: string;

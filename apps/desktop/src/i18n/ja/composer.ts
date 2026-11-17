@@ -19,4 +19,7 @@ export const composer = {
   addToQueue: "キューに積む",
   send: "送る",
   addToQueueHint: "キューに積む（ターンが終わったら送ります）",
+  mentionLabel: "ファイル",
+  mentionEmpty: "一致するファイルがありません",
+  mentionLoading: "ファイルを探しています",
 } satisfies Record<string, string>;

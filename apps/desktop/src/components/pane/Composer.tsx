@@ -16,6 +16,7 @@ import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 import type { Attached } from "@/lib/attachments";
 import { AttachBox, useAttachments } from "./Attachments";
+import { MentionMenu, useMention } from "./Mention";
 import { useAutoGrow } from "./autoGrow";
 import { isImeKey, isSendKey } from "@/lib/keys";
 import { useStore, type Queued } from "@/state/store";
@@ -259,6 +260,7 @@ export function Composer({
   queue = [],
   onUnqueue,
   onSendQueued,
+  root = null,
 }: {
   scope: string;
   agent: string;
@@ -273,12 +275,15 @@ export function Composer({
   queue?: Queued[];
   onUnqueue?: (key: string) => void;
   onSendQueued?: () => void;
+  /** Working directory for @-mentions (the session's worktree or repository) */
+  root?: string | null;
 }) {
   const t = useT();
   const [text, setText] = useState("");
   const att = useAttachments();
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
   const textRef = useAutoGrow(text);
+  const mention = useMention({ root, text, setText, textRef, boxRef: att.boxRef, scope, onPick: (h) => att.addPath(h.abs) });
   const canSend = !disabled && (!!text.trim() || att.items.length > 0);
   // Mid-turn with empty text, the send button becomes stop
   const stopMode = busy && !text.trim() && att.items.length === 0 && !!onStop;
@@ -295,6 +300,7 @@ export function Composer({
     <div className="flex shrink-0 flex-col gap-1 px-3 pb-3">
       <QueueList items={queue} busy={busy} onRemove={(k) => onUnqueue?.(k)} onSendNow={() => onSendQueued?.()} />
       <ControlRow scope={scope} agent={agent} info={info} onSet={onSet} />
+      <MentionMenu m={mention} boxRef={att.boxRef} />
       <AttachBox att={att}>
         <textarea
           ref={textRef}
@@ -302,8 +308,14 @@ export function Composer({
           rows={1}
           value={text}
           placeholder={placeholder}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            mention.syncCaret();
+          }}
+          onSelect={mention.syncCaret}
           onKeyDown={(e) => {
+            // The @-mention list takes ↑↓, ⏎, ⇥ and esc while it is open
+            if (mention.onKeyDown(e)) return;
             if (isSendKey(e, sendKey)) {
               e.preventDefault();
               send();

@@ -173,6 +173,7 @@ function SessionPane({ index }: { index: number }) {
         queue={queue ?? []}
         onUnqueue={(k) => unqueue(id, k)}
         onSendQueued={() => sendQueued(id)}
+        root={r.worktree_path ?? r.repo_path}
         onSet={(c, v) => void setCategory(id, c, v)}
       />
     </section>
