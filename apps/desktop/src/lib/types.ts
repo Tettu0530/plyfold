@@ -130,6 +130,8 @@ export interface AppSettings {
   send_key: "enter" | "cmd_enter";
   /** 画面の言語（auto なら macOS の言語） */
   language: "auto" | "ja" | "en" | "zh";
+  /** Sidebar density */
+  sidebar_density: "comfortable" | "compact";
 }
 
 export interface SettingsView {

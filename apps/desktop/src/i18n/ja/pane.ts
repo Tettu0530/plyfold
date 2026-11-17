@@ -27,4 +27,7 @@ export const pane = {
   shellFailed: "失敗",
   shellStopped: "停止",
   shellUnknown: "不明",
+  resizeWidth: "ペインの幅",
+  resizeHeight: "ペインの高さ",
+  resizeHint: "ドラッグで大きさを変える。ダブルクリックで等分に戻す",
 } satisfies Record<string, string>;

@@ -29,4 +29,7 @@ export const pane: Record<keyof typeof source, string> = {
   shellFailed: "Failed",
   shellStopped: "Stopped",
   shellUnknown: "Unknown",
+  resizeWidth: "Pane width",
+  resizeHeight: "Pane height",
+  resizeHint: "Drag to resize. Double-click to split evenly.",
 };

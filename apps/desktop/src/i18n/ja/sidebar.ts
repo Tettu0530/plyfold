@@ -8,4 +8,5 @@ export const sidebar = {
   unread: "見ていない通知があります",
   profiles: "プロファイル",
   settings: "設定",
+  rowTitle: "{title}（{profile}、{age}）",
 } satisfies Record<string, string>;

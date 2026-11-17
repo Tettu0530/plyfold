@@ -32,6 +32,8 @@ export function Sidebar() {
   const active = useLiquidActiveAnchors();
   // 右クリックのメニューは途中で行を実体の下へ下げる。下げても、動いているあいだは選択中の色で残す
   const moving = useLiquidMovingAnchors();
+  // Compact: one line per session; profile and age move to the row's tooltip
+  const compact = useStore((s) => s.settings.sidebar_density === "compact");
   const searchOpen = useStore((s) => s.searchOpen);
   const [closed, setClosed] = useState<Record<string, boolean>>({});
   // 名前を変えている行
@@ -121,12 +123,14 @@ export function Sidebar() {
                       href="#"
                       whileTap={{ scale: 1.03 }}
                       aria-current={open.has(r.id) ? "true" : undefined}
+                      title={compact ? t("sidebar.rowTitle", { title: r.title, profile: r.profile === r.agent ? "default" : r.profile, age: age(r.updated_at) }) : undefined}
                       onClick={(e) => {
                         e.preventDefault();
                         void openInPane(r.id, undefined, `session:${r.id}`);
                       }}
                       className={cn(
-                        "relative mb-1 flex flex-col gap-1 rounded-lg p-2 text-foreground no-underline hover:bg-accent data-[state=open]:bg-accent",
+                        "relative flex flex-col gap-1 rounded-lg text-foreground no-underline hover:bg-accent data-[state=open]:bg-accent",
+                        compact ? "mb-0.5 px-2 py-1.5" : "mb-1 p-2",
                         (open.has(r.id) || moving.has(`session:${r.id}`)) && "bg-accent",
                         active.has(`session:${r.id}`) && "z-[57]",
                       )}
@@ -164,13 +168,16 @@ export function Sidebar() {
                         {unread[r.id] && <span role="img" aria-label={t("sidebar.unread")} className={cn("size-1.5 shrink-0 rounded-full", unread[r.id].error ? "bg-error" : "bg-foreground")} />}
                         <span className={cn("flex shrink-0 items-center gap-1 text-xs", quiet ? "text-muted-foreground" : st.color)}>
                           <StatusIcon status={r.status} className="size-3" />
-                          {st.label}
+                          {/* Compact rows keep the state icon (with its accessible label) but drop the word */}
+                          {!compact && st.label}
                         </span>
                       </span>
-                      <span className="flex items-center gap-2 pl-[22px] text-xs text-muted-foreground">
-                        <span className="min-w-0 grow truncate">{r.profile === r.agent ? "default" : r.profile}</span>
-                        <span className="font-mono tabular">{age(r.updated_at)}</span>
-                      </span>
+                      {!compact && (
+                        <span className="flex items-center gap-2 pl-[22px] text-xs text-muted-foreground">
+                          <span className="min-w-0 grow truncate">{r.profile === r.agent ? "default" : r.profile}</span>
+                          <span className="font-mono tabular">{age(r.updated_at)}</span>
+                        </span>
+                      )}
                     </motion.a>
                     </SessionMenu>
                   );

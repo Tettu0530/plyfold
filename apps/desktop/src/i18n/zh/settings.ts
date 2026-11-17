@@ -39,4 +39,9 @@ export const settings: Record<keyof typeof source, string> = {
   open: "打开",
   saveFailed: "无法保存：{error}",
   revealInFinder: "在 Finder 中显示",
+  sidebarDensity: "侧边栏密度",
+  sidebarComfortable: "标准",
+  sidebarCompact: "紧凑",
+  sidebarComfortableDetail: "每个会话在名称和状态下方显示配置和时长。",
+  sidebarCompactDetail: "每个会话占一行，悬停即可查看配置和时长。",
 };

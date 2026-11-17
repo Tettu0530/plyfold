@@ -95,6 +95,17 @@ export function SettingsView() {
                 options={[{ value: "auto" as const, label: <span className="px-2">{t("settings.auto")}</span> }, ...LANGS.map((l) => ({ value: l.value, label: <span className="px-2">{l.label}</span> }))]}
               />
             </Row>
+            <Row label={t("settings.sidebarDensity")} detail={settings.sidebar_density === "compact" ? t("settings.sidebarCompactDetail") : t("settings.sidebarComfortableDetail")}>
+              <Segmented<"comfortable" | "compact">
+                label={t("settings.sidebarDensity")}
+                value={settings.sidebar_density ?? "comfortable"}
+                onChange={(v) => change({ sidebar_density: v })}
+                options={[
+                  { value: "comfortable", label: <span className="px-2">{t("settings.sidebarComfortable")}</span> },
+                  { value: "compact", label: <span className="px-2">{t("settings.sidebarCompact")}</span> },
+                ]}
+              />
+            </Row>
             <Row label={t("settings.sendKey")} detail={settings.send_key === "cmd_enter" ? t("settings.sendCmdEnter") : t("settings.sendEnter")}>
               <Segmented<"enter" | "cmd_enter">
                 label={t("settings.sendKey")}

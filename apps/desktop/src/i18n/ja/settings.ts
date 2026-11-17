@@ -37,4 +37,9 @@ export const settings = {
   open: "開く",
   saveFailed: "保存できませんでした: {error}",
   revealInFinder: "Finder で開く",
+  sidebarDensity: "サイドバーの表示",
+  sidebarComfortable: "標準",
+  sidebarCompact: "コンパクト",
+  sidebarComfortableDetail: "セッションごとに、名前と状態の下にプロファイルと経過時間を出します",
+  sidebarCompactDetail: "セッションを 1 行で出します。プロファイルと経過時間は、マウスを乗せると出ます",
 } satisfies Record<string, string>;

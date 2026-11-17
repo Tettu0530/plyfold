@@ -43,11 +43,13 @@ struct AppSettings {
     send_key: String,
     /// UI language: "auto" (the macOS language) / "ja" / "en"
     language: String,
+    /// Sidebar density: "comfortable" (two lines per session) / "compact" (one line)
+    sidebar_density: String,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
-        Self { editor: "auto".into(), cleanup_after_merge: false, stall_seconds: 120, worktree_default: true, send_key: "enter".into(), language: "auto".into() }
+        Self { editor: "auto".into(), cleanup_after_merge: false, stall_seconds: 120, worktree_default: true, send_key: "enter".into(), language: "auto".into(), sidebar_density: "comfortable".into() }
     }
 }
 

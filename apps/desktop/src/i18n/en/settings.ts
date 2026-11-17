@@ -39,4 +39,9 @@ export const settings: Record<keyof typeof source, string> = {
   open: "Open",
   saveFailed: "Couldn't save: {error}",
   revealInFinder: "Show in Finder",
+  sidebarDensity: "Sidebar density",
+  sidebarComfortable: "Comfortable",
+  sidebarCompact: "Compact",
+  sidebarComfortableDetail: "Each session shows its profile and age under its name and status.",
+  sidebarCompactDetail: "Each session takes one line. Hover to see its profile and age.",
 };

@@ -18,7 +18,8 @@ Plyfold does not implement its own agent loop. It is an ACP client: the agent CL
 ## Features
 
 - Sessions grouped by repository in the sidebar, with their status (Working, Waiting for permission, Stalled, Idle, Stopped, Error) shown as an icon and a word
-- 1, 2 or 4 panes side by side
+- 1, 2 or 4 panes side by side; drag the boundary between panes to resize them (double-click to split evenly)
+- A collapsible sidebar (⌘B), with a compact one-line-per-session layout in Settings
 - Transcript with messages, thoughts, tool calls, inline diffs and the agent's plan
 - Model, effort and mode switches under the composer (⇧⇥ cycles modes), plus context usage, tokens in and out, tok/s and cost where the agent reports them
 - Messages typed during a turn are queued and sent when the turn ends; images and files can be attached

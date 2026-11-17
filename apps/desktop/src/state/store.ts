@@ -89,7 +89,17 @@ export interface Layout {
   panes: (string | null)[];
   paneCount: PaneCount;
   focusedPane: number;
+  /** Where the panes are split: x is the left/right boundary, y the top/bottom one (0..1 of the pane area) */
+  split: Split;
+  sidebarOpen: boolean;
 }
+
+export interface Split {
+  x: number;
+  y: number;
+}
+export const EVEN_SPLIT: Split = { x: 0.5, y: 0.5 };
+const clampSplit = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.min(0.85, Math.max(0.15, v)) : 0.5);
 
 /** 覚えておいた並べ方を、今あるセッションに合わせて戻す（消えたセッションと下書きは空のペインにする） */
 export function restoreLayout(saved: unknown, exists: (id: string) => boolean): Layout | null {
@@ -102,7 +112,9 @@ export function restoreLayout(saved: unknown, exists: (id: string) => boolean): 
     return typeof id === "string" && !isDraft(id) && exists(id) ? id : null;
   });
   const focusedPane = typeof o.focusedPane === "number" && o.focusedPane >= 0 && o.focusedPane < paneCount ? o.focusedPane : 0;
-  return { panes, paneCount, focusedPane };
+  const split = { x: clampSplit(o.split?.x), y: clampSplit(o.split?.y) };
+  const sidebarOpen = o.sidebarOpen !== false;
+  return { panes, paneCount, focusedPane, split, sidebarOpen };
 }
 
 function readLayout(): unknown {
@@ -133,6 +145,11 @@ interface State {
 
   init: () => Promise<void>;
   setPaneCount: (n: PaneCount) => void;
+  /** Pane split ratios (dragging the boundary between panes) */
+  split: Split;
+  setSplit: (patch: Partial<Split>) => void;
+  sidebarOpen: boolean;
+  toggleSidebar: () => void;
   /** from を渡すと、その出発点から分離アニメーションで開く */
   openInPane: (id: string, pane?: number, from?: string) => Promise<void>;
   /** 新しいセッションの下書きを、空いているペインに開く */
@@ -263,6 +280,8 @@ export const useStore = create<State>((set, get) => ({
   profiles: [],
   panes: [null, null, null, null],
   paneCount: 2,
+  split: EVEN_SPLIT,
+  sidebarOpen: true,
   focusedPane: 0,
   searchOpen: false,
   labOpen: false,
@@ -273,7 +292,7 @@ export const useStore = create<State>((set, get) => ({
   settingsView: null,
   infoCache: loadInfoCache(),
   unread: {},
-  settings: { editor: "auto", cleanup_after_merge: false, stall_seconds: 120, worktree_default: true, send_key: "enter", language: "auto" },
+  settings: { editor: "auto", cleanup_after_merge: false, stall_seconds: 120, worktree_default: true, send_key: "enter", language: "auto", sidebar_density: "comfortable" },
   liquidStyle: "pop",
   searchLayerActive: false,
   liquidLag: 0.12,
@@ -317,6 +336,8 @@ export const useStore = create<State>((set, get) => ({
   },
 
   setPaneCount: (paneCount) => set((s) => ({ paneCount, focusedPane: Math.min(s.focusedPane, paneCount - 1) })),
+  setSplit: (patch) => set((s) => ({ split: { x: clampSplit(patch.x ?? s.split.x), y: clampSplit(patch.y ?? s.split.y) } })),
+  toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
 
   openInPane: async (id, pane, from) => {
     if (get().unread[id]) {
@@ -593,8 +614,18 @@ async function loadSession(id: string) {
 
 // 並べ方が変わったら覚えておく（下書きは残さない）
 useStore.subscribe((st, prev) => {
-  if (!st.ready || (st.panes === prev.panes && st.paneCount === prev.paneCount && st.focusedPane === prev.focusedPane)) return;
-  const layout: Layout = { panes: st.panes.map((p) => (isDraft(p) ? null : p)), paneCount: st.paneCount, focusedPane: st.focusedPane };
+  if (
+    !st.ready ||
+    (st.panes === prev.panes && st.paneCount === prev.paneCount && st.focusedPane === prev.focusedPane && st.split === prev.split && st.sidebarOpen === prev.sidebarOpen)
+  )
+    return;
+  const layout: Layout = {
+    panes: st.panes.map((p) => (isDraft(p) ? null : p)),
+    paneCount: st.paneCount,
+    focusedPane: st.focusedPane,
+    split: st.split,
+    sidebarOpen: st.sidebarOpen,
+  };
   try {
     localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
   } catch {

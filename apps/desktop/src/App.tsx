@@ -1,5 +1,5 @@
-import { Columns2, Grid2x2, Square } from "lucide-react";
-import { MotionConfig } from "motion/react";
+import { Columns2, Grid2x2, PanelLeft, Square } from "lucide-react";
+import { motion, MotionConfig } from "motion/react";
 import { useEffect } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -14,6 +14,7 @@ import { PaneGrid } from "./components/pane/PaneGrid";
 import { SearchCard } from "./components/SearchCard";
 import { Segmented } from "./components/Segmented";
 import { Sidebar } from "./components/Sidebar";
+import { smooth } from "./components/motion";
 import { useT } from "./i18n";
 import { inTauri } from "./lib/api";
 import { repoName } from "./lib/format";
@@ -31,6 +32,9 @@ function useShortcuts() {
         e.preventDefault();
         if (s.settingsView) s.closeSettings();
         else s.openSettings();
+      } else if (e.key === "b") {
+        e.preventDefault();
+        s.toggleSidebar();
       } else if (e.key === "n") {
         e.preventDefault();
         s.newDraft();
@@ -58,6 +62,8 @@ export default function App() {
   const init = useStore((s) => s.init);
   const paneCount = useStore((s) => s.paneCount);
   const setPaneCount = useStore((s) => s.setPaneCount);
+  const sidebarOpen = useStore((s) => s.sidebarOpen);
+  const toggleSidebar = useStore((s) => s.toggleSidebar);
   const focusedRepo = useStore((s) => {
     const id = s.panes[s.focusedPane];
     return id ? s.sessions[id]?.record.repo_path ?? null : null;
@@ -72,6 +78,16 @@ export default function App() {
       <TooltipProvider>
         <div className="flex h-full flex-col">
           <header data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-2 border-b pr-2 pl-[84px]">
+            <button
+              type="button"
+              aria-label={sidebarOpen ? t("app.hideSidebar") : t("app.showSidebar")}
+              title={sidebarOpen ? t("app.hideSidebar") : t("app.showSidebar")}
+              aria-pressed={sidebarOpen}
+              onClick={toggleSidebar}
+              className="flex size-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <PanelLeft className="size-4" aria-hidden />
+            </button>
             <span data-tauri-drag-region className="font-medium">
               {focusedRepo ? repoName(focusedRepo) : "Plyfold"}
             </span>
@@ -90,7 +106,17 @@ export default function App() {
           </header>
 
           <div className="flex min-h-0 grow">
-            <Sidebar />
+            {/* Closing the sidebar animates the clipping width only; the sidebar keeps its own width so its text never reflows.
+                While closed it is inert, so focus and screen readers skip it */}
+            <motion.div
+              initial={false}
+              animate={{ width: sidebarOpen ? 240 : 0 }}
+              transition={smooth}
+              inert={!sidebarOpen}
+              className="flex shrink-0 overflow-hidden"
+            >
+              <Sidebar />
+            </motion.div>
             <PaneGrid count={paneCount} />
           </div>
           {!inTauri && (

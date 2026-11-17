@@ -10,4 +10,5 @@ export const sidebar: Record<keyof typeof source, string> = {
   unread: "有未读通知",
   profiles: "配置",
   settings: "设置",
+  rowTitle: "{title}（{profile}，{age}）",
 };
