@@ -2,6 +2,9 @@
 name = "plyfold-acp"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
+repository.workspace = true
+publish = false
 
 [dependencies]
 agent-client-protocol-schema = { version = "1.18.0", default-features = false }

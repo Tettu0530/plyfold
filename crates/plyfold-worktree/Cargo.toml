@@ -2,6 +2,9 @@
 name = "plyfold-worktree"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
+repository.workspace = true
+publish = false
 
 [dependencies]
 plyfold-i18n = { version = "0.1.0", path = "../plyfold-i18n" }
