@@ -63,6 +63,10 @@ function lastRepo(): string {
   }
 }
 
+/** エンジンの出来事の受け口（開発中に store が読み直されても、窓に 1 つだけにする） */
+const engineListener = ((globalThis as { __plyfoldEngineListener?: { current: Promise<() => void> | null } }).__plyfoldEngineListener ??= { current: null });
+let initStarted = false;
+
 // ペインの並べ方と、ペインに出していたセッション（起動したときに戻す）
 const LAYOUT_KEY = "plyfold.layout";
 export interface Layout {
@@ -251,8 +255,13 @@ export const useStore = create<State>((set, get) => ({
   ready: false,
 
   init: async () => {
-    if (!inTauri || get().ready) return;
-    await onEngineEvent((e) =>
+    // StrictMode は開発中に効果を 2 回走らせる。ready は読み込みの後に立つので、始めた時点で印を付ける
+    if (!inTauri || get().ready || initStarted) return;
+    initStarted = true;
+    // 受け口は窓に 1 つだけ。開発中に store が読み直されたら、前の受け口を外す
+    // （2 つあると、同じ出来事が 2 回入り、発言の文字が 2 重になる）
+    const prev = engineListener.current;
+    const next = onEngineEvent((e) =>
       set((s) => {
         const sessions = reduceEvent(s.sessions, e);
         // アプリを見ていないときは、macOS の通知も出す
@@ -267,6 +276,9 @@ export const useStore = create<State>((set, get) => ({
         return { sessions };
       }),
     );
+    engineListener.current = next;
+    if (prev) void prev.then((off) => off());
+    await next;
     const [profiles, records, sv] = await Promise.all([api.listProfiles(), api.listSessions(), api.getSettings()]);
     const sessions: Record<string, SessionView> = {};
     for (const r of records) sessions[r.id] = newView(r);
