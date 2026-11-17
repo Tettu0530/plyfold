@@ -1,3 +1,5 @@
+<img src="docs/assets/icon.png" width="96" height="96" alt="The Plyfold icon: a P made of two panes, one with a folded corner">
+
 # Plyfold
 
 [![CI](https://github.com/Tettu0530/plyfold/actions/workflows/ci.yml/badge.svg)](https://github.com/Tettu0530/plyfold/actions/workflows/ci.yml)
