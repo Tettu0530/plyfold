@@ -8,7 +8,7 @@ export const composer = {
   contextUsage: "コンテキストの使用量",
   context: "コンテキスト",
   reportedModel: "応答モデル",
-  switchMode: "mode を切り替え（今は{mode}、⇧⇥）",
+  switchMode: "モード（今は{mode}。⇧⇥ で順に切り替え）",
   queueSendAfterTurn: "ターンが終わったら送ります",
   queueUnsent: "送っていない指示",
   sendFirst: "先頭を送る",
