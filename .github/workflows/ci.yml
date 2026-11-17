@@ -94,7 +94,7 @@ jobs:
         run: npm run tauri build
 
       - name: Upload installers
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: plyfold-windows
           path: |
