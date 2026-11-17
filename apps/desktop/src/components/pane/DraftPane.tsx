@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, Check, Coins, FolderOpen, GitBranch, MessageSquare, Plus, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { money, repoName, tokens } from "@/lib/format";
@@ -337,19 +337,24 @@ function CliSessions({ draftId, profile, repo, busy }: { draftId: string; profil
   const anchor = `${draftId}:cli`;
   const menu = useLiquidMenu(`menu:${anchor}`, anchor);
   const raised = useLiquidActiveAnchors().has(anchor);
+  // Listing launches an agent, so a slow reply must not replace a newer one
+  const request = useRef(0);
   const toggle = (o: boolean) => {
     menu.onOpenChange(o);
     setOpen(o);
+    const current = ++request.current;
     if (!o) return;
     setLoading(true);
     setError(null);
     setItems([]);
     void api.listCliSessions(profile, repo).then(
       (rows) => {
+        if (request.current !== current) return;
         setItems(rows);
         setLoading(false);
       },
       (e: unknown) => {
+        if (request.current !== current) return;
         setError(String(e));
         setLoading(false);
       },
