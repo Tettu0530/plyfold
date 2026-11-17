@@ -234,6 +234,8 @@ interface State {
   setSearchLayerActive: (v: boolean) => void;
   setLiquidLag: (v: number) => void;
   startSession: (args: { profile: string; repo: string; title: string; worktree: boolean; prompt?: string }) => Promise<void>;
+  /** Fork into a new session. newWorktree is false only when the source agent is stopped */
+  forkSession: (id: string, newWorktree: boolean) => Promise<void>;
   sendPrompt: (id: string, text: string, attachments?: Attached[]) => Promise<void>;
   /** Instructions sent mid-turn (sent in order once the turn ends) */
   queues: Record<string, Queued[]>;
@@ -664,6 +666,16 @@ export const useStore = create<State>((set, get) => ({
     const rec = await api.startSession(args);
     await get().openInPane(rec.id);
     if (prompt?.trim()) await get().sendPrompt(rec.id, prompt);
+  },
+
+  forkSession: async (id, newWorktree) => {
+    const rec = await api.forkSession(id, newWorktree);
+    // SessionCreated marks history as loaded, but the copied conversation is only in the log
+    set((s) => {
+      const cur = s.sessions[rec.id] ?? newView(rec);
+      return { sessions: { ...s.sessions, [rec.id]: { ...cur, record: rec, historyLoaded: false } } };
+    });
+    await get().openInPane(rec.id, undefined, `session:${id}`);
   },
 
   sendPrompt: async (id, text, attachments = []) => {

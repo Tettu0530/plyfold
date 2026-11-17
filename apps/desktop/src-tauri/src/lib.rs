@@ -299,6 +299,11 @@ async fn reopen_session(state: State<'_, AppState>, id: String) -> CmdResult<()>
 }
 
 #[tauri::command]
+async fn fork_session(state: State<'_, AppState>, id: String, new_worktree: bool) -> CmdResult<SessionRecord> {
+    state.engine.fork_session(&id, new_worktree).await.map_err(err)
+}
+
+#[tauri::command]
 async fn close_session(state: State<'_, AppState>, id: String) -> CmdResult<()> {
     state.engine.close_session(&id).await.map_err(err)
 }
@@ -539,16 +544,18 @@ struct MergeResult {
 async fn merge_session(state: State<'_, AppState>, id: String) -> CmdResult<MergeResult> {
     let target = state.engine.merge(&id).map_err(err)?;
     let cleanup = state.settings.read().unwrap().cleanup_after_merge;
-    if cleanup {
+    let cleaned = if cleanup {
         state.engine.cleanup_worktree(&id).await.map_err(|e| {
             plyfold_i18n::tr!(
                 "{target} には取り込みましたが、片付けに失敗しました: {e}",
                 "Merged into {target}, but cleanup failed: {e}",
                 "已合并到 {target}，但清理失败：{e}"
             )
-        })?;
-    }
-    Ok(MergeResult { target, cleaned: cleanup })
+        })?
+    } else {
+        false
+    };
+    Ok(MergeResult { target, cleaned })
 }
 
 /// Git commands run git (and the network for fetch / push / pull / gh) synchronously, so keep them off the async workers
@@ -686,6 +693,7 @@ pub fn run() {
             reveal_file,
             start_session,
             reopen_session,
+            fork_session,
             close_session,
             delete_session,
             prompt,

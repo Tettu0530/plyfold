@@ -409,7 +409,7 @@ fn print_log(engine: &Engine, sid: &str) -> Result<()> {
         after = Some(last.id);
         for e in events {
             match e.kind {
-                EventKind::FrameIn => {
+                EventKind::FrameIn | EventKind::ForkIn => {
                     let Ok(v) = serde_json::from_str::<Value>(&e.payload) else { continue };
                     if v["method"] == "session/update" {
                         let u = &v["params"]["update"];
@@ -420,7 +420,7 @@ fn print_log(engine: &Engine, sid: &str) -> Result<()> {
                         in_prompt = false;
                     }
                 }
-                EventKind::FrameOut => {
+                EventKind::FrameOut | EventKind::ForkOut => {
                     let Ok(v) = serde_json::from_str::<Value>(&e.payload) else { continue };
                     if v["method"] == "session/prompt" {
                         in_prompt = true;

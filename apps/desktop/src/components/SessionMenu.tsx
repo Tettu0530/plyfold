@@ -1,4 +1,4 @@
-import { Pencil, Square, Trash2 } from "lucide-react";
+import { GitFork, Pencil, Square, Trash2 } from "lucide-react";
 import { ContextMenu } from "radix-ui";
 import { useState } from "react";
 
@@ -16,9 +16,10 @@ export const MENU_ITEM =
 export const Shortcut = ({ k }: { k: string }) => <Keys keys={[k]} className="ml-auto pl-4 opacity-70" />;
 
 /**
- * Keys that pick menu items while the menu is open: R rename, S stop, D delete; in the delete options W also removes the
- * worktree, D deletes the record only (pressing D twice keeps the worktree) and esc goes back. A key clicks the item
- * marked with data-key, so it behaves exactly like choosing it with the pointer
+ * Keys that pick menu items while the menu is open: R rename, S stop, F fork, D delete. In the fork options N uses a new
+ * worktree and W keeps this workspace. In the delete options W also removes the worktree, D deletes the record only
+ * (pressing D twice keeps the worktree) and esc goes back. A key clicks the item marked with data-key, so it behaves
+ * exactly like choosing it with the pointer
  */
 export function pickByKey(e: React.KeyboardEvent<HTMLDivElement>) {
   if (e.metaKey || e.ctrlKey || e.altKey || e.key.length !== 1) return;
@@ -32,11 +33,13 @@ export function pickByKey(e: React.KeyboardEvent<HTMLDivElement>) {
 /** Context menu for sidebar rows: rename, stop, delete (with a choice to keep the worktree) */
 export function SessionMenu({ record, onRename, children }: { record: SessionRecord; onRename: () => void; children: React.ReactNode }) {
   const t = useT();
-  const { stopSession, removeSession } = useStore.getState();
-  const [confirm, setConfirm] = useState(false);
+  const { stopSession, removeSession, forkSession } = useStore.getState();
+  const [view, setView] = useState<"main" | "fork" | "delete">("main");
   const [error, setError] = useState<string | null>(null);
   const running = record.status !== "closed" && record.status !== "error";
+  const inTurn = record.status === "starting" || record.status === "working" || record.status === "awaiting_permission" || record.status === "stalled";
   const run = (f: () => Promise<void>) => void f().catch((e) => setError(String(e)));
+  const forkHint = !record.acp_session_id ? t("sessionMenu.forkNeedsConversation") : inTurn ? t("sessionMenu.forkBusy") : undefined;
   // The menu expands out of the right-clicked row and shrinks back into it on close
   const menu = useLiquidMenu(`menu:session:${record.id}`, `session:${record.id}`);
 
@@ -45,7 +48,7 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
       onOpenChange={(o) => {
         menu.onOpenChange(o);
         if (!o) {
-          setConfirm(false);
+          setView("main");
           setError(null);
         }
       }}
@@ -61,15 +64,15 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
           )}
           onKeyDown={(e) => {
             // esc in the delete options goes back to the first menu instead of closing it
-            if (confirm && e.key === "Escape") {
+            if (view !== "main" && e.key === "Escape") {
               e.preventDefault();
-              setConfirm(false);
+              setView("main");
               return;
             }
             pickByKey(e);
           }}
         >
-          {!confirm ? (
+          {view === "main" ? (
             <>
               <ContextMenu.Item data-key="r" className={MENU_ITEM} onSelect={onRename}>
                 <Pencil className="size-3.5 text-muted-foreground" aria-hidden />
@@ -81,6 +84,18 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
                 {t("sessionMenu.stop")}
                 <Shortcut k="s" />
               </ContextMenu.Item>
+              <ContextMenu.Item
+                data-key="f"
+                className={MENU_ITEM}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setView("fork");
+                }}
+              >
+                <GitFork className="size-3.5 text-muted-foreground" aria-hidden />
+                {t("sessionMenu.fork")}
+                <Shortcut k="f" />
+              </ContextMenu.Item>
               <ContextMenu.Separator className="my-0.5 h-px bg-border" />
               <ContextMenu.Item
                 data-key="d"
@@ -88,12 +103,49 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
                 onSelect={(e) => {
                   // Go to the delete options without closing the menu
                   e.preventDefault();
-                  setConfirm(true);
+                  setView("delete");
                 }}
               >
                 <Trash2 className="size-3.5" aria-hidden />
                 {t("sessionMenu.delete")}
                 <Shortcut k="d" />
+              </ContextMenu.Item>
+            </>
+          ) : view === "fork" ? (
+            <>
+              <ContextMenu.Label className="px-2 pt-1 pb-1.5 text-xs text-muted-foreground">
+                {forkHint ?? t("sessionMenu.forkTitle", { title: record.title })}
+              </ContextMenu.Label>
+              <ContextMenu.Item
+                data-key="n"
+                className={MENU_ITEM}
+                disabled={forkHint !== undefined || !record.repo_path}
+                onSelect={() => run(() => forkSession(record.id, true))}
+              >
+                <GitFork className="size-3.5 text-muted-foreground" aria-hidden />
+                {t("sessionMenu.forkNew")}
+                <Shortcut k="n" />
+              </ContextMenu.Item>
+              <ContextMenu.Item
+                data-key="w"
+                className={MENU_ITEM}
+                disabled={forkHint !== undefined || running}
+                title={forkHint === undefined && running ? t("sessionMenu.forkStopFirst") : undefined}
+                onSelect={() => run(() => forkSession(record.id, false))}
+              >
+                <GitFork className="size-3.5 text-muted-foreground" aria-hidden />
+                {t("sessionMenu.forkSame")}
+                <Shortcut k="w" />
+              </ContextMenu.Item>
+              <ContextMenu.Item
+                className={MENU_ITEM}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setView("main");
+                }}
+              >
+                {t("sessionMenu.cancel")}
+                <Shortcut k="esc" />
               </ContextMenu.Item>
             </>
           ) : (
@@ -125,7 +177,7 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
                 className={MENU_ITEM}
                 onSelect={(e) => {
                   e.preventDefault();
-                  setConfirm(false);
+                  setView("main");
                 }}
               >
                 {t("sessionMenu.cancel")}

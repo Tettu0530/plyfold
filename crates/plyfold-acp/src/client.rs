@@ -6,9 +6,10 @@ use std::time::Duration;
 
 use agent_client_protocol_schema::ProtocolVersion;
 use agent_client_protocol_schema::v1::{
-    CancelNotification, ClientCapabilities, ContentBlock, FileSystemCapabilities, Implementation, InitializeRequest, InitializeResponse, LoadSessionRequest,
-    NewSessionRequest, NewSessionResponse, PromptRequest, PromptResponse, RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
-    SelectedPermissionOutcome, SessionId, SessionNotification, SessionUpdate, SetSessionModeRequest, TextContent,
+    CancelNotification, ClientCapabilities, ContentBlock, FileSystemCapabilities, ForkSessionRequest, ForkSessionResponse, Implementation, InitializeRequest,
+    InitializeResponse, LoadSessionRequest, NewSessionRequest, NewSessionResponse, PromptRequest, PromptResponse, RequestPermissionOutcome,
+    RequestPermissionRequest, RequestPermissionResponse, SelectedPermissionOutcome, SessionId, SessionNotification, SessionUpdate, SetSessionModeRequest,
+    TextContent,
 };
 use serde_json::Value;
 use tokio::sync::mpsc;
@@ -80,6 +81,11 @@ impl AcpClient {
         self.init.agent_capabilities.load_session
     }
 
+    /// Whether the agent advertises `sessionCapabilities.fork` (`session/fork` is still marked unstable in the schema)
+    pub fn supports_fork(&self) -> bool {
+        self.init.agent_capabilities.session_capabilities.fork.is_some()
+    }
+
     /// Whether prompts may contain image blocks (if not, images are passed as file links)
     pub fn supports_images(&self) -> bool {
         self.init.agent_capabilities.prompt_capabilities.image
@@ -91,6 +97,15 @@ impl AcpClient {
 
     pub async fn new_session(&self, cwd: &Path) -> Result<NewSessionResponse, AcpError> {
         self.conn.request("session/new", &NewSessionRequest::new(cwd), Some(SESSION_TIMEOUT)).await
+    }
+
+    /// Forks an existing session into a new one with the same conversation context.
+    /// Returns (response JSON, barrier). The agent does not resend the history.
+    pub async fn fork_session(&self, session_id: &str, cwd: &Path) -> Result<(Value, u64), AcpError> {
+        let req = ForkSessionRequest::new(session_id.to_string(), cwd);
+        let (v, barrier) = self.conn.request_with_barrier("session/fork", serde_json::to_value(&req).expect("serialize"), Some(SESSION_TIMEOUT)).await?;
+        let _: ForkSessionResponse = serde_json::from_value(v.clone()).map_err(|source| AcpError::Decode { method: "session/fork".into(), source })?;
+        Ok((v, barrier))
     }
 
     /// Reopens an existing session. The history is replayed as session/update notifications.

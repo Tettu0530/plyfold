@@ -13,6 +13,7 @@
   - Session: the unit of record Plyfold owns (the log of ACP traffic, the worktree, the profile)
   - Pane: only a view onto a running session. Closing it keeps the record
 - **Each session gets its own git worktree**. Diffs are built from git, not from ACP diffs
+- **Fork** opens a new session with `session/fork` (the agent keeps the conversation; it does not resend it, so the transcript is copied from Plyfold's log). The new session gets its own worktree, branched from the source's current commit; uncommitted files stay behind. Forking into the same workspace is refused while any agent is already running there, so two agents never edit one directory. A worktree shared that way is removed only when the last session using it is deleted or cleaned up, and its changes cannot be discarded while another session still uses it. Gemini CLI does not advertise fork
 
 ## Layout
 
