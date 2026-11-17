@@ -36,6 +36,7 @@ export function snapshot(info: SessionInfo): SessionInfo {
     last_turn: null,
     total: { input: 0, output: 0, cached_read: 0, cached_write: 0, thought: 0, total: 0 },
     live: null,
+    commands: info.commands ?? [],
   };
 }
 

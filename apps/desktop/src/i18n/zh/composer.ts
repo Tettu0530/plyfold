@@ -24,4 +24,6 @@ export const composer: Record<keyof typeof source, string> = {
   mentionLabel: "文件",
   mentionEmpty: "没有匹配的文件",
   mentionLoading: "正在搜索文件",
+  slashLabel: "命令",
+  slashEmpty: "没有匹配的命令",
 };

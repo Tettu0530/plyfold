@@ -17,6 +17,7 @@ import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 import type { Attached } from "@/lib/attachments";
 import { AttachBox, useAttachments } from "./Attachments";
 import { MentionMenu, removeMention, useMention } from "./Mention";
+import { SlashMenu, useSlash } from "./Slash";
 import { useAutoGrow } from "./autoGrow";
 import { isImeKey, isSendKey } from "@/lib/keys";
 import { useStore, type Queued } from "@/state/store";
@@ -285,6 +286,8 @@ export function Composer({
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
   const textRef = useAutoGrow(text);
   const mention = useMention({ root, text, setText, textRef, boxRef: att.boxRef, scope, onPick: (h) => att.addMention(h.abs, h.path) });
+  // "/" at the start lists the agent's slash commands
+  const slash = useSlash({ commands: info?.commands ?? [], text, setText, textRef, boxRef: att.boxRef, scope });
   useEffect(() => {
     att.syncMentions(text);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -306,6 +309,7 @@ export function Composer({
       <QueueList items={queue} busy={busy} onRemove={(k) => onUnqueue?.(k)} onSendNow={() => onSendQueued?.()} />
       <ControlRow scope={scope} agent={agent} info={info} onSet={onSet} />
       <MentionMenu m={mention} boxRef={att.boxRef} />
+      <SlashMenu m={slash} boxRef={att.boxRef} />
       <AttachBox att={att}>
         <textarea
           ref={textRef}
@@ -316,11 +320,15 @@ export function Composer({
           onChange={(e) => {
             setText(e.target.value);
             mention.syncCaret();
+            slash.syncCaret();
           }}
-          onSelect={mention.syncCaret}
+          onSelect={() => {
+            mention.syncCaret();
+            slash.syncCaret();
+          }}
           onKeyDown={(e) => {
             // The @-mention list takes ↑↓, ⏎, ⇥ and esc while it is open
-            if (mention.onKeyDown(e)) return;
+            if (mention.onKeyDown(e) || slash.onKeyDown(e)) return;
             if (isSendKey(e, sendKey)) {
               e.preventDefault();
               send();

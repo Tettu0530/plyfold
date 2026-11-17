@@ -44,6 +44,15 @@ pub struct ConfigOption {
     pub choices: Vec<Choice>,
 }
 
+/// A slash command the agent offers (ACP available_commands_update)
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct SlashCommand {
+    pub name: String,
+    pub description: String,
+    /// What to type after the command, when it takes input
+    pub hint: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize)]
 pub struct TokenUsage {
     pub input: u64,
@@ -121,6 +130,8 @@ pub struct SessionInfo {
     pub last_turn: Option<TurnStats>,
     pub total: TokenUsage,
     pub live: Option<LiveTurn>,
+    /// Slash commands the agent offers
+    pub commands: Vec<SlashCommand>,
 }
 
 impl SessionInfo {
@@ -171,6 +182,10 @@ impl SessionInfo {
                 self.set_config(&u["configOptions"]);
                 true
             }
+            Some("available_commands_update") => {
+                self.commands = parse_commands(&u["availableCommands"]);
+                true
+            }
             Some("current_mode_update") => {
                 let id = u["currentModeId"].as_str().map(str::to_string);
                 self.current_mode = id.clone();
@@ -182,6 +197,22 @@ impl SessionInfo {
             _ => false,
         }
     }
+}
+
+fn parse_commands(v: &Value) -> Vec<SlashCommand> {
+    v.as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|c| {
+            // Some agents include the leading slash in the name
+            let name = c["name"].as_str()?.trim().trim_start_matches('/');
+            (!name.is_empty()).then(|| SlashCommand {
+                name: name.into(),
+                description: c["description"].as_str().unwrap_or_default().trim().into(),
+                hint: c["input"]["hint"].as_str().map(str::trim).filter(|h| !h.is_empty()).map(str::to_string),
+            })
+        })
+        .collect()
 }
 
 fn parse_config(opts: &Value) -> Vec<ConfigOption> {
@@ -317,5 +348,20 @@ mod tests {
         info.finish_turn(exact.clone());
         info.finish_turn(exact);
         assert_eq!(info.total.output, 100);
+    }
+
+    #[test]
+    fn reads_available_commands() {
+        let mut info = SessionInfo::default();
+        let u = serde_json::json!({"sessionUpdate": "available_commands_update", "availableCommands": [
+            {"name": "compact", "description": "Clear history but keep a summary", "input": {"hint": "instructions"}},
+            {"name": "/review", "description": "Review changes"},
+            {"name": "", "description": "broken"}
+        ]});
+        assert!(info.apply_update(&u));
+        assert_eq!(info.commands.len(), 2);
+        assert_eq!(info.commands[0].hint.as_deref(), Some("instructions"));
+        assert_eq!(info.commands[1].name, "review");
+        assert_eq!(info.commands[1].hint, None);
     }
 }

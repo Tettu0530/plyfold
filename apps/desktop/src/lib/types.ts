@@ -74,6 +74,14 @@ export interface SessionInfo {
   last_turn: TurnStats | null;
   total: TokenUsage;
   live: LiveTurn | null;
+  /** Slash commands the agent offers (missing in info remembered by older versions) */
+  commands?: SlashCommand[];
+}
+
+export interface SlashCommand {
+  name: string;
+  description: string;
+  hint: string | null;
 }
 
 export interface PermissionChoice {

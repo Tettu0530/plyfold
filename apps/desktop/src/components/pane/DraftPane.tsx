@@ -9,6 +9,7 @@ import { AGENT_NAMES, ProviderLogo } from "../icons";
 import { ControlRow } from "./Composer";
 import { AttachBox, useAttachments } from "./Attachments";
 import { MentionMenu, removeMention, useMention } from "./Mention";
+import { SlashMenu, useSlash } from "./Slash";
 import { useAutoGrow } from "./autoGrow";
 import { RepoPicker } from "./RepoPicker";
 import { liquidAnchor } from "../liquid/liquid";
@@ -121,6 +122,8 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   useEffect(() => {
     void useStore.getState().loadUsage();
   }, []);
+  // "/" at the start lists the agent's slash commands (remembered from the profile's last session)
+  const slash = useSlash({ commands: cached?.commands ?? [], text, setText, textRef, boxRef: att.boxRef, scope: id });
   if (!draft) return null;
   const sorted = [...profiles].sort((a, b) => Number(a.name === a.agent) - Number(b.name === b.agent) || a.name.localeCompare(b.name));
   const current = profiles.find((p) => p.name === draft.profile);
@@ -233,6 +236,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
         </div>
 
         <MentionMenu m={mention} boxRef={att.boxRef} />
+      <SlashMenu m={slash} boxRef={att.boxRef} />
         <AttachBox att={att}>
           <textarea
             ref={textRef}
@@ -244,10 +248,14 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
             onChange={(e) => {
               setText(e.target.value);
               mention.syncCaret();
+            slash.syncCaret();
             }}
-            onSelect={mention.syncCaret}
+            onSelect={() => {
+            mention.syncCaret();
+            slash.syncCaret();
+          }}
             onKeyDown={(e) => {
-              if (mention.onKeyDown(e)) return;
+              if (mention.onKeyDown(e) || slash.onKeyDown(e)) return;
               if (isSendKey(e, sendKey)) {
                 e.preventDefault();
                 send();
