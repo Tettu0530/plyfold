@@ -1,10 +1,12 @@
 # Plyfold
 
+[![CI](https://github.com/Tettu0530/plyfold/actions/workflows/ci.yml/badge.svg)](https://github.com/Tettu0530/plyfold/actions/workflows/ci.yml)
+
 Plyfold is a macOS desktop app for running coding agents side by side. It drives existing agent CLIs (Claude Code, Codex, OpenCode and Gemini CLI) over the [Agent Client Protocol](https://agentclientprotocol.com) (ACP). Each session gets its own git worktree, and you can keep several API keys for the same CLI.
 
 Plyfold does not implement its own agent loop. It is an ACP client: the agent CLI does the model calls, tool use and file edits, and Plyfold launches it, shows what it does, answers its permission requests and handles the git side.
 
-![Two sessions side by side: one is running cargo test and showing an inline diff, the other has just written a CHANGELOG entry](docs/assets/screenshot.png)
+![Three sessions in a split layout: one is running cargo test and showing an inline diff, one has just written a CHANGELOG entry, and one is waiting for permission to run a benchmark](docs/assets/screenshot.png)
 
 ## Why
 
@@ -140,6 +142,12 @@ Plyfold is early. There is no prebuilt release yet, and the app is not signed, s
 ## Contributing
 
 Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). To report a security issue, see [SECURITY.md](SECURITY.md) and do not open a public issue.
+
+## Acknowledgements
+
+Plyfold is built on [Tauri](https://tauri.app), [React](https://react.dev), [Radix UI](https://www.radix-ui.com) with [shadcn/ui](https://ui.shadcn.com) patterns, [Motion](https://motion.dev), [Zustand](https://zustand.docs.pmnd.rs) and the [Agent Client Protocol](https://agentclientprotocol.com). It ships the [Geist and Geist Mono](https://vercel.com/font) typefaces (SIL Open Font License 1.1), icons from [Lucide](https://lucide.dev) (ISC) and agent logos from [Simple Icons](https://simpleicons.org) (CC0). Product names and logos belong to their owners; Plyfold is not affiliated with Anthropic, OpenAI, Google or the OpenCode project.
+
+The screenshots use made-up sessions and numbers.
 
 ## License
 

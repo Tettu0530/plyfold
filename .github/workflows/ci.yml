@@ -104,3 +104,22 @@ jobs:
       - name: npm audit
         working-directory: apps/desktop
         run: npm audit --omit=dev --audit-level=high
+
+  secrets:
+    name: Secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@v5
+        with:
+          # The whole history, so a key added and removed later is still caught
+          fetch-depth: 0
+
+      # Fake keys in tests are listed in .gitleaksignore
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: false
+

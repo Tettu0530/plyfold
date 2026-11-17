@@ -1,0 +1,3 @@
+# Fake keys in tests (gitleaks fingerprints). Real keys never belong in the repository
+723c41467e5893bf7dc03f670969f741ccda9c8e:crates/plyfold-acp/src/redact.rs:generic-api-key:34
+723c41467e5893bf7dc03f670969f741ccda9c8e:crates/plyfold-profile/src/lib.rs:generic-api-key:299

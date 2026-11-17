@@ -1,6 +1,6 @@
 # UI design (draft)
 
-Mockups: the Plyfold UI prototype (a design canvas with five frames). macOS only, Tauri + React + TypeScript. We do not use the native Liquid Glass.
+The UI was first drawn as mockups outside the repository; this document records the decisions they led to. macOS only, Tauri + React + TypeScript. We do not use the native Liquid Glass.
 Visual and motion rules follow `.claude/skills/no-ai-slop-ui/SKILL.md`.
 
 ## Visual foundation
