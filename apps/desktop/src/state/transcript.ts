@@ -236,9 +236,21 @@ export function addNotice(t: Transcript, message: string): Transcript {
 }
 
 /** Rebuild the conversation from the saved ACP traffic (readable even when the agent is stopped) */
+/** Event-log notes written by the engine around a session/load history resend (plyfold-core REPLAY_BEGIN / REPLAY_END) */
+export const REPLAY_BEGIN = "replay:begin";
+export const REPLAY_END = "replay:end";
+
+/** Rebuild the conversation from stored ACP traffic (readable even when the agent is not running) */
 export function fromHistory(events: EventRecord[]): Transcript {
   let t = emptyTranscript();
+  // Between these notes the agent was resending history for session/load; the conversation is already here once
+  let replaying = false;
+  let loadId: unknown = null;
   for (const e of events) {
+    if (e.kind === "note" && (e.payload === REPLAY_BEGIN || e.payload === REPLAY_END)) {
+      replaying = e.payload === REPLAY_BEGIN;
+      continue;
+    }
     if (e.kind === "note") {
       // Skip boilerplate like the startup note
       if (!e.payload.startsWith("起動:")) t = addNotice(t, e.payload);
@@ -251,6 +263,17 @@ export function fromHistory(events: EventRecord[]): Transcript {
     } catch {
       continue;
     }
+    // The frames themselves also bracket the resend: from the session/load request to its response.
+    // This catches logs written before the markers existed
+    if (e.kind === "frame_out" && msg.method === "session/load") {
+      loadId = msg.id ?? null;
+      continue;
+    }
+    if (loadId !== null && e.kind === "frame_in" && msg.id === loadId && (msg.result !== undefined || msg.error !== undefined)) {
+      loadId = null;
+      continue;
+    }
+    if (replaying || loadId !== null) continue;
     if (e.kind === "frame_out" && msg.method === "session/prompt") {
       const params = msg.params as { prompt?: { type?: string; text?: string }[] } | undefined;
       const blocks = params?.prompt ?? [];

@@ -121,6 +121,10 @@ struct Live {
     info: Mutex<SessionInfo>,
     clock: Mutex<Option<TurnClock>>,
     last_live_emit: Mutex<Instant>,
+    /// True while session/load is resending the conversation history. Those updates are recorded and still update
+    /// SessionInfo, but are not sent to the UI: it already has the conversation from the event log, and showing the
+    /// resend would duplicate it and push the message being sent above the earlier output
+    replaying: AtomicBool,
 }
 
 impl Live {
@@ -181,6 +185,11 @@ impl Inner {
         self.live.lock().unwrap().get(id).cloned().ok_or_else(|| CoreError::NotRunning(id.into()))
     }
 }
+
+/// Event-log notes around the history that session/load resends. The UI skips the updates between them
+/// when it rebuilds a conversation from the log, and never shows these notes
+pub const REPLAY_BEGIN: &str = "replay:begin";
+pub const REPLAY_END: &str = "replay:end";
 
 #[derive(Clone)]
 pub struct Engine {
@@ -329,6 +338,7 @@ impl Engine {
                 info: Mutex::new(SessionInfo::default()),
                 clock: Mutex::new(None),
                 last_live_emit: Mutex::new(Instant::now()),
+                replaying: AtomicBool::new(false),
             });
             // Start receiving first so the history resent by session/load is captured
             tokio::spawn(pump(inner.clone(), id.to_string(), live.clone(), rx));
@@ -338,9 +348,17 @@ impl Engine {
                 let mut fallback = None;
                 if let Some(old) = &reopen {
                     if live.client.supports_load_session() {
-                        match live.client.load_session(old, cwd).await {
-                            Ok((resp, barrier)) => {
-                                live.wait_processed(barrier).await;
+                        // Mark the resent history in the event log so it is not rebuilt as a second copy of the conversation
+                        let _ = inner.store.append_event(id, EventKind::Note, REPLAY_BEGIN);
+                        live.replaying.store(true, Ordering::SeqCst);
+                        let loaded = live.client.load_session(old, cwd).await;
+                        if let Ok((_, barrier)) = &loaded {
+                            live.wait_processed(*barrier).await;
+                        }
+                        live.replaying.store(false, Ordering::SeqCst);
+                        let _ = inner.store.append_event(id, EventKind::Note, REPLAY_END);
+                        match loaded {
+                            Ok((resp, _)) => {
                                 live.info.lock().unwrap().apply_session_response(&resp);
                                 inner.notice(id, plyfold_i18n::tr!("session/load で開き直しました（履歴はエージェントから再送されます）", "Reopened with session/load (the agent resends the history)", "已通过 session/load 重新打开（历史记录由代理重新发送）"));
                                 return Ok(old.clone());
@@ -679,7 +697,10 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
                 {
                     inner.emit(EngineEvent::Renamed { session_id: id.clone(), title: title.to_string() });
                 }
-                inner.emit(EngineEvent::Update { session_id: id.clone(), update: update.clone() });
+                // History resent by session/load stays out of the live transcript (see Live::replaying)
+                if !live.replaying.load(Ordering::SeqCst) {
+                    inner.emit(EngineEvent::Update { session_id: id.clone(), update: update.clone() });
+                }
                 if changed || live_due {
                     emit_info(inner, &id, live);
                 }

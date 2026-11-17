@@ -200,10 +200,15 @@ async fn reopen_after_close_and_restart_uses_session_load() {
     assert_eq!(eng.store().get_session(&id).unwrap().status, Status::Closed);
     let mut rx = eng.subscribe();
     eng.reopen_session(&id).await.unwrap();
-    // The history is resent
-    let e = wait_for(&mut rx, |e| matches!(e, EngineEvent::Update { update, .. } if update["sessionUpdate"] == "user_message_chunk")).await;
-    if let EngineEvent::Update { update, .. } = e {
-        assert_eq!(update["content"]["text"], "remember me");
+    // The agent resends the history. It is recorded in the event log between the replay markers...
+    let log: Vec<_> = eng.store().events(&id, None, 10_000).unwrap();
+    let begin = log.iter().rposition(|e| e.payload == plyfold_core::REPLAY_BEGIN).expect("replay begin marker");
+    let end = log.iter().rposition(|e| e.payload == plyfold_core::REPLAY_END).expect("replay end marker");
+    assert!(begin < end);
+    assert!(log[begin..end].iter().any(|e| e.payload.contains("user_message_chunk") && e.payload.contains("remember me")));
+    // ...but not sent to the UI, which already has the conversation (it would be shown twice, after the new message)
+    while let Ok(e) = rx.try_recv() {
+        assert!(!matches!(e, EngineEvent::Update { ref update, .. } if update["sessionUpdate"] == "user_message_chunk"), "replayed history reached the UI");
     }
     assert!(eng.is_running(&id));
     assert!(matches!(eng.reopen_session(&id).await, Err(plyfold_core::CoreError::AlreadyRunning(_))));

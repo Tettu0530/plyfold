@@ -107,7 +107,7 @@ describe("transcript", () => {
     expect(t.items[t.items.length - 1]).toEqual({ kind: "plan", entries: [{ content: "a", status: "completed" }] });
   });
 
-  it("rebuilds from stored frames, replayed history included", () => {
+  it("rebuilds from stored frames and skips a session/load resend by its request id", () => {
     const ev = (id: number, kind: EventRecord["kind"], payload: unknown): EventRecord => ({
       id,
       session_id: "s",
@@ -122,12 +122,43 @@ describe("transcript", () => {
       ev(4, "frame_in", { jsonrpc: "2.0", method: "session/update", params: { update: chunk("agent_message_chunk", "echo: hi") } }),
       ev(5, "frame_in", { jsonrpc: "2.0", id: 1, result: { stopReason: "end_turn", usage: { inputTokens: 100, outputTokens: 4 } } }),
       ev(6, "note", "session/load で開き直しました"),
-      // History replayed on reload (outside a turn, so user messages are shown too)
+      // A user message arriving outside a turn (not part of a session/load resend) is shown
       ev(7, "frame_in", { jsonrpc: "2.0", method: "session/update", params: { update: chunk("user_message_chunk", "old") } }),
+      // History resent by session/load in an older log without replay markers: skipped by request/response id
+      ev(8, "frame_out", { jsonrpc: "2.0", id: 7, method: "session/load", params: {} }),
+      ev(9, "frame_in", { jsonrpc: "2.0", method: "session/update", params: { update: chunk("agent_message_chunk", "echo: hi") } }),
+      ev(10, "frame_in", { jsonrpc: "2.0", id: 7, result: {} }),
     ];
     const t = fromHistory(events);
     expect(t.items.map((i) => i.kind)).toEqual(["user", "agent", "stats", "notice", "user"]);
     const stats = t.items[2];
     if (stats.kind === "stats") expect(stats.stats?.usage?.input).toBe(100);
+  });
+
+  it("skips history resent by session/load between the replay markers", () => {
+    const ev = (id: number, kind: EventRecord["kind"], payload: unknown): EventRecord => ({
+      id,
+      session_id: "s",
+      ts: 0,
+      kind,
+      payload: typeof payload === "string" ? payload : JSON.stringify(payload),
+    });
+    const update = (u: unknown) => ({ jsonrpc: "2.0", method: "session/update", params: { update: u } });
+    const t = fromHistory([
+      ev(1, "frame_out", { jsonrpc: "2.0", id: 1, method: "session/prompt", params: { prompt: [{ type: "text", text: "first" }] } }),
+      ev(2, "frame_in", update(chunk("agent_message_chunk", "answer one"))),
+      ev(3, "frame_in", { jsonrpc: "2.0", id: 1, result: { stopReason: "end_turn" } }),
+      // The app restarted; reopening resends the whole conversation
+      ev(4, "note", "replay:begin"),
+      ev(5, "frame_in", update(chunk("user_message_chunk", "first"))),
+      ev(6, "frame_in", update(chunk("agent_message_chunk", "answer one"))),
+      ev(7, "note", "replay:end"),
+      ev(8, "frame_out", { jsonrpc: "2.0", id: 2, method: "session/prompt", params: { prompt: [{ type: "text", text: "second" }] } }),
+      ev(9, "frame_in", update(chunk("agent_message_chunk", "answer two"))),
+      ev(10, "frame_in", { jsonrpc: "2.0", id: 2, result: { stopReason: "end_turn" } }),
+    ]);
+    const texts = t.items.filter((i) => i.kind === "user" || i.kind === "agent").map((i) => (i as { text: string }).text);
+    // Each message once, in order; the new message comes after the earlier answer
+    expect(texts).toEqual(["first", "answer one", "second", "answer two"]);
   });
 });
