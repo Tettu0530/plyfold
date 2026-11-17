@@ -87,12 +87,15 @@
   body {
     @apply bg-background text-foreground font-sans text-sm antialiased;
     overflow: hidden;
+    /* WebKit (the Tauri webview) only honours the prefixed property; without it every label and button is selectable */
+    -webkit-user-select: none;
     user-select: none;
   }
   input,
   textarea,
   code,
   pre {
+    -webkit-user-select: text;
     user-select: text;
   }
   .tabular {
