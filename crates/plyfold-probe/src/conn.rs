@@ -1,6 +1,6 @@
-//! ACP の最小 JSON-RPC クライアント（改行区切り JSON over stdio）
+//! Minimal ACP JSON-RPC client (newline-delimited JSON over stdio)
 //!
-//! 検証用なので、送受信したメッセージはすべて transcript.jsonl に残す。
+//! This is a test tool, so every message sent or received is kept in transcript.jsonl.
 
 use std::collections::HashMap;
 use std::fmt;
@@ -29,7 +29,7 @@ pub struct RpcError {
 impl RpcError {
     pub const METHOD_NOT_FOUND: i64 = -32601;
     pub const AUTH_REQUIRED: i64 = -32000;
-    /// こちら側で作るエラー（通信断・タイムアウト）
+    /// Errors raised on our side (disconnects, timeouts)
     pub const TRANSPORT: i64 = -1;
 
     fn transport(msg: impl Into<String>) -> Self {
@@ -39,7 +39,7 @@ impl RpcError {
 
 impl fmt::Display for RpcError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "RPC エラー {}: {}", self.code, self.message)?;
+        write!(f, "RPC error {}: {}", self.code, self.message)?;
         if let Some(d) = &self.data {
             write!(f, " ({d})")?;
         }
@@ -82,7 +82,7 @@ impl Transcript {
     fn log(&self, dir: &str, raw: &str) {
         let ms = self.start.elapsed().as_millis();
         let body = self.redact(raw);
-        // 受信行が JSON でなければ文字列として残す
+        // Keep incoming lines that are not JSON as strings
         let body = if serde_json::from_str::<Value>(&body).is_ok() { body } else { Value::String(body).to_string() };
         if let Ok(mut f) = self.file.lock() {
             let _ = writeln!(f, "{{\"ms\":{ms},\"dir\":\"{dir}\",\"msg\":{body}}}");
@@ -123,13 +123,13 @@ impl Conn {
         }
         let mut child = cmd
             .spawn()
-            .with_context(|| format!("起動できません: {} {}", launch.command, launch.args.join(" ")))?;
+            .with_context(|| format!("cannot start: {} {}", launch.command, launch.args.join(" ")))?;
 
         let stdin = child.stdin.take().expect("stdin");
         let stdout = child.stdout.take().expect("stdout");
         let stderr = child.stderr.take().expect("stderr");
 
-        // stderr はファイルへ
+        // stderr goes to a file
         {
             let path = run_dir.join("stderr.log");
             let transcript = transcript.clone();
@@ -184,9 +184,9 @@ impl Conn {
                         (None, None) => {}
                     }
                 }
-                // エージェントが終了したら、待っているリクエストをすべて失敗させる
+                // When the agent exits, fail every pending request
                 for (_, waiter) in pending.lock().unwrap().drain() {
-                    let _ = waiter.send(Err(RpcError::transport("エージェントのプロセスが終了しました")));
+                    let _ = waiter.send(Err(RpcError::transport("the agent process exited")));
                 }
             });
         }
@@ -208,8 +208,8 @@ impl Conn {
         stdin
             .write_all(format!("{line}\n").as_bytes())
             .await
-            .map_err(|e| RpcError::transport(format!("書き込みに失敗: {e}")))?;
-        stdin.flush().await.map_err(|e| RpcError::transport(format!("flush に失敗: {e}")))
+            .map_err(|e| RpcError::transport(format!("write failed: {e}")))?;
+        stdin.flush().await.map_err(|e| RpcError::transport(format!("flush failed: {e}")))
     }
 
     pub async fn request(&self, method: &str, params: Value) -> Result<Value, RpcError> {
@@ -217,13 +217,13 @@ impl Conn {
         let (tx, rx) = oneshot::channel();
         self.pending.lock().unwrap().insert(id, tx);
         self.send(json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params})).await?;
-        rx.await.unwrap_or_else(|_| Err(RpcError::transport("応答を受け取れませんでした")))
+        rx.await.unwrap_or_else(|_| Err(RpcError::transport("no response received")))
     }
 
     pub async fn request_timeout(&self, method: &str, params: Value, dur: Duration) -> Result<Value, RpcError> {
         match tokio::time::timeout(dur, self.request(method, params)).await {
             Ok(r) => r,
-            Err(_) => Err(RpcError::transport(format!("{method} が {} 秒でタイムアウト", dur.as_secs()))),
+            Err(_) => Err(RpcError::transport(format!("{method} timed out after {} s", dur.as_secs()))),
         }
     }
 

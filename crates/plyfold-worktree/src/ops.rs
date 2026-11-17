@@ -1,4 +1,4 @@
-//! 差分の画面の操作: コミット、元のリポジトリへの取り込み、破棄
+//! Actions on the diff view: commit, merge into the original repository, discard
 
 use serde::{Deserialize, Serialize};
 
@@ -6,13 +6,13 @@ use crate::{Worktree, WorktreeError, git};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct WtStatus {
-    /// まだコミットしていない変更（未追跡を含む）がある
+    /// There are uncommitted changes (including untracked files)
     pub dirty: bool,
-    /// 基準のコミットから積んだコミットの数
+    /// Number of commits made on top of the base commit
     pub commits: u32,
-    /// 取り込み先（元のリポジトリで今チェックアウトしている枝）。切り離した HEAD なら None
+    /// Merge target (the branch currently checked out in the original repository). None for a detached HEAD
     pub target: Option<String>,
-    /// 積んだコミットがすべて取り込み先に入っている
+    /// All commits made are already in the merge target
     pub merged: bool,
 }
 
@@ -35,7 +35,7 @@ pub fn status(wt: &Worktree) -> Result<WtStatus, WorktreeError> {
     Ok(WtStatus { dirty, commits, target, merged })
 }
 
-/// 作業ツリーの変更をすべてコミットする。短いハッシュを返す
+/// Commits all changes in the working tree. Returns the short hash
 pub fn commit(wt: &Worktree, message: &str) -> Result<String, WorktreeError> {
     let message = message.trim();
     if message.is_empty() {
@@ -49,8 +49,8 @@ pub fn commit(wt: &Worktree, message: &str) -> Result<String, WorktreeError> {
     Ok(git(&wt.path, &["rev-parse", "--short", "HEAD"])?.trim().to_string())
 }
 
-/// セッションの枝を、元のリポジトリで今チェックアウトしている枝へ取り込む。取り込み先の名前を返す。
-/// ぶつかったら取り込みをやめて、元のリポジトリを元の状態に戻す
+/// Merges the session branch into the branch currently checked out in the original repository. Returns the target's name.
+/// On a conflict, aborts the merge and restores the original repository to its previous state
 pub fn merge(wt: &Worktree) -> Result<String, WorktreeError> {
     let st = status(wt)?;
     if st.dirty {
@@ -83,7 +83,7 @@ fn has(cmd: &str) -> bool {
     std::process::Command::new("sh").args(["-c", &format!("command -v {cmd} >/dev/null 2>&1")]).status().is_ok_and(|s| s.success())
 }
 
-/// 枝を origin に push して、GitHub の PR を作る（gh を使う）。PR の URL を返す
+/// Pushes the branch to origin and opens a GitHub PR (via gh). Returns the PR URL
 pub fn create_pr(wt: &Worktree, title: &str) -> Result<String, WorktreeError> {
     let st = status(wt)?;
     if st.dirty {
@@ -120,8 +120,8 @@ pub fn create_pr(wt: &Worktree, title: &str) -> Result<String, WorktreeError> {
     Ok(String::from_utf8_lossy(&out.stdout).lines().last().unwrap_or("").trim().to_string())
 }
 
-/// worktree をエディタで開く。`prefer` は "auto" / "zed" / "cursor" / "code" / "finder"。
-/// 開いたエディタの名前を返す（auto で見つからなければ Finder）
+/// Opens the worktree in an editor. `prefer` is "auto" / "zed" / "cursor" / "code" / "finder".
+/// Returns the name of the editor that was opened (Finder if auto finds nothing)
 pub fn open_in_editor(wt: &Worktree, prefer: &str) -> Result<String, WorktreeError> {
     let path = wt.path.display().to_string();
     let editors = [("zed", "Zed"), ("cursor", "Cursor"), ("code", "VS Code")];
@@ -146,7 +146,7 @@ pub fn open_in_editor(wt: &Worktree, prefer: &str) -> Result<String, WorktreeErr
     Ok("Finder".into())
 }
 
-/// 基準のコミットまで戻す（コミットも未コミットの変更も、未追跡のファイルも消える。無視しているファイルは残す）
+/// Resets to the base commit (drops commits, uncommitted changes and untracked files; ignored files are kept)
 pub fn discard(wt: &Worktree) -> Result<(), WorktreeError> {
     git(&wt.path, &["reset", "-q", "--hard", &wt.base])?;
     git(&wt.path, &["clean", "-fdq"])?;
@@ -184,7 +184,7 @@ mod tests {
         let repo = base.join("repo");
         std::fs::create_dir_all(&repo).unwrap();
         g(&repo, &["init", "-q", "-b", "main"]);
-        // テストの中のコミットは、このリポジトリの設定で名前を決める
+        // Commits made in tests take their author from this repository's config
         g(&repo, &["config", "user.name", "t"]);
         g(&repo, &["config", "user.email", "t@example.invalid"]);
         std::fs::write(repo.join("a.txt"), "one\n").unwrap();

@@ -1,4 +1,4 @@
-//! 模擬エージェントを相手にした結合テスト
+//! Integration tests against the mock agent
 
 use std::time::Duration;
 

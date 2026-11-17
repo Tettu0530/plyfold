@@ -1,9 +1,9 @@
-//! エンジンが画面に出す文（エラー、知らせ）の言語。画面の言語に合わせて、デスクトップのアプリが set_lang で切り替える
+//! Language of the text the engine shows in the UI (errors, notices). The desktop app switches it with set_lang to match the UI language
 //!
 //!   tr!("セッション {id} がありません", "Session {id} not found", "会话 {id} 不存在")
-//!   #[error("{}", tr!("セッション {} がありません", "Session {} not found", "会话 {} 不存在", .0))]   // thiserror の中でも使える
+//!   #[error("{}", tr!("セッション {} がありません", "Session {} not found", "会话 {} 不存在", .0))]   // also works inside thiserror
 //!
-//! 日本語・英語・中国語（簡体）の文を並べて書く（呼ぶ場所のすぐそばにすべての言語がある）。言語を足すときは、引数を足す
+//! Japanese, English and Simplified Chinese text is written side by side, so every language sits right at the call site. To add a language, add an argument
 
 use std::sync::atomic::{AtomicU8, Ordering};
 
@@ -16,7 +16,7 @@ pub enum Lang {
 
 static LANG: AtomicU8 = AtomicU8::new(0);
 
-/// "ja" / "en" / "zh"（ほかは英語）
+/// "ja" / "en" / "zh" (anything else means English)
 pub fn set_lang(code: &str) {
     let l = if code.starts_with("ja") {
         0
@@ -40,7 +40,7 @@ pub fn is_en() -> bool {
     lang() == Lang::En
 }
 
-/// 今の言語の文を format! で作る。`tr!(ja, en, zh, 引数…)`（3 つの言語の文はどれも省けない）
+/// Formats the text for the current language with format!. `tr!(ja, en, zh, args...)` (none of the three texts may be omitted)
 #[macro_export]
 macro_rules! tr {
     ($ja:literal, $en:literal, $zh:literal $(, $arg:expr)* $(,)?) => {

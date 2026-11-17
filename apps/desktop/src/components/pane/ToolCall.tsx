@@ -1,4 +1,4 @@
-// 会話の中のツールの呼び出し。行を押すと、実行したコマンドと結果を開く（段階的な開示）
+// A tool call in the transcript. Click the row to reveal the command and its result (progressive disclosure)
 import { Check, ChevronRight, CircleX, FileText, LoaderCircle, Pencil, Search, SquareTerminal, Wrench } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
@@ -19,10 +19,10 @@ const TOOL_ICONS: Record<string, typeof FileText> = {
   execute: SquareTerminal,
 };
 
-/** 最初に見せる結果の行数。残りは押して出す（畳んでいるあいだはスクロールしない） */
+/** Result lines shown at first. Click for the rest (no scrolling while collapsed) */
 const FIRST_LINES = 12;
 
-/** 動いているあいだだけ、一定の間隔で描き直す（経過時間を数える） */
+/** Re-render at a fixed interval only while running (to count elapsed time) */
 function useNow(active: boolean, ms = 100) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -39,7 +39,7 @@ function Status({ t }: { t: ToolCall }) {
   const tr = useT();
   const running = t.status === "pending" || t.status === "in_progress";
   const now = useNow(running);
-  // 実行中は経過時間を数え、終わったらかかった時間を出す
+  // Count elapsed time while running; show the duration once done
   const elapsed = t.startedAt != null ? (running ? now : (t.endedAt ?? t.startedAt)) - t.startedAt : null;
   const time = elapsed != null && (running || elapsed >= 100) ? <span className="font-mono tabular">{seconds(Math.max(0, elapsed))}</span> : null;
   if (running)
@@ -73,13 +73,13 @@ function Status({ t }: { t: ToolCall }) {
   );
 }
 
-/** 長い文字は最初の行だけ見せ、残りは押して出す */
+/** Show only the first lines of long text; click for the rest */
 function useClamp(text: string, first: number) {
   const t = useT();
   const [all, setAll] = useState(false);
   const lines = useMemo(() => text.replace(/\n$/, "").split("\n"), [text]);
   const rest = all ? 0 : Math.max(0, lines.length - first);
-  // 数は等幅の部品で出すので、訳文の {n} の前後で切る
+  // The count is rendered in a monospace element, so split the translated text around {n}
   const [before, after = ""] = t("transcript.showMore", { count: rest }).split("{n}");
   const more = rest > 0 && (
     <button type="button" onClick={() => setAll(true)} className="flex h-7 w-full items-center px-3 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
@@ -91,19 +91,19 @@ function useClamp(text: string, first: number) {
   return { text: rest ? lines.slice(0, first).join("\n") : lines.join("\n"), more, folded: rest > 0 };
 }
 
-/** 結果の文字 */
+/** Result text */
 function Output({ text }: { text: string }) {
   const c = useClamp(text, FIRST_LINES);
   return (
     <div className="overflow-hidden rounded-md bg-background">
-      {/* 畳んでいるあいだは最初の行だけ（スクロールしない）。全部を出したら、高さを抑えてスクロールする */}
+      {/* While collapsed, only the first lines (no scrolling). Once fully shown, cap the height and scroll */}
       <pre className={cn("m-0 px-3 py-2 font-mono text-xs leading-5 whitespace-pre text-foreground/85 select-text", c.folded ? "overflow-x-auto overflow-y-hidden" : "max-h-80 overflow-auto")}>{c.text}</pre>
       {c.more}
     </div>
   );
 }
 
-/** 実行したコマンド（ヒアドキュメントなどで長いものは畳む） */
+/** The executed command (long ones such as heredocs are collapsed) */
 function Command({ text }: { text: string }) {
   const c = useClamp(text, 12);
   return (
@@ -120,8 +120,8 @@ function Command({ text }: { text: string }) {
 function Detail({ t }: { t: ToolCall }) {
   const tr = useT();
   const output = t.stream || t.result;
-  // 読んだファイルの中身や書いた内容は、差分や題名で分かるので path だけにする
-  // 題名で全部読める短いコマンドは、もう一度は出さない
+  // File contents read or written are clear from the diff or title, so show only the path
+  // Short commands fully readable in the title are not shown again
   const showCommand = !!t.command && (t.command !== t.title || t.command.length > 60);
   const showPath = t.path && t.toolKind !== "execute" && !t.title.includes(shortPath(t.path));
   return (
@@ -180,7 +180,7 @@ function ToolRow({ t, first }: { t: ToolCall; first: boolean }) {
   );
 }
 
-/** 連続するツールの呼び出しを 1 つの枠に並べる */
+/** Consecutive tool calls in one frame */
 export function ToolCalls({ tools }: { tools: ToolCall[] }) {
   return (
     <div className="overflow-hidden rounded-[10px] border bg-card">
@@ -191,7 +191,7 @@ export function ToolCalls({ tools }: { tools: ToolCall[] }) {
   );
 }
 
-/** 会話の中のファイルの差分。見出しを押すと畳める */
+/** A file diff in the transcript. Click the header to collapse */
 export function DiffBlock({ d }: { d: DiffPreview }) {
   const t = useT();
   const [open, setOpen] = useState(true);

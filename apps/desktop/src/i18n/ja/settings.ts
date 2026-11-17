@@ -1,4 +1,4 @@
-// SettingsView.tsx（設定の画面）
+// SettingsView.tsx (settings screen)
 export const settings = {
   title: "設定",
   back: "戻る",

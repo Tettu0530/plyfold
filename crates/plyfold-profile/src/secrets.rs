@@ -1,4 +1,4 @@
-//! 秘密の値（API キー）の保存先
+//! Where secret values (API keys) are stored
 
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
@@ -7,13 +7,13 @@ use std::sync::Mutex;
 use crate::ProfileError;
 
 pub trait SecretStore: Send + Sync {
-    /// account は "<名前>/<変数名>"
+    /// account is "<name>/<var>"
     fn get(&self, account: &str) -> Result<String, ProfileError>;
     fn set(&self, account: &str, value: &str) -> Result<(), ProfileError>;
     fn delete(&self, account: &str) -> Result<(), ProfileError>;
 }
 
-/// macOS のキーチェーン（`security` コマンド経由）
+/// The macOS keychain (via the `security` command)
 pub struct KeychainStore {
     service: String,
 }
@@ -47,10 +47,10 @@ impl SecretStore for KeychainStore {
         Ok(s.trim_end_matches('\n').to_string())
     }
 
-    /// 値はコマンドライン引数に載せず、標準入力から渡す（`ps` に出さない）
+    /// The value goes through stdin, not command-line arguments (so it never shows up in `ps`)
     fn set(&self, account: &str, value: &str) -> Result<(), ProfileError> {
         use std::io::Write as _;
-        // security -w を最後に置くと、パスワードを標準入力（確認を含め 2 回）から読む
+        // With -w last, security reads the password from stdin (twice, including confirmation)
         let mut child = Command::new("security")
             .args(["add-generic-password", "-U", "-s", &self.service, "-a", account, "-w"])
             .stdin(Stdio::piped())
@@ -81,7 +81,7 @@ impl SecretStore for KeychainStore {
     }
 }
 
-/// テスト用
+/// For tests
 #[derive(Default)]
 pub struct MemoryStore(Mutex<HashMap<String, String>>);
 

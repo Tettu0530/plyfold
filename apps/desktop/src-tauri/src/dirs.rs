@@ -1,8 +1,8 @@
-//! リポジトリを選ぶ欄の補完: 入力の途中のパスから、続きになるフォルダを返す
+//! Completion for the repository picker: returns folders that continue a partially typed path
 //!
-//! - `~/pro` → `~/projects` など（大文字小文字は区別しない）。`~/projects/` なら中のフォルダ
-//! - 隠しフォルダは、名前を `.` から打ったときだけ出す
-//! - git のリポジトリ（.git がある）には印を付けて先に並べる
+//! - `~/pro` → `~/projects` etc. (case-insensitive). `~/projects/` lists the folders inside
+//! - Hidden folders appear only when the typed name starts with `.`
+//! - Git repositories (with a .git) are marked and listed first
 
 use std::path::{Path, PathBuf};
 
@@ -12,7 +12,7 @@ const LIMIT: usize = 40;
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct DirCandidate {
-    /// 表示と入力に使うパス（ホームの下は ~ で書く）
+    /// Path used for display and input (paths under home are written with ~)
     pub path: String,
     pub name: String,
     pub git: bool,
@@ -64,7 +64,7 @@ pub fn complete(input: &str, home: &Path) -> Vec<DirCandidate> {
                 return None;
             }
             let path = e.path();
-            // シンボリックリンクの先がフォルダなら入れる
+            // Include symlinks whose target is a folder
             if !path.is_dir() {
                 return None;
             }

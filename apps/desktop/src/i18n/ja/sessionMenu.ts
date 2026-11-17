@@ -1,4 +1,4 @@
-// SessionMenu.tsx（行の右クリックのメニュー）
+// SessionMenu.tsx (row context menu)
 export const sessionMenu = {
   rename: "名前を変える",
   stop: "止める",

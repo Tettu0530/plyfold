@@ -1,4 +1,4 @@
-// icons.tsx（セッションの状態、mode の名前、エージェントの名前）
+// icons.tsx (session states, mode names, agent names)
 export const status = {
   starting: "起動中",
   working: "作業中",

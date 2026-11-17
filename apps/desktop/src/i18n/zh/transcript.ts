@@ -1,4 +1,4 @@
-// pane/Transcript.tsx、pane/ToolCall.tsx、pane/Markdown.tsx（会話）
+// pane/Transcript.tsx, pane/ToolCall.tsx, pane/Markdown.tsx (conversation)
 import type { transcript as source } from "../ja/transcript";
 
 export const transcript: Record<keyof typeof source, string> = {
@@ -18,7 +18,7 @@ export const transcript: Record<keyof typeof source, string> = {
   exitCode: "退出码",
   toolFailed: "失败",
   toolDone: "完成",
-  // {n} は数の部品に差し替える（数は等幅で出す）
+  // {n} is replaced by a number component (numbers render monospaced)
   showMore: "显示其余 {n} 行",
   noResult: "还没有结果",
   tool: "工具",

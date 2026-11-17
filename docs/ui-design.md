@@ -1,76 +1,76 @@
-# UI 設計（下書き）
+# UI design (draft)
 
-試作の画面: Plyfold UI 試作（Design のキャンバス、5 枚）。macOS 専用、Tauri ＋ React + TypeScript。ネイティブの Liquid Glass は使わない。
-見た目と動きの決まりは `.claude/skills/no-ai-slop-ui/SKILL.md` に従う。
+Mockups: the Plyfold UI prototype (a design canvas with five frames). macOS only, Tauri + React + TypeScript. We do not use the native Liquid Glass.
+Visual and motion rules follow `.claude/skills/no-ai-slop-ui/SKILL.md`.
 
-## 見た目の土台
+## Visual foundation
 
-- shadcn/ui（Tailwind v4、Radix 版）のダークテーマ（neutral）。色を使うのは状態と差分だけ
-- 書体は Geist / Geist Mono。数値は等幅
-- エージェント向けの部品は AffectUI の無料（MIT）のものだけ（Tool Call Card、Code Block）。
-  権限確認（Approval Card、Permission Request）、入力欄（Run Controls）、使用量（Usage Meter）は Pro なので自前で作る
-- ランディングページ向けの部品集（Ruixen、Pin UI など）は本体には使わない
+- The shadcn/ui (Tailwind v4, Radix) dark theme (neutral). Color is used only for state and diffs
+- Typefaces are Geist / Geist Mono. Numbers are monospaced
+- For agent-specific components we use only AffectUI's free (MIT) ones (Tool Call Card, Code Block).
+  Permission requests (Approval Card, Permission Request), the input (Run Controls) and usage (Usage Meter) are Pro, so we build our own
+- Component kits aimed at landing pages (Ruixen, Pin UI, etc.) are not used in the app
 
-## 動き（液体ガラス）
+## Motion (liquid glass)
 
-- 適度に跳ねるばね（0.35 秒以内）。選択の印は Motion の `layoutId` で流す
-- 融合と分離は SVG の goo フィルタを背景の形だけにかける（文字にはかけない）。1 画面で 1〜2 か所まで
-- 使う場所: ペインの分割と融合、権限確認の滴（状態の点から落ちて広がり、答えると吸い込まれる）、チップからメニューが伸びる、切り替えの印
-- macOS の「視差効果を減らす」では 150ms のフェードに置き換える
-- ガラスの質感（背景のぼかし）は浮いている層（ポップオーバー、ダイアログ、権限確認）だけ
+- Springs with moderate bounce (0.35 s or less). Selection indicators glide with Motion's `layoutId`
+- Merging and separating apply an SVG goo filter to background shapes only (never to text). At most one or two places per screen
+- Where it is used: splitting and merging panes, the permission-request droplet (drops from the status dot and spreads out, then is absorbed once answered), menus growing out of chips, toggle indicators
+- With macOS "Reduce motion" enabled, these become a 150ms fade
+- The glass texture (background blur) is only for floating layers (popovers, dialogs, permission requests)
 
-## 画面の骨格
+## Screen skeleton
 
 ```
-┌ ヘッダー: リポジトリ ・ ⌘K 検索 ・ ペインの並べ方（1 / 2 / 4）───────────────┐
-├ サイドバー ────────┬ ペイン ───────────────────┬ ペイン ───────────────────┤
-│ セッション（リポジトリ別）│ ヘッダー: 状態・題・プロファイル・枝・差分  │                         │
-│  ● 題 · 状態 · +/−  │ 会話（発言 / 考え / ツール / 差分 / 計画）│ 権限確認のカード          │
-│ プロファイル（⌘,）    │ 入力欄 + 設定の切り替え + 使用量    │                         │
-└────────────────┴──────────────────────────┴─────────────────────────┘
+┌ Header: repository, ⌘K search, pane layout (1 / 2 / 4) ───────────────────────────────────────────────────┐
+├ Sidebar ───────────────────┬ Pane ────────────────────────────────────────────────────┬ Pane ─────────────┤
+│ Sessions (by repository)   │ Header: status, title, profile, branch, diff             │                   │
+│  ● title, status, +/−      │ Conversation (message / thought / tool / diff / plan)    │ Permission card   │
+│ Profiles (⌘,)              │ Input + setting toggles + usage                          │                   │
+└────────────────────────────┴──────────────────────────────────────────────────────────┴───────────────────┘
 ```
 
-- **セッションが主、ペインは表示**。ペインを閉じてもセッションは残り、サイドバーから開き直せる（Herdr 風に並べても、履歴の整理とぶつからない）
-- サイドバーの行には、状態（作業中、権限確認待ち、無応答、待機、停止、エラー）を色の点と文字の両方で出す
+- **Sessions come first; panes are views**. Closing a pane keeps the session, which can be reopened from the sidebar (arranging panes Herdr-style does not conflict with organizing history)
+- Each sidebar row shows its status (working, awaiting permission, unresponsive, idle, stopped, error) as both a colored dot and text
 
-## 入力欄（Claude Code と OpenCode のよいところ）
+## Input (the best of Claude Code and OpenCode)
 
-- **Claude Code から**: model / effort / mode を入力欄の下のチップでその場で切り替える。⇧⇥ でモードを順に回す。effort は段階を棒で見せる
-  - エージェントごとの名前の違い（`effort` / `reasoning_effort`）は ACP の category で吸収する（エンジンの `set_by_category`）
-  - モードは色でも区別する（bypassPermissions は赤系）
-- **OpenCode から**: 入力欄の右に、コンテキストの使用量（バー ＋ 使用 / 上限）、直前のターンの ↑入力 ↓出力、tok/s、費用を等幅の数字で出す
-  - 流れている途中は「経過時間」と「~推定 tok/s」、ターンの後は実測の tok/s
-- 設定したモデルと、API が返したモデル名が違うときは、ペインのヘッダーに注意の表示を出す
+- **From Claude Code**: switch model / effort / mode on the spot with chips under the input. ⇧⇥ cycles through modes. Effort levels are shown as bars
+  - Differences in naming between agents (`effort` / `reasoning_effort`) are absorbed by the ACP category (the engine's `set_by_category`)
+  - Modes are also distinguished by color (bypassPermissions is reddish)
+- **From OpenCode**: to the right of the input, show context usage (bar + used / limit), the previous turn's ↑input ↓output, tok/s and cost, in monospaced numbers
+  - While streaming, show "elapsed time" and "~estimated tok/s"; after the turn, the measured tok/s
+- When the configured model differs from the model name returned by the API, show a warning in the pane header
 
-## 権限確認
+## Permission requests
 
-- ペインの中にカードで出す（サイドバーと通知にも出す）。ボタンは「今回だけ許可」「常に許可」「拒否」「止める」
-- エージェントによって「拒否」の意味が違う（Codex はターンも終わる）。違うときはカードに一言添える
-- ⏎ で「今回だけ許可」、⌘. で「止める」
+- Shown as a card inside the pane (and also in the sidebar and as a notification). Buttons: "Allow once", "Always allow", "Reject", "Stop"
+- "Reject" means different things per agent (in Codex it also ends the turn). When it differs, the card says so in one line
+- ⏎ for "Allow once", ⌘. for "Stop"
 
-## 差分
+## Diffs
 
-- git から作る（エージェントが diff を返さなくても出せる）。未追跡の新しいファイルも含む
-- 下の帯に、worktree の作業をどうするか（エディタで開く、コミット、PR、main に取り込む、破棄）
+- Built from git (so they work even when the agent returns no diff). New untracked files are included
+- A bottom strip for what to do with the worktree's work (open in editor, commit, PR, merge into main, discard)
 
-## 新しいセッション
+## New session
 
-- 最初の指示、プロファイル（CLI × キー）、リポジトリ、worktree の有無
-- 設定項目の選択肢は起動するまで分からないので、「このプロファイルで前回使った値」を初期値に見せる
+- The first prompt, the profile (CLI × key), the repository, and whether to use a worktree
+- Config option choices are not known until the agent starts, so "the values last used with this profile" are shown as defaults
 
-## プロファイル
+## Profiles
 
-- エージェントごとに、複数のプロファイル（認証: 既存のログイン / 公式の API キー / カスタムプロバイダー（ベース URL ＋ キー））
-- キーはキーチェーン。画面には末尾 4 文字だけ
-- 「設定ディレクトリを専用にする」の切り替えと、その意味の説明
-- 接続の確認: 設定したモデル、応答したモデル、最初の文字までの時間、足された入力の量
+- Multiple profiles per agent (auth: existing login / official API key / custom provider (base URL + key))
+- Keys live in the Keychain. Only the last 4 characters are shown
+- A toggle for "use a dedicated config directory", with an explanation of what it means
+- Connection check: configured model, responding model, time to first token, amount of added input
 
-## キーボード
+## Keyboard
 
-⌘N 新しいセッション、⌘K 検索、⌘1〜4 ペインの移動、⇧⇥ モードを回す、⌘. 止める、⏎ 権限を今回だけ許可、⌘, プロファイル
+⌘N new session, ⌘K search, ⌘1–4 move between panes, ⇧⇥ cycle modes, ⌘. stop, ⏎ allow permission once, ⌘, profiles
 
-## まだ決めていないこと
+## Open questions
 
-- ペインの並べ方: 決まった枠（1 / 2 / 4）か、自由に分割か
-- 作業中に入力した指示を、次のターンに積むか（Claude のアダプタは `promptQueueing` を持っている）
-- worktree の後片付け（取り込み、PR、破棄）の具体的な流れ
+- Pane layout: fixed slots (1 / 2 / 4) or free-form splitting
+- Whether prompts entered mid-turn are queued for the next turn (the Claude adapter has `promptQueueing`)
+- The concrete flow for worktree cleanup (merge, PR, discard)

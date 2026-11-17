@@ -1,4 +1,4 @@
-// pane/Pane.tsx、pane/PaneTools.tsx（ペインの見出しとボタン）
+// pane/Pane.tsx, pane/PaneTools.tsx (pane header and buttons)
 export const pane = {
   emptyLabel: "ペイン {n}（空き）",
   emptyHint: "サイドバーからセッションを選ぶか、新しく始めます",

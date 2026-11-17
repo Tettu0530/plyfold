@@ -34,16 +34,16 @@ pub struct ProfileDef {
     pub keys: BTreeMap<String, String>,
     #[serde(default)]
     pub env: BTreeMap<String, String>,
-    /// isolate したディレクトリに置くファイル（相対パス = 中身）。Codex の config.toml など
+    /// Files to write into the isolated directory (relative path = contents), e.g. Codex's config.toml
     #[serde(default)]
     pub files: BTreeMap<String, String>,
-    /// isolate したディレクトリに張るシンボリックリンク（相対パス = リンク先。~ 可）。
-    /// ログイン情報は複製するとトークンの更新でぶつかるので、リンクで共有する
+    /// Symlinks to create in the isolated directory (relative path = target; ~ allowed).
+    /// Login state is shared via links, since copies would conflict on token refresh
     #[serde(default)]
     pub links: BTreeMap<String, String>,
 }
 
-/// 1 回の起動に必要なものを解決したもの
+/// Everything resolved for a single launch
 #[derive(Debug, Clone)]
 pub struct Launch {
     pub agent: String,
@@ -51,20 +51,20 @@ pub struct Launch {
     pub args: Vec<String>,
     pub env_set: Vec<(String, String)>,
     pub env_remove: Vec<String>,
-    /// ログに出してはいけない値
+    /// Values that must never appear in logs
     pub secrets: Vec<String>,
-    /// 表示用（値は伏せる）
+    /// For display (values masked)
     pub env_summary: Vec<String>,
 }
 
 impl Config {
     pub fn load(path: &Path) -> Result<Self> {
         let text = std::fs::read_to_string(path)
-            .with_context(|| format!("設定ファイルを読めません: {}", path.display()))?;
+            .with_context(|| format!("cannot read config file: {}", path.display()))?;
         let mut cfg: Config =
-            toml::from_str(&text).with_context(|| format!("設定ファイルの形式が不正です: {}", path.display()))?;
+            toml::from_str(&text).with_context(|| format!("invalid config file: {}", path.display()))?;
 
-        // 同じ場所の *.local.toml（git に入れない）があれば上書きで足す
+        // Overlay a sibling *.local.toml (kept out of git) if there is one
         let local = path.with_extension("local.toml");
         if local.exists() {
             let text = std::fs::read_to_string(&local)?;
@@ -76,14 +76,14 @@ impl Config {
                 profiles: BTreeMap<String, ProfileDef>,
             }
             let o: Overlay = toml::from_str(&text)
-                .with_context(|| format!("設定ファイルの形式が不正です: {}", local.display()))?;
+                .with_context(|| format!("invalid config file: {}", local.display()))?;
             cfg.agents.extend(o.agents);
             cfg.profiles.extend(o.profiles);
         }
         Ok(cfg)
     }
 
-    /// target はプロファイル名かエージェント名
+    /// `target` is a profile name or an agent name
     pub fn resolve(&self, target: &str, state_dir: &Path) -> Result<Launch> {
         let (profile_name, profile) = if let Some(p) = self.profiles.get(target) {
             (target.to_string(), p.clone())
@@ -100,19 +100,19 @@ impl Config {
                 },
             )
         } else {
-            bail!("'{target}' はプロファイルにもエージェントにもありません");
+            bail!("'{target}' is neither a profile nor an agent");
         };
 
         let agent = self
             .agents
             .get(&profile.agent)
-            .ok_or_else(|| anyhow!("プロファイル '{profile_name}' のエージェント '{}' が未定義です", profile.agent))?;
+            .ok_or_else(|| anyhow!("agent '{}' of profile '{profile_name}' is not defined", profile.agent))?;
 
         let mut env_set: Vec<(String, String)> = agent.env.clone().into_iter().collect();
         let mut env_summary = Vec::new();
         let mut secrets = Vec::new();
 
-        // 既定プロファイル以外では、キー系の環境変数を親から引き継がない
+        // Except for the default profile, don't inherit key env vars from the parent
         let env_remove = if profile.keys.is_empty() && !profile.isolate {
             Vec::new()
         } else {
@@ -122,14 +122,14 @@ impl Config {
         let profile_dir = state_dir.join("profiles").join(&profile_name);
         if profile.isolate {
             let var = agent.config_dir_env.as_ref().ok_or_else(|| {
-                anyhow!("エージェント '{}' は config_dir_env が未設定なので isolate できません", profile.agent)
+                anyhow!("agent '{}' has no config_dir_env, so it cannot be isolated", profile.agent)
             })?;
             let dir = profile_dir.clone();
             std::fs::create_dir_all(&dir)?;
             for (rel, content) in &profile.files {
                 let rel_path = Path::new(rel);
                 if rel_path.is_absolute() || rel_path.components().any(|c| c.as_os_str() == "..") {
-                    bail!("files のパスはプロファイルのディレクトリの中に限ります: {rel}");
+                    bail!("files paths must stay inside the profile directory: {rel}");
                 }
                 let target = dir.join(rel_path);
                 if let Some(parent) = target.parent() {
@@ -140,7 +140,7 @@ impl Config {
             for (rel, dest) in &profile.links {
                 let rel_path = Path::new(rel);
                 if rel_path.is_absolute() || rel_path.components().any(|c| c.as_os_str() == "..") {
-                    bail!("links のパスはプロファイルのディレクトリの中に限ります: {rel}");
+                    bail!("links paths must stay inside the profile directory: {rel}");
                 }
                 let dest = match dest.strip_prefix("~/") {
                     Some(rest) => PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(rest),
@@ -160,17 +160,17 @@ impl Config {
             let value = if source == "keychain" {
                 keys::get(&profile_name, var)?
             } else if let Some(account) = source.strip_prefix("keychain:") {
-                // 複数のプロファイルで同じキーを使う: "keychain:<名前>/<変数名>"
+                // Share one key across profiles: "keychain:<name>/<VAR>"
                 let (p, v) = account
                     .split_once('/')
-                    .ok_or_else(|| anyhow!("keychain:<名前>/<変数名> の形で指定してください: {source}"))?;
+                    .ok_or_else(|| anyhow!("expected the form keychain:<name>/<VAR>: {source}"))?;
                 keys::get(p, v)?
             } else if let Some(other) = source.strip_prefix("env:") {
-                std::env::var(other).with_context(|| format!("環境変数 {other} がありません"))?
+                std::env::var(other).with_context(|| format!("environment variable {other} is not set"))?
             } else {
-                bail!("キーの取得元 '{source}' は不明です（keychain / keychain:<名前>/<変数名> / env:VAR）");
+                bail!("unknown key source '{source}' (keychain / keychain:<name>/<VAR> / env:VAR)");
             };
-            env_summary.push(format!("{var}=***({}文字)", value.len()));
+            env_summary.push(format!("{var}=***({} chars)", value.len()));
             secrets.push(value.clone());
             env_set.push((var.clone(), value));
         }

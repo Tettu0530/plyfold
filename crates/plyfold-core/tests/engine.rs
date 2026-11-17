@@ -1,4 +1,4 @@
-//! 模擬エージェントを相手にしたエンジンの結合テスト（トークンは使わない）
+//! Engine integration tests against the mock agent (no tokens spent)
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -9,7 +9,7 @@ use plyfold_core::{Engine, EngineEvent, EngineOptions, StartSession, Status};
 use plyfold_profile::{Config, MemoryStore};
 use tokio::sync::broadcast::Receiver;
 
-/// 模擬エージェントのバイナリを一度だけビルドして、パスを返す
+/// Build the mock agent binary once and return its path
 fn mock_agent() -> PathBuf {
     static PATH: OnceLock<PathBuf> = OnceLock::new();
     PATH.get_or_init(|| {
@@ -18,7 +18,7 @@ fn mock_agent() -> PathBuf {
             .status()
             .unwrap()
             .success();
-        assert!(ok, "模擬エージェントをビルドできません");
+        assert!(ok, "failed to build the mock agent");
         let target = std::env::var("CARGO_TARGET_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|_| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target"));
@@ -74,7 +74,7 @@ async fn wait_for<F: Fn(&EngineEvent) -> bool>(rx: &mut Receiver<EngineEvent>, f
         }
     })
     .await
-    .expect("イベントが届きません")
+    .expect("no event arrived")
 }
 
 fn is_status(e: &EngineEvent, want: Status) -> bool {
@@ -118,13 +118,13 @@ async fn worktree_session_with_permission_and_diff() {
     }
     wait_for(&mut rx, |e| is_status(e, Status::Idle)).await;
 
-    // 差分は worktree の中だけ。元のリポジトリは汚れない
+    // The diff stays inside the worktree; the original repository is untouched
     let d = eng.diff(&s.id).unwrap();
     let paths: Vec<_> = d.files.iter().map(|f| f.path.as_str()).collect();
     assert!(paths.contains(&"mock-output.txt"), "{paths:?}");
     assert!(!repo.join("mock-output.txt").exists());
 
-    // 送受信はすべて記録されている
+    // Every frame sent and received is recorded
     let events = eng.store().events(&s.id, None, 10_000).unwrap();
     assert!(events.iter().any(|e| e.payload.contains("session/request_permission")));
 
@@ -151,7 +151,7 @@ async fn cancel_resolves_pending_permission_and_stops_turn() {
         _ => unreachable!(),
     }
 
-    // 権限確認の返事待ちのまま中断 → 権限確認はキャンセルで返る
+    // Cancel while a permission request is pending → the request is answered as cancelled
     eng.prompt(&s.id, "permission").unwrap();
     wait_for(&mut rx, |e| matches!(e, EngineEvent::PermissionRequested { .. })).await;
     eng.cancel(&s.id).await.unwrap();
@@ -172,9 +172,9 @@ async fn stall_detection_and_recovery() {
         .start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.clone(), worktree: false })
         .await
         .unwrap();
-    eng.prompt(&s.id, "silent").unwrap(); // 3 秒黙る
+    eng.prompt(&s.id, "silent").unwrap(); // stays silent for 3 s
     wait_for(&mut rx, |e| is_status(e, Status::Stalled)).await;
-    wait_for(&mut rx, |e| is_status(e, Status::Working)).await; // 何か届いたら戻る
+    wait_for(&mut rx, |e| is_status(e, Status::Working)).await; // recovers once something arrives
     wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { .. })).await;
     eng.close_session(&s.id).await.unwrap();
 }
@@ -193,14 +193,14 @@ async fn reopen_after_close_and_restart_uses_session_load() {
         eng.prompt(&s.id, "remember me").unwrap();
         wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { .. })).await;
         s.id
-        // エンジンを捨てる（アプリの再起動に相当。プロセスは kill_on_drop で止まる）
+        // Drop the engine (like restarting the app; the process is stopped by kill_on_drop)
     };
     tokio::time::sleep(Duration::from_millis(200)).await;
     let eng = engine(&state, 60_000);
     assert_eq!(eng.store().get_session(&id).unwrap().status, Status::Closed);
     let mut rx = eng.subscribe();
     eng.reopen_session(&id).await.unwrap();
-    // 履歴が再送される
+    // The history is resent
     let e = wait_for(&mut rx, |e| matches!(e, EngineEvent::Update { update, .. } if update["sessionUpdate"] == "user_message_chunk")).await;
     if let EngineEvent::Update { update, .. } = e {
         assert_eq!(update["content"]["text"], "remember me");
@@ -226,7 +226,7 @@ async fn keyed_profile_secret_is_redacted_in_log_and_launch_failure_is_reported(
     assert!(all.contains("***"));
     eng.close_session(&s.id).await.unwrap();
 
-    // worktree を頼んだのに git リポジトリでない → Error として記録される
+    // Worktree requested but not a git repository → recorded as Error
     let err = eng
         .start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.join("nope"), worktree: true })
         .await;
@@ -257,7 +257,7 @@ async fn turn_end_is_delivered_after_all_updates_of_the_turn() {
                 _ => {}
             }
         }
-        assert_eq!(got, format!("echo: {text}"), "ターン {i} の発言がターン終了の後に届いた");
+        assert_eq!(got, format!("echo: {text}"), "turn {i}: the message arrived after the turn ended");
         wait_for(&mut rx, |e| is_status(e, Status::Idle)).await;
     }
     eng.close_session(&s.id).await.unwrap();
@@ -278,7 +278,7 @@ async fn session_info_config_switching_and_usage() {
     assert_eq!(info.option(Category::Model).unwrap().current.as_deref(), Some("mock-large"));
     assert_eq!(info.option(Category::ThoughtLevel).unwrap().id, "effort");
 
-    // カテゴリで切り替え（ID の違いを気にしない）
+    // Switch by category (regardless of the ID)
     eng.set_by_category(&s.id, Category::ThoughtLevel, "high").await.unwrap();
     eng.set_by_category(&s.id, Category::Mode, "plan").await.unwrap();
     let info = eng.session_info(&s.id).unwrap();
@@ -286,7 +286,7 @@ async fn session_info_config_switching_and_usage() {
     assert_eq!(info.option(Category::Mode).unwrap().current.as_deref(), Some("plan"));
     assert!(eng.set_by_category(&s.id, Category::Model, "no-such-model").await.is_err());
 
-    // ターンの後に使用量が入る。Info はターン終了より前に届く
+    // Usage is filled in after the turn. Info arrives before the turn ends
     eng.prompt(&s.id, "count my tokens please").unwrap();
     let mut saw_info_with_turn = false;
     loop {
@@ -296,7 +296,7 @@ async fn session_info_config_switching_and_usage() {
             _ => {}
         }
     }
-    assert!(saw_info_with_turn, "ターン終了の前に使用量の Info が届くこと");
+    assert!(saw_info_with_turn, "usage Info should arrive before the turn ends");
     let info = eng.session_info(&s.id).unwrap();
     let turn = info.last_turn.unwrap();
     assert_eq!(turn.usage.unwrap().input, 100);
@@ -318,7 +318,7 @@ async fn check_profile_reports_reply_and_model() {
     assert_eq!(r.configured_model.as_deref(), Some("mock-large"));
     assert_eq!(r.reported_model.as_deref(), Some("mock-large-2026"));
     assert!(r.first_text_ms.is_some());
-    // 記録には残さない
+    // Not recorded
     assert!(engine.store().list_sessions().unwrap().is_empty());
 
     let bad = engine.check_profile("nope").await;
@@ -339,7 +339,7 @@ async fn reopen_falls_back_to_new_session_when_agent_lost_the_transcript() {
     wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { .. })).await;
     let old_sid = eng.store().get_session(&s.id).unwrap().acp_session_id.unwrap();
     eng.close_session(&s.id).await.unwrap();
-    // エージェントの側の記録を消す（書き残す前に落ちた場合に相当）
+    // Delete the agent's own record (like a crash before it was saved)
     std::fs::remove_dir_all(base.join(".plyfold-mock")).unwrap();
 
     eng.reopen_session(&s.id).await.unwrap();

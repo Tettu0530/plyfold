@@ -1,9 +1,9 @@
-// エージェントの発言を Markdown として描く（react-markdown + remark-gfm: 表、チェックリスト、取り消し線、自動リンク）
+// Render agent messages as Markdown (react-markdown + remark-gfm: tables, task lists, strikethrough, autolinks)
 //
-// - 見た目は shadcn のトークンだけで作る（文字の大きさは 12 / 13 / 14 / 16 px の 4 段階）
-// - リンクは既定のブラウザで開く（WebView の中で開くとアプリの画面が替わる）
-// - 外の画像は読み込まない（会話の中から勝手に通信しない）。代わりに代替テキストをリンクとして出す
-// - HTML は描かない（react-markdown の既定。エージェントの出力に混ざった HTML を実行しない）
+// - Styled with shadcn tokens only (four text sizes: 12 / 13 / 14 / 16 px)
+// - Links open in the default browser (opening inside the WebView would replace the app's screen)
+// - External images are not loaded (no network requests from the transcript). Their alt text is shown as a link instead
+// - HTML is not rendered (react-markdown's default; HTML mixed into agent output never runs)
 import { memo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -19,7 +19,7 @@ function openLink(href: string | undefined) {
   else window.open(href, "_blank", "noopener");
 }
 
-/** コードの塊: 言語の名前とコピーのボタンを上に出す */
+/** Code block: shows the language name and a copy button on top */
 function CodeBlock({ lang, code }: { lang: string | null; code: string }) {
   const t = useT();
   return (
@@ -35,7 +35,7 @@ function CodeBlock({ lang, code }: { lang: string | null; code: string }) {
   );
 }
 
-/** 外の画像は読み込まず、代替テキストをリンクとして出す */
+/** Don't load external images; show the alt text as a link */
 function ImageLink({ src, alt }: { src: string | undefined; alt: string | undefined }) {
   const t = useT();
   return (
@@ -107,13 +107,13 @@ const components: Components = {
   code: ({ className, children }) => {
     const text = String(children ?? "");
     const lang = /language-([\w+-]+)/.exec(className ?? "")?.[1] ?? null;
-    // 塊のコード（``` で囲んだもの）は言語の class が付くか、改行を含む
+    // Block code (fenced with ```) has a language class or contains a newline
     if (lang || text.includes("\n")) return <CodeBlock lang={lang} code={text.replace(/\n$/, "")} />;
     return <code className="rounded-[4px] bg-muted px-1 py-px font-mono text-[12px]">{children}</code>;
   },
 };
 
-/** Markdown の本文。streaming のあいだは、最後の要素の後ろに書いている印を出す */
+/** Markdown body. While streaming, shows a typing indicator after the last element */
 export const Markdown = memo(function Markdown({ text, streaming }: { text: string; streaming?: boolean }) {
   return (
     <div lang={contentLang(text)} className={cn("min-w-0 break-words select-text", streaming && "md-streaming")}>

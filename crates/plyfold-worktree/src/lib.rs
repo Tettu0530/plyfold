@@ -1,7 +1,7 @@
-//! セッションごとの git worktree と、その差分
+//! One git worktree per session, and its diff
 //!
-//! エージェントごとに作業場所を分けて、同じリポジトリを触ってもぶつからないようにする。
-//! 差分は ACP の diff に頼らず git から作る（Codex や OpenCode は diff を返さないため）。
+//! Each agent gets its own working directory, so agents touching the same repository do not collide.
+//! Diffs come from git rather than ACP diffs (Codex and OpenCode do not return diffs).
 
 pub mod ops;
 pub use ops::WtStatus;
@@ -25,11 +25,11 @@ pub enum WorktreeError {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Worktree {
-    /// 元のリポジトリのルート
+    /// Root of the original repository
     pub repo: PathBuf,
     pub path: PathBuf,
     pub branch: String,
-    /// 作ったときのコミット（差分の基準）
+    /// The commit at creation time (the diff base)
     pub base: String,
 }
 
@@ -38,7 +38,7 @@ pub struct FileStat {
     pub path: String,
     pub added: u32,
     pub removed: u32,
-    /// git がまだ追跡していない新しいファイル
+    /// A new file git does not track yet
     pub untracked: bool,
     pub binary: bool,
 }
@@ -46,7 +46,7 @@ pub struct FileStat {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct Diff {
     pub files: Vec<FileStat>,
-    /// unified diff（そのまま表示できる）
+    /// Unified diff (ready to display as is)
     pub patch: String,
 }
 
@@ -61,7 +61,7 @@ fn git(dir: &Path, args: &[&str]) -> Result<String, WorktreeError> {
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
-/// 終了コード 1 も成功扱い（`git diff --no-index` は差分があると 1 を返す）
+/// Exit code 1 also counts as success (`git diff --no-index` returns 1 when there are differences)
 fn git_diff_ok(dir: &Path, args: &[&str]) -> Result<String, WorktreeError> {
     let out = Command::new("git").args(args).current_dir(dir).output()?;
     match out.status.code() {
@@ -79,7 +79,7 @@ pub fn repo_root(dir: &Path) -> Result<PathBuf, WorktreeError> {
         .map_err(|_| WorktreeError::NotARepo(dir.to_path_buf()))
 }
 
-/// worktree を置く場所の管理
+/// Manages where worktrees are placed
 pub struct Worktrees {
     root: PathBuf,
 }
@@ -89,7 +89,7 @@ impl Worktrees {
         Self { root: root.into() }
     }
 
-    /// `base` を省くと、今の HEAD から切る
+    /// Without `base`, branches off the current HEAD
     pub fn create(&self, repo: &Path, session_id: &str, base: Option<&str>) -> Result<Worktree, WorktreeError> {
         let repo = repo_root(repo)?;
         let base = git(&repo, &["rev-parse", "--verify", &format!("{}^{{commit}}", base.unwrap_or("HEAD"))])?
@@ -103,7 +103,7 @@ impl Worktrees {
         Ok(Worktree { repo, path, branch, base })
     }
 
-    /// worktree を消す。`delete_branch` なら枝も消す（作業内容は失われる）
+    /// Removes the worktree. With `delete_branch`, also deletes the branch (the work is lost)
     pub fn remove(&self, wt: &Worktree, delete_branch: bool) -> Result<(), WorktreeError> {
         git(&wt.repo, &["worktree", "remove", "--force", &wt.path.display().to_string()])?;
         if delete_branch {
@@ -113,7 +113,7 @@ impl Worktrees {
     }
 }
 
-/// 基準のコミットから、今の作業ツリーまでの差分（コミット済み・未コミット・未追跡をすべて含む）
+/// Diff from the base commit to the current working tree (committed, uncommitted and untracked)
 pub fn diff(wt: &Worktree) -> Result<Diff, WorktreeError> {
     let dir = &wt.path;
     let mut out = Diff::default();
@@ -150,7 +150,7 @@ pub fn diff(wt: &Worktree) -> Result<Diff, WorktreeError> {
 }
 
 fn short_hash(s: &str) -> String {
-    // FNV-1a（安定していればよい）
+    // FNV-1a (it only needs to be stable)
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for b in s.bytes() {
         h ^= b as u64;
@@ -211,10 +211,10 @@ mod tests {
         assert!(wt.path.join("a.txt").exists());
         assert_eq!(wt.branch, "plyfold/s1");
 
-        // 変更なし
+        // No changes
         assert!(diff(&wt).unwrap().files.is_empty());
 
-        // 既存ファイルの変更 + 未追跡の新規 + 無視されるファイル
+        // A modified file + a new untracked file + an ignored file
         std::fs::write(wt.path.join("a.txt"), "one\nTWO\nthree\n").unwrap();
         std::fs::write(wt.path.join("new.txt"), "hello\n").unwrap();
         std::fs::create_dir_all(wt.path.join("target")).unwrap();
@@ -226,7 +226,7 @@ mod tests {
         assert_eq!((d.files[1].added, d.files[1].untracked), (1, true));
         assert!(d.patch.contains("+TWO") && d.patch.contains("+hello"));
 
-        // 元のリポジトリには影響しない
+        // The original repository is untouched
         assert_eq!(std::fs::read_to_string(repo.join("a.txt")).unwrap(), "one\ntwo\n");
 
         wts.remove(&wt, true).unwrap();

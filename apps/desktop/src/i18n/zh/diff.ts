@@ -1,4 +1,4 @@
-// DiffView.tsx（差分の画面）
+// DiffView.tsx (diff screen)
 import type { diff as source } from "../ja/diff";
 
 export const diff: Record<keyof typeof source, string> = {

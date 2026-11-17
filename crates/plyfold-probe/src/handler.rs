@@ -1,4 +1,4 @@
-//! エージェントから来るリクエスト（権限確認・ファイル読み書き）と通知（session/update）の処理
+//! Handling of agent requests (permission, file read/write) and notifications (session/update)
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write as _;
@@ -14,23 +14,23 @@ use crate::conn::{Conn, Incoming, RpcError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum Policy {
-    /// 毎回ターミナルで選ぶ
+    /// Choose in the terminal every time
     Ask,
-    /// 一度だけ許可する選択肢を自動で選ぶ
+    /// Automatically pick the allow-once option
     Allow,
-    /// 一度だけ拒否する選択肢を自動で選ぶ
+    /// Automatically pick the reject-once option
     Reject,
 }
 
 #[derive(Debug, Default, Clone, Serialize)]
 pub struct Stats {
-    /// sessionUpdate の種類ごとの件数
+    /// Count per sessionUpdate kind
     pub updates: BTreeMap<String, u64>,
-    /// エージェントから来たリクエストのメソッドごとの件数
+    /// Count of agent requests per method
     pub agent_requests: BTreeMap<String, u64>,
     pub permission_option_kinds: BTreeSet<String>,
     pub tool_kinds: BTreeSet<String>,
-    /// ツール呼び出しの content に出てきた type（diff, terminal, content など）
+    /// Types seen in tool call content (diff, terminal, content, ...)
     pub tool_content_types: BTreeSet<String>,
     pub diff_paths: BTreeSet<String>,
     pub agent_text_chars: usize,
@@ -41,11 +41,11 @@ pub struct Shared {
     pub label: String,
     pub policy: Policy,
     pub cwd: PathBuf,
-    /// true なら本文のストリームを出さず、ツールなどのイベントだけを出す
+    /// When true, print only events such as tool calls, not the streamed text
     pub quiet: bool,
     pub cancelled: AtomicBool,
     pub stats: Mutex<Stats>,
-    /// 1 ターン分の記録（bench 用。ターンの前に reset_turn で消す）
+    /// Record of one turn (for bench; cleared with reset_turn before each turn)
     pub turn: Mutex<Turn>,
 }
 
@@ -53,9 +53,9 @@ pub struct Shared {
 pub struct Turn {
     pub text: String,
     pub first_text_at: Option<std::time::Instant>,
-    /// usage_update の used（コンテキストに入っているトークン数）
+    /// `used` from usage_update (tokens currently in context)
     pub used: Option<u64>,
-    /// usage_update の _meta._claude/model（API が返した実際のモデル名）
+    /// _meta._claude/model from usage_update (the actual model name the API returned)
     pub model: Option<String>,
 }
 
@@ -86,7 +86,7 @@ impl Shared {
 
     pub fn note(&self, msg: impl Into<String>) {
         let msg = msg.into();
-        self.event(&format!("※ {msg}"));
+        self.event(&format!("note: {msg}"));
         self.stats.lock().unwrap().notes.push(msg);
     }
 }
@@ -99,7 +99,7 @@ pub fn spawn_dispatcher(conn: Arc<Conn>, mut rx: mpsc::UnboundedReceiver<Incomin
                     if method == "session/update" {
                         on_update(&shared, &params);
                     } else {
-                        shared.event(&format!("[通知] {method}"));
+                        shared.event(&format!("[notify] {method}"));
                         *shared.stats.lock().unwrap().updates.entry(format!("(notify) {method}")).or_default() += 1;
                     }
                 }
@@ -107,7 +107,7 @@ pub fn spawn_dispatcher(conn: Arc<Conn>, mut rx: mpsc::UnboundedReceiver<Incomin
                     *shared.stats.lock().unwrap().agent_requests.entry(method.clone()).or_default() += 1;
                     let conn = conn.clone();
                     let shared = shared.clone();
-                    // 権限確認で入力待ちになっても、通知の処理を止めない
+                    // Keep handling notifications while a permission prompt waits for input
                     tokio::spawn(async move { on_request(&conn, &shared, id, &method, params).await });
                 }
             }
@@ -161,9 +161,9 @@ fn on_update(shared: &Shared, params: &Value) {
             let id = update["toolCallId"].as_str().unwrap_or("");
             drop(stats);
             if kind == "tool_call" {
-                shared.event(&format!("[ツール] {title} ({}) {status}  id={id}", update["kind"].as_str().unwrap_or("?")));
+                shared.event(&format!("[tool] {title} ({}) {status}  id={id}", update["kind"].as_str().unwrap_or("?")));
             } else if matches!(status, "completed" | "failed") {
-                shared.event(&format!("[ツール {status}] id={id} {title}"));
+                shared.event(&format!("[tool {status}] id={id} {title}"));
             }
         }
         "plan" => {
@@ -176,7 +176,7 @@ fn on_update(shared: &Shared, params: &Value) {
                 })
                 .unwrap_or_default();
             drop(stats);
-            shared.event(&format!("[計画]\n{}", entries.join("\n")));
+            shared.event(&format!("[plan]\n{}", entries.join("\n")));
         }
         "usage_update" => {
             let mut turn = shared.turn.lock().unwrap();
@@ -187,11 +187,11 @@ fn on_update(shared: &Shared, params: &Value) {
                 turn.model = Some(m.to_string());
             }
         }
-        // 頻繁に来るものは件数だけ数える
+        // Frequent updates are only counted
         "available_commands_update" | "session_info_update" => {}
         other => {
             drop(stats);
-            shared.event(&format!("[更新] {other}"));
+            shared.event(&format!("[update] {other}"));
         }
     }
 }
@@ -213,7 +213,7 @@ async fn on_request(conn: &Conn, shared: &Shared, id: Value, method: &str, param
             Err(e) => conn.respond_error(id, -32002, &e).await,
         },
         other => {
-            shared.note(format!("未対応のリクエスト {other} を受信（method not found で返答）"));
+            shared.note(format!("received unsupported request {other} (answered with method not found)"));
             conn.respond_error(id, RpcError::METHOD_NOT_FOUND, "not supported by plyfold-probe").await;
         }
     }
@@ -240,7 +240,7 @@ async fn permission(shared: &Shared, params: &Value) -> Value {
             stats.permission_option_kinds.insert(kind.clone());
         }
     }
-    let title = params["toolCall"]["title"].as_str().unwrap_or("(タイトルなし)");
+    let title = params["toolCall"]["title"].as_str().unwrap_or("(untitled)");
 
     if shared.cancelled.load(Ordering::SeqCst) {
         return json!({ "outcome": { "outcome": "cancelled" } });
@@ -259,11 +259,11 @@ async fn permission(shared: &Shared, params: &Value) -> Value {
         Policy::Reject => pick("reject_once", "reject"),
         Policy::Ask => {
             let _guard = ASK_LOCK.lock().await;
-            let mut menu = format!("[権限確認] {title}\n");
+            let mut menu = format!("[permission] {title}\n");
             for (i, (_, name, kind)) in options.iter().enumerate() {
                 menu += &format!("  {}) {name}  ({kind})\n", i + 1);
             }
-            menu += "  c) キャンセル\n番号を入力: ";
+            menu += "  c) cancel\nEnter a number: ";
             print!("\n{menu}");
             let _ = std::io::stdout().flush();
             let line = tokio::task::spawn_blocking(|| {
@@ -279,29 +279,29 @@ async fn permission(shared: &Shared, params: &Value) -> Value {
 
     match chosen {
         Some(option_id) => {
-            shared.event(&format!("[権限確認] {title} → {option_id}"));
+            shared.event(&format!("[permission] {title} → {option_id}"));
             json!({ "outcome": { "outcome": "selected", "optionId": option_id } })
         }
         None => {
-            shared.event(&format!("[権限確認] {title} → cancelled"));
+            shared.event(&format!("[permission] {title} → cancelled"));
             json!({ "outcome": { "outcome": "cancelled" } })
         }
     }
 }
 
-/// 作業ディレクトリの外は読み書きさせない
+/// Refuse reads and writes outside the working directory
 fn inside_cwd(shared: &Shared, path: &Path) -> Result<PathBuf, String> {
     let cwd = shared.cwd.canonicalize().map_err(|e| e.to_string())?;
-    let parent = path.parent().ok_or("親ディレクトリがありません")?;
+    let parent = path.parent().ok_or("no parent directory")?;
     let parent = parent.canonicalize().map_err(|e| format!("{}: {e}", parent.display()))?;
     if !parent.starts_with(&cwd) {
-        return Err(format!("作業ディレクトリの外です: {}", path.display()));
+        return Err(format!("outside the working directory: {}", path.display()));
     }
-    Ok(parent.join(path.file_name().ok_or("ファイル名がありません")?))
+    Ok(parent.join(path.file_name().ok_or("no file name")?))
 }
 
 fn read_text_file(shared: &Shared, params: &Value) -> Result<String, String> {
-    let path = inside_cwd(shared, Path::new(params["path"].as_str().ok_or("path がありません")?))?;
+    let path = inside_cwd(shared, Path::new(params["path"].as_str().ok_or("missing path")?))?;
     let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let line = params["line"].as_u64().unwrap_or(1).max(1) as usize;
     let limit = params["limit"].as_u64().map(|n| n as usize);
@@ -313,9 +313,9 @@ fn read_text_file(shared: &Shared, params: &Value) -> Result<String, String> {
 }
 
 fn write_text_file(shared: &Shared, params: &Value) -> Result<(), String> {
-    let path = inside_cwd(shared, Path::new(params["path"].as_str().ok_or("path がありません")?))?;
-    let content = params["content"].as_str().ok_or("content がありません")?;
+    let path = inside_cwd(shared, Path::new(params["path"].as_str().ok_or("missing path")?))?;
+    let content = params["content"].as_str().ok_or("missing content")?;
     std::fs::write(&path, content).map_err(|e| e.to_string())?;
-    shared.event(&format!("[fs] 書き込み {}", path.display()));
+    shared.event(&format!("[fs] wrote {}", path.display()));
     Ok(())
 }

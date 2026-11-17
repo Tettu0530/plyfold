@@ -1,8 +1,8 @@
-//! Plyfold の ACP クライアント
+//! Plyfold's ACP client
 //!
-//! - 輸送（[`transport`]）は自前の小さな JSON-RPC。送受信した全メッセージを [`FrameSink`] に流せる
-//! - 型は公式の `agent-client-protocol-schema`（v1）を使う。ただし未知の更新でも落ちないよう、
-//!   session/update は生の JSON も必ず残す（[`AgentMessage::Update`]）
+//! - The transport ([`transport`]) is a small in-house JSON-RPC. Every message sent or received can be fed to a [`FrameSink`]
+//! - Types come from the official `agent-client-protocol-schema` (v1). So that unknown updates do not break us,
+//!   session/update always keeps the raw JSON as well ([`AgentMessage::Update`])
 
 pub mod client;
 pub mod redact;

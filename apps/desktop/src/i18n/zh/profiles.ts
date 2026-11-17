@@ -1,4 +1,4 @@
-// ProfilesView.tsx（プロファイルの画面）
+// ProfilesView.tsx (profiles screen)
 import type { profiles as source } from "../ja/profiles";
 
 export const profiles: Record<keyof typeof source, string> = {

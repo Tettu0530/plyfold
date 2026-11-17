@@ -1,16 +1,16 @@
-# plyfold-probe の設定
+# plyfold-probe configuration
 #
-# [agents.<id>]   ACP サーバーとして起動するコマンド
-#   config_dir_env  プロファイルを分けるときに、設定ディレクトリを差し替える環境変数（未検証のものあり）
-#   key_envs        親プロセスから引き継がない環境変数（キーが混ざらないようにする）
+# [agents.<id>]   command that starts the agent as an ACP server
+#   config_dir_env  env var that redirects the config directory when profiles are separated (some unverified)
+#   key_envs        env vars NOT inherited from the parent process (so keys never mix)
 #
-# [profiles.<name>]  エージェント × 認証情報の組
-#   isolate = true   設定ディレクトリをプロファイル専用にする
-#   keys             環境変数名 = 取得元
-#                      "keychain"      → plyfold-probe keys set <profile> <ENV> で登録したもの
-#                      "env:OTHER_VAR" → 今の環境変数から取る
+# [profiles.<name>]  an agent x credentials pair
+#   isolate = true   give the profile its own config directory
+#   keys             ENV_VAR_NAME = source
+#                      "keychain"      -> stored with: plyfold-probe keys set <profile> <ENV>
+#                      "env:OTHER_VAR" -> taken from the current environment
 #
-# エージェント名をそのまま指定すると、何も上書きしない既定プロファイルで動く（既存のログインを使う）
+# Passing a bare agent name runs a default profile that overrides nothing (uses the existing login)
 
 [agents.claude]
 command = "npx"
@@ -27,7 +27,7 @@ key_envs = ["OPENAI_API_KEY", "CODEX_API_KEY"]
 [agents.opencode]
 command = "opencode"
 args = ["acp"]
-# OpenCode の設定・認証の置き場所は XDG に従う想定（未検証）
+# OpenCode is assumed to keep its config and auth under XDG paths (unverified)
 config_dir_env = "XDG_DATA_HOME"
 key_envs = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"]
 
@@ -36,7 +36,7 @@ command = "npx"
 args = ["-y", "@google/gemini-cli@0.68.0", "--experimental-acp"]
 key_envs = ["GEMINI_API_KEY", "GOOGLE_API_KEY"]
 
-# --- プロファイルの例（キーを登録してから使う） ---
+# --- Example profiles (store the keys first) ---
 
 [profiles.claude-key-a]
 agent = "claude"

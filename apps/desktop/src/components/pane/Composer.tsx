@@ -35,7 +35,7 @@ function modeChoices(info: SessionInfo | null): string[] {
   return info?.modes.map((m) => m.value) ?? [];
 }
 
-/** コンテキストの使用率。押すと内訳を出す */
+/** Context usage. Click to show the breakdown */
 function ContextMeter({ info, pct, scope }: { info: SessionInfo; pct: number; scope: string }) {
   const anchor = `${scope}:ctx`;
   const menu = useLiquidMenu(`menu:${anchor}`, anchor);
@@ -94,7 +94,7 @@ function ContextMeter({ info, pct, scope }: { info: SessionInfo; pct: number; sc
   );
 }
 
-/** 入力欄のすぐ上: model / effort / mode と、コンテキストの使用量 */
+/** Right above the input: model / effort / mode, and context usage */
 export function ControlRow({
   agent,
   info,
@@ -105,9 +105,9 @@ export function ControlRow({
   agent: string;
   info: SessionInfo | null;
   onSet: (c: Category, v: string) => void;
-  /** 設定項目がまだ分からないときに出す文 */
+  /** Text shown while the config options are not known yet */
   empty?: string;
-  /** 分離アニメーションの出発点の名前を、ペインごとに分けるため（セッションか下書きの id） */
+  /** Per-pane name for the separation animation's origin (session or draft id) */
   scope: string;
 }) {
   const t = useT();
@@ -195,7 +195,7 @@ export function ControlRow({
   );
 }
 
-/** ターンの途中に送った指示の並び。ターンが終わると先頭から送る */
+/** Messages sent mid-turn. Sent in order from the front once the turn ends */
 function QueueList({ items, busy, onRemove, onSendNow }: { items: Queued[]; busy: boolean; onRemove: (key: string) => void; onSendNow: () => void }) {
   const t = useT();
   return (
@@ -264,7 +264,7 @@ export function Composer({
   agent: string;
   info: SessionInfo | null;
   disabled: boolean;
-  /** ターンの途中（送るとキューに積む。文が空なら送るボタンは停止になる） */
+  /** Mid-turn (sending queues the message; with empty text the send button becomes stop) */
   busy?: boolean;
   placeholder: string;
   onSend: (text: string, attachments: Attached[]) => void;
@@ -280,7 +280,7 @@ export function Composer({
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
   const textRef = useAutoGrow(text);
   const canSend = !disabled && (!!text.trim() || att.items.length > 0);
-  // 途中で文が空なら、送るボタンは停止になる
+  // Mid-turn with empty text, the send button becomes stop
   const stopMode = busy && !text.trim() && att.items.length === 0 && !!onStop;
   const send = () => {
     if (!canSend) return;
@@ -308,7 +308,7 @@ export function Composer({
               e.preventDefault();
               send();
             } else if (e.key === "Escape" && busy && onStop && !isImeKey(e)) {
-              // 作業中は esc で中断（Claude Code と同じ）
+              // While working, esc interrupts (same as Claude Code)
               e.preventDefault();
               onStop();
             } else if (e.key === "Tab" && e.shiftKey && modes.length > 0) {

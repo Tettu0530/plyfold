@@ -1,4 +1,4 @@
-// pane/PermissionCard.tsx（権限確認）
+// pane/PermissionCard.tsx (permission prompts)
 export const permission = {
   label: "権限確認",
   defaultTitle: "ツールを実行してよいですか",

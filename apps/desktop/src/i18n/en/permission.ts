@@ -1,4 +1,4 @@
-// pane/PermissionCard.tsx（権限確認）
+// pane/PermissionCard.tsx (permission prompts)
 import type { permission as source } from "../ja/permission";
 
 export const permission: Record<keyof typeof source, string> = {

@@ -1,4 +1,4 @@
-// App.tsx（窓の見出し、ショートカットなど）
+// App.tsx (window title, shortcuts, etc.)
 export const app = {
   paneCount: "ペインの数",
   panes: "ペイン {count} 枚",

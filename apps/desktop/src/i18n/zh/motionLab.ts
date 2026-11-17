@@ -1,4 +1,4 @@
-// MotionLab.tsx（動きの見本）
+// MotionLab.tsx (motion samples)
 import type { motionLab as source } from "../ja/motionLab";
 
 export const motionLab: Record<keyof typeof source, string> = {

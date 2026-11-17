@@ -1,4 +1,4 @@
-// 入力欄に添えるもの: 画像は貼り付け（⌘V）、ファイルはペインに落とす。送る前に並べて見せ、× で外せる
+// Attachments for the input: paste images (⌘V), drop files onto the pane. Shown before sending; × removes one
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { FileText, ImageIcon, Paperclip, Plus, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -23,7 +23,7 @@ export function useAttachments() {
   useEffect(
     () =>
       addDropTarget({
-        // ペインのどこに落としても、そのペインの入力欄に添える
+        // Dropping anywhere on the pane attaches to that pane's input
         el: () => boxRef.current?.closest<HTMLElement>("[data-pane-index]") ?? boxRef.current,
         onOver: setOver,
         onDrop: (paths) => setItems((a) => [...a, ...paths.map(fromPath)]),
@@ -33,11 +33,11 @@ export function useAttachments() {
   const onPaste = (e: React.ClipboardEvent) => {
     const images = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
     if (images.length === 0) return;
-    // 文字も一緒なら、文字は普通に貼る
+    // If there is text as well, paste the text normally
     if (!e.clipboardData.types.includes("text/plain")) e.preventDefault();
     void Promise.all(images.map(readImage)).then((read) => setItems((a) => [...a, ...read]));
   };
-  /** macOS のファイルの選択を開いて添える（パスで渡すので、落としたときと同じ扱い） */
+  /** Open the macOS file picker and attach (passed as paths, so handled the same as a drop) */
   const pick = async (kind: "file" | "image") => {
     if (!inTauri) return;
     const picked = await openDialog({
@@ -93,10 +93,10 @@ function Chip({ a, onRemove }: { a: Attached; onRemove: () => void }) {
 
 const MENU_ITEM = "flex h-8 cursor-default items-center gap-2 rounded-md px-2 text-sm outline-none select-none data-[highlighted]:bg-accent";
 
-/** 入力欄の左の + : 添えるもののメニュー（ほかのメニューと同じ分離アニメーションで開く） */
+/** The + left of the input: attachment menu (opens with the same separation animation as other menus) */
 function AddMenu({ att }: { att: AttachmentsState }) {
   const t = useT();
-  // 文の中のキーの位置は言語で違うので、{keys} の前後で分けて Keys を挟む
+  // Where the keys sit in the sentence depends on the language, so split around {keys} and put Keys in between
   const [hintBefore, hintAfter = ""] = t("attach.pasteHint").split("{keys}").map((s) => s.trim());
   const anchor = `add:${useId()}`;
   const menu = useLiquidMenu(`menu:${anchor}`, anchor);
@@ -145,7 +145,7 @@ function AddMenu({ att }: { att: AttachmentsState }) {
   );
 }
 
-/** 入力欄の枠。添えたものを上に並べ、ファイルを持ってくると枠を明るくする */
+/** The input's frame. Lists attachments above it and highlights when a file is dragged over */
 export function AttachBox({ att, children }: { att: AttachmentsState; children: React.ReactNode }) {
   return (
     <div
@@ -176,7 +176,7 @@ export function AttachBox({ att, children }: { att: AttachmentsState; children: 
   );
 }
 
-/** 会話の中の自分の発言に添えたもの */
+/** Attachments on the user's own message in the transcript */
 export function SentAttachments({ items }: { items: { kind: "image" | "file"; name: string; src?: string }[] }) {
   return (
     <div className="flex flex-wrap justify-end gap-2">

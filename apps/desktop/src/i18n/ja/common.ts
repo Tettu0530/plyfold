@@ -1,4 +1,4 @@
-// どこでも使う語（閉じる、コピー、やめる など）。共有の語はここに置く
+// Words used everywhere (Close, Copy, Cancel, etc.). Shared words live here
 export const common = {
   close: "閉じる",
   cancel: "やめる",

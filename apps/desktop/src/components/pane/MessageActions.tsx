@@ -1,6 +1,6 @@
-// 会話の発言の操作（コピー、編集して送る、もう一度送る）と、生成中の印
+// Message actions in the transcript (copy, edit and send, send again) and the generating indicator
 //
-// ACP にはエージェント側の履歴を巻き戻す方法がない。編集ともう一度送るは、新しいターンとして送る（前のやり取りは残る）
+// ACP has no way to rewind the agent's history. Edit and send-again go out as new turns (earlier exchanges stay)
 import { Check, Copy, Pencil, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -14,7 +14,7 @@ import { t as translate, useT } from "@/i18n";
 const ICON_BUTTON =
   "flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40";
 
-/** 押すと文字をコピーし、少しのあいだ印を替える */
+/** Copies the text on click and swaps the icon briefly */
 export function CopyButton({ text, label }: { text: string; label?: string }) {
   const t = useT();
   const [done, setDone] = useState(false);
@@ -36,7 +36,7 @@ export function CopyButton({ text, label }: { text: string; label?: string }) {
   );
 }
 
-/** 発言の下に並べる操作。ふだんは隠し、発言にマウスを乗せるかフォーカスしたときに出す */
+/** Actions under a message. Hidden by default; shown on hover or focus */
 export function ActionRow({ align, children }: { align: "start" | "end"; children: React.ReactNode }) {
   return (
     <div
@@ -65,7 +65,7 @@ export function UserActions({ text, busy, onEdit, onResend }: { text: string; bu
   );
 }
 
-/** 自分の発言をその場で直して送る欄 */
+/** Inline editor for fixing and resending the user's own message */
 export function EditBox({ initial, onSend, onCancel }: { initial: string; onSend: (text: string) => void; onCancel: () => void }) {
   const t = useT();
   const [text, setText] = useState(initial);
@@ -77,7 +77,7 @@ export function EditBox({ initial, onSend, onCancel }: { initial: string; onSend
     el.focus();
     el.setSelectionRange(el.value.length, el.value.length);
   }, []);
-  // 中身に合わせて高さを変える
+  // Resize to fit the content
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -126,9 +126,9 @@ export function EditBox({ initial, onSend, onCancel }: { initial: string; onSend
   );
 }
 
-/** 生成中の印の文言: 最後に届いたものから、今なにをしているかを出す */
+/** Label for the generating indicator: what's happening now, based on the last thing received */
 export function workingLabel(items: TranscriptItem[]): string {
-  // このターンで実行中のツールがあれば、何が最後に届いても「実行しています」
+  // If a tool is running in this turn, show "running" whatever arrived last
   for (let i = items.length - 1; i >= 0 && items[i].kind !== "user"; i--) {
     const it = items[i];
     if (it.kind === "tool" && (it.status === "pending" || it.status === "in_progress")) return translate("message.running");

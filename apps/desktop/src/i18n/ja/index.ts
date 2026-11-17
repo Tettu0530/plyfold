@@ -1,4 +1,4 @@
-// 名前空間をまとめる（名前空間を足すときだけ触る）
+// Collects the namespaces (touch only when adding a namespace)
 import { common } from "./common";
 import { app } from "./app";
 import { sidebar } from "./sidebar";

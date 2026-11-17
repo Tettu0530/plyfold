@@ -1,9 +1,9 @@
-//! プロファイル = エージェント（CLI）× 認証情報 × 設定ディレクトリ
+//! Profile = agent (CLI) × credentials × config directory
 //!
-//! 1 つの CLI に複数のキーを持たせるのが前提条件。プロファイルを分けると:
-//! - キーはキーチェーンから取り出して、起動するときだけ環境変数で渡す
-//! - 親プロセスのキー系の環境変数は引き継がない（混ざらないようにする）
-//! - `isolate` なら CLI の設定ディレクトリをプロファイル専用にする（普段の設定に触らない）
+//! Multiple keys per CLI is a core premise. With separate profiles:
+//! - keys are read from the keychain and passed as env vars only at launch
+//! - key-related env vars from the parent process are not inherited (so they never mix)
+//! - with `isolate`, the CLI gets a config directory of its own (the usual config is left untouched)
 
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
@@ -43,7 +43,7 @@ pub enum ProfileError {
     Form(String),
 }
 
-/// ACP で起動するエージェント
+/// An agent launched over ACP
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AgentDef {
     pub command: String,
@@ -51,9 +51,9 @@ pub struct AgentDef {
     pub args: Vec<String>,
     #[serde(default)]
     pub env: BTreeMap<String, String>,
-    /// プロファイルを分けるときに差し替える、設定ディレクトリの環境変数
+    /// Env var for the config directory, overridden for separate profiles
     pub config_dir_env: Option<String>,
-    /// 既定プロファイル以外では親から引き継がない環境変数
+    /// Env vars not inherited from the parent except in the default profile
     #[serde(default)]
     pub key_envs: Vec<String>,
 }
@@ -61,24 +61,24 @@ pub struct AgentDef {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct ProfileDef {
     pub agent: String,
-    /// 画面に出す名前
+    /// Display name
     pub label: Option<String>,
     #[serde(default)]
     pub isolate: bool,
-    /// 環境変数名 → 取得元（"keychain" / "keychain:<名前>/<変数名>" / "env:VAR"）
+    /// Env var name → source ("keychain" / "keychain:<name>/<var>" / "env:VAR")
     #[serde(default)]
     pub keys: BTreeMap<String, String>,
-    /// 値の中の `{profile_dir}` はプロファイルのディレクトリに置き換わる
+    /// `{profile_dir}` in a value is replaced with the profile directory
     #[serde(default)]
     pub env: BTreeMap<String, String>,
-    /// isolate したディレクトリに置くファイル（相対パス → 中身）
+    /// Files to place in the isolated directory (relative path → contents)
     #[serde(default)]
     pub files: BTreeMap<String, String>,
-    /// isolate したディレクトリに張るシンボリックリンク（相対パス → リンク先。`~/` 可）。
-    /// ログイン情報は複製するとトークンの更新でぶつかるので、リンクで共有する
+    /// Symlinks to create in the isolated directory (relative path → target; `~/` allowed).
+    /// Login data is shared through links, since copies would conflict on token refresh
     #[serde(default)]
     pub links: BTreeMap<String, String>,
-    /// session/new の直後に切り替えるモード
+    /// Mode to switch to right after session/new
     pub default_mode: Option<String>,
 }
 
@@ -90,7 +90,7 @@ pub struct Config {
     pub profiles: BTreeMap<String, ProfileDef>,
 }
 
-/// 起動に必要なものを解決したもの
+/// Everything needed for a launch, resolved
 #[derive(Debug, Clone)]
 pub struct Resolved {
     pub profile: String,
@@ -98,7 +98,7 @@ pub struct Resolved {
     pub label: String,
     pub spawn: SpawnSpec,
     pub default_mode: Option<String>,
-    /// 表示用の環境変数の要約（値は伏せる）
+    /// Summary of env vars for display (values masked)
     pub env_summary: Vec<String>,
 }
 
@@ -137,7 +137,7 @@ pub fn builtin_agents() -> BTreeMap<String, AgentDef> {
 }
 
 impl Config {
-    /// 組み込みのエージェント定義の上に、ファイルの内容を重ねる
+    /// Layers the file's contents over the built-in agent definitions
     pub fn from_toml(text: &str) -> Result<Self, ProfileError> {
         let file: Config = toml::from_str(text)?;
         let mut cfg = Config { agents: builtin_agents(), profiles: BTreeMap::new() };
@@ -146,7 +146,7 @@ impl Config {
         Ok(cfg)
     }
 
-    /// ファイルがなければ組み込みの定義だけにする
+    /// Without a file, only the built-in definitions are used
     pub fn load(path: &Path) -> Result<Self, ProfileError> {
         match std::fs::read_to_string(path) {
             Ok(text) => Self::from_toml(&text),
@@ -155,7 +155,7 @@ impl Config {
         }
     }
 
-    /// `target` はプロファイル名かエージェント名（エージェント名なら、何も上書きしない既定プロファイル）
+    /// `target` is a profile or agent name (an agent name means the default profile, which overrides nothing)
     pub fn resolve(
         &self,
         target: &str,
@@ -259,7 +259,7 @@ fn expand_home(p: &str) -> PathBuf {
     }
 }
 
-/// macOS の既定の状態ディレクトリ
+/// Default state directory on macOS
 pub fn default_state_dir() -> PathBuf {
     expand_home("~/Library/Application Support/plyfold")
 }
@@ -278,7 +278,7 @@ mod tests {
     const TOML: &str = r#"
 [profiles.claude-proxy]
 agent = "claude"
-label = "Claude（プロキシ）"
+label = "Claude (proxy)"
 isolate = true
 keys = { ANTHROPIC_AUTH_TOKEN = "keychain:proxy/KEY" }
 env = { ANTHROPIC_BASE_URL = "https://example.invalid", HOME_HINT = "{profile_dir}/x" }
@@ -295,7 +295,7 @@ links = { "auth.json" = "/nonexistent/auth.json" }
     fn builtin_agent_as_default_profile() {
         let cfg = Config::from_toml("").unwrap();
         let r = cfg.resolve("claude", &tmp("d"), Path::new("/w"), &MemoryStore::default()).unwrap();
-        assert!(r.spawn.env_remove.is_empty(), "既定プロファイルは何も外さない");
+        assert!(r.spawn.env_remove.is_empty(), "the default profile removes nothing");
         assert!(r.spawn.env_set.is_empty());
         assert_eq!(r.spawn.cwd, Path::new("/w"));
     }
@@ -315,7 +315,7 @@ links = { "auth.json" = "/nonexistent/auth.json" }
         assert_eq!(r.spawn.secrets, vec!["sk-test-1234567890".to_string()]);
         assert!(dir.join(".claude.json").exists());
         assert!(r.env_summary.iter().all(|s| !s.contains("sk-test")));
-        assert_eq!(r.label, "Claude（プロキシ）");
+        assert_eq!(r.label, "Claude (proxy)");
     }
 
     #[test]

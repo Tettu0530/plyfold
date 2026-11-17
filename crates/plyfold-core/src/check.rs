@@ -1,5 +1,5 @@
-//! 接続テスト: プロファイルでエージェントを起動し、短い問い合わせを 1 回送って、
-//! 応答の速さと、応答したモデルを確かめる。セッションの記録には残さない。
+//! Connection test: launch the agent with a profile, send one short prompt,
+//! and check the response speed and which model answered. Nothing is recorded in the session log.
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -17,18 +17,18 @@ const TIMEOUT: Duration = Duration::from_secs(90);
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct CheckResult {
     pub ok: bool,
-    /// 送ってから最初の文字が届くまで
+    /// From sending until the first character arrives
     pub first_text_ms: Option<u64>,
-    /// 起動から応答が終わるまで
+    /// From launch until the response finishes
     pub total_ms: u64,
-    /// 応答の文（長ければ切る）
+    /// Reply text (truncated if long)
     pub reply: String,
-    /// API が返したモデル名（エージェントが教えてくれる場合だけ）
+    /// Model name returned by the API (only if the agent reports it)
     pub reported_model: Option<String>,
-    /// 設定で選ばれているモデル
+    /// Model selected in the config
     pub configured_model: Option<String>,
     pub error: Option<String>,
-    /// 終わった時刻（UNIX 秒）
+    /// Finish time (UNIX seconds)
     pub at: i64,
 }
 
@@ -76,7 +76,7 @@ async fn run(config: &Config, profile: &str, state_dir: &Path, secrets: &dyn Sec
                                 text.lock().unwrap().push_str(t);
                             }
                         }
-                        // テストでは何も許可しない
+                        // Nothing is permitted during the test
                         AgentMessage::PermissionRequest { request_id, .. } => {
                             let _ = client.respond_permission(request_id, None).await;
                         }
@@ -92,7 +92,7 @@ async fn run(config: &Config, profile: &str, state_dir: &Path, secrets: &dyn Sec
 
         let sent = Instant::now();
         let turn = client.prompt(&sid, PROMPT).await.map_err(|e| e.to_string())?;
-        // 応答の後に届く通知を少しだけ待つ
+        // Wait briefly for notifications that arrive after the response
         tokio::time::sleep(Duration::from_millis(150)).await;
         reader.abort();
 

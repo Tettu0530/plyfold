@@ -1,140 +1,158 @@
 ---
 name: no-ai-slop-ui
-description: Plyfold の UI（画面の試作、React のコンポーネント、CSS、文言、アニメーション）を作る・直す・レビューするときに必ず使う。AI が作りがちな量産的なデザイン（グラデーションの洗い、絵文字のアイコン、意味のないカード、嘘の数字、全部中央寄せ、過剰な角丸や影など）を防ぎ、shadcn/ui のトークンと Plyfold の動きの決まりに沿わせる。UI のコードや見た目を出す前に、最後のチェックリストで自己点検すること。
+description: Always use when building, fixing or reviewing Plyfold UI (screen prototypes, React components, CSS, copy, animation). Prevents the mass-produced look AI tends to generate (gradient washes, emoji icons, pointless cards, fake numbers, everything centered, excessive rounding and shadows) and keeps the work aligned with the shadcn/ui tokens and Plyfold's motion rules. Before showing any UI code or visuals, self-check against the checklist at the end.
 ---
 
-# AI slop を防ぐ UI の決まり
+# UI rules against AI slop
 
-Plyfold は、コーディングエージェントを長時間見張る道具。「見栄え」より「一目で状況が分かる」「疲れない」を優先する。
-下の決まりに反するものは、理由を説明できない限り出さない。
+Plyfold is a tool for watching coding agents over long stretches. It puts "see the state at a glance" and "doesn't tire you out" ahead of looking impressive.
+Do not ship anything that breaks the rules below unless you can explain why.
 
-## 1. 色
+## 1. Color
 
-- 土台は shadcn/ui のダークテーマ（neutral）のトークンだけを使う。生の 16 進を直書きしない（試作でも、トークン名をコメントで添える）
+- Use only the shadcn/ui dark theme (neutral) tokens as the base. Never hard-code raw hex values (in prototypes, add the token name in a comment)
 
-  | トークン | 値 | 用途 |
+  | Token | Value | Use |
   |---|---|---|
-  | background | `#0a0a0a` | 窓の地 |
-  | card / sidebar / popover | `#171717` | 面 |
-  | muted / accent / secondary | `#262626` | 強調面、hover |
-  | border | `rgba(255,255,255,.10)` | 境界線 |
-  | input | `rgba(255,255,255,.15)` | 入力欄の枠 |
-  | foreground | `#fafafa` | 本文 |
-  | muted-foreground | `#a1a1a1` | 補足 |
-  | primary | `#e5e5e5`（文字 `#171717`） | 主ボタン |
+  | background | `#0a0a0a` | Window background |
+  | card / sidebar / popover | `#171717` | Surfaces |
+  | muted / accent / secondary | `#262626` | Emphasized surfaces, hover |
+  | border | `rgba(255,255,255,.10)` | Borders |
+  | input | `rgba(255,255,255,.15)` | Input outlines |
+  | foreground | `#fafafa` | Body text |
+  | muted-foreground | `#a1a1a1` | Secondary text |
+  | primary | `#e5e5e5` (text `#171717`) | Primary button |
 
-- **色に意味を持たせる**。色を使ってよいのは「状態」と「差分」だけ
-  - 作業中 = emerald `#34d399`、権限確認待ち = amber `#fbbf24`、無応答 = orange `#fb923c`、エラー = red `#f87171`、待機・停止 = 無彩色
-  - 追加 = emerald 系、削除 = red 系
-- 状態は色だけで伝えない。**状態ごとのアイコン**と文字を必ず添える
-  - 作業中 = 回る輪（loader-circle）、権限確認待ち = 盾、無応答 = 砂時計、エラー = × 付きの円、待機 = 円、停止 = 四角
-- ブランドの色を新しく発明しない。アクセントの色は 1 つまで
+- **Color must carry meaning**. Color is allowed only for "state" and "diff"
+  - Working = emerald `#34d399`, waiting for permission = amber `#fbbf24`, stalled = orange `#fb923c`, error = red `#f87171`, idle / stopped = neutral
+  - Added = emerald tones, removed = red tones
+- Never convey state by color alone. Always add a **per-state icon** and text
+  - Working = spinning ring (loader-circle), waiting for permission = shield, stalled = hourglass, error = circle with ×, idle = circle, stopped = square
+- Don't invent new brand colors. At most one accent color
 
-## 2. 禁止（AI slop の典型）
+## 2. Banned (typical AI slop)
 
-- 紫〜青のグラデーション、背景のグラデーションの洗い、光る輪郭（glow）、ネオン
-- 絵文字のアイコン（✨🚀💡 など）。アイコンは lucide の線のアイコンだけ、16px、線幅 2
-- 意味のない装飾カード、左端だけ色のついた枠のカード、カードの中にカード
-- 何でもガラス（すりガラス）にすること。ガラスは「浮いている層」（ポップオーバー、ダイアログ、権限確認）だけ
-- 嘘の数字、架空の実績、lorem ipsum。分からない値は `—` か「未取得」と書く
-- 全部を中央寄せ。アプリの画面は左揃えが基本
-- 全部 `rounded-full` の錠剤形。角丸はトークン（ボタン 8px、カード 10px、入力欄 12px まで）
-- 大きな影の重ねがけ。影はダイアログとポップオーバーだけ
-- 見出しの乱用、太字の乱用、感嘆符、「さあ始めましょう！」のような煽る文言
-- 一般的すぎる文言（「Welcome to your dashboard」「Get started」）。何ができるかを具体的に書く
+- Purple-to-blue gradients, gradient background washes, glowing outlines (glow), neon
+- Emoji icons (✨🚀💡 etc.). Icons are lucide line icons only, 16px, stroke width 2
+- Decorative cards with no purpose, cards with only a colored left edge, cards inside cards
+- Making everything glass (frosted glass). Glass is only for "floating layers" (popovers, dialogs, permission requests)
+- Fake numbers, invented track records, lorem ipsum. Write `—` or "Not available" for unknown values
+- Centering everything. App screens are left-aligned by default
+- Pill shapes from `rounded-full` everywhere. Corner radii follow the tokens (buttons 8px, cards 10px, inputs up to 12px)
+- Stacked large shadows. Shadows only on dialogs and popovers
+- Overuse of headings or bold, exclamation marks, hype copy like "Let's get started!"
+- Overly generic copy ("Welcome to your dashboard", "Get started"). Say concretely what the user can do
 
-## 3. 文字とレイアウト
+## 3. Type and layout
 
-- 書体: Geist（本文）、Geist Mono（数値・パス・コマンド・トークン数）。日本語はヒラギノに任せる
-- 文字の大きさは 12 / 13 / 14 / 16 px の 4 段階だけ。本文 13px、補足 12px
-- 数値は等幅（`font-variant-numeric: tabular-nums` か Geist Mono）。桁がガタつかないこと
-- 余白は 4 の倍数（4, 8, 12, 16, 24）
-- **情報量を絞る**。常に見せるのは「今の判断に要るもの」だけにし、残りはホバー・展開・別画面に回す（段階的な開示）。
-  1 つの行やバーに 4 つ以上の情報を並べたくなったら、何を隠せるかを先に考える（ユーザーから「情報量が強い」と指摘あり）
-- 1 画面の主ボタンは 1 つまで
+- Fonts: Geist (body), Geist Mono (numbers, paths, commands, token counts). Leave CJK text to the system CJK font (`--font-cjk`: Hiragino for Japanese, PingFang SC for Chinese)
+- Only four type sizes: 12 / 13 / 14 / 16 px. Body 13px, secondary 12px
+- Numbers are tabular (`font-variant-numeric: tabular-nums` or Geist Mono). Digits must not jitter
+- Spacing in multiples of 4 (4, 8, 12, 16, 24)
+- **Keep information density low**. Always show only what the current decision needs; move the rest to hover, expansion or another screen (progressive disclosure).
+  If you are tempted to put four or more pieces of information in one row or bar, first decide what can be hidden (users have flagged the UI as too dense)
+- At most one primary button per screen
 
-## 4. 動き（Apple の動きの再現）
+## 4. Motion (reproducing Apple's motion)
 
-ガラスの見た目より、**Apple と同じ動き**を優先する。実装は `apps/desktop/src/components/motion.ts`。
+Prioritize **moving the way Apple's UI moves** over the glass look. The implementation is `apps/desktop/src/components/motion.ts`.
 
-- ばねは SwiftUI と同じ式（duration ＋ bounce → stiffness = (2π/d)²、damping = 4π(1−b)/d）。自前の値を作らず、次から選ぶ
-  - `smooth`（0.35 秒、bounce 0）: 画面やペインの移動、出現と消滅、フェード
-  - `snappy`（0.35 秒、bounce 0.3）: 切り替えの印、スイッチ、矢印の回転
-  - `bouncy`（0.35 秒、bounce 0.3）: 小さく目を引くもの（権限確認の滴、通知）
-  - 標準は duration 0.35 秒、bounce 0.3（ユーザーが決定。SwiftUI の既定の 0.5 秒は遅く感じたため）
-  - `interactive`（0.15 秒、bounce 0.14）: 指に追従しているあいだ
-  - CSS のトランジションでは `var(--ease-snappy)` と `var(--dur-snappy)`（ばねを解いた linear() の曲線）を使う
-- **割り込める**こと。動いている途中で次の操作が来たら、止めずに今の速さを引き継いで行き先を変える
-- **指の勢いを引き継ぐ**。離した後の行き先は `project()`（減速率 0.998/ms）で予測し、ばねの初速に速さを渡す。端を越えたら `rubberBand()`
-- 伸び縮みは**操作しているあいだだけ**（押すと少し膨らむ `press`、ドラッグの方向に伸びる）。着地で潰れて揺れる演出は常用しない
-- 融合と分離は SVG の goo フィルタを **背景の形だけ** にかける。文字にはかけない。1 画面で 1〜2 か所まで
-- **分離アニメーション**（規格。別の面が開く・閉じるときは必ずこれ）: `components/liquid/stage.tsx`
-  - 出発点に `ref={liquidAnchor("名前")}` を付け、`liquidOpen(id, { anchor, target })` で開く。閉じるときは `liquidClose(id)`（開いた id）か `liquidCloseFrom(id, { anchor, target })`（今表示中の面）。面の中身は `useLiquidRevealed(id)` が true になるまで隠す
-  - 動き: 出発点（ボタンや行）**だけの裏から**出る（実体はサイドバーの地より上の 55 に描き、出発点だけを 57 で手前に出す。サイドバー全体の裏には隠さない）→ 位置は snappy、大きさは 0.12 秒遅れて 0.42 秒 / bounce 0.3 で広がる（1 段階と 2 段階の中間）→ 色・枠線・影・ぼかしは広がりに合わせて出発点の見た目から行き先の見た目へフェード → 角の丸みは、出だしで飛ぶときの丸み（16px）になり、途中はそのまま、**最後の 25% でだけ**行き先の丸みへ変える（四角いまま飛ばさない） → 縁をすり抜けるとき速さに応じて横に伸びる（最大 1.18 倍）→ 広がりきったら本物を見せる。閉じるときは逆に縮んで出発点の裏へ戻る
-  - 出発点は押すとぽんと膨らみ、開いているあいだ選択中の色で残す（どこから出たか分かるように）
-  - 全面に広がる画面（設定、プロファイル、差分）は `cover: true`: 出発点を手前に出すのは、開くときの出だし 150ms と、閉じるときの 300ms 以降だけ（広がった実体の上にボタンを残さない）
-  - 全面の画面の中身は、広がりきるのを待たない: `useLiquidClip(id, ref)` で実体の形に切り抜き、面積が 3 割から 8 割へ広がるあいだにフェードで出す（閉じるときは逆）。ぱっと現れて見えないように
-  - **液体の融合**（Liquid Glass と同じ作り。`components/liquid/sdf.ts` と GPU の `liquid-gl.ts`）: 出発点と実体を、距離場の滑らかな最小値（iq の 2 次の smin）で 1 つの形にして描く
-    - すきまが k/2 以下でつながり（首）、k 以下なら縁が互いへ寄る。k は出発点の太さ × 1.2 + 16（40〜72px）。ふくらみは最大 k/4
-    - 塗り・枠線・影は smin の混ざり具合で、出発点の見た目と実体の見た目を混ぜる（継ぎ目を作らない）。出発点の中は塗らない（本物のボタンの上に重ねない）
-    - 位置のばねは出だしを柔らかく（剛性 18% から 0.16 秒で本来へ）: つながっているあいだはゆっくり剥がれ、離れてから加速する
-    - 首があるあいだは実体を少し引き留め（すきまの 60%、上限 k × 0.8）、首が切れたらばね（0.45 秒 / bounce 0.4）で放す。切れた瞬間に出発点を少し引っぱって戻す
-    - k は広がりが 45% から 90% のあいだに 0 へ絞る（行き先が出発点のすぐ隣でも、最後は必ず別々の形になる）。閉じるときは逆に、戻ってくるにつれて広げる（吸い込まれる）
-    - 重なっているあいだは融合させない: smin はぴったり重なった形を k/4 ふくらませる（出だしと戻り際に出発点より大きな塊になる）。k に「中心どうしの離れ具合」（0 → 出発点の太さ 1 つぶんで 1）を掛ける
-    - 動いているあいだの「体」は液体の実体だけ: 本物の面（メニューや全面の画面）の地・枠線・影は消し、中身だけを実体の形で切り抜いて見せる。2 つの体があると、ばねの跳ね返りで大きさがずれて隙間が見える
-    - Radix の既定のフェード・拡大は、インラインの `animation: none` で止める（クラスでは打ち消せない。tailwind-merge は animate-in と animate-none を別物として両方残す）
-    - 手で首や尾の形を描かない（以前の試みは Liquid Glass らしく見えなかった）
-    - 確かめ方: `tools/liquid-probe/sdf-film.mjs`（式だけ）と `app-frames.sh`（本物のアプリを 1/60 秒ずつ撮る）
-  - 小さなメニューは、位置が落ち着いてから測る（Radix は出た直後に位置を決めるため）。Radix の既定のフェード・拡大は切る（二重に動かない）。メニューは入力欄の上に出す（popper / side=top）
-  - 小さなメニュー（model / effort の選択、コンテキストの内訳など）も同じ動き: `useLiquidMenu(id, anchor)`。チップから飛び出して広がり、閉じると直前の大きさから縮んでチップへ戻る。中身は広がるのに合わせてフェード
-  - メニューの重なり順（`rise`、`useLiquidMenu` は必ずこれ）: 実体は出だしだけ出発点の裏から出て、開いている途中（開き具合 0.2〜0.5）から出発点の上に乗る。右クリックのメニューのように出発点に重なって開くとき、行の下に潜ったままにしない。切り替えはぱっとせず、GPU の描画が実体だけの形（影・塗り・枠線）を出発点の上に重ねていく（`over`）。重ね始めたら出発点は z-[57] から下げる（`useLiquidActiveAnchors` から外れる）。選択中の色は `useLiquidMovingAnchors` で残す。中身のフェードは面積の割合と開き具合の小さいほう（出発点が大きいと、最初から面積が足りるため）
-  - メニューは開いた後も実体がそのまま枠になる（`hold`）。本物の地・枠線・影は閉じるまで出さず、中身だけを実体の形で切り抜いて見せる。本物の枠へ入れ替えると、入れ替える瞬間にばねの跳ね返りの分だけ実体が大きく見える（特に上辺）。行き先の大きさが変われば実体が追う
-  - 全面の画面（cover）も、出発点を下げたあとは実体を出発点の上に塗る（出発点の中を塗らない決まりのままだと、広がった実体に穴が開いてボタンが透けて見える）
-  - mode のように「順に切り替わる値」は、パタパタ（反転フラップ）で替える: `<SplitFlap>`。古い上半分が倒れ（0.16 秒）、新しい下半分がばね（0.4 秒 / bounce 0.35）で落ちて少し跳ねる。めくれているあいだは半分ずつを地の色で塗る（透けると文字が重なる）
-  - 入れ替え（ペインのセッションを別のセッションに替える）: 元のセッションが先に自分の行へ戻り始め、140ms 遅れて新しいセッションが飛び出す
-  - 使っている場所: 検索（⌘K）、セッションを開く・閉じる（サイドバーの行 ↔ ペイン）、新しいセッション（ボタン → 空のペイン）
-  - 新しい面を作るときも、モーダルを出すより、既存の画面の中に開けないかを先に考える（新しいセッションはモーダルではなく空のペイン）
-- 意味のある変化にだけ動きを付ける。飾りのループアニメーションは禁止（作業中の回る輪を除く）
-- macOS の「視差効果を減らす」では動かさない（Motion の `reducedMotion="user"`、CSS は 150ms のフェード）
-- 動かすのは transform と opacity。width / height / top / left を直接アニメーションしない
-  - **例外: 文字を含む領域の大きさが変わるとき**（ペインの分割など）は、Motion の `layout`（拡大縮小で見せるので中身が引き伸ばされる）を使わず、実際の幅と高さをばねで動かして中身を毎フレーム組み直す（Apple の分割表示と同じ）。位置だけ変わる行の並び替えは `layout="position"`
-- 値を変えるときは、アプリの「動きの調整」（⌘,）で Finder やシステム設定と見比べる
+- Springs use the same formula as SwiftUI (duration + bounce → stiffness = (2π/d)², damping = 4π(1−b)/d). Don't make up your own values; pick one of these
+  - `smooth` (0.35 s, bounce 0): moving screens and panes, appearing and disappearing, fades
+  - `snappy` (0.35 s, bounce 0.3): toggle indicators, switches, rotating chevrons
+  - `bouncy` (0.35 s, bounce 0.3): small attention-grabbing things (the permission-request droplet, notifications)
+  - The standard is duration 0.35 s, bounce 0.3 (a deliberate choice; SwiftUI's default 0.5 s felt slow)
+  - `interactive` (0.15 s, bounce 0.14): while tracking the pointer
+  - For CSS transitions, use `var(--ease-snappy)` and `var(--dur-snappy)` (a linear() curve solved from the spring)
+- **Interruptible**. If the next action arrives mid-animation, don't stop; carry over the current velocity and retarget
+- **Carry the gesture's momentum**. Predict the resting point after release with `project()` (deceleration rate 0.998/ms) and hand the velocity to the spring as its initial velocity. Past the edges, use `rubberBand()`
+- Stretch and squash **only while the user is interacting** (`press` swells slightly when pressed, dragging stretches along the drag direction). Don't routinely squash-and-wobble on landing
+- Fusion and separation apply the SVG goo filter to **background shapes only**. Never to text. At most one or two places per screen
+- **Separation animation** (the standard; always use it when another surface opens or closes): `components/liquid/stage.tsx`
+  - Put `ref={liquidAnchor("name")}` on the origin and open with `liquidOpen(id, { anchor, target })`. Close with `liquidClose(id)` (the id that was opened) or `liquidCloseFrom(id, { anchor, target })` (the surface currently shown). Hide the surface's contents until `useLiquidRevealed(id)` is true
+  - Motion: it emerges from **behind the origin only** (the origin is the button or row; the body is drawn at z-index 55, above the sidebar background, and only the origin is raised to 57; don't hide it behind the whole sidebar) → position uses snappy, size expands 0.12 s later with 0.42 s / bounce 0.3 (between a one-stage and a two-stage expansion) → color, border, shadow and blur fade from the origin's look to the destination's look as it expands → the corner radius jumps to the in-flight radius (16px) at the start, holds it, and changes to the destination's radius **only in the last 25%** (never fly as a sharp rectangle) → while slipping past an edge it stretches sideways with speed (up to 1.18×) → once fully expanded, show the real surface. Closing is the reverse: it shrinks back behind the origin
+  - The origin pops slightly when pressed and keeps its selected color while the surface is open (so you can see where it came from)
+  - Full-window screens (settings, profiles, diff) use `cover: true`: the origin is raised only for the first 150ms of opening and after 300ms of closing (don't leave the button on top of the expanded body)
+  - Contents of full-window screens don't wait for full expansion: clip them to the body's shape with `useLiquidClip(id, ref)` and fade them in while the area grows from 30% to 80% (reverse on close), so they don't pop in
+  - **Liquid fusion** (built the same way as Liquid Glass; `components/liquid/sdf.ts` and the GPU renderer `liquid-gl.ts`): draw the origin and the body as one shape using a smooth minimum of their distance fields (iq's quadratic smin)
+    - When the gap is at most k/2 they join (a neck); at most k, their edges lean toward each other. k is origin thickness × 1.2 + 16 (40 to 72px). The bulge is at most k/4
+    - Fill, border and shadow blend the origin's look and the body's look by the smin mix factor (no visible seam). Don't fill inside the origin (never paint over the real button)
+    - The position spring starts soft (stiffness ramps from 18% to full over 0.16 s): it peels away slowly while joined and speeds up once separated
+    - While the neck exists, hold the body back slightly (60% of the gap, capped at k × 0.8); when the neck breaks, release it with a spring (0.45 s / bounce 0.4). At the moment it breaks, tug the origin slightly and let it spring back
+    - Shrink k to 0 while the expansion goes from 45% to 90% (even when the destination sits right next to the origin, they always end as separate shapes). Closing is the reverse: widen k as it comes back (it gets sucked in)
+    - Don't fuse while the shapes overlap: smin inflates perfectly overlapping shapes by k/4 (producing a blob larger than the origin at the start and end). Multiply k by the center separation (0 → 1 over one origin thickness)
+    - While moving, the liquid body is the only "body": hide the real surface's (menu or full-window screen) background, border and shadow, and show only its contents clipped to the body's shape. With two bodies, spring overshoot misaligns their sizes and a gap shows
+    - Stop Radix's default fade and zoom with an inline `animation: none` (a class can't override it; tailwind-merge treats animate-in and animate-none as different and keeps both)
+    - Don't hand-draw neck or tail shapes (earlier attempts didn't look like Liquid Glass)
+    - How to verify: `tools/liquid-probe/sdf-film.mjs` (the formula only) and `app-frames.sh` (captures the real app frame by frame at 1/60 s)
+  - Measure small menus after their position settles (Radix positions them right after they appear). Turn off Radix's default fade and zoom (so nothing animates twice). Menus open above the input (popper / side=top)
+  - Small menus (model / effort pickers, the context breakdown, etc.) use the same motion: `useLiquidMenu(id, anchor)`. They burst out of the chip and expand; on close they shrink from their last size back into the chip. Contents fade in as it expands
+  - Menu stacking order (`rise`; `useLiquidMenu` always uses it): the body emerges from behind the origin only at the start, and partway through opening (openness 0.2 to 0.5) it moves on top of the origin. When a menu opens overlapping its origin, like a context menu, it must not stay buried under the row. The switch is not instant: the GPU renderer gradually layers the body-only shape (shadow, fill, border) over the origin (`over`). Once layering starts, drop the origin from z-[57] (it leaves `useLiquidActiveAnchors`). Keep its selected color via `useLiquidMovingAnchors`. Content fade uses the smaller of area ratio and openness (with a large origin, the area is already sufficient from the start)
+  - After opening, the body stays as the menu's frame (`hold`). Don't show the real background, border or shadow until it closes; show only the contents clipped to the body's shape. Swapping to the real frame makes the body look larger at the moment of the swap by the spring's overshoot (especially the top edge). If the destination's size changes, the body follows
+  - Full-window screens (cover) also paint the body over the origin once the origin has been lowered (if the "don't fill inside the origin" rule still applied, the expanded body would have a hole and the button would show through)
+  - Values that cycle in order, like mode, change with a split-flap: `<SplitFlap>`. The old top half falls (0.16 s), and the new bottom half drops on a spring (0.4 s / bounce 0.35) with a small bounce. While flipping, paint each half with the background color (if it's transparent, the text overlaps)
+  - Swapping (replacing a pane's session with another session): the original session starts returning to its row first, and the new session bursts out 140ms later
+  - Where it is used: search (⌘K), opening and closing sessions (sidebar row ↔ pane), new session (button → empty pane)
+  - When creating a new surface, first consider whether it can open inside an existing screen rather than as a modal (a new session is an empty pane, not a modal)
+- Animate only meaningful changes. Decorative looping animations are banned (except the spinning ring for "working")
+- Don't animate when macOS "Reduce motion" is on (Motion's `reducedMotion="user"`; in CSS, a 150ms fade)
+- Animate only transform and opacity. Don't animate width / height / top / left directly
+  - **Exception: when a region containing text changes size** (e.g. splitting panes), don't use Motion's `layout` (it scales, so the contents stretch). Spring the actual width and height and re-lay out the contents every frame (like Apple's Split View). For rows that only change position when reordered, use `layout="position"`
+- When changing values, compare side by side with Finder and System Settings using the app's motion tuning panel (⌘,)
 
-## 5. 部品の選び方
+## 5. Choosing components
 
-1. shadcn/ui（Tailwind v4、Radix 版）にあるものはそれを使う
-2. エージェント向けで shadcn にないものは、AffectUI の **無料（MIT）の部品だけ** を使う（Tool Call Card、Code Block など）。Pro の部品は OSS に入れられないので使わない。権限確認・入力欄・使用量の表示は自前で作る
-3. それでもないものは自前で作り、shadcn のトークンに合わせる
-4. 見本集（Pin UI、Ruixen など）の部品は、ライセンスが明確で、トークンに合わせて作り直せる場合だけ
+1. If shadcn/ui (Tailwind v4, Radix flavor) has it, use that
+2. For agent-specific components shadcn lacks, use **only the free (MIT) components** from AffectUI (Tool Call Card, Code Block, etc.). Pro components can't go into an OSS project, so don't use them. Build permission requests, the input box and usage displays ourselves
+3. Anything still missing, build ourselves and match the shadcn tokens
+4. Components from showcase collections (Pin UI, Ruixen, etc.) only when the license is clear and they can be rebuilt to fit the tokens
 
-## 6. 文言（日本語）
+## 6. UI copy
 
-- **画面の文は部品に直接書かない**。日本語の辞書（`src/i18n/ja/<名前空間>.ts`）に足し、英語（`src/i18n/en/`）と中国語（`src/i18n/zh/`）も同時に書いて `t()` で引く。決まりと用語集は `docs/i18n.md`（英語の文体もそこ）。エンジン（Rust）の文は `plyfold_i18n::tr!("日本語", "English", "中文")`
+The app ships English, Japanese and Simplified Chinese UIs.
 
-- 短く、具体的に、です・ます調はボタン以外の説明文だけ。ボタンは動詞で終える（「許可」「止める」「取り込む」）
-- 英語とカタカナの混ぜすぎを避ける。ただし model / effort / mode、ACP の用語、コマンドはそのまま
-- エラーは「何が起きたか」と「次にできること」を書く
-- **「・」や「 · 」で語をつながない**（「claude · work」ではなく、ロゴ ＋「work」）。並べるときは要素を分けて間隔で区切る
-- 説明調より、短い定着した用語を選ぶ（「初期プロンプト」「ベース URL」「置換」「テスト」「停止」「カスタムプロバイダー」「通知」。「最初の指示」「接続先 URL」「置き換える」「確かめる」「止める」「独自の接続先」「知らせ」は使わない）
-- 数値の並び（tok/s、入力・出力トークン、費用、時間）は、それぞれにアイコンを付け、間隔は詰める
-- 分かりきった説明文は置かない（例: 差分の画面に「差分は git から作ります」と書かない）
-- アクションのボタンにはアイコンを付ける（lucide、14〜16px）。プロバイダーは文字ではなくロゴで示す（Simple Icons、CC0。ないものは偽物を描かず汎用のアイコン）
-- **アイコンで表せるものは必ずアイコンにする**。キーの組み合わせは `Keys`（`components/Keys.tsx`、⌘ ⇧ ⌥ ⇥ ⏎ 矢印をキーの形の枠にアイコンで描く）を使い、「⌘K」のような文字を直接書かない
+- **Never write UI strings directly in components**. Add them to the Japanese dictionary (`src/i18n/ja/<namespace>.ts`), write the English (`src/i18n/en/`) and Chinese (`src/i18n/zh/`) versions at the same time, and look them up with `t()`. Rules, glossaries and the English and Chinese style guides are in `docs/i18n.md`. Engine (Rust) strings use `plyfold_i18n::tr!("<Japanese>", "<English>", "<Chinese>")`
 
-## 7. アクセシビリティ
+All languages:
 
-- 本文のコントラスト 4.5:1 以上（`#a1a1a1` は `#171717` の上で約 6.9:1 で可。`#737373` を文字に使わない）
-- クリックできるものは `<button>` か `<a>`。アイコンだけのボタンには `aria-label`
-- キーボードで全部操作できること。フォーカスの輪は消さない
+- Errors say "what happened" and "what you can do next"
+- **Don't join words with separator dots** such as "·" ("claude · work" becomes the logo + "work"). When listing items, keep them as separate elements separated by spacing
+- Number rows (tok/s, input and output tokens, cost, time) get an icon each, with tight spacing
+- No self-evident explanations (e.g. don't write "Diffs are generated from git" on the diff screen)
+- Action buttons get an icon (lucide, 14 to 16px). Show providers by logo, not text (Simple Icons, CC0; when none exists, use a generic icon rather than drawing a fake)
+- **If an icon can express it, use an icon**. For key combinations use `Keys` (`components/Keys.tsx`, which draws ⌘ ⇧ ⌥ ⇥ ⏎ and arrows as icons in key-shaped frames); never write text like "⌘K" directly
 
-## 出す前のチェックリスト
+English:
 
-- [ ] 色は状態と差分にだけ使ったか。グラデーション・glow・絵文字はないか
-- [ ] 生の色・大きさの値ではなく、トークンを使ったか
-- [ ] 嘘の数字・lorem ipsum・一般的な煽り文言はないか
-- [ ] 主ボタンは 1 つか。中央寄せや錠剤形の乱用はないか
-- [ ] 常に見せる情報を絞ったか。詳細はホバー・展開・別画面に回したか
-- [ ] 数値は等幅か
-- [ ] ばねは smooth / snappy / bouncy / interactive から選んだか。割り込めるか。勢いを引き継ぐか。液体の効果は 1〜2 か所で文字にかかっていないか。reduce motion の代わりがあるか
-- [ ] Pro の部品を使っていないか
-- [ ] コントラストとキーボード操作は大丈夫か
+- Short and concrete. Sentence case everywhere, including headings and buttons ("New session", not "New Session")
+- Buttons are short imperative verbs without a period ("Stop", "Merge", "Discard"). No exclamation marks, no "Please …"
+
+Japanese (the `ja` dictionary):
+
+- Short and concrete; the polite 「です・ます」 form only in explanatory text, never on buttons. Buttons end with a verb (「許可」「止める」「取り込む」)
+- Avoid mixing in too much English and katakana. But model / effort / mode, ACP terms and commands stay as they are
+- **Don't join words with 「・」 or 「 · 」**
+- Prefer short, established terms over descriptive phrasing: use 「初期プロンプト」「ベース URL」「置換」「テスト」「停止」「カスタムプロバイダー」「通知」, not 「最初の指示」「接続先 URL」「置き換える」「確かめる」「止める」「独自の接続先」「知らせ」
+
+Chinese (the `zh` dictionary):
+
+- Simplified Chinese for mainland China (zh-CN). Short, plain terms common in software UIs; buttons are mostly 2 to 4 character verbs (「停止」「合并」「放弃」)
+- Put a half-width space between Chinese and Latin letters or digits (「打开 worktree」「3 个文件」)
+
+## 7. Accessibility
+
+- Body text contrast at least 4.5:1 (`#a1a1a1` on `#171717` is about 6.9:1, which is fine. Never use `#737373` for text)
+- Anything clickable is a `<button>` or `<a>`. Icon-only buttons get an `aria-label`
+- Everything must be operable by keyboard. Never remove the focus ring
+
+## Checklist before shipping
+
+- [ ] Is color used only for state and diff? No gradients, glow or emoji?
+- [ ] Are tokens used instead of raw color and size values?
+- [ ] No fake numbers, lorem ipsum or generic hype copy?
+- [ ] One primary button at most? No overuse of centering or pill shapes?
+- [ ] Is the always-visible information kept minimal, with details moved to hover, expansion or another screen?
+- [ ] Are numbers tabular?
+- [ ] Are springs chosen from smooth / snappy / bouncy / interactive? Interruptible? Carrying momentum? Liquid effects in only one or two places and never on text? Is there a reduced-motion fallback?
+- [ ] No Pro components?
+- [ ] Are contrast and keyboard operation OK?

@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from "react";
 
-/** 入力欄の高さを中身に合わせる（ふだんは 1 行、最大 max px。越えたら中でスクロール） */
+/** Fit the input's height to its content (one line by default, at most max px; scrolls inside beyond that) */
 export function useAutoGrow(value: string, max = 200) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {

@@ -1,11 +1,11 @@
-//! 軽いベンチマーク: 経路ごとの差（本物のモデルか、別物か）をはっきり出す
+//! Light benchmark: makes differences between routes obvious (the real model, or something else)
 //!
-//! 1. トークナイザーの指紋: 同じ文章を足したときに増える入力トークン数。
-//!    差を取るので、CLI のシステムプロンプトや、途中で足される見えない指示の分は打ち消される。
-//! 2. 答えが決まった問題（乱数で作る）: 掛け算、べき乗の剰余、曜日、文字数え
-//! 3. 速さ: 最初の文字が届くまでの時間と、全体の時間
+//! 1. Tokenizer fingerprint: how many input tokens a fixed passage adds.
+//!    Taking the difference cancels out the CLI's system prompt and any hidden instructions injected on the way.
+//! 2. Fixed-answer questions (randomly generated): multiplication, modular exponentiation, digit sums, letter counting
+//! 3. Speed: time to the first character, and total time
 //!
-//! 送る内容は乱数で作った問題と固定の文章だけにする（中継で記録されても困らないもの）。
+//! Only randomly generated questions and a fixed passage are sent (nothing sensitive if an intermediary logs it).
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -22,8 +22,8 @@ use crate::handler::Turn;
 use crate::scenario::{self, Opts, Session};
 
 const PROMPT_TIMEOUT: Duration = Duration::from_secs(300);
-const SUFFIX: &str = "\n\nツールやコマンドは使わず、頭の中だけで解いてください。\
-最後の行に `ANSWER: <答え>` の形で、答えだけを書いてください。";
+const SUFFIX: &str = "\n\nDo not use any tools or commands; solve it in your head.\
+On the last line, write only the answer in the form `ANSWER: <answer>`.";
 
 struct Rng(u64);
 
@@ -64,7 +64,7 @@ fn pow_mod(base: u64, mut exp: u64, m: u64) -> u64 {
 }
 
 fn digit_sum_pow2(k: u32) -> u32 {
-    // 2^k を 10 進の桁の配列で計算する
+    // Compute 2^k as an array of decimal digits
     let mut digits = vec![1u32];
     for _ in 0..k {
         let mut carry = 0;
@@ -90,32 +90,32 @@ fn make_tasks(trial: u64) -> Vec<Task> {
     vec![
         Task {
             id: "mul",
-            name: "15 桁 × 15 桁",
-            prompt: format!("{a} × {b} を正確に計算してください。"),
+            name: "15 digits × 15 digits",
+            prompt: format!("Compute {a} × {b} exactly."),
             answer: (a as u128 * b as u128).to_string(),
         },
         Task {
             id: "modpow",
-            name: "べき乗の剰余",
-            prompt: format!("{pb} の {pe} 乗を {pm} で割った余りを求めてください。"),
+            name: "modular exponentiation",
+            prompt: format!("Find the remainder of {pb} to the power {pe} divided by {pm}."),
             answer: pow_mod(pb, pe, pm).to_string(),
         },
         Task {
             id: "digitsum",
-            name: "2^k の各桁の和",
-            prompt: format!("2 の {k} 乗を 10 進数で書いたときの、各桁の数字の和を求めてください。"),
+            name: "digit sum of 2^k",
+            prompt: format!("Find the sum of the decimal digits of 2 to the power {k}."),
             answer: digit_sum_pow2(k).to_string(),
         },
         Task {
             id: "count",
-            name: "文字数え（200 文字）",
-            prompt: format!("次の文字列に r はいくつ含まれますか。\n{s}"),
+            name: "letter count (200 chars)",
+            prompt: format!("How many times does r occur in the following string?\n{s}"),
             answer: s.chars().filter(|&c| c == 'r').count().to_string(),
         },
     ]
 }
 
-/// トークナイザーの指紋用の固定の文章（英語・日本語・コードを混ぜる）
+/// Fixed passage for the tokenizer fingerprint (deliberately mixes English, Japanese and code)
 fn filler() -> String {
     let mut s = String::new();
     for i in 0..12 {
@@ -163,10 +163,10 @@ pub struct TargetResult {
     pub error: Option<String>,
 }
 
-/// 新しいセッションを作る（Codex は読み取り専用にする）
+/// Create a new session (Codex is switched to read-only)
 async fn open(s: &Session) -> Result<(String, Value)> {
     let new = s.new_session().await?;
-    let sid = new["sessionId"].as_str().context("sessionId がありません")?.to_string();
+    let sid = new["sessionId"].as_str().context("missing sessionId")?.to_string();
     if s.launch.agent == "codex" {
         let _ = s
             .conn
@@ -176,7 +176,7 @@ async fn open(s: &Session) -> Result<(String, Value)> {
     Ok((sid, new))
 }
 
-/// 既存のセッションで 1 回聞く。戻り値: (ターンの記録, 全体の ms, 最初の文字までの ms)
+/// Ask once in an existing session. Returns (turn record, total ms, ms to the first character)
 async fn ask_in(s: &Session, sid: &str, text: &str) -> Result<(Turn, u128, Option<u128>)> {
     s.shared.reset_turn();
     let t0 = Instant::now();
@@ -188,7 +188,7 @@ async fn ask_in(s: &Session, sid: &str, text: &str) -> Result<(Turn, u128, Optio
         )
         .await?;
     let total = t0.elapsed().as_millis();
-    // usage_update がターンの終わりの直後に来ることがある
+    // usage_update may arrive right after the turn ends
     tokio::time::sleep(Duration::from_millis(300)).await;
     let turn = s.shared.turn.lock().unwrap().clone();
     let ttft = turn.first_text_at.map(|at| at.duration_since(t0).as_millis());
@@ -217,10 +217,10 @@ async fn bench_target(cfg: &Config, target: &str, opts: &Opts, trials: u64) -> R
         ..Default::default()
     };
 
-    // 1. トークナイザーの指紋
-    let short = "OK とだけ答えてください。";
-    let long = format!("次の文章は読まずに、OK とだけ答えてください。\n---\n{}", filler());
-    // 同じセッションで続けて送り、増えた分を見る（セッションごとのシステムプロンプトの揺れを消す）
+    // 1. Tokenizer fingerprint
+    let short = "Reply with just OK.";
+    let long = format!("Do not read the passage below; reply with just OK.\n---\n{}", filler());
+    // Send both in the same session and take the increase (cancels per-session system prompt variation)
     let (sid, new) = open(&s).await?;
     out.model_setting = setting_of(&new);
     let (t_short, _, _) = ask_in(&s, &sid, short).await?;
@@ -233,9 +233,9 @@ async fn bench_target(cfg: &Config, target: &str, opts: &Opts, trials: u64) -> R
     if let (Some(a), Some(b)) = (t_short.used, t_long.used) {
         out.token_delta = Some(b as i64 - a as i64);
     }
-    println!("[{target}] トークン差: {:?}", out.token_delta);
+    println!("[{target}] token delta: {:?}", out.token_delta);
 
-    // 2. 答えが決まった問題
+    // 2. Fixed-answer questions
     for trial in 0..trials {
         for task in make_tasks(trial) {
             let started = Instant::now();
@@ -275,7 +275,7 @@ async fn bench_target(cfg: &Config, target: &str, opts: &Opts, trials: u64) -> R
                 },
             };
             println!(
-                "[{target}] {} #{trial}: {} （期待 {} / 回答 {}）{:.1}s",
+                "[{target}] {} #{trial}: {} (expected {} / got {}) {:.1}s",
                 task.name,
                 if res.ok { "○" } else { "×" },
                 res.expected,
@@ -316,8 +316,8 @@ pub async fn bench(cfg: Arc<Config>, targets: Vec<String>, opts: Opts, trials: u
     }
 
     let task_ids: Vec<(&str, &str)> = make_tasks(0).iter().map(|t| (t.id, t.name)).collect();
-    let mut md = String::from("# ベンチマーク結果\n\n");
-    let _ = writeln!(md, "| 項目 | {} |", targets.join(" | "));
+    let mut md = String::from("# Benchmark results\n\n");
+    let _ = writeln!(md, "| item | {} |", targets.join(" | "));
     let _ = writeln!(md, "|---|{}", "---|".repeat(targets.len()));
     let row = |md: &mut String, name: &str, f: &dyn Fn(&TargetResult) -> String| {
         let cells: Vec<String> = results
@@ -326,30 +326,30 @@ pub async fn bench(cfg: Arc<Config>, targets: Vec<String>, opts: Opts, trials: u
             .collect();
         let _ = writeln!(md, "| {name} | {} |", cells.join(" | "));
     };
-    row(&mut md, "設定上のモデル", &|r| r.model_setting.clone());
-    row(&mut md, "API が返したモデル名", &|r| {
-        if r.reported_models.is_empty() { "（取れない）".into() } else { r.reported_models.iter().cloned().collect::<Vec<_>>().join(", ") }
+    row(&mut md, "configured model", &|r| r.model_setting.clone());
+    row(&mut md, "model name returned by the API", &|r| {
+        if r.reported_models.is_empty() { "(unavailable)".into() } else { r.reported_models.iter().cloned().collect::<Vec<_>>().join(", ") }
     });
-    row(&mut md, "**トークン差**（同じ文章）", &|r| r.token_delta.map(|d| format!("**{d}**")).unwrap_or("-".into()));
+    row(&mut md, "**token delta** (same passage)", &|r| r.token_delta.map(|d| format!("**{d}**")).unwrap_or("-".into()));
     for (id, name) in &task_ids {
         row(&mut md, name, &|r| {
             let rs: Vec<&TaskResult> = r.results.iter().filter(|x| x.task == *id).collect();
             format!("{}/{}", rs.iter().filter(|x| x.ok).count(), rs.len())
         });
     }
-    row(&mut md, "**合計正答**", &|r| format!("**{}/{}**", r.results.iter().filter(|x| x.ok).count(), r.results.len()));
-    row(&mut md, "最初の文字まで（中央値）", &|r| {
+    row(&mut md, "**total correct**", &|r| format!("**{}/{}**", r.results.iter().filter(|x| x.ok).count(), r.results.len()));
+    row(&mut md, "time to first character (median)", &|r| {
         median(r.results.iter().filter_map(|x| x.ttft_ms).collect())
             .map(|m| format!("{:.1}s", m as f64 / 1000.0))
             .unwrap_or("-".into())
     });
-    row(&mut md, "全体（中央値）", &|r| {
+    row(&mut md, "total time (median)", &|r| {
         median(r.results.iter().map(|x| x.total_ms).collect())
             .map(|m| format!("{:.1}s", m as f64 / 1000.0))
             .unwrap_or("-".into())
     });
 
-    let _ = writeln!(md, "\n## 間違い・エラー\n");
+    let _ = writeln!(md, "\n## Wrong answers and errors\n");
     for r in &results {
         if let Some(e) = &r.error {
             let _ = writeln!(md, "- **{}**: {e}", r.target);
@@ -357,13 +357,13 @@ pub async fn bench(cfg: Arc<Config>, targets: Vec<String>, opts: Opts, trials: u
         for x in r.results.iter().filter(|x| !x.ok) {
             let _ = writeln!(
                 md,
-                "- **{}** {} #{}: 期待 `{}` / 回答 `{}`{}",
+                "- **{}** {} #{}: expected `{}` / got `{}`{}",
                 r.target,
                 x.task,
                 x.trial,
                 x.expected,
                 x.got.as_deref().unwrap_or("-"),
-                x.error.as_deref().map(|e| format!("（{e}）")).unwrap_or_default()
+                x.error.as_deref().map(|e| format!(" ({e})")).unwrap_or_default()
             );
         }
     }
@@ -389,6 +389,6 @@ mod tests {
         assert_eq!(digit_sum_pow2(15), 26); // 32768
         assert_eq!(digit_sum_pow2(1000), 1366);
         assert_eq!(pow_mod(4, 13, 497), 445);
-        assert_eq!(extract_answer("考えた結果…\nANSWER: **1,234**"), Some("1234".into()));
+        assert_eq!(extract_answer("After some thought…\nANSWER: **1,234**"), Some("1234".into()));
     }
 }

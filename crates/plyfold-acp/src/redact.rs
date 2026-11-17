@@ -1,4 +1,4 @@
-/// ログに残す前に、キーなどの秘密の値を伏せ字にする
+/// Masks secret values such as keys before they reach the logs
 #[derive(Debug, Clone, Default)]
 pub struct Redactor {
     secrets: Vec<String>,
@@ -6,9 +6,9 @@ pub struct Redactor {
 
 impl Redactor {
     pub fn new(secrets: Vec<String>) -> Self {
-        // 短すぎる値は誤爆が多いので対象にしない
+        // Skip values that are too short; they cause too many false matches
         let mut secrets: Vec<String> = secrets.into_iter().filter(|s| s.len() >= 8).collect();
-        // 長いものから置き換える（一方が他方を含む場合に備える）
+        // Replace longest first, in case one secret contains another
         secrets.sort_by_key(|s| std::cmp::Reverse(s.len()));
         Self { secrets }
     }

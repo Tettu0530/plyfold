@@ -1,4 +1,4 @@
-// MotionLab.tsx（動きの見本）
+// MotionLab.tsx (motion samples)
 export const motionLab = {
   curveLabel: "ばねの位置の変化",
   throwCardLabel: "投げて四隅に吸い付かせるカード",

@@ -1,4 +1,4 @@
-// pane/MessageActions.tsx（発言の操作、編集の欄、生成中の印）
+// pane/MessageActions.tsx (message actions, edit box, generating indicator)
 export const message = {
   copy: "コピー",
   copied: "コピーしました",

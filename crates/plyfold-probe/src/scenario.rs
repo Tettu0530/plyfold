@@ -18,7 +18,7 @@ pub struct Opts {
     pub quiet: bool,
     pub cwd: Option<PathBuf>,
     pub auth: Option<String>,
-    /// session/new の直後に session/set_mode で切り替えるモード
+    /// Mode to switch to with session/set_mode right after session/new
     pub mode: Option<String>,
 }
 
@@ -36,7 +36,7 @@ fn now_ms() -> u128 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0)
 }
 
-const INIT_TIMEOUT: Duration = Duration::from_secs(180); // npx の初回ダウンロードを見込む
+const INIT_TIMEOUT: Duration = Duration::from_secs(180); // allow for npx's first download
 const SESSION_TIMEOUT: Duration = Duration::from_secs(120);
 
 pub async fn start(cfg: &Config, target: &str, opts: &Opts, kind: &str) -> Result<Session> {
@@ -52,16 +52,16 @@ pub async fn start(cfg: &Config, target: &str, opts: &Opts, kind: &str) -> Resul
     let cwd = cwd.canonicalize()?;
 
     if !opts.quiet {
-        println!("== {target}（エージェント: {}）", launch.agent);
-        println!("   起動: {} {}", launch.command, launch.args.join(" "));
+        println!("== {target} (agent: {})", launch.agent);
+        println!("   launch: {} {}", launch.command, launch.args.join(" "));
         if !launch.env_summary.is_empty() {
-            println!("   環境変数: {}", launch.env_summary.join(", "));
+            println!("   env: {}", launch.env_summary.join(", "));
         }
         if !launch.env_remove.is_empty() {
-            println!("   引き継がない環境変数: {}", launch.env_remove.join(", "));
+            println!("   env not inherited: {}", launch.env_remove.join(", "));
         }
-        println!("   作業ディレクトリ: {}", cwd.display());
-        println!("   記録: {}", run_dir.display());
+        println!("   working dir: {}", cwd.display());
+        println!("   log: {}", run_dir.display());
     }
 
     let (conn, rx) = Conn::spawn(&launch, &cwd, &run_dir).await?;
@@ -82,12 +82,12 @@ pub async fn start(cfg: &Config, target: &str, opts: &Opts, kind: &str) -> Resul
             INIT_TIMEOUT,
         )
         .await
-        .with_context(|| format!("initialize に失敗（stderr: {}）", run_dir.join("stderr.log").display()))?;
+        .with_context(|| format!("initialize failed (stderr: {})", run_dir.join("stderr.log").display()))?;
 
     if let Some(method) = &opts.auth {
         conn.request_timeout("authenticate", json!({ "methodId": method }), SESSION_TIMEOUT)
             .await
-            .context("authenticate に失敗")?;
+            .context("authenticate failed")?;
     }
 
     Ok(Session { conn, shared, init, run_dir, launch, cwd, mode: opts.mode.clone() })
@@ -102,7 +102,7 @@ impl Session {
         if let Err(e) = &r
             && e.code == RpcError::AUTH_REQUIRED {
                 let methods: Vec<String> = auth_methods(&self.init);
-                eprintln!("認証が必要です。使える方法: {}（--auth <id> で指定）", methods.join(", "));
+                eprintln!("Authentication required. Available methods: {} (choose with --auth <id>)", methods.join(", "));
             }
         r
     }
@@ -111,7 +111,7 @@ impl Session {
         self.shared.stats.lock().unwrap().updates.values().sum()
     }
 
-    /// session/load（なければ session/resume）で既存セッションを開き直す
+    /// Reopen an existing session with session/load (or session/resume if unavailable)
     pub async fn reopen(&self, session_id: &str) -> Result<(String, u64)> {
         let caps = &self.init["agentCapabilities"];
         let method = if caps["loadSession"].as_bool() == Some(true) {
@@ -119,7 +119,7 @@ impl Session {
         } else if !caps["sessionCapabilities"]["resume"].is_null() {
             "session/resume"
         } else {
-            bail!("このエージェントは session/load も session/resume も対応していません");
+            bail!("this agent supports neither session/load nor session/resume");
         };
         let before = self.total_updates();
         self.conn
@@ -129,7 +129,7 @@ impl Session {
                 SESSION_TIMEOUT,
             )
             .await?;
-        // 履歴の再送が通知で届き切るのを少し待つ
+        // Wait briefly for the replayed history notifications to arrive
         tokio::time::sleep(Duration::from_millis(500)).await;
         Ok((method.to_string(), self.total_updates() - before))
     }
@@ -216,20 +216,20 @@ pub async fn caps(cfg: &Config, target: &str, opts: &Opts) -> Result<CapsRow> {
             row.models = ids(&r["models"]["availableModels"], "modelId");
             new_session = r;
         }
-        Err(e) => row.new_session = format!("失敗: {e}"),
+        Err(e) => row.new_session = format!("failed: {e}"),
     }
 
     let mut list = Value::Null;
     if !ac["sessionCapabilities"]["list"].is_null() {
         match s.conn.request_timeout("session/list", json!({ "cwd": s.cwd }), SESSION_TIMEOUT).await {
             Ok(r) => {
-                row.session_list = format!("{} 件", r["sessions"].as_array().map(|a| a.len()).unwrap_or(0));
+                row.session_list = format!("{} sessions", r["sessions"].as_array().map(|a| a.len()).unwrap_or(0));
                 list = r;
             }
-            Err(e) => row.session_list = format!("失敗: {e}"),
+            Err(e) => row.session_list = format!("failed: {e}"),
         }
     } else {
-        row.session_list = "非対応".into();
+        row.session_list = "unsupported".into();
     }
 
     std::fs::write(
@@ -250,17 +250,17 @@ fn join_or(v: &[String], empty: &str) -> String {
 
 fn print_caps(r: &CapsRow) {
     println!();
-    println!("エージェント        {}", r.agent_info);
-    println!("プロトコル          v{}", r.protocol);
-    println!("session/load        {}", if r.load_session { "対応" } else { "非対応" });
-    println!("セッション機能      {}", join_or(&r.session_caps, "なし"));
-    println!("プロンプト          text{}", r.prompt_caps.iter().map(|c| format!(", {c}")).collect::<String>());
-    println!("MCP                 {}", join_or(&r.mcp_caps, "stdio のみ"));
-    println!("認証方法            {}", join_or(&r.auth, "なし"));
+    println!("agent               {}", r.agent_info);
+    println!("protocol            v{}", r.protocol);
+    println!("session/load        {}", if r.load_session { "supported" } else { "unsupported" });
+    println!("session caps        {}", join_or(&r.session_caps, "none"));
+    println!("prompt              text{}", r.prompt_caps.iter().map(|c| format!(", {c}")).collect::<String>());
+    println!("MCP                 {}", join_or(&r.mcp_caps, "stdio only"));
+    println!("auth methods        {}", join_or(&r.auth, "none"));
     println!("session/new         {}", r.new_session);
-    println!("モード              {}", join_or(&r.modes, "なし"));
-    println!("設定項目            {}", join_or(&r.config_options, "なし"));
-    println!("モデル              {}", join_or(&r.models, "なし"));
+    println!("modes               {}", join_or(&r.modes, "none"));
+    println!("config options      {}", join_or(&r.config_options, "none"));
+    println!("models              {}", join_or(&r.models, "none"));
     println!("session/list        {}", r.session_list);
 }
 
@@ -313,10 +313,10 @@ pub async fn run(
     s.conn.shutdown().await;
 
     if !opts.quiet {
-        println!("\n\n== 結果");
+        println!("\n\n== result");
         println!("{}", serde_json::to_string_pretty(&summary)?);
         if let Some(id) = &summary.session_id {
-            println!("\n開き直す: plyfold-probe run {target} --session {id}");
+            println!("\nreopen with: plyfold-probe run {target} --session {id}");
         }
     }
     Ok(summary)
@@ -332,14 +332,14 @@ async fn run_inner(
     let sid = match session_id {
         Some(id) => {
             let (method, replayed) = s.reopen(&id).await?;
-            let msg = format!("{method} で開き直し、履歴の通知を {replayed} 件受信");
+            let msg = format!("reopened with {method}; received {replayed} history notifications");
             s.shared.note(msg.clone());
             summary.reopen = Some(msg);
             id
         }
         None => {
             let r = s.new_session().await?;
-            r["sessionId"].as_str().context("sessionId がありません")?.to_string()
+            r["sessionId"].as_str().context("missing sessionId")?.to_string()
         }
     };
     summary.session_id = Some(sid.clone());
@@ -348,7 +348,7 @@ async fn run_inner(
         s.conn
             .request_timeout("session/set_mode", json!({ "sessionId": sid, "modeId": mode }), SESSION_TIMEOUT)
             .await?;
-        s.shared.note(format!("モードを {mode} に切り替え"));
+        s.shared.note(format!("switched mode to {mode}"));
     }
 
     let Some(prompt) = prompt else { return Ok(()) };
@@ -369,7 +369,7 @@ async fn run_inner(
                     return;
                 }
                 *cancel_at.lock().unwrap() = Some(Instant::now());
-                shared.note("session/cancel を送信");
+                shared.note("sent session/cancel");
                 let _ = conn.notify("session/cancel", json!({ "sessionId": sid })).await;
             }
         }
@@ -411,7 +411,7 @@ async fn run_inner(
 
 pub async fn parallel(cfg: Arc<Config>, targets: Vec<String>, opts: Opts, prompt: String) -> Result<()> {
     if opts.policy == Policy::Ask {
-        bail!("parallel では --permission allow か reject を指定してください");
+        bail!("parallel needs --permission allow or reject");
     }
     let opts = Opts { quiet: true, ..opts };
     let mut tasks = Vec::new();
@@ -424,19 +424,19 @@ pub async fn parallel(cfg: Arc<Config>, targets: Vec<String>, opts: Opts, prompt
             (t, r)
         }));
     }
-    println!("\n| プロファイル | 結果 | 本文文字数 | 時間 | 記録 |");
+    println!("\n| profile | result | text chars | time | log |");
     println!("|---|---|---|---|---|");
     for task in tasks {
         let (t, r) = task.await?;
         match r {
             Ok(s) => println!(
                 "| {t} | {} | {} | {:.1}s | {} |",
-                s.error.as_deref().map(|e| format!("エラー: {e}")).or(s.stop_reason.clone()).unwrap_or_default(),
+                s.error.as_deref().map(|e| format!("error: {e}")).or(s.stop_reason.clone()).unwrap_or_default(),
                 s.stats.agent_text_chars,
                 s.elapsed_ms as f64 / 1000.0,
                 s.run_dir.display()
             ),
-            Err(e) => println!("| {t} | 起動失敗: {e:#} | | | |"),
+            Err(e) => println!("| {t} | failed to start: {e:#} | | | |"),
         }
     }
     Ok(())
@@ -449,7 +449,7 @@ pub async fn matrix(cfg: &Config, targets: Vec<String>, opts: &Opts) -> Result<P
     let targets = if targets.is_empty() { cfg.agents.keys().cloned().collect() } else { targets };
     let mut rows = Vec::new();
     for t in &targets {
-        eprintln!("調査中: {t}");
+        eprintln!("probing: {t}");
         let row = match caps(cfg, t, &opts).await {
             Ok(r) => r,
             Err(e) => CapsRow { target: t.clone(), error: Some(format!("{e:#}")), ..Default::default() },
@@ -458,22 +458,22 @@ pub async fn matrix(cfg: &Config, targets: Vec<String>, opts: &Opts) -> Result<P
     }
 
     let fields: [(&str, fn(&CapsRow) -> String); 12] = [
-        ("エージェント", |r| r.agent_info.clone()),
-        ("プロトコル", |r| r.protocol.clone()),
+        ("agent", |r| r.agent_info.clone()),
+        ("protocol", |r| r.protocol.clone()),
         ("session/load", |r| if r.load_session { "○".into() } else { "×".into() }),
-        ("セッション機能", |r| join_or(&r.session_caps, "-")),
-        ("プロンプト", |r| join_or(&r.prompt_caps, "text のみ")),
-        ("MCP", |r| join_or(&r.mcp_caps, "stdio のみ")),
-        ("認証方法", |r| join_or(&r.auth, "-")),
+        ("session caps", |r| join_or(&r.session_caps, "-")),
+        ("prompt", |r| join_or(&r.prompt_caps, "text only")),
+        ("MCP", |r| join_or(&r.mcp_caps, "stdio only")),
+        ("auth methods", |r| join_or(&r.auth, "-")),
         ("session/new", |r| r.new_session.clone()),
-        ("モード", |r| join_or(&r.modes, "-")),
-        ("設定項目", |r| join_or(&r.config_options, "-")),
-        ("モデル", |r| summarize_models(&r.models)),
+        ("modes", |r| join_or(&r.modes, "-")),
+        ("config options", |r| join_or(&r.config_options, "-")),
+        ("models", |r| summarize_models(&r.models)),
         ("session/list", |r| r.session_list.clone()),
     ];
 
-    let mut md = String::from("# ACP 対応状況（initialize / session/new 時点）\n\n");
-    md += &format!("| 項目 | {} |\n", targets.join(" | "));
+    let mut md = String::from("# ACP support (as of initialize / session/new)\n\n");
+    md += &format!("| item | {} |\n", targets.join(" | "));
     md += &format!("|---|{}\n", "---|".repeat(targets.len()));
     for (name, f) in fields {
         let cells: Vec<String> = rows
@@ -484,12 +484,12 @@ pub async fn matrix(cfg: &Config, targets: Vec<String>, opts: &Opts) -> Result<P
     }
     let errors: Vec<&CapsRow> = rows.iter().filter(|r| r.error.is_some()).collect();
     if !errors.is_empty() {
-        md += "\n## 起動できなかったもの\n\n";
+        md += "\n## Failed to start\n\n";
         for r in errors {
             md += &format!("- **{}**: {}\n", r.target, r.error.as_deref().unwrap_or(""));
         }
     }
-    md += "\n権限確認・差分・中断は `plyfold-probe run` で確かめる（summary.json に記録される）。\n";
+    md += "\nCheck permission requests, diffs and cancellation with `plyfold-probe run` (recorded in summary.json).\n";
 
     let path = opts.root.join("probe-runs").join("matrix.md");
     std::fs::write(&path, &md)?;
@@ -497,7 +497,7 @@ pub async fn matrix(cfg: &Config, targets: Vec<String>, opts: &Opts) -> Result<P
     Ok(path)
 }
 
-/// "gpt-x[high]" のような effort 違いをまとめ、数と代表例だけにする
+/// Collapse effort variants like "gpt-x[high]" and show only a count and a few examples
 fn summarize_models(models: &[String]) -> String {
     if models.is_empty() {
         return "-".into();
@@ -510,8 +510,8 @@ fn summarize_models(models: &[String]) -> String {
         }
     }
     let head: Vec<&str> = base.iter().take(4).map(String::as_str).collect();
-    let more = if base.len() > 4 { " ほか" } else { "" };
-    format!("{} 種（{}{more}）", base.len(), head.join(", "))
+    let more = if base.len() > 4 { ", ..." } else { "" };
+    format!("{} ({}{more})", base.len(), head.join(", "))
 }
 
 pub fn root_of(config_path: &Path) -> PathBuf {

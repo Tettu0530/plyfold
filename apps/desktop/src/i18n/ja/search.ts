@@ -1,4 +1,4 @@
-// SearchCard.tsx（⌘K の検索）
+// SearchCard.tsx (⌘K search)
 export const search = {
   newSession: "新しいセッション",
   switchMode: "mode を切り替え",

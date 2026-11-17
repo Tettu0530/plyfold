@@ -1,4 +1,4 @@
-// DiffView.tsx（差分の画面）
+// DiffView.tsx (diff screen)
 export const diff = {
   badgeAdded: "追加",
   badgeDeleted: "削除",

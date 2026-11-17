@@ -1,35 +1,35 @@
 # plyfold-probe
 
-各 CLI の ACP 対応状況を調べる検証用 CLI。SDK を使わず、生の JSON-RPC を話して、送受信したメッセージをすべて記録する。
+A verification CLI that checks each CLI's ACP support. It speaks raw JSON-RPC without the SDK and records every message sent and received.
 
 ```sh
 cargo build
-alias probe=./target/debug/plyfold-probe   # リポジトリのルートで実行（probe.toml を読む）
+alias probe=./target/debug/plyfold-probe   # run from the repository root (reads probe.toml)
 
-probe list                         # 設定済みのエージェントとプロファイル
-probe caps claude                  # initialize と session/new の結果（トークンは使わない）
-probe matrix                       # 全エージェントの caps → probe-runs/matrix.md
+probe list                         # configured agents and profiles
+probe caps claude                  # results of initialize and session/new (uses no tokens)
+probe matrix                       # caps for every agent → probe-runs/matrix.md
 
-probe run claude --prompt "..."                      # 権限確認はターミナルで選ぶ
+probe run claude --prompt "..."                      # answer permission requests in the terminal
 probe run claude --mode default --permission reject --prompt "..."
-probe run claude --cancel-after 4 --prompt "..."     # 中断の確認（Ctrl-C でも送る）
-probe run claude --session <id> --prompt "..."       # session/load / resume で開き直す
+probe run claude --cancel-after 4 --prompt "..."     # test cancel (Ctrl-C also sends it)
+probe run claude --session <id> --prompt "..."       # reopen with session/load / resume
 
-# 複数のキー
-probe keys set claude-key-a ANTHROPIC_API_KEY        # 対話入力でキーチェーンに登録
+# Multiple keys
+probe keys set claude-key-a ANTHROPIC_API_KEY        # store a key in the Keychain (interactive prompt)
 probe caps claude-key-a
-probe parallel claude-key-a claude-key-b --prompt "hi と答えて"
+probe parallel claude-key-a claude-key-b --prompt "Reply with hi"
 ```
 
-- 記録先：`probe-runs/<時刻>-<対象>-<種類>/`
-  - `transcript.jsonl`：全メッセージ。キーの値は `***` に置き換える
+- Output goes to `probe-runs/<time>-<target>-<kind>/`
+  - `transcript.jsonl`: every message. Key values are replaced with `***`
   - `stderr.log`
   - `summary.json` / `caps.json`
-- 既定の作業ディレクトリは `probe-runs/workspace`。fs の読み書きはこの中だけ許可する
-- プロファイルの設定ディレクトリは `~/Library/Application Support/plyfold-probe/profiles/<name>/`
-- エージェント名をそのまま指定すると、既存のログインと設定（`~/.claude`、`~/.codex` など）を引き継ぐ。権限設定もそのまま効くので、確認が出ないことがある
-- `probe.local.toml` が `probe.toml` と同じ場所にあれば、上書きで足す（git に入れない。プロキシ事業者の設定などはここに書く）
-- プロファイルの書き方
-  - `keys = { VAR = "keychain:<名前>/<変数名>" }`：1 つのキーを複数のプロファイルで使う
-  - `files`：isolate したディレクトリに置くファイル（Codex の `config.toml` など）
-  - `env` の値に書いた `{profile_dir}` は、プロファイルのディレクトリに置き換わる
+- The default working directory is `probe-runs/workspace`. fs reads and writes are allowed only inside it
+- Profile config directories are `~/Library/Application Support/plyfold-probe/profiles/<name>/`
+- Passing a bare agent name inherits the existing login and configuration (`~/.claude`, `~/.codex`, etc.). Permission settings apply as well, so permission requests may not appear
+- If `probe.local.toml` sits next to `probe.toml`, it is merged on top (keep it out of git; put local settings such as custom endpoints there)
+- Writing profiles
+  - `keys = { VAR = "keychain:<name>/<VAR>" }`: share one key across multiple profiles
+  - `files`: files to place in the isolated directory (e.g. Codex's `config.toml`)
+  - `{profile_dir}` in an `env` value is replaced with the profile's directory

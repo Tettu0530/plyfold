@@ -1,13 +1,13 @@
-//! テストと UI 開発用の模擬 ACP エージェント（トークンを使わない）
+//! Mock ACP agent for tests and UI development (spends no tokens)
 //!
-//! プロンプトに含まれる言葉でふるまいを変える:
-//! - `permission` : ファイルを書く前に権限確認を出す。許可されたら `mock-output.txt` を書き、diff を返す
-//! - `hang`       : session/cancel が来るまで終わらない
-//! - `silent`     : 何も送らずに 3 秒黙ってから答える（無応答の検知の確認用）
-//! - それ以外     : `echo: <プロンプト>` と答える
+//! Behavior depends on words in the prompt:
+//! - `permission` : asks for permission before writing a file. If allowed, writes `mock-output.txt` and returns a diff
+//! - `hang`       : does not finish until session/cancel arrives
+//! - `silent`     : stays silent for 3 seconds, then answers (for testing stall detection)
+//! - otherwise    : answers `echo: <prompt>`
 //!
-//! 履歴は `<cwd>/.plyfold-mock/<sessionId>.jsonl` に残し、session/load で再送する。
-//! 設定項目（model / effort / mode）と使用量（usage_update、ターンごとの usage）も返す。
+//! History is kept in `<cwd>/.plyfold-mock/<sessionId>.jsonl` and replayed on session/load.
+//! Also reports config options (model / effort / mode) and usage (usage_update, per-turn usage).
 
 use std::collections::{HashMap, HashSet};
 use std::io::Write as _;
@@ -28,7 +28,7 @@ struct State {
     cancelled: Mutex<HashSet<String>>,
     cwds: Mutex<HashMap<String, PathBuf>>,
     seq: AtomicU64,
-    /// sessionId → (configId → 値)
+    /// sessionId → (configId → value)
     config: Mutex<HashMap<String, HashMap<String, String>>>,
     used: AtomicU64,
 }
@@ -206,7 +206,7 @@ fn handle_request(st: &Arc<State>, id: Value, method: &str, params: Value) {
                 st.send(json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32002, "message": "session not found"}}));
                 return;
             };
-            // 再送の間は履歴に追記しないよう、cwd の登録は再送の後にする
+            // Register the cwd only after the replay, so the replay is not appended to the history
             for line in text.lines() {
                 if let Ok(update) = serde_json::from_str::<Value>(line) {
                     st.send(json!({"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": sid, "update": update}}));

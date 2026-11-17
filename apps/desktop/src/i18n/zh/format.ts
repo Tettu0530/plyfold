@@ -1,4 +1,4 @@
-// lib/format.ts と時刻の書式（経過、何分前 など）
+// lib/format.ts and time formats (elapsed, minutes ago, etc.)
 import type { format as source } from "../ja/format";
 
 export const format: Record<keyof typeof source, string> = {

@@ -1,4 +1,4 @@
-//! plyfold-probe: 各 CLI の ACP 対応状況を調べる検証用 CLI
+//! plyfold-probe: test CLI that checks how well each agent CLI supports ACP
 
 mod bench;
 mod codebench;
@@ -19,18 +19,18 @@ use handler::Policy;
 use scenario::Opts;
 
 #[derive(Parser)]
-#[command(name = "plyfold-probe", about = "各 CLI の ACP 対応状況を調べる検証用 CLI")]
+#[command(name = "plyfold-probe", about = "Checks how well each agent CLI supports ACP")]
 struct Cli {
-    /// 設定ファイル
+    /// Config file
     #[arg(long, global = true, default_value = "probe.toml")]
     config: PathBuf,
-    /// 作業ディレクトリ（既定: probe-runs/workspace）
+    /// Working directory (default: probe-runs/workspace)
     #[arg(long, global = true)]
     cwd: Option<PathBuf>,
-    /// session/new の前に authenticate する認証方法の id
+    /// Id of the auth method to authenticate with before session/new
     #[arg(long, global = true)]
     auth: Option<String>,
-    /// session/new の後に切り替えるモード（caps の「モード」の id）
+    /// Mode to switch to after session/new (an id from the "modes" line of caps)
     #[arg(long, global = true)]
     mode: Option<String>,
     #[command(subcommand)]
@@ -39,30 +39,30 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// 設定済みのエージェントとプロファイルを表示
+    /// Show configured agents and profiles
     List,
-    /// initialize と session/new の結果から、対応機能を表示（トークンは使わない）
+    /// Show supported features from initialize and session/new (spends no tokens)
     Caps {
-        /// プロファイル名かエージェント名
+        /// Profile name or agent name
         target: String,
     },
-    /// プロンプトを 1 回送り、ストリーム・権限確認・差分・中断を記録
+    /// Send one prompt and record streaming, permission requests, diffs and cancellation
     Run {
         target: String,
-        /// 送るプロンプト（--session だけなら開き直しの確認のみ）
+        /// Prompt to send (with only --session, just checks reopening)
         #[arg(long)]
         prompt: Option<String>,
-        /// 権限確認への応じ方
+        /// How to answer permission requests
         #[arg(long, value_enum, default_value_t = Policy::Ask)]
         permission: Policy,
-        /// 指定秒数後に session/cancel を送る（Ctrl-C でも送る）
+        /// Send session/cancel after this many seconds (Ctrl-C also sends it)
         #[arg(long)]
         cancel_after: Option<u64>,
-        /// 既存セッションを session/load か session/resume で開き直す
+        /// Reopen an existing session with session/load or session/resume
         #[arg(long)]
         session: Option<String>,
     },
-    /// 複数のプロファイルで同時にプロンプトを送る（キーの分離の確認）
+    /// Send a prompt from several profiles at once (checks key isolation)
     Parallel {
         targets: Vec<String>,
         #[arg(long)]
@@ -70,23 +70,23 @@ enum Cmd {
         #[arg(long, value_enum, default_value_t = Policy::Reject)]
         permission: Policy,
     },
-    /// 軽いベンチマーク（トークナイザーの指紋・答えが決まった問題・速さ）を同時に実行
+    /// Run a light benchmark concurrently (tokenizer fingerprint, fixed-answer questions, speed)
     Bench {
         targets: Vec<String>,
-        /// 問題のセットを何回分やるか（1 回 = 4 問）
+        /// Number of question sets to run (1 set = 4 questions)
         #[arg(long, default_value_t = 2)]
         trials: u64,
     },
-    /// コーディングのベンチマーク（Rust の小さな課題 4 つ。隠しテストで採点）
+    /// Coding benchmark (4 small Rust tasks, graded with hidden tests)
     Codebench {
         targets: Vec<String>,
-        /// 実行はせず、codebench-*.json の作業フォルダを採点し直す
+        /// Don't run anything; regrade the work folders from a codebench-*.json
         #[arg(long)]
         regrade: Option<PathBuf>,
     },
-    /// 全エージェントの caps を集めて probe-runs/matrix.md に書き出す
+    /// Collect caps for all agents and write probe-runs/matrix.md
     Matrix { targets: Vec<String> },
-    /// キーチェーンの API キーを管理
+    /// Manage API keys in the Keychain
     Keys {
         #[command(subcommand)]
         cmd: KeysCmd,
@@ -95,9 +95,9 @@ enum Cmd {
 
 #[derive(Subcommand)]
 enum KeysCmd {
-    /// 登録（値は対話入力）
+    /// Store (value is read interactively)
     Set { profile: String, var: String },
-    /// 削除
+    /// Delete
     Delete { profile: String, var: String },
 }
 
@@ -124,11 +124,11 @@ async fn main() -> Result<()> {
 
     match cli.cmd {
         Cmd::List => {
-            println!("エージェント:");
+            println!("Agents:");
             for (id, a) in &cfg.agents {
                 println!("  {id:10} {} {}", a.command, a.args.join(" "));
             }
-            println!("プロファイル:");
+            println!("Profiles:");
             for (name, p) in &cfg.profiles {
                 let keys: Vec<_> = p.keys.iter().map(|(k, v)| format!("{k}←{v}")).collect();
                 println!(
@@ -144,7 +144,7 @@ async fn main() -> Result<()> {
         }
         Cmd::Run { target, prompt, permission, cancel_after, session } => {
             if prompt.is_none() && session.is_none() {
-                anyhow::bail!("--prompt か --session のどちらかを指定してください");
+                anyhow::bail!("Specify --prompt or --session");
             }
             let opts = Opts { policy: permission, ..opts };
             let s = scenario::run(&cfg, &target, &opts, prompt, cancel_after, session).await?;
@@ -159,18 +159,18 @@ async fn main() -> Result<()> {
         Cmd::Bench { targets, trials } => {
             let opts = Opts { policy: Policy::Reject, ..opts };
             let path = bench::bench(Arc::new(cfg), targets, opts, trials).await?;
-            eprintln!("書き出し: {}", path.display());
+            eprintln!("wrote: {}", path.display());
         }
         Cmd::Codebench { targets, regrade } => {
             let path = match regrade {
                 Some(json) => codebench::regrade(&json).await?,
                 None => codebench::codebench(Arc::new(cfg), targets, opts).await?,
             };
-            eprintln!("書き出し: {}", path.display());
+            eprintln!("wrote: {}", path.display());
         }
         Cmd::Matrix { targets } => {
             let path = scenario::matrix(&cfg, targets, &opts).await?;
-            eprintln!("書き出し: {}", path.display());
+            eprintln!("wrote: {}", path.display());
         }
         Cmd::Keys { .. } => unreachable!(),
     }

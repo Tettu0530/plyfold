@@ -1,5 +1,5 @@
-// リポジトリを選ぶ欄: 最近使ったリポジトリと、入力の続きになるフォルダの補完
-//   ↑↓ で選ぶ、Tab でそのフォルダの中へ進む（続けて補完）、⏎ で決める
+// Repository picker: recent repositories plus completion of folders continuing the input
+//   ↑↓ to select, Tab to descend into that folder (keeps completing), ⏎ to confirm
 import { Folder, GitBranch } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -13,14 +13,14 @@ import { useT } from "@/i18n";
 
 const baseName = (p: string) => p.replace(/\/+$/, "").split("/").pop() || p;
 
-/** 最近のリポジトリ: セッションのリポジトリを新しい順に（同じものは 1 つ。セッションで使ったので git のリポジトリとみなす） */
+/** Recent repositories: session repositories, newest first (deduplicated; used by a session, so treated as git repositories) */
 function useRecent(current: string): DirCandidate[] {
   const sessions = useStore((s) => s.sessions);
   return useMemo(() => {
     const seen = new Set<string>();
     const out: DirCandidate[] = [];
     const list = Object.values(sessions).sort((a, b) => b.record.updated_at - a.record.updated_at);
-    // 今の値は入力欄に出ているので並べない
+    // The current value is already in the input, so don't list it
     seen.add(current);
     for (const p of list.map((v) => v.record.repo_path)) {
       if (!p || seen.has(p)) continue;
@@ -40,7 +40,7 @@ export function RepoPicker({ value, onPick }: { value: string; onPick: (path: st
   const recent = useRecent(value);
   const touched = query !== value;
 
-  // 入力が変わったら、少し待ってから補完を取りにいく
+  // When the input changes, wait a moment before fetching completions
   useEffect(() => {
     if (!inTauri || !touched) {
       setDirs([]);
@@ -56,7 +56,7 @@ export function RepoPicker({ value, onPick }: { value: string; onPick: (path: st
     };
   }, [query, touched]);
 
-  // 開いた直後は最近のものだけ。打ち始めたら、名前に打った文字を含む最近のものと補完を並べる
+  // Right after opening, only recent ones. Once typing starts, list recent ones whose name contains the text, plus completions
   const q = baseName(query).toLowerCase();
   const recentShown = touched ? recent.filter((r) => r.path !== query && r.name.toLowerCase().includes(q)).slice(0, 3) : recent;
   const rows = [...recentShown.map((r) => ({ ...r, recent: true })), ...dirs.filter((d) => !recentShown.some((r) => r.path === d.path)).map((d) => ({ ...d, recent: false }))];
@@ -73,12 +73,12 @@ export function RepoPicker({ value, onPick }: { value: string; onPick: (path: st
       e.preventDefault();
       if (rows.length) setActive((cur + (e.key === "ArrowDown" ? 1 : rows.length - 1)) % rows.length);
     } else if (e.key === "Tab" && !e.shiftKey && rows[cur]) {
-      // そのフォルダの中へ進む
+      // Descend into that folder
       e.preventDefault();
       setQuery(`${rows[cur].path}/`);
     } else if (e.key === "Enter") {
       e.preventDefault();
-      // 打っている途中で候補を選んでいなければ、打った値で決める
+      // If no candidate was selected while typing, confirm with the typed value
       const pick = touched && dirs.length === 0 && recentShown.length === 0 ? query : (rows[cur]?.path ?? query);
       onPick(pick.replace(/\/+$/, "") || pick);
     }

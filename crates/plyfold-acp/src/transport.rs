@@ -1,4 +1,4 @@
-//! エージェントのプロセスと、改行区切りの JSON-RPC（ACP の stdio 輸送）
+//! The agent process and newline-delimited JSON-RPC (ACP's stdio transport)
 
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
@@ -16,7 +16,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::redact::Redactor;
 
-/// エージェントの起動方法
+/// How to launch the agent
 #[derive(Debug, Clone, Default)]
 pub struct SpawnSpec {
     pub command: String,
@@ -24,7 +24,7 @@ pub struct SpawnSpec {
     pub cwd: PathBuf,
     pub env_set: Vec<(String, String)>,
     pub env_remove: Vec<String>,
-    /// ログに出してはいけない値（キーなど）
+    /// Values that must never appear in logs (keys, etc.)
     pub secrets: Vec<String>,
 }
 
@@ -35,7 +35,7 @@ pub enum Direction {
     Out,
 }
 
-/// 送受信したメッセージを受け取る先（イベントログなど）。値は伏せ字にした後の文字列
+/// Destination for sent and received messages (e.g. the event log). Values arrive already redacted
 pub type FrameSink = Arc<dyn Fn(Direction, &str) + Send + Sync>;
 
 #[derive(Debug, thiserror::Error)]
@@ -66,16 +66,16 @@ impl AcpError {
     }
 }
 
-/// エージェントから届いたもの
+/// Something received from the agent
 #[derive(Debug, Clone)]
 pub enum Incoming {
     Request { id: Value, method: String, params: Value },
     Notification { method: String, params: Value },
-    /// プロセスの stdout が閉じた（終了した）
+    /// The process's stdout closed (it exited)
     Closed,
 }
 
-/// 応答と、その時点までにエージェントから届いたリクエスト・通知の数（区切り）
+/// A response, plus the number of requests and notifications received from the agent up to that point (the barrier)
 type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<(Value, u64), AcpError>>>>>;
 
 const STDERR_TAIL: usize = 200;
@@ -114,9 +114,9 @@ impl Connection {
             .spawn()
             .map_err(|source| AcpError::Spawn { command: spec.command.clone(), source })?;
 
-        let stdin = child.stdin.take().expect("stdin は piped");
-        let stdout = child.stdout.take().expect("stdout は piped");
-        let stderr = child.stderr.take().expect("stderr は piped");
+        let stdin = child.stdin.take().expect("stdin is piped");
+        let stdout = child.stdout.take().expect("stdout is piped");
+        let stderr = child.stderr.take().expect("stderr is piped");
 
         let stderr_tail = Arc::new(Mutex::new(VecDeque::new()));
         {
@@ -152,7 +152,7 @@ impl Connection {
                         sink(Direction::In, &redactor.redact(&line));
                     }
                     let Ok(msg) = serde_json::from_str::<Value>(&line) else {
-                        tracing::warn!("JSON でない行を受信: {}", redactor.redact(&line));
+                        tracing::warn!("received a non-JSON line: {}", redactor.redact(&line));
                         continue;
                     };
                     dispatch(msg, &pending, &tx, &delivered);
@@ -192,8 +192,8 @@ impl Connection {
         self.request_with_barrier(method, params, timeout).await.map(|(v, _)| v)
     }
 
-    /// 応答と一緒に「区切り」を返す。区切りは、応答が届いた時点までに `Incoming` として渡した
-    /// リクエスト・通知の数。受け取る側がその数まで処理し終えれば、応答より前に届いた通知を取りこぼさない
+    /// Returns a "barrier" along with the response: the number of requests and notifications handed out as
+    /// `Incoming` by the time the response arrived. If the receiver processes that many, nothing sent before the response is lost
     pub async fn request_with_barrier(
         &self,
         method: &str,
@@ -244,7 +244,7 @@ impl Connection {
         self.send(json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}})).await
     }
 
-    /// stderr の最後の数百行（伏せ字済み）。起動失敗の原因を見せるのに使う
+    /// The last few hundred lines of stderr (redacted). Used to show why a launch failed
     pub fn stderr_tail(&self) -> Vec<String> {
         self.stderr_tail.lock().unwrap().iter().cloned().collect()
     }

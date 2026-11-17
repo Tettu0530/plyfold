@@ -1,4 +1,4 @@
-// pane/DraftPane.tsx、pane/RepoPicker.tsx（新しいセッション）
+// pane/DraftPane.tsx, pane/RepoPicker.tsx (new session)
 import type { draft as source } from "../ja/draft";
 
 export const draft: Record<keyof typeof source, string> = {

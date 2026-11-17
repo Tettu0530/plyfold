@@ -1,4 +1,4 @@
-// ProfilesView.tsx（プロファイルの画面）
+// ProfilesView.tsx (profiles screen)
 export const profiles = {
   authApi: "公式 API",
   authLogin: "既存のログイン",

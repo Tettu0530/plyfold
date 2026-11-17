@@ -1,4 +1,4 @@
-// pane/Attachments.tsx（添えるもの、+ のメニュー）
+// pane/Attachments.tsx (attachments, the + menu)
 import type { attach as source } from "../ja/attach";
 
 export const attach: Record<keyof typeof source, string> = {
@@ -9,6 +9,6 @@ export const attach: Record<keyof typeof source, string> = {
   add: "Attach",
   attachFile: "Attach file",
   attachImage: "Attach image",
-  // {keys} はキーの組み合わせ（Keys の部品）に置き換わる
+  // {keys} is replaced by a key combination (the Keys component)
   pasteHint: "{keys} pastes an image. Files dropped on the pane are attached too.",
 };

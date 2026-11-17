@@ -1,4 +1,4 @@
-// state/store.ts、state/transcript.ts、lib/lineDiff.ts の画面に出る文
+// User-facing text from state/store.ts, state/transcript.ts, lib/lineDiff.ts
 export const store = {
   fallbackTitle: "セッション",
   notifyPermission: "権限確認待ちです",

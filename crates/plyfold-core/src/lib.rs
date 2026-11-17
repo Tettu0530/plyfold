@@ -1,9 +1,9 @@
-//! Plyfold のエンジン: プロファイル・worktree・ACP・記録を束ねる
+//! The Plyfold engine: ties together profiles, worktrees, ACP and the session log
 //!
-//! UI（Tauri など）はこのエンジンだけを触る。状態の変化は [`EngineEvent`] として配信する。
-//! - セッション（記録）とエージェントのプロセス（実行）は別物。プロセスを止めても記録は残り、`reopen_session` で再開できる
-//! - 権限確認は UI に回し、返事を `respond_permission` で受け取る
-//! - ターンの途中で一定時間なにも届かなければ `Stalled` にする（検証で、終わらないエージェントがいたため）
+//! The UI (Tauri, etc.) talks only to this engine. State changes are delivered as [`EngineEvent`]s.
+//! - A session (the record) and the agent process (the execution) are separate. Stopping the process keeps the record, and `reopen_session` resumes it
+//! - Permission requests are forwarded to the UI, and the answer comes back through `respond_permission`
+//! - If nothing arrives for a while during a turn, the session becomes `Stalled` (testing turned up agents that never finish)
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -69,7 +69,7 @@ pub struct PermissionChoice {
 pub enum EngineEvent {
     SessionCreated { session: SessionRecord },
     Status { session_id: String, status: SessionStatus },
-    /// session/update の `update` の部分（生の JSON。UI が種類ごとに描く）
+    /// The `update` part of session/update (raw JSON; the UI renders each kind)
     Update { session_id: String, update: Value },
     PermissionRequested {
         session_id: String,
@@ -80,11 +80,11 @@ pub enum EngineEvent {
     },
     PermissionResolved { session_id: String, permission_id: String, option_id: Option<String> },
     TurnEnded { session_id: String, stop_reason: Option<String>, error: Option<String> },
-    /// 人に知らせたいこと（起動の失敗、無応答、開き直しの結果など）
+    /// Something to tell the user (launch failures, no response, reopen results, etc.)
     Notice { session_id: String, message: String },
-    /// 設定項目と使用量（変わるたびに全体を送る。流れている途中は 0.5 秒ごと）
+    /// Config options and usage (sent in full on every change; every 0.5 s while streaming)
     Info { session_id: String, info: Box<SessionInfo> },
-    /// エージェントが付けたタイトルで、セッションの名前が替わった
+    /// The session was renamed to a title the agent set
     Renamed { session_id: String, title: String },
 }
 
@@ -92,30 +92,30 @@ pub struct EngineOptions {
     pub state_dir: PathBuf,
     pub config: Config,
     pub secrets: Arc<dyn SecretStore>,
-    /// ターンの途中でこれだけ何も届かなければ Stalled にする
+    /// Mark the session Stalled if nothing arrives for this long during a turn
     pub stall_after: Duration,
 }
 
 pub struct StartSession {
-    /// プロファイル名かエージェント名
+    /// Profile name or agent name
     pub profile: String,
     pub title: String,
-    /// 作業するリポジトリ（またはディレクトリ）
+    /// Repository (or directory) to work in
     pub repo: PathBuf,
-    /// true ならセッション専用の worktree を切る（repo は git リポジトリであること）
+    /// If true, create a dedicated worktree for the session (repo must be a git repository)
     pub worktree: bool,
 }
 
 struct Live {
     client: AcpClient,
     acp_sid: Mutex<String>,
-    /// permission_id → JSON-RPC のリクエスト ID
+    /// permission_id → JSON-RPC request ID
     permissions: Mutex<HashMap<String, Value>>,
     last_activity: Mutex<Instant>,
     in_turn: AtomicBool,
     stalled: AtomicBool,
     closing: AtomicBool,
-    /// pump が処理し終えた AgentMessage の数（区切りと比べる）
+    /// Number of AgentMessages the pump has finished processing (compared against a barrier)
     processed: AtomicU64,
     progress: tokio::sync::Notify,
     info: Mutex<SessionInfo>,
@@ -124,7 +124,7 @@ struct Live {
 }
 
 impl Live {
-    /// 区切りまでの AgentMessage を pump が処理し終えるのを待つ（念のため上限つき）
+    /// Wait until the pump has processed every AgentMessage up to the barrier (with a safety timeout)
     async fn wait_processed(&self, barrier: u64) {
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
@@ -148,7 +148,7 @@ impl Live {
 
 struct Inner {
     store: Store,
-    /// 画面からプロファイルを編集したら差し替える（動いているセッションには影響しない）
+    /// Replaced when profiles are edited from the UI (running sessions are unaffected)
     config: RwLock<Config>,
     secrets: Arc<dyn SecretStore>,
     state_dir: PathBuf,
@@ -166,7 +166,7 @@ impl Inner {
 
     fn set_status(&self, id: &str, status: SessionStatus) {
         if let Err(e) = self.store.set_status(id, status) {
-            tracing::warn!("状態を保存できません: {e}");
+            tracing::warn!("cannot save state: {e}");
         }
         self.emit(EngineEvent::Status { session_id: id.into(), status });
     }
@@ -190,7 +190,7 @@ pub struct Engine {
 impl Engine {
     pub fn open(opts: EngineOptions) -> Result<Self, CoreError> {
         let store = Store::open(&opts.state_dir.join("plyfold.db"))?;
-        // 前回の起動で動いていたセッションは、プロセスがもうないので Closed にする
+        // Sessions that were running in the previous launch no longer have a process, so mark them Closed
         for s in store.list_sessions()? {
             if !matches!(s.status, SessionStatus::Closed | SessionStatus::Error) {
                 store.set_status(&s.id, SessionStatus::Closed)?;
@@ -219,13 +219,13 @@ impl Engine {
         &self.inner.store
     }
 
-    /// 接続テスト（記録には残さない）
+    /// Connection test (not recorded)
     pub async fn check_profile(&self, profile: &str) -> check::CheckResult {
         let config = self.inner.config.read().unwrap().clone();
         check::check_profile(&config, profile, &self.inner.state_dir, self.inner.secrets.as_ref()).await
     }
 
-    /// プロファイルの設定を差し替える（次に起動するセッションから効く）
+    /// Replace the profile config (takes effect for the next session launched)
     pub fn set_config(&self, config: Config) {
         *self.inner.config.write().unwrap() = config;
     }
@@ -280,7 +280,7 @@ impl Engine {
         Ok(inner.store.get_session(&rec.id)?)
     }
 
-    /// 止まっているセッションのエージェントを起動し直す。対応していれば session/load で文脈ごと戻す
+    /// Restart the agent for a stopped session. If supported, session/load restores the full context
     pub async fn reopen_session(&self, id: &str) -> Result<(), CoreError> {
         if self.is_running(id) {
             return Err(CoreError::AlreadyRunning(id.into()));
@@ -305,7 +305,7 @@ impl Engine {
             }
             inner.notice(id, msg);
 
-            // Inner → Live → 接続 → sink → Inner の循環を作らないよう、弱参照で持つ
+            // Hold a weak reference to avoid an Inner → Live → connection → sink → Inner cycle
             let sink: FrameSink = {
                 let weak = Arc::downgrade(&inner);
                 let id = id.to_string();
@@ -330,11 +330,11 @@ impl Engine {
                 clock: Mutex::new(None),
                 last_live_emit: Mutex::new(Instant::now()),
             });
-            // session/load の履歴の再送を受け取るため、先に受信を始める
+            // Start receiving first so the history resent by session/load is captured
             tokio::spawn(pump(inner.clone(), id.to_string(), live.clone(), rx));
 
             let opened: Result<String, CoreError> = async {
-                // 開き直せないときの理由（新しいセッションで続けるときに知らせる）
+                // Why reopening failed (reported when continuing in a new session)
                 let mut fallback = None;
                 if let Some(old) = &reopen {
                     if live.client.supports_load_session() {
@@ -345,7 +345,7 @@ impl Engine {
                                 inner.notice(id, plyfold_i18n::tr!("session/load で開き直しました（履歴はエージェントから再送されます）", "Reopened with session/load (the agent resends the history)", "已通过 session/load 重新打开（历史记录由代理重新发送）"));
                                 return Ok(old.clone());
                             }
-                            // エージェントの側に会話の記録がない（書き残す前に終わったなど）。新しいセッションで続ける
+                            // The agent has no record of the conversation (e.g. it exited before saving). Continue in a new session
                             Err(AcpError::Rpc { code: -32002, .. }) => {
                                 fallback = Some(plyfold_i18n::tr!(
                                     "エージェントの側にこの会話の記録が見つからないため、新しいセッションを作りました（文脈は引き継がれません。Plyfold の記録は残っています）",
@@ -412,16 +412,16 @@ impl Engine {
         }
     }
 
-    /// ターンを始める。終わるのは待たない（終わったら TurnEnded が届く）
+    /// Start a turn. Does not wait for it to finish (TurnEnded arrives when it does)
     pub fn prompt(&self, id: &str, text: &str) -> Result<(), CoreError> {
         self.prompt_with(id, text, &[])
     }
 
-    /// 画像やファイルを添えてターンを始める
+    /// Start a turn with images or files attached
     pub fn prompt_with(&self, id: &str, text: &str, attachments: &[Attachment]) -> Result<(), CoreError> {
         let inner = self.inner.clone();
         let live = inner.live(id)?;
-        // 画像に対応していないエージェントには、画像を保存場所に書き出してリンクで渡す
+        // For agents without image support, write images to the state dir and pass them as links
         let blocks = attach::prompt_blocks(text, attachments, live.client.supports_images(), &inner.state_dir.join("attachments"))
             .map_err(|e| CoreError::Attachment(e.to_string()))?;
         if live.in_turn.swap(true, Ordering::SeqCst) {
@@ -439,7 +439,7 @@ impl Engine {
             live.permissions.lock().unwrap().clear();
             match r {
                 Ok(turn) => {
-                    // このターンの通知を配信し終えてから、ターンの終わりを知らせる
+                    // Report the end of the turn only after this turn's notifications have been delivered
                     live.wait_processed(turn.barrier).await;
                     finish_turn(&inner, &id, &live, &turn.raw["usage"]);
                     let stop = serde_json::to_value(turn.response.stop_reason).ok().and_then(|v| v.as_str().map(str::to_string));
@@ -458,7 +458,7 @@ impl Engine {
         Ok(())
     }
 
-    /// 中断。返事待ちの権限確認は「キャンセル」で返す（ACP の決まり）
+    /// Cancel. Pending permission requests are answered with "cancelled" (per the ACP spec)
     pub async fn cancel(&self, id: &str) -> Result<(), CoreError> {
         let live = self.inner.live(id)?;
         let pending: Vec<(String, Value)> = live.permissions.lock().unwrap().drain().collect();
@@ -470,7 +470,7 @@ impl Engine {
         Ok(())
     }
 
-    /// option_id が None ならキャンセル扱い
+    /// An option_id of None is treated as a cancel
     pub async fn respond_permission(&self, id: &str, permission_id: &str, option_id: Option<&str>) -> Result<(), CoreError> {
         let live = self.inner.live(id)?;
         let request_id = live
@@ -492,12 +492,12 @@ impl Engine {
         Ok(())
     }
 
-    /// 今のセッション情報（エージェントが動いていなければ None）
+    /// Current session info (None if the agent is not running)
     pub fn session_info(&self, id: &str) -> Option<SessionInfo> {
         self.inner.live(id).ok().map(|l| l.info.lock().unwrap().clone())
     }
 
-    /// 設定項目を ID で変える
+    /// Change a config option by ID
     pub async fn set_config_option(&self, id: &str, config_id: &str, value: &str) -> Result<(), CoreError> {
         let live = self.inner.live(id)?;
         let opts = live.client.set_config_option(&live.sid(), config_id, value).await?;
@@ -506,8 +506,8 @@ impl Engine {
         Ok(())
     }
 
-    /// model / effort / mode を、エージェントごとの名前の違いを気にせずに変える。
-    /// mode は configOptions になければ旧来の session/set_mode を使う
+    /// Change model / effort / mode without caring how each agent names them.
+    /// For mode, fall back to the legacy session/set_mode when configOptions lacks it
     pub async fn set_by_category(&self, id: &str, category: Category, value: &str) -> Result<(), CoreError> {
         let live = self.inner.live(id)?;
         let config_id = live.info.lock().unwrap().option(category).map(|o| o.id.clone());
@@ -526,7 +526,7 @@ impl Engine {
         Ok(())
     }
 
-    /// エージェントを止める（記録と worktree は残る）
+    /// Stop the agent (the record and worktree are kept)
     pub async fn close_session(&self, id: &str) -> Result<(), CoreError> {
         let live = self.inner.live.lock().unwrap().remove(id);
         if let Some(live) = live {
@@ -537,7 +537,7 @@ impl Engine {
         Ok(())
     }
 
-    /// 記録ごと消す。`remove_worktree` なら worktree と枝も消す（作業内容は失われる）
+    /// Delete the session and its record. With `remove_worktree`, also delete the worktree and branch (work is lost)
     pub async fn delete_session(&self, id: &str, remove_worktree: bool) -> Result<(), CoreError> {
         let rec = self.inner.store.get_session(id)?;
         self.close_session(id).await?;
@@ -548,7 +548,7 @@ impl Engine {
         Ok(())
     }
 
-    /// worktree の差分（作ったときのコミットから、今の作業ツリーまで）
+    /// Worktree diff (from the commit it was created at to the current working tree)
     pub fn diff(&self, id: &str) -> Result<Diff, CoreError> {
         let rec = self.inner.store.get_session(id)?;
         let wt = worktree_of(&rec).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
@@ -569,7 +569,7 @@ impl Engine {
         Ok(plyfold_worktree::ops::status(&wt)?)
     }
 
-    /// 作業ツリーの変更をすべてコミットする（ターンの途中はできない）
+    /// Commit every change in the working tree (not allowed mid-turn)
     pub fn commit(&self, id: &str, message: &str) -> Result<String, CoreError> {
         let wt = self.idle_worktree(id)?;
         let hash = plyfold_worktree::ops::commit(&wt, message)?;
@@ -577,7 +577,7 @@ impl Engine {
         Ok(hash)
     }
 
-    /// 元のリポジトリで今チェックアウトしている枝へ取り込む
+    /// Merge into the branch currently checked out in the original repository
     pub fn merge(&self, id: &str) -> Result<String, CoreError> {
         let wt = self.idle_worktree(id)?;
         let target = plyfold_worktree::ops::merge(&wt)?;
@@ -585,7 +585,7 @@ impl Engine {
         Ok(target)
     }
 
-    /// 枝を push して PR を作る。URL を返す
+    /// Push the branch and open a PR. Returns its URL
     pub fn create_pr(&self, id: &str) -> Result<String, CoreError> {
         let wt = self.idle_worktree(id)?;
         let title = self.inner.store.get_session(id)?.title;
@@ -600,7 +600,7 @@ impl Engine {
         Ok(plyfold_worktree::ops::open_in_editor(&wt, prefer)?)
     }
 
-    /// 取り込んだ後の片付け: エージェントを止め、worktree と枝を消す。記録は残り、開き直すと元のリポジトリで動く
+    /// Cleanup after merging: stop the agent and delete the worktree and branch. The record stays; reopening runs in the original repository
     pub async fn cleanup_worktree(&self, id: &str) -> Result<(), CoreError> {
         let rec = self.inner.store.get_session(id)?;
         let wt = worktree_of(&rec).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
@@ -611,12 +611,12 @@ impl Engine {
         Ok(())
     }
 
-    /// 無応答とみなすまでの時間を変える（次の見張りから効く）
+    /// Change the no-response timeout (takes effect from the next watchdog check)
     pub fn set_stall_after(&self, d: Duration) {
         self.inner.stall_after_ms.store(d.as_millis() as u64, Ordering::SeqCst);
     }
 
-    /// 作業ツリーを基準のコミットまで戻す
+    /// Reset the working tree to the base commit
     pub fn discard(&self, id: &str) -> Result<(), CoreError> {
         let wt = self.idle_worktree(id)?;
         plyfold_worktree::ops::discard(&wt)?;
@@ -672,7 +672,7 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
                         live_due = true;
                     }
                 }
-                // エージェントが付けたタイトル（Claude の session_info_update）。人が名前を変えていなければ書き換える
+                // Title set by the agent (Claude's session_info_update). Applied unless the user has renamed the session
                 if update["sessionUpdate"] == "session_info_update"
                     && let Some(title) = update["title"].as_str().map(str::trim).filter(|t| !t.is_empty())
                     && matches!(inner.store.set_title_from_agent(&id, title), Ok(true))

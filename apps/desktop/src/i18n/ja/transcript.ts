@@ -1,4 +1,4 @@
-// pane/Transcript.tsx、pane/ToolCall.tsx、pane/Markdown.tsx（会話）
+// pane/Transcript.tsx, pane/ToolCall.tsx, pane/Markdown.tsx (conversation)
 export const transcript = {
   tokPerSecEstimated: "出力トークン/秒（推定）",
   tokPerSec: "出力トークン/秒",
@@ -16,7 +16,7 @@ export const transcript = {
   exitCode: "終了コード",
   toolFailed: "失敗",
   toolDone: "完了",
-  // {n} は数の部品に差し替える（数は等幅で出す）。{count} は複数形を選ぶため
+  // {n} is replaced by a number component (numbers render monospaced). {count} selects the plural form
   showMore: "残り {n} 行を表示",
   noResult: "結果はまだありません",
   tool: "ツール",

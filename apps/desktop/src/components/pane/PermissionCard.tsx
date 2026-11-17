@@ -8,7 +8,7 @@ import { dropIn } from "../motion";
 import { isImeKey } from "@/lib/keys";
 import { useT } from "@/i18n";
 
-/** エージェントによって「拒否」でターンが終わるかが違う（docs/probe-findings.md） */
+/** Whether "reject" ends the turn differs by agent (docs/probe-findings.md) */
 const REJECT_ENDS_TURN = new Set(["codex"]);
 
 export function PermissionCard({

@@ -1,4 +1,4 @@
-//! Plyfold のデスクトップアプリ: エンジンを Tauri のコマンドとして公開し、EngineEvent を画面へ流す
+//! The Plyfold desktop app: exposes the engine as Tauri commands and streams EngineEvents to the UI
 
 mod dirs;
 
@@ -14,7 +14,7 @@ use plyfold_worktree::Diff;
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager, State};
 
-/// 画面へ流すイベントの名前
+/// Name of the event streamed to the UI
 const ENGINE_EVENT: &str = "engine";
 const KEYCHAIN_SERVICE: &str = "plyfold";
 
@@ -27,21 +27,21 @@ struct AppState {
     settings: RwLock<AppSettings>,
 }
 
-/// アプリの設定（<state_dir>/settings.json）。プロファイルは config.toml の方
+/// App settings (<state_dir>/settings.json). Profiles live in config.toml
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 struct AppSettings {
     /// "auto" / "zed" / "cursor" / "code" / "finder"
     editor: String,
-    /// main に取り込んだら、エージェントを止めて worktree と枝を消す
+    /// After merging into main, stop the agent and delete the worktree and branch
     cleanup_after_merge: bool,
-    /// ターンの途中でこれだけ何も届かなければ無応答にする
+    /// Treat the agent as unresponsive if nothing arrives for this long during a turn
     stall_seconds: u64,
-    /// 新しいセッションを worktree で始める
+    /// Start new sessions in a worktree
     worktree_default: bool,
-    /// 入力欄で送るキー: "enter"（Enter で送り Shift+Enter で改行）/ "cmd_enter"（⌘Enter で送り Enter で改行）
+    /// Send key in the composer: "enter" (Enter sends, Shift+Enter inserts a newline) / "cmd_enter" (⌘Enter sends, Enter inserts a newline)
     send_key: String,
-    /// 画面の言語: "auto"（macOS の言語）/ "ja" / "en"
+    /// UI language: "auto" (the macOS language) / "ja" / "en"
     language: String,
 }
 
@@ -71,7 +71,7 @@ fn get_settings(state: State<'_, AppState>) -> SettingsView {
     }
 }
 
-/// 画面の言語に合わせて、エンジンが出す文（エラー、知らせ）の言語を切り替える
+/// Switch the language of engine messages (errors, notices) to match the UI language
 #[tauri::command]
 fn set_ui_lang(lang: String) {
     plyfold_i18n::set_lang(&lang);
@@ -94,7 +94,7 @@ fn save_settings(state: State<'_, AppState>, settings: AppSettings) -> CmdResult
     Ok(())
 }
 
-/// 設定ファイル（なければデータのフォルダ）を Finder で見せる
+/// Reveal the config file (or the data folder if it does not exist) in Finder
 #[tauri::command]
 fn reveal_path(state: State<'_, AppState>, which: String) -> CmdResult<()> {
     let mut cmd = std::process::Command::new("open");
@@ -107,7 +107,7 @@ fn reveal_path(state: State<'_, AppState>, which: String) -> CmdResult<()> {
 }
 
 impl AppState {
-    /// config.toml を読み直し、画面とエンジンの両方に反映する
+    /// Reload config.toml and apply it to both the UI and the engine
     fn reload(&self) -> CmdResult<()> {
         let mut config = Config::load(&self.config_path).map_err(err)?;
         resolve_mock_agent(&mut config);
@@ -117,7 +117,7 @@ impl AppState {
     }
 }
 
-/// コマンドのエラーは文字列で返す（画面でそのまま見せる）
+/// Command errors are returned as strings (shown as-is in the UI)
 type CmdResult<T> = Result<T, String>;
 
 fn err<E: std::fmt::Display>(e: E) -> String {
@@ -130,9 +130,9 @@ struct ProfileSummary {
     agent: String,
     label: String,
     isolate: bool,
-    /// キーで認証する（既存のログインではない）
+    /// Authenticates with a key (not an existing login)
     keyed: bool,
-    /// 独自の接続先（ベース URL）を持つ
+    /// Has a custom endpoint (base URL)
     custom_provider: bool,
 }
 
@@ -151,7 +151,7 @@ fn list_profiles(state: State<'_, AppState>) -> Vec<ProfileSummary> {
             custom_provider: p.env.keys().any(|k| k.ends_with("BASE_URL")) || p.files.contains_key("config.toml"),
         })
         .collect();
-    // エージェント名そのものも、既存のログインを使う既定のプロファイルとして選べる
+    // A bare agent name can also be chosen, as a default profile that uses the existing login
     for agent in cfg.agents.keys() {
         out.push(ProfileSummary {
             name: agent.clone(),
@@ -256,7 +256,7 @@ async fn session_diff(state: State<'_, AppState>, id: String) -> CmdResult<Diff>
     state.engine.diff(&id).map_err(err)
 }
 
-/// リポジトリを選ぶ欄の補完（dirs.rs）
+/// Completion for the repository picker (dirs.rs)
 #[tauri::command]
 async fn complete_dirs(input: String) -> Vec<dirs::DirCandidate> {
     let home = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default());
@@ -270,7 +270,7 @@ fn expand_home(p: &str) -> String {
     }
 }
 
-/// 開発中は、ワークスペースの target にある模擬エージェントを使う
+/// During development, use the mock agent in the workspace's target directory
 fn resolve_mock_agent(config: &mut Config) {
     let Some(mock) = config.agents.get_mut("mock") else { return };
     if mock.command != "plyfold-mock-agent" {
@@ -289,16 +289,16 @@ fn resolve_mock_agent(config: &mut Config) {
 struct ProfileDetail {
     form: ProfileForm,
     supported: Vec<AuthKind>,
-    /// キーを渡す環境変数
+    /// Environment variable that carries the key
     key_var: Option<String>,
-    /// キーチェーンのアカウント名
+    /// Keychain account name
     key_account: Option<String>,
     key_set: bool,
-    /// 保存したキーの末尾 4 文字（どのキーかを見分けるため。全体は画面に渡さない）
+    /// Last 4 characters of the saved key (to tell keys apart; the full key never reaches the UI)
     key_tail: Option<String>,
-    /// 同じキーを使っているほかのプロファイル
+    /// Other profiles that use the same key
     shared_with: Vec<String>,
-    /// 専用ディレクトリにするときに差し替える環境変数
+    /// Environment variable overridden to give the profile its own config directory
     config_dir_env: Option<String>,
 }
 
@@ -330,7 +330,7 @@ fn profile_detail(state: State<'_, AppState>, name: String) -> CmdResult<Profile
     })
 }
 
-/// 保存する。`original` と名前が違えば名前を変える（キーチェーンの中身も移す）
+/// Save. If the name differs from `original`, rename the profile (and move its keychain entry)
 #[tauri::command]
 fn save_profile(state: State<'_, AppState>, form: ProfileForm, original: Option<String>) -> CmdResult<()> {
     let (def, old_account) = {
@@ -350,7 +350,7 @@ fn save_profile(state: State<'_, AppState>, form: ProfileForm, original: Option<
         let old_account = original.as_ref().zip(existing).and_then(|(o, d)| edit::key_account(o, d));
         (def, old_account)
     };
-    // 名前を変えたら、このプロファイル専用のキーを新しい名前のアカウントへ移す
+    // On rename, move this profile's own key to the account under the new name
     if let (Some(orig), Some((_, old))) = (original.as_ref(), old_account.as_ref())
         && orig != &form.name
         && let Some((_, new)) = edit::key_account(&form.name, &def)
@@ -367,7 +367,7 @@ fn save_profile(state: State<'_, AppState>, form: ProfileForm, original: Option<
     state.reload()
 }
 
-/// キーをキーチェーンに保存する（値はログにも画面にも戻さない）
+/// Save a key to the keychain (the value is never logged or returned to the UI)
 #[tauri::command]
 fn set_profile_key(state: State<'_, AppState>, name: String, value: String) -> CmdResult<()> {
     let value = value.trim();
@@ -380,7 +380,7 @@ fn set_profile_key(state: State<'_, AppState>, name: String, value: String) -> C
     state.secrets.set(&account, value).map_err(err)
 }
 
-/// 削除する。このプロファイル専用のキーもキーチェーンから消す（共有のキーは残す）
+/// Delete. Also removes this profile's own key from the keychain (shared keys are kept)
 #[tauri::command]
 fn delete_profile(state: State<'_, AppState>, name: String) -> CmdResult<()> {
     let own = {
@@ -408,7 +408,7 @@ async fn commit_session(state: State<'_, AppState>, id: String, message: String)
 #[derive(Serialize)]
 struct MergeResult {
     target: String,
-    /// 設定に従って worktree を片付けた
+    /// The worktree was cleaned up according to the settings
     cleaned: bool,
 }
 
@@ -427,8 +427,8 @@ async fn create_pr(state: State<'_, AppState>, id: String) -> CmdResult<String> 
     state.engine.create_pr(&id).map_err(err)
 }
 
-/// 会話の中のリンクを、既定のブラウザで開く（WebView の中で開くとアプリの画面が替わってしまう）。
-/// http / https / mailto だけを通す
+/// Open a link from the conversation in the default browser (opening it in the WebView would navigate the app away).
+/// Only http / https / mailto are allowed
 #[tauri::command]
 fn open_url(url: String) -> CmdResult<()> {
     let ok = ["http://", "https://", "mailto:"].iter().any(|p| url.starts_with(p));
@@ -439,7 +439,7 @@ fn open_url(url: String) -> CmdResult<()> {
     Ok(())
 }
 
-/// エージェントが触ったファイルを Finder で見せる（ファイルがあるときだけ）
+/// Reveal a file the agent touched in Finder (only if it exists)
 #[tauri::command]
 fn reveal_file(path: String) -> CmdResult<()> {
     let p = std::path::Path::new(&path);
@@ -461,7 +461,7 @@ async fn discard_session_changes(state: State<'_, AppState>, id: String) -> CmdR
     state.engine.discard(&id).map_err(err)
 }
 
-/// セッションの名前を変える
+/// Rename a session
 #[tauri::command]
 fn rename_session(state: State<'_, AppState>, id: String, title: String) -> CmdResult<()> {
     let title = title.trim();
@@ -494,7 +494,7 @@ pub fn run() {
                 stall_after: Duration::from_secs(settings.stall_seconds),
             })?;
 
-            // エンジンのイベントをそのまま画面へ
+            // Forward engine events to the UI as-is
             let mut rx = engine.subscribe();
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -548,5 +548,5 @@ pub fn run() {
             set_ui_lang,
         ])
         .run(tauri::generate_context!())
-        .expect("Plyfold を起動できません");
+        .expect("failed to start Plyfold");
 }

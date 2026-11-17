@@ -1,7 +1,7 @@
-//! セッション情報: 設定項目（model / effort / mode）と使用量（トークン、コンテキスト、速さ、費用）
+//! Session info: config options (model / effort / mode) and usage (tokens, context, speed, cost)
 //!
-//! エージェントごとに名前が違う設定項目（Claude の `effort`、Codex の `reasoning_effort` など）は、
-//! ACP の `category` で同じ操作にまとめる（[`Category`]）。
+//! Options that each agent names differently (Claude's `effort`, Codex's `reasoning_effort`, etc.)
+//! are unified into one operation by their ACP `category` ([`Category`]).
 
 use std::time::Instant;
 
@@ -90,11 +90,11 @@ pub struct Cost {
 pub struct TurnStats {
     pub usage: Option<TokenUsage>,
     pub elapsed_ms: u64,
-    /// 最初の文字が届くまで
+    /// Time until the first character arrives
     pub ttft_ms: Option<u64>,
-    /// 出力トークン / 秒（最初の文字から終わりまで）
+    /// Output tokens per second (from the first character to the end)
     pub tokens_per_sec: Option<f64>,
-    /// true なら、トークン数がなかったので文字数から推定した値
+    /// If true, estimated from the character count because no token count was available
     pub estimated: bool,
 }
 
@@ -103,20 +103,20 @@ pub struct LiveTurn {
     pub elapsed_ms: u64,
     pub ttft_ms: Option<u64>,
     pub streamed_chars: u64,
-    /// 流れている途中の推定トークン / 秒（文字数 ÷ 4 で数える）
+    /// Estimated tokens per second while streaming (characters ÷ 4)
     pub est_tokens_per_sec: Option<f64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct SessionInfo {
     pub config: Vec<ConfigOption>,
-    /// 旧来の modes（configOptions に mode がないエージェント用）
+    /// Legacy modes (for agents whose configOptions have no mode)
     pub modes: Vec<Choice>,
     pub current_mode: Option<String>,
     pub context_used: Option<u64>,
     pub context_size: Option<u64>,
     pub cost: Option<Cost>,
-    /// API が実際に返したモデル名（分かるエージェントだけ）
+    /// Model name the API actually returned (only for agents that report it)
     pub reported_model: Option<String>,
     pub last_turn: Option<TurnStats>,
     pub total: TokenUsage,
@@ -128,7 +128,7 @@ impl SessionInfo {
         self.config.iter().find(|o| o.category == cat)
     }
 
-    /// session/new や session/load の応答から
+    /// From the session/new or session/load response
     pub(crate) fn apply_session_response(&mut self, r: &Value) {
         if let Some(opts) = r.get("configOptions").filter(|v| v.is_array()) {
             self.config = parse_config(opts);
@@ -153,7 +153,7 @@ impl SessionInfo {
         }
     }
 
-    /// session/update のうち情報に関わるもの。変わったら true
+    /// Apply the info-related parts of a session/update. Returns true if anything changed
     pub(crate) fn apply_update(&mut self, u: &Value) -> bool {
         match u["sessionUpdate"].as_str() {
             Some("usage_update") => {
@@ -198,7 +198,7 @@ fn parse_config(opts: &Value) -> Vec<ConfigOption> {
         .collect()
 }
 
-/// 選択肢はグループ（{ group, options: [...] }）で入れ子になっていることがある
+/// Choices may be nested in groups ({ group, options: [...] })
 fn flatten_choices(v: &Value) -> Vec<Choice> {
     let mut out = Vec::new();
     for item in v.as_array().into_iter().flatten() {
@@ -211,7 +211,7 @@ fn flatten_choices(v: &Value) -> Vec<Choice> {
     out
 }
 
-/// 1 ターンの計測
+/// Timing for a single turn
 pub(crate) struct TurnClock {
     pub started: Instant,
     pub first_token: Option<Instant>,
@@ -278,7 +278,7 @@ mod tests {
     #[test]
     fn parses_real_shapes() {
         let mut info = SessionInfo::default();
-        // Codex の形（effort の名前が reasoning_effort）
+        // Codex's shape (effort is named reasoning_effort)
         info.apply_session_response(&json!({
             "configOptions": [
                 {"id": "model", "name": "Model", "category": "model", "currentValue": "gpt-a",

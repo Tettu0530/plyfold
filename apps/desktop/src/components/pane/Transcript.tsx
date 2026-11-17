@@ -21,8 +21,8 @@ function Stat({ icon: Icon, children, title, className }: { icon: typeof Gauge; 
   );
 }
 
-/** ターンの真下に出す 1 行（tok/s、入力、出力、費用、時間） */
-/** 答え終えた時刻。今日なら時刻だけ、ほかの日は日付も */
+/** One line right under a turn (tok/s, input, output, cost, time) */
+/** Time the answer finished. Just the time for today, with the date for other days */
 function clock(ms: number): string {
   const d = new Date(ms);
   const hm = `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
@@ -99,20 +99,20 @@ export function Transcript({
   items: TranscriptItem[];
   info: SessionInfo | null;
   streaming: boolean;
-  /** ターンの途中か（権限確認の待ちも含む）。途中は送り直せない */
+  /** Mid-turn (including waiting on a permission prompt). Can't resend mid-turn */
   busy?: boolean;
-  /** 自分の発言を（直して）新しいターンとして送る */
+  /** Send the user's own message (possibly edited) as a new turn */
   onResend?: (text: string, attachments: Attached[]) => void;
 }) {
   const tr = useT();
-  // 編集している自分の発言（blocks の位置）
+  // The user message being edited (index in blocks)
   const [editing, setEditing] = useState<number | null>(null);
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
     end.current?.scrollIntoView({ block: "end" });
   }, [items.length, items[items.length - 1]]);
 
-  // 連続するツール呼び出しは 1 つの枠にまとめる
+  // Group consecutive tool calls into one frame
   const blocks: (TranscriptItem | { kind: "tools"; tools: ToolCall[] })[] = [];
   for (const it of items) {
     const last = blocks[blocks.length - 1];

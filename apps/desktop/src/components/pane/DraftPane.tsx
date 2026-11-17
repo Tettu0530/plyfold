@@ -17,7 +17,7 @@ import type { Category, ProfileSummary, ProfileUsage } from "@/lib/types";
 import { isSendKey } from "@/lib/keys";
 import { useT, type MessageKey } from "@/i18n";
 
-/** 認証の種類の表記 */
+/** Label for the auth type */
 function authLabel(p: { keyed: boolean; custom_provider: boolean }): MessageKey {
   return p.custom_provider ? "draft.authCustom" : p.keyed ? "draft.authKeyed" : "draft.authLogin";
 }
@@ -33,7 +33,7 @@ function Num({ icon: Icon, title, children }: { icon: typeof Coins; title: strin
   );
 }
 
-/** プロファイルの 1 行: 名前と認証の種類、直近 30 日のターン数・トークン・費用 */
+/** One profile row: name and auth type, plus turns, tokens and cost over the last 30 days */
 function ProfileRow({ p, u, selected, onSelect }: { p: ProfileSummary; u: ProfileUsage | undefined; selected: boolean; onSelect: () => void }) {
   const t = useT();
   const tok = u?.input != null || u?.output != null ? (u.input ?? 0) + (u.output ?? 0) : null;
@@ -85,8 +85,8 @@ function ProfileRow({ p, u, selected, onSelect }: { p: ProfileSummary; u: Profil
 }
 
 /**
- * 新しいセッション（下書き）。既存のセッションと同じ画面で、会話は空。
- * 真ん中にプロファイルの一覧（直近 30 日の使用状況つき）。入力欄の上は、左にリポジトリと worktree、右に model / effort / mode
+ * New session (draft). Same screen as an existing session, with an empty transcript.
+ * Profile list in the middle (with usage over the last 30 days). Above the input: repository and worktree on the left, model / effort / mode on the right
  */
 export function DraftPane({ index, id }: { index: number; id: string }) {
   const t = useT();
@@ -98,7 +98,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
   const textRef = useAutoGrow(text);
   const [repoOpen, setRepoOpen] = useState(false);
-  // リポジトリの選択も、ボタンから飛び出して広がり、閉じるとボタンへ戻る（ほかのメニューと同じ分離アニメーション）
+  // The repository picker also pops out of its button and returns to it on close (same separation animation as other menus)
   const repoAnchor = `${id}:repo`;
   const repoMenu = useLiquidMenu(`menu:${repoAnchor}`, repoAnchor);
   const repoRaised = useLiquidActiveAnchors().has(repoAnchor);
@@ -119,7 +119,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const modes = info ? (info.config.find((o) => o.category === "mode")?.choices.map((c) => c.value) ?? info.modes.map((m) => m.value)) : [];
   const mode = info ? (info.config.find((o) => o.category === "mode")?.current ?? info.current_mode) : null;
   const byProfile = new Map((usage ?? []).map((u) => [u.profile, u]));
-  // 最近使ったものを上に（使っていないものは、既定のプロファイルを先に名前順）
+  // Recently used first (unused ones: default profile first, then by name)
   const ordered = [...sorted].sort((a, b) => (byProfile.get(b.name)?.last_used ?? 0) - (byProfile.get(a.name)?.last_used ?? 0));
   const select = (name: string) => updateDraft(id, { profile: name, choices: {} });
   const onListKey = (e: React.KeyboardEvent) => {
@@ -153,14 +153,14 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
         </button>
       </div>
 
-      {/* 一覧はペインの真ん中に。入りきらなければ上下に流す（my-auto なら上が切れない） */}
+      {/* List sits in the middle of the pane; scrolls vertically if it doesn't fit (my-auto keeps the top from being cut off) */}
       <div className="flex min-h-0 grow flex-col overflow-y-auto px-3 py-4">
       <div className="mx-auto my-auto w-full max-w-xl">
         <div className="mb-1 flex items-center justify-between px-2.5 text-xs text-muted-foreground">
           <span id={`${id}-profiles`}>{t("draft.profiles")}</span>
           <span>{t("draft.last30Days")}</span>
         </div>
-        {/* 狭いときはトークンを隠す（行の幅で決める） */}
+        {/* Hide tokens when narrow (decided by row width) */}
         <div role="radiogroup" aria-labelledby={`${id}-profiles`} onKeyDown={onListKey} className="@container flex flex-col gap-0.5">
           {ordered.map((p) => (
             <ProfileRow key={p.name} p={p} u={byProfile.get(p.name)} selected={p.name === draft.profile} onSelect={() => select(p.name)} />
@@ -178,10 +178,10 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
 
       <Popover open={repoOpen} onOpenChange={toggleRepo}>
       <div className="flex shrink-0 flex-col px-3 pb-3">
-      {/* リポジトリの欄は、この 1 行＋入力欄のまとまりの左端にそろえて、すぐ上に開く */}
+      {/* The repository picker aligns with the left edge of this row + input group and opens right above it */}
       <PopoverAnchor asChild>
       <div className="flex flex-col gap-1">
-        {/* 幅が足りなければ、model / effort / mode は 2 段目に回る */}
+        {/* If there's not enough width, model / effort / mode wrap to a second row */}
         <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 text-xs">
           <div className="flex items-center gap-0.5">
           <PopoverTrigger asChild>
@@ -255,7 +255,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
         side="top"
         align="start"
         sideOffset={6}
-        // 幅はペインいっぱいにしない（広いと実体が遠くまで飛んでから戻って見える）
+        // Don't span the full pane width (if wide, the body seems to fly far out before returning)
         className={cn("z-[58] w-[min(32rem,var(--radix-popper-anchor-width))] p-1.5", repoMenu.moving && "opacity-0")}
       >
         <RepoPicker

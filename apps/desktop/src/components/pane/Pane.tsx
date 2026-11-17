@@ -38,7 +38,7 @@ function EmptyPane({ index }: { index: number }) {
   );
 }
 
-/** 分離アニメーションで開いているあいだは中身を隠す（広がりきってから現れる） */
+/** Hide the content while the separation animation opens it (appears once fully expanded) */
 export function Pane({ index }: { index: number }) {
   const revealed = useLiquidRevealed(`pane-${index}`);
   const id = useStore((s) => s.panes[index]);
@@ -64,7 +64,7 @@ function SessionPane({ index }: { index: number }) {
   const cached = useStore((s) => (view ? s.infoCache[view.record.profile] : undefined));
 
   const status = view?.record.status;
-  // ターンが終わるたびに、worktree の差分の数を取り直す
+  // Refetch the worktree's diff count after every turn
   useEffect(() => {
     if (!id || !view?.record.worktree_path || (status !== "idle" && status !== "closed")) return;
     api
@@ -152,7 +152,7 @@ function SessionPane({ index }: { index: number }) {
         scope={id}
         agent={r.agent}
         info={(() => {
-          // 動いていないあいだは、前回の値（このプロファイルで覚えているもの）に、選んでおいた値を重ねて出す
+          // While not running, show the last known values (remembered for this profile) with the chosen values applied on top
           const base = r.status === "closed" || r.status === "error" || r.status === "starting" ? (view.info ?? cached ?? null) : view.info;
           return base && Object.keys(view.pending).length > 0 ? withChoices(base, view.pending) : base;
         })()}
@@ -167,7 +167,7 @@ function SessionPane({ index }: { index: number }) {
                 ? t("pane.placeholderWorking")
                 : t("pane.placeholder")
         }
-        // ターンの途中に送ったものは、キューに積んで後で送る
+        // Messages sent mid-turn are queued and sent later
         onSend={(t, a) => (view.transcript.inTurn ? enqueue(id, t, a) : void sendPrompt(id, t, a))}
         onStop={() => void cancel(id)}
         queue={queue ?? []}

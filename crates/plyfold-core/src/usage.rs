@@ -1,9 +1,9 @@
-//! プロファイルごとの使用状況（新しいセッションを始めるときに、どのキーをどれだけ使ったかを見せる）
+//! Per-profile usage (shows how much each key has been used when starting a new session)
 //!
-//! 記録（ACP の送受信のログ）から数える。消したセッションは記録ごと消えるので数えない
-//! - ターン: 送った session/prompt
-//! - トークン: ターンの結果の usage（届かないエージェントもある）
-//! - 費用: usage_update の cost。通算で届くので、前の値との差を足す（減ったら開き直しなどで 0 から数え直したとみなす）
+//! Counted from the record (the log of ACP frames). Deleted sessions lose their record, so they are not counted
+//! - Turns: session/prompt requests sent
+//! - Tokens: usage from turn results (some agents never send it)
+//! - Cost: cost from usage_update. It is cumulative, so add the delta from the previous value (a drop means it restarted from 0, e.g. after a reopen)
 
 use std::collections::{HashMap, HashSet};
 
@@ -15,19 +15,19 @@ use serde_json::Value;
 pub struct ProfileUsage {
     pub profile: String,
     pub agent: String,
-    /// 期間中にプロンプトを送ったセッションの数
+    /// Number of sessions that sent a prompt during the period
     pub sessions: u32,
     pub turns: u32,
-    /// 入力トークン（キャッシュの読み書きを含む）。usage が一度も届かなければ None
+    /// Input tokens (including cache reads and writes). None if no usage ever arrived
     pub input: Option<u64>,
     pub output: Option<u64>,
     pub cost: Option<f64>,
     pub currency: Option<String>,
-    /// 最後にプロンプトを送った時刻（ms）
+    /// When the last prompt was sent (ms)
     pub last_used: Option<i64>,
 }
 
-/// `since`（ms）以降の使用状況を、プロファイルごとに
+/// Usage since `since` (ms), per profile
 pub fn summarize(events: &[UsageEvent], since: i64) -> Vec<ProfileUsage> {
     let mut by: HashMap<String, ProfileUsage> = HashMap::new();
     let mut sessions: HashMap<String, HashSet<String>> = HashMap::new();
@@ -99,13 +99,13 @@ mod tests {
     #[test]
     fn counts_turns_tokens_and_cost_inside_the_window() {
         let events = vec![
-            // 期間より前: 数えないが、費用の基準にはなる
+            // Before the period: not counted, but used as the cost baseline
             ev("s1", "work", 50, EventKind::FrameOut, prompt()),
             ev("s1", "work", 51, EventKind::FrameIn, cost(1.0)),
             ev("s1", "work", 100, EventKind::FrameOut, prompt()),
             ev("s1", "work", 101, EventKind::FrameIn, result(100, 20)),
             ev("s1", "work", 102, EventKind::FrameIn, cost(1.5)),
-            // 開き直して費用が 0 から数え直し
+            // Reopened, so the cost restarted from 0
             ev("s1", "work", 200, EventKind::FrameOut, prompt()),
             ev("s1", "work", 201, EventKind::FrameIn, cost(0.25)),
             ev("s2", "work", 300, EventKind::FrameOut, prompt()),

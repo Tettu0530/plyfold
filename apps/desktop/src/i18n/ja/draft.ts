@@ -1,4 +1,4 @@
-// pane/DraftPane.tsx、pane/RepoPicker.tsx（新しいセッション）
+// pane/DraftPane.tsx, pane/RepoPicker.tsx (new session)
 export const draft = {
   authCustom: "カスタムプロバイダー",
   authKeyed: "公式 API",

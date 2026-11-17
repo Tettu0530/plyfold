@@ -1,4 +1,4 @@
-//! 型付きの ACP クライアント（v1）
+//! Typed ACP client (v1)
 
 use std::path::Path;
 use std::sync::Arc;
@@ -16,29 +16,29 @@ use tokio::sync::mpsc;
 
 use crate::transport::{AcpError, Connection, FrameSink, Incoming, SpawnSpec};
 
-pub const INIT_TIMEOUT: Duration = Duration::from_secs(180); // npx の初回ダウンロードを見込む
+pub const INIT_TIMEOUT: Duration = Duration::from_secs(180); // allow for npx's first-run download
 pub const SESSION_TIMEOUT: Duration = Duration::from_secs(120);
 
-/// エージェントからの通知・リクエストを、扱いやすい形にしたもの
+/// Notifications and requests from the agent, in a form that is easy to handle
 #[derive(Debug, Clone)]
 pub enum AgentMessage {
-    /// session/update。型に変換できないもの（新しい種類など）は typed が None
+    /// session/update. `typed` is None when it cannot be parsed (e.g. a new update kind)
     Update { session_id: String, typed: Option<Box<SessionUpdate>>, raw: Value },
-    /// session/request_permission。応答は `respond_permission` で返す
+    /// session/request_permission. Answer it with `respond_permission`
     PermissionRequest { request_id: Value, request: Box<RequestPermissionRequest> },
-    /// それ以外のリクエスト（fs/*、terminal/* など）。応答しないとエージェントが待ち続けるので、
-    /// 受け取った側が `respond_unsupported` などで必ず返すこと
+    /// Any other request (fs/*, terminal/*, ...). The agent waits until it gets an answer, so the
+    /// receiver must always reply, e.g. with `respond_unsupported`
     OtherRequest { request_id: Value, method: String, params: Value },
-    /// それ以外の通知（auth/status_update など）
+    /// Any other notification (auth/status_update, ...)
     OtherNotification { method: String, params: Value },
-    /// プロセスが終了した
+    /// The process exited
     Closed,
 }
 
 #[derive(Debug, Clone)]
 pub struct TurnResult {
     pub response: PromptResponse,
-    /// 応答の生の JSON（`usage` など、型にまだない項目を読むため）
+    /// The raw response JSON (for fields the types do not cover yet, such as `usage`)
     pub raw: Value,
     pub barrier: u64,
 }
@@ -49,7 +49,7 @@ pub struct AcpClient {
 }
 
 impl AcpClient {
-    /// 起動して initialize まで済ませる
+    /// Spawns the agent and completes initialize
     pub async fn connect(
         spec: &SpawnSpec,
         sink: Option<FrameSink>,
@@ -61,7 +61,7 @@ impl AcpClient {
         let req = InitializeRequest::new(ProtocolVersion::V1)
             .client_capabilities(
                 ClientCapabilities::new()
-                    // ファイルはエージェントが worktree の中で自分で読み書きする
+                    // The agent reads and writes files in the worktree itself
                     .fs(FileSystemCapabilities::new().read_text_file(false).write_text_file(false))
                     .terminal(false),
             )
@@ -84,7 +84,7 @@ impl AcpClient {
         self.init.agent_capabilities.load_session
     }
 
-    /// プロンプトに画像の塊を入れてよいか（入れられなければ、ファイルへのリンクで渡す）
+    /// Whether prompts may contain image blocks (if not, images are passed as file links)
     pub fn supports_images(&self) -> bool {
         self.init.agent_capabilities.prompt_capabilities.image
     }
@@ -100,8 +100,8 @@ impl AcpClient {
         self.conn.request("session/new", &NewSessionRequest::new(cwd), Some(SESSION_TIMEOUT)).await
     }
 
-    /// 既存のセッションを開き直す。履歴は session/update の通知として再送される。
-    /// 戻り値は（応答の JSON, 区切り）。応答には configOptions や modes が入っていることがある
+    /// Reopens an existing session. The history is replayed as session/update notifications.
+    /// Returns (response JSON, barrier). The response may contain configOptions and modes
     pub async fn load_session(&self, session_id: &str, cwd: &Path) -> Result<(Value, u64), AcpError> {
         self.conn
             .request_with_barrier(
@@ -112,7 +112,7 @@ impl AcpClient {
             .await
     }
 
-    /// 設定項目（model、effort、mode など）を変える。戻り値は変更後の configOptions（生の JSON）
+    /// Changes a config option (model, effort, mode, ...). Returns the updated configOptions as raw JSON
     pub async fn set_config_option(&self, session_id: &str, config_id: &str, value: &str) -> Result<Value, AcpError> {
         let v = self
             .conn
@@ -137,14 +137,14 @@ impl AcpClient {
             .map(|_| ())
     }
 
-    /// 1 ターン分。終わるまで返らない（中断は `cancel` を別のタスクから呼ぶ）。
-    /// `barrier` は、このターンの通知（AgentMessage）が何件目までかを表す。受け取った AgentMessage を
-    /// その件数まで処理してからターンの終わりを扱えば、最後の発言を取りこぼさない
+    /// Runs one turn and returns only when it ends (to interrupt, call `cancel` from another task).
+    /// `barrier` is the count of notifications (AgentMessage) belonging to this turn. Process received
+    /// AgentMessages up to that count before handling the end of the turn, so the last message is not lost
     pub async fn prompt(&self, session_id: &str, text: &str) -> Result<TurnResult, AcpError> {
         self.prompt_blocks(session_id, vec![ContentBlock::Text(TextContent::new(text))]).await
     }
 
-    /// 文字のほかに、画像やファイルへのリンクの塊も送る
+    /// Sends image and file-link blocks in addition to text
     pub async fn prompt_blocks(&self, session_id: &str, blocks: Vec<ContentBlock>) -> Result<TurnResult, AcpError> {
         let req = PromptRequest::new(SessionId::new(session_id), blocks);
         let params = serde_json::to_value(req).expect("serialize");
@@ -158,7 +158,7 @@ impl AcpClient {
         self.conn.notify("session/cancel", &CancelNotification::new(SessionId::new(session_id))).await
     }
 
-    /// option_id が None ならキャンセル扱い
+    /// A None option_id is treated as a cancel
     pub async fn respond_permission(&self, request_id: Value, option_id: Option<&str>) -> Result<(), AcpError> {
         let outcome = match option_id {
             Some(id) => RequestPermissionOutcome::Selected(SelectedPermissionOutcome::new(id.to_string())),

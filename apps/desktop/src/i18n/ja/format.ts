@@ -1,4 +1,4 @@
-// lib/format.ts と時刻の書式（経過、何分前 など）
+// lib/format.ts and time formats (elapsed, minutes ago, etc.)
 export const format = {
   now: "今",
   minutes: "{n}分",

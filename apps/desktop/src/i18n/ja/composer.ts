@@ -1,4 +1,4 @@
-// pane/Composer.tsx（入力欄、model / effort、コンテキスト、キュー）
+// pane/Composer.tsx (input box, model / effort, context, queue)
 export const composer = {
   inputTotal: "入力（累計）",
   cachedPart: "うちキャッシュ",

@@ -1,4 +1,4 @@
-// Notifications.tsx（ベルの通知の欄）
+// Notifications.tsx (bell notification panel)
 export const notifications = {
   awaitingPermission: "権限確認待ち",
   stalled: "無応答",

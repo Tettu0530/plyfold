@@ -11,7 +11,7 @@ interface Rect {
   height: number;
 }
 
-/** ペインの数ごとの配置（%） */
+/** Layout per pane count (%) */
 function rects(count: PaneCount): Rect[] {
   if (count === 1) return [{ left: 0, top: 0, width: 100, height: 100 }];
   if (count === 2)
@@ -27,15 +27,15 @@ function rects(count: PaneCount): Rect[] {
   ];
 }
 
-/** 現れる前・消えた後の形。上の段は右端へ、下の段は下端へ縮める */
+/** Shape before appearing / after disappearing. Top row shrinks to the right edge, bottom row to the bottom edge */
 const collapsed = (r: Rect): Rect => (r.top > 0 ? { ...r, top: 100, height: 0 } : { ...r, left: 100, width: 0 });
 
 const pct = (r: Rect) => ({ left: `${r.left}%`, top: `${r.top}%`, width: `${r.width}%`, height: `${r.height}%` });
 
 /**
- * Apple の分割表示と同じく、ペインの大きさは拡大縮小ではなく実際の幅と高さで動かす。
- * 中身は毎フレームその幅で組み直されるので、文字が引き伸ばされない
- * （transform で拡大縮小すると中身ごと歪むため、ここだけは幅と高さを直接動かす）
+ * Like Apple's Split View, panes animate their actual width and height rather than scaling.
+ * The content is relaid out at that width every frame, so text never gets stretched
+ * (scaling with transform distorts the content, so this is the one place that animates width and height directly)
  */
 export function PaneGrid({ count }: { count: PaneCount }) {
   const layout = rects(count);
@@ -45,7 +45,7 @@ export function PaneGrid({ count }: { count: PaneCount }) {
         {layout.map((r, i) => (
           <motion.div
             key={i}
-            // 増えるペインは右端（下の段は下端）から幅 0 で現れて広がり、減るときはそこへ縮む
+            // A new pane appears from the right edge (bottom edge for the lower row) at zero width and expands; a removed one shrinks back there
             initial={{ ...pct(collapsed(r)), opacity: 0 }}
             animate={{ ...pct(r), opacity: 1 }}
             exit={{ ...pct(collapsed(r)), opacity: 0 }}

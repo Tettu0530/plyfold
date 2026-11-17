@@ -1,4 +1,4 @@
-// state/store.ts、state/transcript.ts、lib/lineDiff.ts の画面に出る文
+// User-facing text from state/store.ts, state/transcript.ts, lib/lineDiff.ts
 import type { store as source } from "../ja/store";
 
 export const store: Record<keyof typeof source, string> = {

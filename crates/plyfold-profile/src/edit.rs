@@ -1,8 +1,8 @@
-//! 画面からプロファイルを編集するための、単純化した形と config.toml の書き換え
+//! A simplified profile form for editing from the UI, and rewriting config.toml
 //!
-//! 画面では「認証の種類・ベース URL・専用ディレクトリ」だけを扱い、
-//! エージェントごとの環境変数名や Codex の config.toml の中身はここで決める。
-//! 手で書いた項目（default_mode、links など）は、保存しても消さない。
+//! The UI only deals with auth kind, base URL and dedicated directory;
+//! per-agent env var names and the contents of Codex's config.toml are decided here.
+//! Hand-written fields (default_mode, links, ...) survive a save.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -15,11 +15,11 @@ use crate::{Config, ProfileDef, ProfileError};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AuthKind {
-    /// CLI にすでにあるログインをそのまま使う
+    /// Reuse the CLI's existing login as is
     Login,
-    /// 公式 API にキーで接続する
+    /// Connect to the official API with a key
     Api,
-    /// カスタムプロバイダー（ベース URL + キー）
+    /// Custom provider (base URL + key)
     Custom,
 }
 
@@ -33,15 +33,15 @@ pub struct ProfileForm {
     pub isolate: bool,
 }
 
-/// エージェントごとの、キーとベース URL の渡し方
+/// How each agent receives the key and base URL
 struct AuthSpec {
     api_key: &'static str,
     custom_key: &'static str,
-    /// None なら、ベース URL は Codex の config.toml に書く
+    /// If None, the base URL is written to Codex's config.toml
     custom_base: Option<&'static str>,
 }
 
-/// Codex のカスタムプロバイダーのキーを渡す環境変数（config.toml の env_key）
+/// Env var that passes the key for a Codex custom provider (env_key in config.toml)
 const CODEX_PROVIDER_KEY: &str = "PLYFOLD_PROVIDER_KEY";
 
 fn spec(agent: &str) -> Option<AuthSpec> {
@@ -53,7 +53,7 @@ fn spec(agent: &str) -> Option<AuthSpec> {
     }
 }
 
-/// このエージェントで選べる認証の種類
+/// Auth kinds available for this agent
 pub fn supported_auth(agent: &str) -> Vec<AuthKind> {
     match spec(agent) {
         Some(_) => vec![AuthKind::Login, AuthKind::Api, AuthKind::Custom],
@@ -61,7 +61,7 @@ pub fn supported_auth(agent: &str) -> Vec<AuthKind> {
     }
 }
 
-/// キーを渡す環境変数（ログインなら None）
+/// Env var that carries the key (None for login)
 pub fn key_var(agent: &str, auth: AuthKind) -> Option<&'static str> {
     let s = spec(agent)?;
     match auth {
@@ -92,7 +92,7 @@ fn codex_base_url(files: &BTreeMap<String, String>) -> Option<String> {
     doc.get("model_providers")?.get(name)?.get("base_url")?.as_str().map(str::to_string)
 }
 
-/// 保存されている定義を、画面の形にする
+/// Converts a stored definition into the UI form
 pub fn describe(name: &str, def: &ProfileDef) -> ProfileForm {
     let base = |var: Option<&str>| match var {
         Some(v) => def.env.get(v).cloned(),
@@ -106,7 +106,7 @@ pub fn describe(name: &str, def: &ProfileDef) -> ProfileForm {
     ProfileForm { name: name.into(), agent: def.agent.clone(), label: def.label.clone(), auth, base_url, isolate: def.isolate }
 }
 
-/// 画面の形から定義を作る。既にある定義の、画面で扱わない項目は残す
+/// Builds a definition from the UI form, keeping fields of the existing definition that the UI does not handle
 pub fn to_def(form: &ProfileForm, existing: Option<&ProfileDef>) -> Result<ProfileDef, ProfileError> {
     let mut def = existing.cloned().unwrap_or_default();
     let changed_agent = def.agent != form.agent;
@@ -118,7 +118,7 @@ pub fn to_def(form: &ProfileForm, existing: Option<&ProfileDef>) -> Result<Profi
     if form.auth != AuthKind::Login && s.is_none() {
         return Err(ProfileError::Form(plyfold_i18n::tr!("{} はキーでの接続に対応していません", "{} does not support connecting with a key", "{} 不支持通过 API 密钥连接", form.agent)));
     }
-    // 画面で扱う変数だけを入れ替える（ほかの変数はそのまま）
+    // Replace only the variables the UI manages (leave the others alone)
     let all_key_vars = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "GEMINI_API_KEY", CODEX_PROVIDER_KEY];
     let all_base_vars = ["ANTHROPIC_BASE_URL", "GOOGLE_GEMINI_BASE_URL"];
     let old_keys = std::mem::take(&mut def.keys);
@@ -147,7 +147,7 @@ pub fn to_def(form: &ProfileForm, existing: Option<&ProfileDef>) -> Result<Profi
                     def.env.insert(env.into(), url.into());
                 }
                 None => {
-                    // Codex はプロバイダーを config.toml に書くので、専用ディレクトリが要る
+                    // Codex writes the provider to config.toml, so it needs a dedicated directory
                     def.isolate = true;
                     def.files.insert("config.toml".into(), codex_provider_toml(url));
                 }
@@ -157,7 +157,7 @@ pub fn to_def(form: &ProfileForm, existing: Option<&ProfileDef>) -> Result<Profi
     Ok(def)
 }
 
-/// キーチェーンのアカウント名（"keychain" → "<プロファイル>/<変数>"、"keychain:<名前>" → "<名前>"）
+/// Keychain account name ("keychain" → "<profile>/<var>", "keychain:<name>" → "<name>")
 pub fn key_account(name: &str, def: &ProfileDef) -> Option<(String, String)> {
     let form = describe(name, def);
     let var = key_var(&def.agent, form.auth)?;
@@ -166,7 +166,7 @@ pub fn key_account(name: &str, def: &ProfileDef) -> Option<(String, String)> {
     Some((var.into(), account))
 }
 
-/// プロファイル名に使える文字（ディレクトリ名とキーチェーンのアカウント名になる）
+/// Characters allowed in a profile name (it becomes a directory name and a keychain account name)
 pub fn validate_name(name: &str, config: &Config) -> Result<(), ProfileError> {
     if name.is_empty() || name.len() > 40 || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
         return Err(ProfileError::Form(plyfold_i18n::tr!(
@@ -194,14 +194,14 @@ fn write_doc(path: &Path, doc: &DocumentMut) -> Result<(), ProfileError> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    // 途中で落ちても壊れないように、別のファイルに書いてから置き換える
+    // Write to a separate file and then replace, so a crash midway cannot corrupt it
     let tmp = path.with_extension("toml.tmp");
     std::fs::write(&tmp, doc.to_string())?;
     std::fs::rename(tmp, path)?;
     Ok(())
 }
 
-/// config.toml の [profiles.<name>] を書き換える（ほかの部分とコメントは残す）
+/// Rewrites [profiles.<name>] in config.toml (other sections and comments are kept)
 pub fn upsert_profile(path: &Path, name: &str, def: &ProfileDef) -> Result<(), ProfileError> {
     let mut doc = read_doc(path)?;
     let value = toml_edit::ser::to_document(def).map_err(|e| ProfileError::Form(e.to_string()))?;
@@ -259,7 +259,7 @@ mod tests {
         assert_eq!(new.env.get("FOO").map(String::as_str), Some("1"));
         assert!(!new.keys.contains_key("ANTHROPIC_API_KEY"));
         assert_eq!(new.keys.get("ANTHROPIC_AUTH_TOKEN").map(String::as_str), Some("keychain"));
-        // 同じ変数なら共有のキーの指定を保つ
+        // For the same variable, keep the shared key reference
         let back = to_def(&form("claude", AuthKind::Api, None), Some(&old)).unwrap();
         assert_eq!(back.keys.get("ANTHROPIC_API_KEY").map(String::as_str), Some("keychain:shared/KEY"));
         assert_eq!(key_account("p", &back), Some(("ANTHROPIC_API_KEY".into(), "shared/KEY".into())));
@@ -282,11 +282,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.toml");
-        std::fs::write(&path, "# 手で書いたメモ\n[profiles.keep]\nagent = \"claude\"\n").unwrap();
+        std::fs::write(&path, "# hand-written note\n[profiles.keep]\nagent = \"claude\"\n").unwrap();
         let def = to_def(&form("codex", AuthKind::Custom, Some("https://gw.example.com/v1")), None).unwrap();
         upsert_profile(&path, "proxy", &def).unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
-        assert!(text.contains("# 手で書いたメモ"));
+        assert!(text.contains("# hand-written note"));
         let cfg = Config::load(&path).unwrap();
         assert_eq!(cfg.profiles["proxy"], def);
         assert!(cfg.profiles.contains_key("keep"));

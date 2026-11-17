@@ -1,4 +1,4 @@
-// どこでも使う語（閉じる、コピー、やめる など）。共有の語はここに置く
+// Words used everywhere (Close, Copy, Cancel, etc.). Shared words live here
 import type { common as source } from "../ja/common";
 
 export const common: Record<keyof typeof source, string> = {

@@ -1,4 +1,4 @@
-// SessionMenu.tsx（行の右クリックのメニュー）
+// SessionMenu.tsx (row context menu)
 import type { sessionMenu as source } from "../ja/sessionMenu";
 
 export const sessionMenu: Record<keyof typeof source, string> = {

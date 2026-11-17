@@ -1,5 +1,5 @@
-// ペインの見出しのボタン: 触ったファイル、バックグラウンドのシェル、計画。押すと液体のメニューで中身を出す
-// いつも出す（どこにあるか分かるように）。中身がなければアイコンだけで、数は出さない
+// Pane header buttons: touched files, background shells, plan. Click to show the contents in a liquid menu
+// Always shown (so you know where they are). With nothing inside, only the icon is shown, no count
 import { Check, Circle, FileText, LoaderCircle, Pencil, SquareStop, SquareTerminal, CircleX, ListChecks, CircleHelp } from "lucide-react";
 import { useMemo } from "react";
 
@@ -14,7 +14,7 @@ import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 
 const TRIGGER = "relative flex h-6 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground";
 
-/** 見出しのボタンと、そこから開く欄 */
+/** Header button and the panel it opens */
 function ToolButton({ scope, name, label, icon, badge, width, children }: { scope: string; name: string; label: string; icon: React.ReactNode; badge: React.ReactNode | null; width: string; children: React.ReactNode }) {
   const anchor = `${scope}:${name}`;
   const menu = useLiquidMenu(`menu:${anchor}`, anchor);

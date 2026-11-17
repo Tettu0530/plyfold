@@ -1,7 +1,7 @@
-//! セッションとイベントログの保存（SQLite）
+//! Storage for sessions and the event log (SQLite)
 //!
-//! セッションは Plyfold が持つ記録の単位。ペイン（表示）を閉じても残る。
-//! 各 CLI の履歴機能（session/load）には頼らず、ACP の送受信をすべてここに残す。
+//! A session is Plyfold's unit of record. It outlives the pane that displays it.
+//! Rather than relying on each CLI's own history (session/load), all ACP traffic is recorded here.
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -23,19 +23,19 @@ pub enum StoreError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionStatus {
-    /// エージェントを起動中
+    /// The agent is starting
     Starting,
-    /// 入力待ち
+    /// Waiting for input
     Idle,
-    /// ターンの途中
+    /// In the middle of a turn
     Working,
-    /// 権限確認の返事待ち
+    /// Waiting for a permission answer
     AwaitingPermission,
-    /// ターンの途中なのに、しばらく何も届いていない
+    /// Mid-turn, but nothing has arrived for a while
     Stalled,
-    /// エージェントが落ちた・起動できなかった
+    /// The agent crashed or failed to start
     Error,
-    /// エージェントを止めた（記録は残っている）
+    /// The agent was stopped (the record remains)
     Closed,
 }
 
@@ -75,7 +75,7 @@ pub struct SessionRecord {
     pub worktree_path: Option<String>,
     pub branch: Option<String>,
     pub base_ref: Option<String>,
-    /// エージェント側のセッション ID（session/load に使う）
+    /// The agent-side session ID (used for session/load)
     pub acp_session_id: Option<String>,
     pub status: SessionStatus,
     pub created_at: i64,
@@ -96,13 +96,13 @@ pub struct NewSession {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EventKind {
-    /// エージェントから受信した JSON-RPC（伏せ字済み）
+    /// JSON-RPC received from the agent (redacted)
     FrameIn,
-    /// エージェントへ送信した JSON-RPC（伏せ字済み）
+    /// JSON-RPC sent to the agent (redacted)
     FrameOut,
-    /// 状態の変化
+    /// A status change
     Status,
-    /// Plyfold 側のメモ（起動、エラー、無応答の検知など）
+    /// Plyfold's own notes (launch, errors, stall detection, ...)
     Note,
 }
 
@@ -210,7 +210,7 @@ impl Store {
     fn init(conn: Connection) -> Result<Self, StoreError> {
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.execute_batch(SCHEMA)?;
-        // 後から足した列（古い記録にはない）
+        // Columns added later (missing from older records)
         let has_lock: bool = conn
             .prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'title_locked'")?
             .exists([])?;
@@ -265,7 +265,7 @@ impl Store {
             .ok_or_else(|| StoreError::NotFound(id.into()))
     }
 
-    /// 新しく更新されたものから
+    /// Most recently updated first
     pub fn list_sessions(&self) -> Result<Vec<SessionRecord>, StoreError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(&format!("SELECT {SESSION_COLS} FROM sessions ORDER BY updated_at DESC, id DESC"))?;
@@ -294,7 +294,7 @@ impl Store {
         self.update(id, "acp_session_id", &acp_session_id)
     }
 
-    /// worktree を作った後に、作業場所を記録する
+    /// Records the working directory after the worktree is created
     pub fn set_workspace(
         &self,
         id: &str,
@@ -317,7 +317,7 @@ impl Store {
         self.update(id, "title", &title)
     }
 
-    /// 人が名前を変えた。以後、エージェントが付けたタイトルでは書き換えない
+    /// The user renamed it. From now on, agent-provided titles no longer overwrite it
     pub fn rename_by_user(&self, id: &str, title: &str) -> Result<(), StoreError> {
         let n = self
             .conn
@@ -330,7 +330,7 @@ impl Store {
         Ok(())
     }
 
-    /// エージェントが付けたタイトル。人が名前を変えていなければ書き換える（並び順は変えない）。書き換えたら true
+    /// A title from the agent. Applied unless the user has renamed the session (sort order is unchanged). Returns true if applied
     pub fn set_title_from_agent(&self, id: &str, title: &str) -> Result<bool, StoreError> {
         let n = self
             .conn
@@ -340,7 +340,7 @@ impl Store {
         Ok(n > 0)
     }
 
-    /// 記録ごと消す（イベントも消える）
+    /// Deletes the whole record (events included)
     pub fn delete_session(&self, id: &str) -> Result<(), StoreError> {
         self.conn.lock().unwrap().execute("DELETE FROM sessions WHERE id = ?1", [id])?;
         Ok(())
@@ -355,7 +355,7 @@ impl Store {
         Ok(conn.last_insert_rowid())
     }
 
-    /// `after` より後のイベントを古い順に（`after` が None なら最初から）
+    /// Events after `after`, oldest first (from the start if `after` is None)
     pub fn events(&self, session_id: &str, after: Option<i64>, limit: usize) -> Result<Vec<EventRecord>, StoreError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -376,7 +376,7 @@ impl Store {
     }
 }
 
-/// 使用量の集計に使うイベント（セッションのプロファイルつき）
+/// An event used for usage totals (with the session's profile)
 #[derive(Debug, Clone)]
 pub struct UsageEvent {
     pub session_id: String,
@@ -388,8 +388,8 @@ pub struct UsageEvent {
 }
 
 impl Store {
-    /// `since` 以降に更新されたセッションの、プロンプト・ターンの結果・使用量の更新のイベントを古い順に。
-    /// 費用は通算で届くので、差を取れるよう `since` より前のものも返す
+    /// Prompt, turn-result and usage-update events of sessions updated since `since`, oldest first.
+    /// Costs arrive as running totals, so earlier events are returned too, to allow taking differences
     pub fn usage_events(&self, since: i64) -> Result<Vec<UsageEvent>, StoreError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -438,7 +438,7 @@ mod tests {
         let store = Store::open_in_memory().unwrap();
         let s = new(&store, "最初の指示");
         assert!(store.set_title_from_agent(&s.id, "リポジトリの概要").unwrap());
-        assert!(!store.set_title_from_agent(&s.id, "リポジトリの概要").unwrap(), "同じなら書き換えない");
+        assert!(!store.set_title_from_agent(&s.id, "リポジトリの概要").unwrap(), "an identical title is not rewritten");
         store.rename_by_user(&s.id, "自分で付けた名前").unwrap();
         assert!(!store.set_title_from_agent(&s.id, "別のタイトル").unwrap());
         assert_eq!(store.get_session(&s.id).unwrap().title, "自分で付けた名前");
