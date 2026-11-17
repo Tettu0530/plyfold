@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AttachmentWire } from "./attachments";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-import type { Category, CheckResult, Diff, EngineEvent, EventRecord, ProfileDetail, DirCandidate, FileHit, ProfileForm, ProfileSummary, ProfileUsage, SessionInfo, SessionRecord, SettingsView, WtStatus, AppSettings } from "./types";
+import type { AppSettings, Category, CheckResult, Diff, DirCandidate, EngineEvent, EventRecord, FileHit, GitInfo, ProfileDetail, ProfileForm, ProfileSummary, ProfileUsage, PullRequest, SessionInfo, SessionRecord, SettingsView, WtStatus } from "./types";
 
 // Thin wrappers around the Tauri commands (src-tauri/src/lib.rs). Argument names follow the Rust side's camelCase conversion
 export const api = {
@@ -37,6 +37,11 @@ export const api = {
   saveSettings: (settings: AppSettings) => invoke<void>("save_settings", { settings }),
   revealPath: (which: "config" | "data") => invoke<void>("reveal_path", { which }),
   createPr: (id: string) => invoke<string>("create_pr", { id }),
+  gitInfo: (id: string) => invoke<GitInfo>("git_info", { id }),
+  gitFetch: (id: string) => invoke<void>("git_fetch", { id }),
+  gitPush: (id: string) => invoke<string>("git_push", { id }),
+  gitPull: (id: string) => invoke<void>("git_pull", { id }),
+  pullRequest: (id: string) => invoke<PullRequest | null>("pull_request", { id }),
   openInEditor: (id: string) => invoke<string>("open_in_editor", { id }),
   discardSessionChanges: (id: string) => invoke<void>("discard_session_changes", { id }),
   profileDetail: (name: string) => invoke<ProfileDetail>("profile_detail", { name }),

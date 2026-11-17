@@ -581,7 +581,54 @@ impl Engine {
         worktree_of(&rec).ok_or_else(|| CoreError::NoWorkspace(id.into()))
     }
 
-    pub fn worktree_status(&self, id: &str) -> Result<plyfold_worktree::WtStatus, CoreError> {
+/// The directory a session works in (its worktree, or the repository itself) and the branch to compare it with:
+    /// the branch it will be merged into for a worktree, the remote's default branch otherwise
+    fn git_dir(&self, id: &str) -> Result<(PathBuf, Option<String>), CoreError> {
+        let rec = self.inner.store.get_session(id)?;
+        if let Some(wt) = worktree_of(&rec) {
+            let base = plyfold_worktree::ops::status(&wt).ok().and_then(|s| s.target);
+            return Ok((wt.path, base));
+        }
+        let dir = PathBuf::from(rec.repo_path.ok_or_else(|| CoreError::NoWorkspace(id.into()))?);
+        let base = plyfold_worktree::remote::remote_default(&dir);
+        Ok((dir, base))
+    }
+
+    pub fn git_info(&self, id: &str) -> Result<plyfold_worktree::remote::GitInfo, CoreError> {
+        let (dir, base) = self.git_dir(id)?;
+        Ok(plyfold_worktree::remote::info(&dir, base.as_deref())?)
+    }
+
+    pub fn git_fetch(&self, id: &str) -> Result<(), CoreError> {
+        let (dir, _) = self.git_dir(id)?;
+        Ok(plyfold_worktree::remote::fetch(&dir)?)
+    }
+
+    pub fn git_push(&self, id: &str) -> Result<String, CoreError> {
+        let (dir, _) = self.git_dir(id)?;
+        let upstream = plyfold_worktree::remote::push(&dir)?;
+        self.inner.notice(id, plyfold_i18n::tr!("{upstream} に push しました", "Pushed to {upstream}", "已推送到 {upstream}"));
+        Ok(upstream)
+    }
+
+    /// Pull (fast-forward only). Not mid-turn: it changes files under the agent
+    pub fn git_pull(&self, id: &str) -> Result<(), CoreError> {
+        let rec = self.inner.store.get_session(id)?;
+        if matches!(rec.status, SessionStatus::Working | SessionStatus::AwaitingPermission | SessionStatus::Stalled | SessionStatus::Starting) {
+            return Err(CoreError::Busy(id.into()));
+        }
+        let (dir, _) = self.git_dir(id)?;
+        plyfold_worktree::remote::pull(&dir)?;
+        self.inner.notice(id, plyfold_i18n::tr!("リモートの新しいコミットを取り込みました", "Pulled the new commits from the remote", "已拉取远程的新提交"));
+        Ok(())
+    }
+
+    pub fn pull_request(&self, id: &str) -> Result<Option<plyfold_worktree::remote::PullRequest>, CoreError> {
+        let (dir, _) = self.git_dir(id)?;
+        Ok(plyfold_worktree::remote::pull_request(&dir)?)
+    }
+
+        pub fn worktree_status(&self, id: &str) -> Result<plyfold_worktree::WtStatus, CoreError> {
         let rec = self.inner.store.get_session(id)?;
         let wt = worktree_of(&rec).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
         Ok(plyfold_worktree::ops::status(&wt)?)

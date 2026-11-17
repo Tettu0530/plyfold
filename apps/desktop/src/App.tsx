@@ -24,6 +24,7 @@ import { DragLayer } from "./components/pane/dnd";
 import { actionFor, type Action } from "./lib/keymap";
 import { currentBindings } from "./state/keys";
 import { nextScale } from "./lib/scale";
+import { BrowserButton } from "./components/BrowserButton";
 
 function useShortcuts() {
   useEffect(() => {
@@ -112,6 +113,7 @@ export default function App() {
               {focusedRepo ? repoName(focusedRepo) : "Plyfold"}
             </span>
             <span data-tauri-drag-region className="grow" />
+            <BrowserButton />
             <Notifications />
           </header>
 

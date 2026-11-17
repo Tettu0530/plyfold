@@ -131,7 +131,15 @@ function SessionPane({ index }: { index: number }) {
           )}
           <span className="grow" />
           <span className="hidden items-center gap-2 @[30rem]:flex">
-            <PaneTools scope={id} items={view.transcript.items} worktree={r.worktree_path ?? r.repo_path} alive={r.status !== "closed" && r.status !== "error"} />
+            <PaneTools
+            scope={id}
+            items={view.transcript.items}
+            worktree={r.worktree_path ?? r.repo_path}
+            alive={r.status !== "closed" && r.status !== "error"}
+            busy={view.transcript.inTurn}
+            isWorktree={!!r.worktree_path}
+            title={r.title}
+          />
           </span>
           {diffStat && diffStat.added + diffStat.removed > 0 && (
             <button

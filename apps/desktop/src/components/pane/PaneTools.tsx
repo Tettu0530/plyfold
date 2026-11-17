@@ -1,24 +1,25 @@
-// Pane header buttons: touched files, background shells, plan. Click to show the contents in a liquid menu
+// Pane header buttons: plan, background shells, touched files, git (the preview is in the app header, BrowserButton). Click to show the contents in a liquid menu
 // Always shown (so you know where they are). With nothing inside, only the icon is shown, no count
-import { Check, Circle, CircleHelp, CircleX, FileText, Globe, ListChecks, LoaderCircle, Pencil, SquareStop, SquareTerminal } from "lucide-react";
+import { ArrowUp, Check, Circle, CircleHelp, CircleX, FileText, Globe, ListChecks, LoaderCircle, GitBranch, Pencil, SquareStop, SquareTerminal } from "lucide-react";
 import { createContext, useContext, useMemo, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useT, type MessageKey } from "@/i18n";
 import { api, inTauri } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { backgroundShells, currentPlan, previewUrls, touchedFiles, type BackgroundShell, type ShellState } from "@/state/paneData";
+import { backgroundShells, currentPlan, touchedFiles, type BackgroundShell, type ShellState } from "@/state/paneData";
 import { localUrls, normalizeUrl } from "@/lib/urls";
 import { useStore } from "@/state/store";
 import type { TranscriptItem } from "@/state/transcript";
 import { liquidAnchor } from "../liquid/liquid";
+import { GitPanel, unpushed, useGitInfo } from "./GitMenu";
 import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 
 const TRIGGER = "relative flex h-6 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground";
 
 /** Header button and the panel it opens */
 /** Lets menu contents close their own menu (after opening a preview, for example) */
-const CloseMenu = createContext<() => void>(() => {});
+export const CloseMenu = createContext<() => void>(() => {});
 
 function ToolButton({ scope, name, label, icon, badge, width, children }: { scope: string; name: string; label: string; icon: React.ReactNode; badge: React.ReactNode | null; width: string; children: React.ReactNode }) {
   const anchor = `${scope}:${name}`;
@@ -114,7 +115,7 @@ const PLAN_ICON: Record<string, { Icon: typeof Check; className: string; spin?: 
 };
 
 /** Open a typed URL, or one of the localhost URLs the commands printed */
-function PreviewMenu({ urls, anchor }: { urls: string[]; anchor: string }) {
+export function PreviewMenu({ urls, anchor }: { urls: string[]; anchor: string }) {
   const t = useT();
   const [typed, setTyped] = useState("");
   const close = useContext(CloseMenu);
@@ -161,20 +162,36 @@ function PreviewMenu({ urls, anchor }: { urls: string[]; anchor: string }) {
   );
 }
 
-export function PaneTools({ scope, items, worktree, alive }: { scope: string; items: TranscriptItem[]; worktree: string | null; alive: boolean }) {
+export function PaneTools({
+  scope,
+  items,
+  worktree,
+  alive,
+  busy = false,
+  isWorktree = false,
+  title = "",
+}: {
+  scope: string;
+  items: TranscriptItem[];
+  worktree: string | null;
+  alive: boolean;
+  /** Mid-turn (pull and PR creation wait) */
+  busy?: boolean;
+  /** The session has its own worktree (PRs can be created from it) */
+  isWorktree?: boolean;
+  title?: string;
+}) {
   const t = useT();
   const files = useMemo(() => touchedFiles(items), [items]);
   const shells = useMemo(() => backgroundShells(items, alive), [items, alive]);
   const plan = useMemo(() => currentPlan(items), [items]);
-  const urls = useMemo(() => previewUrls(items), [items]);
   const running = shells.filter((s) => s.state === "running").length;
   const done = plan.filter((e) => e.status === "completed").length;
+  const git = useGitInfo(scope, busy);
+  const toPush = git.info ? unpushed(git.info) : 0;
 
   return (
     <>
-      <ToolButton scope={scope} name="preview" label={t("pane.preview")} icon={<Globe className="size-3.5" aria-hidden />} badge={urls.length || null} width="w-96">
-        <PreviewMenu urls={urls} anchor={`${scope}:preview`} />
-      </ToolButton>
       <ToolButton scope={scope} name="plan" label={t("pane.plan")} icon={<ListChecks className="size-3.5" aria-hidden />} badge={plan.length ? `${done}/${plan.length}` : null} width="w-80">
           {plan.length === 0 && <Empty>{t("pane.planEmpty")}</Empty>}
           {plan.map((e, i) => {
@@ -216,6 +233,12 @@ export function PaneTools({ scope, items, worktree, alive }: { scope: string; it
             </button>
           ))}
         </ToolButton>
+        {/* Only for sessions in a git repository */}
+        {git.info && (
+          <ToolButton scope={scope} name="git" label={t("pane.git")} icon={<GitBranch className="size-3.5" aria-hidden />} badge={toPush > 0 ? <span className="flex items-center"><ArrowUp className="size-3" aria-hidden />{toPush}</span> : null} width="w-[26rem]">
+            <GitPanel id={scope} git={git} busy={busy} worktree={isWorktree} title={title} />
+          </ToolButton>
+        )}
     </>
   );
 }

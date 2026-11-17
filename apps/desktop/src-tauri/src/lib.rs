@@ -485,6 +485,37 @@ async fn merge_session(state: State<'_, AppState>, id: String) -> CmdResult<Merg
     Ok(MergeResult { target, cleaned: cleanup })
 }
 
+/// Git commands run git (and the network for fetch / push / pull / gh) synchronously, so keep them off the async workers
+async fn blocking<T: Send + 'static>(state: &AppState, f: impl FnOnce(&plyfold_core::Engine) -> Result<T, plyfold_core::CoreError> + Send + 'static) -> CmdResult<T> {
+    let engine = state.engine.clone();
+    tauri::async_runtime::spawn_blocking(move || f(&engine)).await.map_err(err)?.map_err(err)
+}
+
+#[tauri::command]
+async fn git_info(state: State<'_, AppState>, id: String) -> CmdResult<plyfold_worktree::remote::GitInfo> {
+    blocking(&state, move |e| e.git_info(&id)).await
+}
+
+#[tauri::command]
+async fn git_fetch(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    blocking(&state, move |e| e.git_fetch(&id)).await
+}
+
+#[tauri::command]
+async fn git_push(state: State<'_, AppState>, id: String) -> CmdResult<String> {
+    blocking(&state, move |e| e.git_push(&id)).await
+}
+
+#[tauri::command]
+async fn git_pull(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    blocking(&state, move |e| e.git_pull(&id)).await
+}
+
+#[tauri::command]
+async fn pull_request(state: State<'_, AppState>, id: String) -> CmdResult<Option<plyfold_worktree::remote::PullRequest>> {
+    blocking(&state, move |e| e.pull_request(&id)).await
+}
+
 #[tauri::command]
 async fn create_pr(state: State<'_, AppState>, id: String) -> CmdResult<String> {
     state.engine.create_pr(&id).map_err(err)
@@ -606,6 +637,11 @@ pub fn run() {
             merge_session,
             discard_session_changes,
             create_pr,
+            git_info,
+            git_fetch,
+            git_push,
+            git_pull,
+            pull_request,
             open_in_editor,
             get_settings,
             save_settings,

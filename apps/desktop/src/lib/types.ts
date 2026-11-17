@@ -171,6 +171,40 @@ export interface WtStatus {
   merged: boolean;
 }
 
+/** crates/plyfold-worktree/src/remote.rs */
+export interface GitCommit {
+  sha: string;
+  subject: string;
+  author: string;
+  time: number;
+  pushed: boolean;
+}
+
+export interface GitInfo {
+  branch: string | null;
+  base: string | null;
+  ahead_base: number;
+  behind_base: number;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+  changed: number;
+  commits: GitCommit[];
+  remote_url: string | null;
+  web_url: string | null;
+  fetched_at: number | null;
+}
+
+export interface PullRequest {
+  number: number;
+  url: string;
+  title: string;
+  state: "OPEN" | "MERGED" | "CLOSED" | string;
+  draft: boolean;
+  review: string | null;
+  checks: { passed: number; failed: number; pending: number };
+}
+
 export interface Diff {
   files: FileStat[];
   patch: string;

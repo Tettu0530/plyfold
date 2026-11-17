@@ -4,6 +4,7 @@
 //! Diffs come from git rather than ACP diffs (Codex and OpenCode do not return diffs).
 
 pub mod ops;
+pub mod remote;
 pub use ops::WtStatus;
 
 use std::path::{Path, PathBuf};
