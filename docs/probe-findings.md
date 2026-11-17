@@ -37,17 +37,17 @@ Results gathered with `plyfold-probe`. The ACP Rust SDK is `agent-client-protoco
 4. **Auth status is available over ACP**. Claude and Codex send the account name and plan via `auth/status_update` and `_auth/status_update` notifications. Useful for the profile screen
 5. **How API keys are passed differs per CLI**. Codex and Gemini have `api-key`-style auth methods (with `_meta.api-key.provider`). Claude has no auth method, so keys will likely be passed through environment variables (to be confirmed)
 
-## Isolated profiles (with a key for a third-party proxy)
+## Isolated profiles (with a key for a custom endpoint)
 
-We launched with a profile-specific `CLAUDE_CONFIG_DIR` / `CODEX_HOME` and a key from the Keychain. One key was used for both Claude Code (Anthropic format) and Codex (Responses API).
+We launched with a profile-specific `CLAUDE_CONFIG_DIR` / `CODEX_HOME` and a key from the Keychain. One key for a custom endpoint was used for both Claude Code (Anthropic format) and Codex (Responses API).
 
-| What we checked | claude (via proxy) | codex (via proxy) |
+| What we checked | claude (custom endpoint) | codex (custom endpoint) |
 |---|---|---|
 | Launch and session creation | yes | yes |
 | Permission requests | yes (`--mode default`) | yes (`--mode read-only`). Options: `allow_once` / `accept_execpolicy_amendment` (kind allow_always) / `cancel` (kind reject_once) |
 | On reject | The tool fails and the turn continues (`end_turn`) | **The whole turn ends** (`stopReason: cancelled`) |
 | Diffs | yes: `type: diff` | no: files are written through the shell too (`printf > file`), so no diff arrives |
-| Three at once | yes: a regular login, Claude via proxy and Codex via proxy ran without mixing credentials | |
+| Three at once | yes: a regular login and two isolated profiles ran without mixing credentials | |
 | Key values | not present in the transcript or stderr (redaction works) | |
 
 ### Findings
@@ -56,19 +56,13 @@ We launched with a profile-specific `CLAUDE_CONFIG_DIR` / `CODEX_HOME` and a key
 7. **Only Claude returns diffs**. Codex and OpenCode do not. We can commit to Plyfold building diffs from the worktree with git diff
 8. **"Reject" means different things per agent** (the turn continues or ends). The UI has to show "reject and continue" and "stop" as separate actions
 9. **The reported auth status is unreliable**. Even when running on a key (`ANTHROPIC_AUTH_TOKEN`), the adapter reported `"Claude subscription" / "OAuth token"`. Plyfold keeps and displays the profile name and endpoint itself
-10. **Notices from Claude Code get mixed into responses**. A warning about the gateway arrived as an `agent_message_chunk` after the model's answer. There is currently no way to tell it apart from model output
-11. **The model behind a proxy can be checked through ACP metadata**. `_meta._claude/model` in `usage_update` carries the actual model name returned by the API. The configured display value (`currentValue: opus`) and the model's own claims are not reliable
-
-12. **A custom endpoint can be inspected by calling the API directly**. Look at the shape of `model` and `id` in the response, the token counts, and the response headers (names of the relaying gateways). What we found about this proxy:
-    - In both formats, the response carried the same custom model name, not the one we requested
-    - The response was in Anthropic format, yet its `id` had the shape of an OpenAI Responses API id (`resp_…`)
-    - A prompt of a few words was billed as thousands of input tokens (hidden instructions are being added)
-    - The response headers showed that the request passed through several relaying gateways, including one that turns a subscription account into an API
-    - → For profiles that use a custom endpoint, Plyfold shows "the model that actually responded". We are also considering a connection check in the settings screen (a direct check like this one)
+10. **Notices from Claude Code get mixed into responses**. A notice from the endpoint arrived as an `agent_message_chunk` after the model's answer. There is currently no way to tell it apart from model output
+11. **The model behind a custom endpoint can be checked through ACP metadata**. `_meta._claude/model` in `usage_update` carries the actual model name returned by the API. The configured display value (`currentValue: opus`) and the model's own claims are not reliable
+12. **A custom endpoint can also be checked by calling the API directly**: the model name and id in the response, and the token counts. The configured model name alone says little about which model answers. → For profiles that use a custom endpoint, Plyfold shows "the model that actually responded", and the profile screen has a connection test
 
 ## Next to check
 
-- [x] Does an isolated profile work with only a key? → confirmed with the proxy key
+- [x] Does an isolated profile work with only a key? → confirmed
 - [x] Can `parallel` run sessions with different credentials at the same time? → confirmed
 - [x] Run Codex in an isolated profile and check diffs and permission requests → confirmed (cancel not checked)
 - [ ] Codex cancel
@@ -78,31 +72,23 @@ We launched with a profile-specific `CLAUDE_CONFIG_DIR` / `CODEX_HOME` and a key
 
 ## Benchmark (`plyfold-probe bench`, 2026-11-16)
 
-We compared the direct routes with routes through a third-party proxy under the same conditions. On each route, four kinds of randomly generated problems were each solved twice.
+Four kinds of randomly generated problems, each solved twice, without tools.
 
-| Item | Claude direct | Claude proxy | GPT direct (ChatGPT login) | GPT proxy |
-|---|---|---|---|---|
-| Configured model | opus / medium | opus | gpt-6-luna / medium | gpt-6-luna / medium |
-| Model name returned by the API | claude-opus-5-5 | a custom name | not available | not available |
-| Token difference (same text) | 4372 | 3758 | 1083 | 1025 |
-| Correct | 8/8 | 6/8 (2 timed out) | 0/8 | 8/8 |
-| Total time (median) | 22.8s | 48.0s | 2.8s | 35.8s |
-
-- **The same model name behaved completely differently**: the direct gpt-6-luna answered in about 3 seconds and got everything wrong; the proxy's gpt-6-luna took about 36 seconds and got everything right. It is not the model its name says
-- **Token-count fingerprinting is not conclusive**: the token counts are reported by the proxy itself, so they may be the relaying gateway's own estimate
-- The direct ChatGPT login could not use `gpt-6.1-sol` (not supported). The proxy accepts that name
+| Item | Claude (API) | GPT (ChatGPT login) |
+|---|---|---|
+| Configured model | opus / medium | gpt-6-luna / medium |
+| Model name returned by the API | claude-opus-5-5 | not available |
+| Correct | 8/8 | 0/8 |
+| Total time (median) | 22.8s | 2.8s |
 
 ## Coding benchmark (`plyfold-probe codebench`, 2026-11-16)
 
-We compared four small Rust tasks (expression evaluation, an O(1) LRU, fixing a bug in existing code, an INI parser). Scoring uses visible tests and hidden tests.
+Four small Rust tasks (expression evaluation, an O(1) LRU, fixing a bug in existing code, an INI parser). Scoring uses visible tests and hidden tests.
 
 | Route | Correct | Total time | Tool calls |
 |---|---|---|---|
-| Claude direct | 4/4 | 148s | 3–3 |
-| Claude proxy | 4/4 | 438s | 9–14 |
-| GPT direct (gpt-6-luna) | 4/4 | 152s | 4–6 |
-| GPT proxy | 4/4 | 1488s (one task hit the 900 s limit; the code was already complete) | 5–9 |
+| Claude (API) | 4/4 | 148s | 3–3 |
+| GPT (gpt-6-luna) | 4/4 | 152s | 4–6 |
 
-- At this difficulty the number of correct answers did not differ. The differences were in **speed and number of steps** (the proxy was 3–10x slower) and in **how runs ended** (sometimes the agent kept going after the work was done)
-- The direct gpt-6-luna scored 0/8 on tool-less mental arithmetic but solved every task in this format, where it can run code. Problems solved purely in the head, without tools, do not reflect an agent's real ability
-- No route modified the tests or Cargo.toml
+- gpt-6-luna scored 0/8 on tool-less mental arithmetic but solved every task in this format, where it can run code. Problems solved purely in the head, without tools, do not reflect an agent's real ability
+- Neither run modified the tests or Cargo.toml
