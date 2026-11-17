@@ -1,4 +1,4 @@
-import { ChevronLeft, ExternalLink, GitBranch, GitCommitHorizontal, GitMerge, GitPullRequest, Trash2 } from "lucide-react";
+import { ChevronLeft, ExternalLink, GitCommitHorizontal, GitMerge, GitPullRequest, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
@@ -13,6 +13,7 @@ import { Keys } from "./Keys";
 import { useLiquidClip, useLiquidRevealed } from "./liquid/stage";
 import { Num, ROW, Unified } from "./PatchLines";
 import { Segmented } from "./Segmented";
+import { GitPanel, useGitInfo } from "./pane/GitMenu";
 
 type View = "unified" | "split";
 
@@ -23,7 +24,11 @@ const BADGE: Record<FilePatch["status"], { letter: string; className: string; la
   renamed: { letter: "R", className: "text-muted-foreground", label: "diff.badgeRenamed" },
 };
 
-/** Diff screen. Overlays the sidebar and panes, expanding out of the pane's diff count */
+/**
+ * Git and the changes, in one view. Overlays the sidebar and panes, expanding out of the pane's Git button.
+ * Left: the branch, remote and commits, then the changed files; right: the selected file's diff; bottom (worktree
+ * sessions): commit, merge, discard and pull requests
+ */
 export function DiffView() {
   const t = useT();
   const diff = useStore((s) => s.diff);
@@ -39,14 +44,13 @@ export function DiffView() {
   const id = diff?.id;
   const [wt, setWt] = useState<WtStatus | null>(null);
   const bumpDiff = useStore((s) => s.bumpDiff);
+  const status = view?.record.status;
+  const busy = status === "working" || status === "awaiting_permission" || status === "starting" || status === "stalled";
+  const git = useGitInfo(id ?? "", busy);
 
+  // The worktree status exists only for worktree sessions (one in the repository itself has no actions here)
   const reload = (sid: string) =>
-    Promise.all([api.sessionDiff(sid), api.worktreeStatus(sid)])
-      .then(([d, st]) => {
-        setData(d);
-        setWt(st);
-      })
-      .catch((e) => setError(String(e)));
+    Promise.all([api.sessionDiff(sid).then(setData, (e) => setError(String(e))), api.worktreeStatus(sid).then(setWt, () => setWt(null))]).then(() => {});
 
   useEffect(() => {
     if (!id) return;
@@ -109,17 +113,14 @@ export function DiffView() {
           {r.profile === r.agent ? "default" : r.profile}
         </span>
         <span className="grow" />
-        {r.branch && (
-          <span className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
-            <GitBranch className="size-3.5" aria-hidden />
-            {r.branch}
-            {r.base_ref && <span>← {r.base_ref.slice(0, 7)}</span>}
-          </span>
-        )}
       </div>
 
       <div className="flex min-h-0 grow">
-        <aside aria-label={t("diff.changedFilesLabel")} className="flex w-[300px] shrink-0 flex-col border-r bg-sidebar">
+        {/* One scroll for the Git section and the file list */}
+        <aside aria-label={t("diff.changedFilesLabel")} className="flex w-[340px] shrink-0 flex-col overflow-y-auto border-r bg-sidebar">
+          <section aria-label={t("pane.git")} className="border-b px-2 pt-3 pb-3">
+            <GitPanel key={diff.id} id={diff.id} git={git} busy={busy} title={r.title} />
+          </section>
           <div className="flex h-10 shrink-0 items-center gap-2 px-4 text-xs">
             <span className="font-medium text-muted-foreground">{data ? t("diff.changedFilesCount", { count: files.length }) : t("diff.loading")}</span>
             <span className="grow" />
@@ -129,7 +130,7 @@ export function DiffView() {
               </span>
             )}
           </div>
-          <div role="listbox" aria-label={t("diff.filesLabel")} className="flex min-h-0 grow flex-col gap-0.5 overflow-y-auto px-2 pb-2">
+          <div role="listbox" aria-label={t("diff.filesLabel")} className="flex flex-col gap-0.5 px-2 pb-2">
             {files.map((f, i) => {
               const b = BADGE[f.patch?.status ?? (f.stat.untracked ? "added" : "modified")];
               return (
@@ -207,14 +208,10 @@ export function DiffView() {
           id={diff.id}
           title={r.title}
           status={wt}
-          busy={
-            view.record.status === "working" ||
-            view.record.status === "awaiting_permission" ||
-            view.record.status === "starting" ||
-            view.record.status === "stalled"
-          }
+          busy={busy}
           onDone={() => {
             bumpDiff();
+            void git.refresh();
             return reload(diff.id);
           }}
         />

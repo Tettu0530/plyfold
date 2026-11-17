@@ -74,10 +74,10 @@ function useShortcuts() {
         zoomIn: () => zoom(1),
         zoomOut: () => zoom(-1),
         zoomReset: () => void s.saveSettings({ ui_scale: 100 }).catch(() => {}),
-        // The focused session's changes (worktree sessions only)
+        // The focused session's Git and changes view
         openDiff: () => {
           const id = s.panes[s.focusedPane];
-          if (id && s.sessions[id]?.record.worktree_path) s.openDiff(id);
+          if (id && s.sessions[id]?.record.repo_path) s.openDiff(id);
         },
         // The focused session's side chat: open it, or put the cursor in it when it is open (closing clears it, so only the × button does)
         sideChat: () => {

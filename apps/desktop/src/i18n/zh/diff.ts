@@ -6,7 +6,7 @@ export const diff: Record<keyof typeof source, string> = {
   badgeDeleted: "删除",
   badgeModified: "修改",
   badgeRenamed: "重命名",
-  dialogLabel: "更改：{title}",
+  dialogLabel: "Git 与更改：{title}",
   backToPane: "返回窗格",
   changedFilesLabel: "已更改的文件",
   changedFilesCount: "{count, plural, other {已更改 # 个文件}}",

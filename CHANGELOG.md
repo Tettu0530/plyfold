@@ -9,6 +9,11 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 - Open a conversation the CLI already has, from the new-session screen, in its own worktree. Gemini CLI has no conversation list
 - Side chat (⌘J, or the button in the pane header): ask about a session without adding to its conversation, even while it works. It is a read-only fork in the same workspace; edits and commands are declined, answers can be added to the main input, and closing it clears it. Gemini CLI cannot fork
 
+### Git
+
+- Git and the changes are one view, opened from the pane header (⌘⇧D): the branch, its base and upstream, fetch, push and pull, the pull request and the commits sit above the changed files. The separate Git menu is gone
+- A session working in the repository itself also shows its uncommitted changes (against HEAD). Commit, merge and discard stay with worktree sessions
+
 ## [0.1.0] - 2026-11-17
 
 The first release, for macOS (Apple Silicon) and Windows 10/11 (x64; new, please report what doesn't work).

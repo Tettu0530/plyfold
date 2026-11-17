@@ -156,6 +156,7 @@ function SideChatBody({ mainId }: { mainId: string }) {
             onStop={() => void cancel(r.id)}
             root={r.worktree_path ?? r.repo_path}
             commands={view.info?.commands ?? []}
+            noMode
             onSet={(c, v) => void setCategory(r.id, c, v)}
           />
         </>

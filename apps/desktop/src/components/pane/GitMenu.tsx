@@ -1,8 +1,8 @@
-// The Git button in a session pane's header: the branch, how it stands against the branch it will be merged into and
-// against its upstream, the commits on it, and the pull request. Fetch / push / pull and creating a PR from here.
-// The info refreshes when the pane opens, when a turn ends and after each action; opening the menu also fetches from the
-// remote if that hasn't happened for a while
-import { ArrowDown, ArrowUp, Check, CircleDot, ExternalLink, GitBranch, GitCompare, GitMerge, GitPullRequest, LoaderCircle, RefreshCw, X } from "lucide-react";
+// The Git section of the changes view: the branch, how it stands against the branch it will be merged into and against
+// its upstream, the commits on it, and the pull request, with fetch / push / pull. (Commit, merge, discard and creating a
+// PR are at the bottom of the changes view.) The info refreshes when the pane opens, when a turn ends and after each
+// action; opening the view also fetches from the remote if that hasn't happened for a while
+import { ArrowDown, ArrowUp, Check, CircleDot, ExternalLink, GitBranch, GitMerge, GitPullRequest, LoaderCircle, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useT } from "@/i18n";
@@ -25,7 +25,7 @@ export function useGitInfo(id: string, busy: boolean) {
   const diffVersion = useStore((s) => s.diffVersion);
   const alive = useRef(true);
   const refresh = useCallback(async () => {
-    if (!inTauri) return;
+    if (!inTauri || !id) return;
     try {
       const g = await api.gitInfo(id);
       if (!alive.current) return;
@@ -36,7 +36,7 @@ export function useGitInfo(id: string, busy: boolean) {
     }
   }, [id]);
   const refreshPr = useCallback(async () => {
-    if (!inTauri) return;
+    if (!inTauri || !id) return;
     const p = await api.pullRequest(id).catch(() => null);
     if (alive.current) setPr(p);
   }, [id]);
@@ -55,23 +55,9 @@ export function useGitInfo(id: string, busy: boolean) {
 
 export type GitState = ReturnType<typeof useGitInfo>;
 
-type Action = "fetch" | "push" | "pull" | "pr";
+type Action = "fetch" | "push" | "pull";
 
-export function GitPanel({
-  id,
-  git,
-  busy,
-  worktree,
-  title,
-  onOpenDiff,
-}: {
-  id: string;
-  git: GitState;
-  busy: boolean;
-  worktree: boolean;
-  title: string;
-  onOpenDiff?: () => void;
-}) {
+export function GitPanel({ id, git, busy, title }: { id: string; git: GitState; busy: boolean; title: string }) {
   const t = useT();
   const [running, setRunning] = useState<Action | null>(null);
   const [note, setNote] = useState<{ error: boolean; text: string } | null>(null);
@@ -167,14 +153,6 @@ export function GitPanel({
         {info.changed > 0 && <span className="text-xs text-muted-foreground">{t("pane.gitChanged", { count: info.changed })}</span>}
       </div>
 
-      {/* The worktree's changes (commit, merge and discard live there) */}
-      {worktree && onOpenDiff && (
-        <button type="button" onClick={onOpenDiff} className="flex h-7 w-fit items-center gap-1.5 rounded-md border border-input px-2 text-xs hover:bg-accent">
-          <GitCompare className="size-3.5" aria-hidden />
-          {t("pane.viewChanges")}
-        </button>
-      )}
-
       {/* Remote actions */}
       {info.remote_url && (
         <div className="flex flex-wrap items-center gap-1.5">
@@ -215,24 +193,6 @@ export function GitPanel({
             {t("pane.gitPull")}
             {info.behind > 0 && <span className="font-mono tabular text-muted-foreground">{info.behind}</span>}
           </button>
-          {!pr && worktree && info.ahead_base > 0 && (
-            <button
-              type="button"
-              className={btn}
-              disabled={!!running || busy || info.changed > 0}
-              title={info.changed > 0 ? t("pane.gitCommitFirst") : undefined}
-              onClick={() =>
-                void run(
-                  "pr",
-                  () => api.createPr(id),
-                  () => t("pane.gitPrCreated"),
-                )
-              }
-            >
-              {spin("pr", GitPullRequest)}
-              {t("pane.gitCreatePr")}
-            </button>
-          )}
         </div>
       )}
       {note && <p className={cn("m-0 text-xs whitespace-pre-wrap", note.error ? "text-error" : "text-muted-foreground")}>{note.text}</p>}

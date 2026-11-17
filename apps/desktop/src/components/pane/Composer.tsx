@@ -116,6 +116,7 @@ export function ControlRow({
   onSet,
   empty,
   scope,
+  noMode = false,
 }: {
   agent: string;
   info: SessionInfo | null;
@@ -124,6 +125,8 @@ export function ControlRow({
   empty?: string;
   /** Per-pane name for the separation animation's origin (session or draft id) */
   scope: string;
+  /** No mode picker (a side chat is read-only whatever the mode) */
+  noMode?: boolean;
 }) {
   const t = useT();
   const raised = useLiquidActiveAnchors();
@@ -133,7 +136,7 @@ export function ControlRow({
   const model = option(info, "model");
   const effort = option(info, "thought_level");
   const mode = currentMode(info);
-  const modes = modeChoices(info);
+  const modes = noMode ? [] : modeChoices(info);
   const ctxPct = info?.context_used != null && info.context_size ? Math.round((info.context_used / info.context_size) * 100) : null;
 
   return (
@@ -327,6 +330,7 @@ export function Composer({
   onSendQueued,
   root = null,
   commands,
+  noMode = false,
 }: {
   scope: string;
   agent: string;
@@ -345,6 +349,8 @@ export function Composer({
   root?: string | null;
   /** Slash commands to complete after "/" */
   commands?: SlashCommand[];
+  /** Hide the mode picker and its ⇧⇥ (the side chat) */
+  noMode?: boolean;
 }) {
   const t = useT();
   const [text, setText] = useState("");
@@ -376,14 +382,14 @@ export function Composer({
     setText("");
     att.clear();
   };
-  const modes = modeChoices(info);
+  const modes = noMode ? [] : modeChoices(info);
   const mode = currentMode(info);
 
   return (
     // Same width as the conversation above in a wide pane (its edges line up with the messages, as in a narrow one)
     <div className="flex shrink-0 flex-col gap-1 px-[max(0.75rem,calc((100%_-_53rem)/2))] pb-3">
       <QueueList items={queue} busy={busy} onRemove={(k) => onUnqueue?.(k)} onSendNow={() => onSendQueued?.()} />
-      <ControlRow scope={scope} agent={agent} info={info} onSet={onSet} />
+      <ControlRow scope={scope} agent={agent} info={info} onSet={onSet} noMode={noMode} />
       <MentionMenu m={mention} boxRef={att.boxRef} />
       <SlashMenu m={slash} boxRef={att.boxRef} />
       <AttachBox att={att}>

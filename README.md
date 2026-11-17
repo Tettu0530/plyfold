@@ -37,8 +37,9 @@ Plyfold does not implement its own agent loop. It is an ACP client: the agent CL
 - Type `/` at the start of a message to complete the slash commands the agent offers (from ACP `available_commands_update`; new sessions use the commands remembered from the profile's last session)
 - Permission cards inside the pane, also shown in the sidebar and as notifications
 - A session is marked Stalled when nothing arrives during a turn for a set time (120 seconds by default)
-- Changes view built from git, including untracked files, with unified and split layouts
-- From the Changes view: commit, merge into the branch currently checked out in the original repository (`--no-ff`; on conflict the merge is aborted and the repository restored), push and open a pull request with `gh`, discard back to the base commit, or open the worktree in Zed, Cursor, VS Code or Finder
+- One Git view per session (⌘⇧D): the branch, how it stands against its base and upstream, fetch / push / pull, the pull request and the commits, above the changes built from git (including untracked files) in unified and split layouts. A session working in the repository itself shows its uncommitted changes
+- Side chat (⌘J): ask about a session in a read-only fork beside it, without adding to its conversation, even while it works
+- From the Git view (worktree sessions): commit, merge into the branch currently checked out in the original repository (`--no-ff`; on conflict the merge is aborted and the repository restored), push and open a pull request with `gh`, discard back to the base commit, or open the worktree in Zed, Cursor, VS Code or Finder
 - Profiles per agent with three kinds of authentication: the CLI's existing login, the official API with a key, or a custom provider (base URL plus key)
 - Optional separate config directory per profile, so its login and history don't mix with your usual CLI setup
 - Connection test per profile: configured model, the model the agent reports, and time to first text. When the two models differ, sessions with that profile show the reported model in the pane header
@@ -71,7 +72,7 @@ You can override these definitions or add other ACP agents in `config.toml` unde
 - Node.js 22.12 or later, with npm
 - git
 - The agent CLIs you want to use, and their logins or API keys. `npx` (bundled with Node) is enough for Claude Code, Codex and Gemini CLI. OpenCode needs `opencode` installed
-- Optional: [GitHub CLI](https://cli.github.com) (`gh`), logged in, for creating pull requests from the Changes view
+- Optional: [GitHub CLI](https://cli.github.com) (`gh`), logged in, for creating pull requests from the Git view
 
 ## Building and running from source
 

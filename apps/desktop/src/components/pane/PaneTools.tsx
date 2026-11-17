@@ -1,20 +1,7 @@
-// Pane header buttons: plan, background shells, touched files, git (the preview is in the app header, BrowserButton). Click to show the contents in a liquid menu
+// Pane header buttons: plan, background shells, touched files (the preview is in the app header, BrowserButton; Git and
+// the changes are one view, opened from the button next to these). Click to show the contents in a liquid menu
 // Always shown (so you know where they are). With nothing inside, only the icon is shown, no count
-import {
-  ArrowUp,
-  Check,
-  Circle,
-  CircleHelp,
-  CircleX,
-  FileText,
-  Globe,
-  ListChecks,
-  LoaderCircle,
-  GitBranch,
-  Pencil,
-  SquareStop,
-  SquareTerminal,
-} from "lucide-react";
+import { Check, Circle, CircleHelp, CircleX, FileText, Globe, ListChecks, LoaderCircle, Pencil, SquareStop, SquareTerminal } from "lucide-react";
 import { createContext, useContext, useMemo, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -26,7 +13,6 @@ import { localUrls } from "@/lib/urls";
 import { useStore } from "@/state/store";
 import type { TranscriptItem } from "@/state/transcript";
 import { liquidAnchor } from "../liquid/liquid";
-import { GitPanel, unpushed, useGitInfo } from "./GitMenu";
 import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 
 const TRIGGER =
@@ -149,33 +135,13 @@ const PLAN_ICON: Record<string, { Icon: typeof Check; className: string; spin?: 
 
 /** Open a typed URL, or one of the localhost URLs the commands printed */
 
-export function PaneTools({
-  scope,
-  items,
-  worktree,
-  alive,
-  busy = false,
-  isWorktree = false,
-  title = "",
-}: {
-  scope: string;
-  items: TranscriptItem[];
-  worktree: string | null;
-  alive: boolean;
-  /** Mid-turn (pull and PR creation wait) */
-  busy?: boolean;
-  /** The session has its own worktree (PRs can be created from it) */
-  isWorktree?: boolean;
-  title?: string;
-}) {
+export function PaneTools({ scope, items, worktree, alive }: { scope: string; items: TranscriptItem[]; worktree: string | null; alive: boolean }) {
   const t = useT();
   const files = useMemo(() => touchedFiles(items), [items]);
   const shells = useMemo(() => backgroundShells(items, alive), [items, alive]);
   const plan = useMemo(() => currentPlan(items), [items]);
   const running = shells.filter((s) => s.state === "running").length;
   const done = plan.filter((e) => e.status === "completed").length;
-  const git = useGitInfo(scope, busy);
-  const toPush = git.info ? unpushed(git.info) : 0;
 
   return (
     <>
@@ -238,40 +204,6 @@ export function PaneTools({
           </button>
         ))}
       </ToolButton>
-      {/* Only for sessions in a git repository */}
-      {git.info && (
-        <ToolButton
-          scope={scope}
-          name="git"
-          label={t("pane.git")}
-          icon={<GitBranch className="size-3.5" aria-hidden />}
-          badge={
-            toPush > 0 ? (
-              <span className="flex items-center">
-                <ArrowUp className="size-3" aria-hidden />
-                {toPush}
-              </span>
-            ) : null
-          }
-          width="w-[26rem]"
-        >
-          <GitPanelInMenu id={scope} git={git} busy={busy} worktree={isWorktree} title={title} />
-        </ToolButton>
-      )}
     </>
-  );
-}
-
-/** The Git panel inside its menu: "View changes" closes the menu, then opens the changes view */
-function GitPanelInMenu(props: Omit<React.ComponentProps<typeof GitPanel>, "onOpenDiff">) {
-  const close = useContext(CloseMenu);
-  return (
-    <GitPanel
-      {...props}
-      onOpenDiff={() => {
-        close();
-        useStore.getState().openDiff(props.id);
-      }}
-    />
   );
 }

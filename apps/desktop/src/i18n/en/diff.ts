@@ -6,7 +6,7 @@ export const diff: Record<keyof typeof source, string> = {
   badgeDeleted: "Deleted",
   badgeModified: "Modified",
   badgeRenamed: "Renamed",
-  dialogLabel: "Changes: {title}",
+  dialogLabel: "Git and changes: {title}",
   backToPane: "Back to pane",
   changedFilesLabel: "Changed files",
   changedFilesCount: "{count, plural, one {# file changed} other {# files changed}}",

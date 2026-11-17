@@ -1,4 +1,4 @@
-import { GitCompare, Square, TriangleAlert, X } from "lucide-react";
+import { ArrowUp, GitBranch, Square, TriangleAlert, X } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
@@ -23,6 +23,7 @@ import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
 import { useKeys } from "@/state/keys";
 import { PlyfoldMark } from "../Logo";
 import { SideChatButton, SideChatColumn } from "./SideChat";
+import { unpushed, useGitInfo } from "./GitMenu";
 
 function EmptyPane({ index }: { index: number }) {
   const t = useT();
@@ -98,10 +99,12 @@ function SessionPane({ index }: { index: number }) {
   const status = view?.record.status;
   // The worktree's change count: on every status change and after worktree actions, when the window comes back,
   // and every few seconds while the agent works (it edits files mid-turn)
-  const hasWorktree = !!view?.record.worktree_path;
+  const inRepo = !!view?.record.repo_path;
   const busyNow = status === "working" || status === "awaiting_permission" || status === "stalled";
+  // Branch, upstream and commits (for the header button; the Git view loads its own)
+  const git = useGitInfo(id && inRepo ? id : "", busyNow);
   useEffect(() => {
-    if (!id || !hasWorktree) return;
+    if (!id || !inRepo) return;
     let alive = true;
     const refresh = () =>
       api
@@ -116,7 +119,7 @@ function SessionPane({ index }: { index: number }) {
       window.removeEventListener("focus", refresh);
       if (timer) clearInterval(timer);
     };
-  }, [id, status, hasWorktree, busyNow, diffVersion]);
+  }, [id, status, inRepo, busyNow, diffVersion]);
 
   if (!id || !view) return <EmptyPane index={index} />;
   const r = view.record;
@@ -166,18 +169,16 @@ function SessionPane({ index }: { index: number }) {
               items={view.transcript.items}
               worktree={r.worktree_path ?? r.repo_path}
               alive={r.status !== "closed" && r.status !== "error"}
-              busy={view.transcript.inTurn}
-              isWorktree={!!r.worktree_path}
-              title={r.title}
             />
           </span>
-          {/* Changes view: always here for a worktree session; shows +added −removed once there are changes */}
-          {r.worktree_path && (
+          {/* Git and the changes, one view: here for any session in a git repository. Shows +added −removed once there
+              are changes, else the commits not pushed yet, else a branch */}
+          {(r.worktree_path || git.info) && (
             <button
               ref={liquidAnchor(`diff:${id}`)}
               type="button"
-              aria-label={t("pane.openDiff", { branch: r.branch ?? "" })}
-              title={t("pane.openDiff", { branch: r.branch ?? "" })}
+              aria-label={t("pane.openDiff", { branch: r.branch ?? git.info?.branch ?? "" })}
+              title={t("pane.openDiff", { branch: r.branch ?? git.info?.branch ?? "" })}
               onClick={() => openDiff(id)}
               className={cn(
                 "relative flex h-6 items-center gap-1 rounded-md px-1.5 font-mono text-xs hover:bg-accent",
@@ -190,8 +191,13 @@ function SessionPane({ index }: { index: number }) {
                   <span className="text-working">+{diffStat.added}</span>
                   <span className="text-error">−{diffStat.removed}</span>
                 </>
+              ) : git.info && unpushed(git.info) > 0 ? (
+                <span className="flex items-center text-muted-foreground">
+                  <ArrowUp className="size-3" aria-hidden />
+                  {unpushed(git.info)}
+                </span>
               ) : (
-                <GitCompare className="size-3.5 text-muted-foreground" aria-hidden />
+                <GitBranch className="size-3.5 text-muted-foreground" aria-hidden />
               )}
             </button>
           )}

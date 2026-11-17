@@ -4,7 +4,7 @@ export const diff = {
   badgeDeleted: "削除",
   badgeModified: "変更",
   badgeRenamed: "名前の変更",
-  dialogLabel: "差分: {title}",
+  dialogLabel: "Git と変更: {title}",
   backToPane: "ペインに戻る",
   changedFilesLabel: "変更したファイル",
   changedFilesCount: "変更 {count} ファイル",

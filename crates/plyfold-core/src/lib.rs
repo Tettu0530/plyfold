@@ -917,9 +917,18 @@ impl Engine {
     }
 
     /// Worktree diff (from the commit it was created at to the current working tree)
+    /// The changes since the base commit for a worktree session. A session working in the repository itself shows its
+    /// uncommitted changes (against HEAD); committing, merging and discarding stay with worktree sessions
     pub fn diff(&self, id: &str) -> Result<Diff, CoreError> {
         let rec = self.inner.store.get_session(id)?;
-        let wt = worktree_of(&rec).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
+        let wt = match worktree_of(&rec) {
+            Some(wt) => wt,
+            None => {
+                let dir = PathBuf::from(rec.repo_path.as_deref().ok_or_else(|| CoreError::NoWorkspace(id.into()))?);
+                let head = plyfold_worktree::head(&dir).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
+                Worktree { repo: dir.clone(), path: dir, branch: String::new(), base: head }
+            }
+        };
         Ok(plyfold_worktree::diff(&wt)?)
     }
 
