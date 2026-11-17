@@ -178,7 +178,8 @@ mod tests {
         let d = std::env::temp_dir().join(format!("plyfold-wt-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
-        d.canonicalize().unwrap()
+        // macOS: resolve /var → /private/var. Windows: keep the path as is (canonicalize adds a \\?\ prefix git rejects)
+        if cfg!(windows) { d } else { d.canonicalize().unwrap() }
     }
 
     fn init_repo(dir: &Path) {
