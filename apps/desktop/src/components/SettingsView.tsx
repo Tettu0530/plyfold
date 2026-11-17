@@ -83,6 +83,18 @@ export function SettingsView() {
                 ]}
               />
             </Row>
+            <Row label="言語" detail={settings.language === "auto" || !settings.language ? "macOS の言語に合わせます" : "画面の言葉をこの言語にします"}>
+              <Segmented<"auto" | "ja" | "en">
+                label="言語"
+                value={settings.language ?? "auto"}
+                onChange={(v) => change({ language: v })}
+                options={[
+                  { value: "auto", label: <span className="px-2">自動</span> },
+                  { value: "ja", label: <span className="px-2">日本語</span> },
+                  { value: "en", label: <span className="px-2">English</span> },
+                ]}
+              />
+            </Row>
             <Row label="送るキー" detail={settings.send_key === "cmd_enter" ? "⌘Enter で送ります。Enter は改行です" : "Enter で送ります。改行は Shift+Enter です"}>
               <Segmented<"enter" | "cmd_enter">
                 label="送るキー"

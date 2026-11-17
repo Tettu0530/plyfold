@@ -1,3 +1,5 @@
+import { t } from "@/i18n";
+
 export function tokens(n: number): string {
   if (n < 1000) return String(n);
   if (n < 1_000_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
@@ -12,11 +14,11 @@ export function seconds(ms: number): string {
 
 export function age(ts: number, now = Date.now()): string {
   const m = Math.floor((now - ts) / 60_000);
-  if (m < 1) return "今";
-  if (m < 60) return `${m}分`;
+  if (m < 1) return t("format.now");
+  if (m < 60) return t("format.minutes", { n: m });
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}時間`;
-  return h < 48 ? "昨日" : `${Math.floor(h / 24)}日`;
+  if (h < 24) return t("format.hours", { n: h });
+  return h < 48 ? t("format.yesterday") : t("format.days", { n: Math.floor(h / 24) });
 }
 
 export function money(amount: number, currency: string): string {
@@ -25,7 +27,7 @@ export function money(amount: number, currency: string): string {
 }
 
 export function repoName(path: string | null): string {
-  if (!path) return "（リポジトリなし）";
+  if (!path) return t("format.noRepo");
   const parts = path.split("/").filter(Boolean);
   return parts[parts.length - 1] ?? path;
 }

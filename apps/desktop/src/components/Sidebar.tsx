@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 
 import { age, repoName } from "@/lib/format";
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { ProviderLogo, STATUS, StatusIcon } from "./icons";
@@ -14,6 +15,7 @@ import { smooth, snappy } from "./motion";
 import { isImeKey } from "@/lib/keys";
 
 export function Sidebar() {
+  const t = useT();
   const sessions = useStore((s) => s.sessions);
   const panes = useStore((s) => s.panes);
   const paneCount = useStore((s) => s.paneCount);
@@ -50,7 +52,7 @@ export function Sidebar() {
   const open = new Set(panes.slice(0, paneCount).filter(Boolean));
 
   return (
-    <nav aria-label="セッション" className="relative flex w-60 shrink-0 flex-col border-r bg-sidebar">
+    <nav aria-label={t("sidebar.label")} className="relative flex w-60 shrink-0 flex-col border-r bg-sidebar">
       <div className="flex flex-col p-2">
         <motion.button
           ref={liquidAnchor("new-session")}
@@ -64,7 +66,7 @@ export function Sidebar() {
           )}
         >
           <Plus className="size-4" aria-hidden />
-          <span className="grow text-left">新しいセッション</span>
+          <span className="grow text-left">{t("sidebar.newSession")}</span>
           <Keys keys={["cmd", "n"]} />
         </motion.button>
         <motion.button
@@ -83,13 +85,13 @@ export function Sidebar() {
           )}
         >
           <Search className="size-4" aria-hidden />
-          <span className="grow text-left">検索</span>
+          <span className="grow text-left">{t("sidebar.search")}</span>
           <Keys keys={["cmd", "k"]} />
         </motion.button>
       </div>
 
       <div className="flex min-h-0 grow flex-col overflow-y-auto px-2">
-        {groups.length === 0 && <p className="px-2 py-4 text-xs text-muted-foreground">セッションはまだありません</p>}
+        {groups.length === 0 && <p className="px-2 py-4 text-xs text-muted-foreground">{t("sidebar.empty")}</p>}
         {groups.map(([repo, items]) => {
           const isClosed = !!closed[repo];
           return (
@@ -133,7 +135,7 @@ export function Sidebar() {
                         <ProviderLogo agent={r.agent} className="text-muted-foreground" />
                         {renaming === r.id ? (
                           <input
-                            aria-label="セッションの名前"
+                            aria-label={t("sidebar.renameLabel")}
                             defaultValue={r.title}
                             autoFocus
                             onFocus={(e) => e.currentTarget.select()}
@@ -159,7 +161,7 @@ export function Sidebar() {
                         ) : (
                           <span className="min-w-0 grow truncate">{r.title}</span>
                         )}
-                        {unread[r.id] && <span role="img" aria-label="見ていない通知があります" className={cn("size-1.5 shrink-0 rounded-full", unread[r.id].error ? "bg-error" : "bg-foreground")} />}
+                        {unread[r.id] && <span role="img" aria-label={t("sidebar.unread")} className={cn("size-1.5 shrink-0 rounded-full", unread[r.id].error ? "bg-error" : "bg-foreground")} />}
                         <span className={cn("flex shrink-0 items-center gap-1 text-xs", quiet ? "text-muted-foreground" : st.color)}>
                           <StatusIcon status={r.status} className="size-3" />
                           {st.label}
@@ -192,7 +194,7 @@ export function Sidebar() {
           )}
         >
           <KeyRound className="size-4" aria-hidden />
-          <span className="grow text-left">プロファイル</span>
+          <span className="grow text-left">{t("sidebar.profiles")}</span>
         </motion.button>
         <motion.button
           ref={liquidAnchor("settings")}
@@ -207,7 +209,7 @@ export function Sidebar() {
           )}
         >
           <Settings className="size-4" aria-hidden />
-          <span className="grow text-left">設定</span>
+          <span className="grow text-left">{t("sidebar.settings")}</span>
           <Keys keys={["cmd", ","]} />
         </motion.button>
       </div>

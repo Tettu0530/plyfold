@@ -128,6 +128,8 @@ export interface AppSettings {
   worktree_default: boolean;
   /** 入力欄で送るキー */
   send_key: "enter" | "cmd_enter";
+  /** 画面の言語（auto なら macOS の言語） */
+  language: "auto" | "ja" | "en";
 }
 
 export interface SettingsView {

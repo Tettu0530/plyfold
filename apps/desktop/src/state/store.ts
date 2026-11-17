@@ -5,6 +5,7 @@ import { create } from "zustand";
 import type { Look, LiquidStyle } from "@/components/liquid/liquid";
 import { liquidCloseFrom, liquidOpen } from "@/components/liquid/stage";
 import type { Attached } from "@/lib/attachments";
+import { resolveLang, setLang } from "@/i18n";
 import { api, inTauri, onEngineEvent } from "@/lib/api";
 import { notify } from "@/lib/notify";
 import { loadInfoCache, saveInfoCache, snapshot, type InfoCache } from "./infoCache";
@@ -265,7 +266,7 @@ export const useStore = create<State>((set, get) => ({
   settingsView: null,
   infoCache: loadInfoCache(),
   unread: {},
-  settings: { editor: "auto", cleanup_after_merge: false, stall_seconds: 120, worktree_default: true, send_key: "enter" },
+  settings: { editor: "auto", cleanup_after_merge: false, stall_seconds: 120, worktree_default: true, send_key: "enter", language: "auto" },
   liquidStyle: "pop",
   searchLayerActive: false,
   liquidLag: 0.12,
@@ -303,6 +304,7 @@ export const useStore = create<State>((set, get) => ({
     for (const r of records) sessions[r.id] = newView(r);
     // 前回の並べ方と、ペインに出していたセッションを戻す（分離アニメーションは付けない）
     const layout = restoreLayout(readLayout(), (id) => !!sessions[id]);
+    setLang(resolveLang(sv.settings.language));
     set({ profiles, sessions, settings: sv.settings, ready: true, ...(layout ?? {}) });
     for (const id of layout?.panes ?? []) if (id) void loadSession(id);
   },
@@ -379,6 +381,7 @@ export const useStore = create<State>((set, get) => ({
     const prev = get().settings;
     const next = { ...prev, ...patch };
     set({ settings: next });
+    if (patch.language) setLang(resolveLang(next.language));
     try {
       await api.saveSettings(next);
     } catch (e) {

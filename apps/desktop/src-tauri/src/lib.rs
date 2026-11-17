@@ -41,11 +41,13 @@ struct AppSettings {
     worktree_default: bool,
     /// 入力欄で送るキー: "enter"（Enter で送り Shift+Enter で改行）/ "cmd_enter"（⌘Enter で送り Enter で改行）
     send_key: String,
+    /// 画面の言語: "auto"（macOS の言語）/ "ja" / "en"
+    language: String,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
-        Self { editor: "auto".into(), cleanup_after_merge: false, stall_seconds: 120, worktree_default: true, send_key: "enter".into() }
+        Self { editor: "auto".into(), cleanup_after_merge: false, stall_seconds: 120, worktree_default: true, send_key: "enter".into(), language: "auto".into() }
     }
 }
 
