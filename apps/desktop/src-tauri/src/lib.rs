@@ -2,6 +2,9 @@
 
 mod dirs;
 mod files;
+mod shell_path;
+
+pub use shell_path::adopt_login_path;
 
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
