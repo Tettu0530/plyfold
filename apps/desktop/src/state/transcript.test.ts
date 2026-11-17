@@ -191,4 +191,27 @@ describe("transcript", () => {
     // Each message once, in order; the new message comes after the earlier answer
     expect(texts).toEqual(["first", "answer one", "second", "answer two"]);
   });
+
+  it("shows a CLI conversation copied out of the session/load resend", () => {
+    const ev = (id: number, kind: EventRecord["kind"], payload: unknown): EventRecord => ({
+      id,
+      session_id: "s",
+      ts: 0,
+      kind,
+      payload: typeof payload === "string" ? payload : JSON.stringify(payload),
+    });
+    const update = (u: unknown) => ({ jsonrpc: "2.0", method: "session/update", params: { update: u } });
+    const t = fromHistory([
+      ev(1, "note", "replay:begin"),
+      ev(2, "frame_out", { jsonrpc: "2.0", id: 1, method: "session/load", params: {} }),
+      ev(3, "fork_in", update(chunk("user_message_chunk", "remember this"))),
+      ev(4, "fork_in", update(chunk("agent_message_chunk", "echo: remember this"))),
+      ev(5, "frame_in", { jsonrpc: "2.0", id: 1, result: {} }),
+      ev(6, "note", "replay:end"),
+      ev(7, "fork_in", update(chunk("user_message_chunk", "remember this"))),
+      ev(8, "fork_in", update(chunk("agent_message_chunk", "echo: remember this"))),
+    ]);
+    const texts = t.items.filter((i) => i.kind === "user" || i.kind === "agent").map((i) => (i as { text: string }).text);
+    expect(texts).toEqual(["remember this", "echo: remember this"]);
+  });
 });

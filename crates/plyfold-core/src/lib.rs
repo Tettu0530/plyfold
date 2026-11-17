@@ -5,7 +5,7 @@
 //! - Permission requests are forwarded to the UI, and the answer comes back through `respond_permission`
 //! - If nothing arrives for a while during a turn, the session becomes `Stalled` (testing turned up agents that never finish)
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -77,6 +77,17 @@ pub enum CoreError {
         )
     )]
     SharedWorktree,
+    #[error("{}", plyfold_i18n::tr!("このエージェントは会話の一覧に対応していません", "This agent cannot list its conversations", "此代理不支持列出会话"))]
+    ListUnsupported,
+    #[error("{}", plyfold_i18n::tr!("このエージェントは既存の会話を開けません", "This agent cannot open an existing conversation", "此代理无法打开已有对话"))]
+    CannotResume,
+    #[error(
+        "{}",
+        plyfold_i18n::tr!("エージェントの側にこの会話の記録がありません", "The agent has no record of this conversation", "代理端没有此对话的记录")
+    )]
+    ConversationMissing,
+    #[error("{}", plyfold_i18n::tr!("この会話はもう Plyfold にあります", "This conversation is already in Plyfold", "此对话已在 Plyfold 中"))]
+    AlreadyInPlyfold,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -147,10 +158,22 @@ pub struct EngineOptions {
 /// How the agent session is opened
 enum Resume {
     New,
-    /// session/load. Falls back to a new session when the agent has no record
-    Load(String),
+    /// session/load. Falls back to a new session when the agent has no record.
+    /// `adopted` keeps the resent history as the transcript, and a failed load does not start a blank session.
+    Load {
+        session_id: String,
+        adopted: bool,
+    },
     /// session/fork. No fallback: a blank session would drop the conversation
     Fork(String),
+}
+
+/// A conversation the CLI already has, and Plyfold does not
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CliSession {
+    pub acp_session_id: String,
+    pub title: Option<String>,
+    pub updated_at: Option<String>,
 }
 
 pub struct StartSession {
@@ -342,7 +365,7 @@ impl Engine {
         let rec = self.inner.store.get_session(id)?;
         let cwd = rec.worktree_path.clone().or(rec.repo_path.clone()).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
         let resume = match rec.acp_session_id {
-            Some(id) => Resume::Load(id),
+            Some(session_id) => Resume::Load { session_id, adopted: false },
             None => Resume::New,
         };
         self.launch(id, &rec.profile, Path::new(&cwd), resume).await
@@ -414,6 +437,91 @@ impl Engine {
             plyfold_i18n::tr!("同じ作業場所で分岐しました", "Forked in this workspace", "已在同一工作区中分叉")
         };
         inner.notice(&rec.id, note);
+        Ok(inner.store.get_session(&rec.id)?)
+    }
+
+    /// Conversations this CLI already has in `repo`, excluding ones Plyfold already recorded.
+    /// The agent process used for the list is stopped before this returns.
+    pub async fn list_cli_sessions(&self, profile: &str, repo: &Path) -> Result<Vec<CliSession>, CoreError> {
+        let dir = plyfold_worktree::repo_root(repo).unwrap_or_else(|_| repo.to_path_buf());
+        let inner = &self.inner;
+        let resolved = inner.config.read().unwrap().resolve(profile, &inner.state_dir, &dir, inner.secrets.as_ref())?;
+        let (client, mut rx) = AcpClient::connect(&resolved.spawn, None).await?;
+        let client = Arc::new(client);
+        let reader = {
+            let client = client.clone();
+            tokio::spawn(async move {
+                while let Some(msg) = rx.recv().await {
+                    match msg {
+                        AgentMessage::PermissionRequest { request_id, .. } => {
+                            let _ = client.respond_permission(request_id, None).await;
+                        }
+                        AgentMessage::OtherRequest { request_id, .. } => {
+                            let _ = client.respond_unsupported(request_id).await;
+                        }
+                        AgentMessage::Closed => break,
+                        AgentMessage::Update { .. } | AgentMessage::OtherNotification { .. } => {}
+                    }
+                }
+            })
+        };
+        let listed = async {
+            if !client.supports_list() {
+                return Err(CoreError::ListUnsupported);
+            }
+            let known: HashSet<String> = inner.store.list_sessions()?.into_iter().filter_map(|s| s.acp_session_id).collect();
+            let mut sessions = Vec::new();
+            for info in client.list_sessions(&dir).await? {
+                let acp_session_id = info.session_id.0.to_string();
+                if acp_session_id.is_empty() || known.contains(&acp_session_id) {
+                    continue;
+                }
+                let title = info.title.filter(|t| !t.trim().is_empty());
+                sessions.push(CliSession { acp_session_id, title, updated_at: info.updated_at });
+            }
+            sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at).then_with(|| a.title.cmp(&b.title)));
+            Ok(sessions)
+        }
+        .await;
+        reader.abort();
+        client.shutdown().await;
+        match listed {
+            Err(CoreError::Acp(AcpError::Rpc { code: AcpError::METHOD_NOT_FOUND, .. })) => Err(CoreError::ListUnsupported),
+            other => other,
+        }
+    }
+
+    /// Open a conversation the CLI already has, in a new worktree. Uncommitted files stay in `repo`.
+    pub async fn adopt_session(&self, profile: &str, repo: &Path, acp_session_id: &str, title: &str) -> Result<SessionRecord, CoreError> {
+        let inner = &self.inner;
+        if acp_session_id.is_empty() {
+            return Err(CoreError::NoConversation(String::new()));
+        }
+        if inner.store.list_sessions()?.iter().any(|s| s.acp_session_id.as_deref() == Some(acp_session_id)) {
+            return Err(CoreError::AlreadyInPlyfold);
+        }
+        let agent = inner.config.read().unwrap().profiles.get(profile).map(|p| p.agent.clone()).unwrap_or_else(|| profile.to_string());
+        let title = if title.trim().is_empty() { plyfold_i18n::tr!("（無題）", "(untitled)", "（无标题）") } else { title.to_string() };
+        let rec = inner.store.create_session(NewSession { title, profile: profile.to_string(), agent, ..Default::default() })?;
+        inner.emit(EngineEvent::SessionCreated { session: rec.clone() });
+        let cwd = match inner.worktrees.create(repo, &rec.id, None) {
+            Ok(wt) => {
+                inner.store.set_workspace(
+                    &rec.id,
+                    Some(&wt.repo.display().to_string()),
+                    Some(&wt.path.display().to_string()),
+                    Some(&wt.branch),
+                    Some(&wt.base),
+                )?;
+                wt.path
+            }
+            Err(e) => {
+                inner.notice(&rec.id, plyfold_i18n::tr!("作業場所を用意できません: {e}", "Cannot prepare the workspace: {e}", "无法准备工作区：{e}"));
+                inner.set_status(&rec.id, SessionStatus::Error);
+                return Err(e.into());
+            }
+        };
+        self.launch(&rec.id, profile, &cwd, Resume::Load { session_id: acp_session_id.to_string(), adopted: true }).await?;
         Ok(inner.store.get_session(&rec.id)?)
     }
 
@@ -493,7 +601,7 @@ impl Engine {
                 }
                 // Why reopening failed (reported when continuing in a new session)
                 let mut fallback = None;
-                if let Resume::Load(old) = &resume {
+                if let Resume::Load { session_id: old, adopted } = &resume {
                     if live.client.supports_load_session() {
                         // Mark the resent history in the event log so it is not rebuilt as a second copy of the conversation
                         let _ = inner.store.append_event(id, EventKind::Note, REPLAY_BEGIN);
@@ -507,9 +615,26 @@ impl Engine {
                         match loaded {
                             Ok((resp, _)) => {
                                 live.info.lock().unwrap().apply_session_response(&resp);
-                                inner.notice(id, plyfold_i18n::tr!("session/load で開き直しました（履歴はエージェントから再送されます）", "Reopened with session/load (the agent resends the history)", "已通过 session/load 重新打开（历史记录由代理重新发送）"));
+                                inner.store.set_acp_session_id(id, old)?;
+                                if *adopted {
+                                    // Plyfold has no earlier copy, so lift the resend out of the load request where the transcript skips it
+                                    inner.store.keep_resent_history(id, REPLAY_BEGIN, REPLAY_END)?;
+                                    inner.notice(
+                                        id,
+                                        plyfold_i18n::tr!(
+                                            "この CLI にあった会話を、新しい worktree で開きました（未コミットの変更は含みません）",
+                                            "Opened a conversation this CLI already had, in a new worktree (uncommitted changes are not included)",
+                                            "已在新 worktree 中打开此 CLI 已有的对话（不含未提交的更改）"
+                                        ),
+                                    );
+                                } else {
+                                    inner.notice(id, plyfold_i18n::tr!("session/load で開き直しました（履歴はエージェントから再送されます）", "Reopened with session/load (the agent resends the history)", "已通过 session/load 重新打开（历史记录由代理重新发送）"));
+                                }
                                 return Ok(old.clone());
                             }
+                            // Adopting a missing conversation must not silently start a blank one
+                            Err(AcpError::Rpc { code: -32002, .. }) if *adopted => return Err(CoreError::ConversationMissing),
+                            Err(e) if *adopted => return Err(e.into()),
                             // The agent has no record of the conversation (e.g. it exited before saving). Continue in a new session
                             Err(AcpError::Rpc { code: -32002, .. }) => {
                                 fallback = Some(plyfold_i18n::tr!(
@@ -520,6 +645,8 @@ impl Engine {
                             }
                             Err(e) => return Err(e.into()),
                         }
+                    } else if *adopted {
+                        return Err(CoreError::CannotResume);
                     } else {
                         fallback = Some(plyfold_i18n::tr!(
                             "このエージェントは開き直しに対応していないため、新しいセッションを作りました（文脈は引き継がれません）",

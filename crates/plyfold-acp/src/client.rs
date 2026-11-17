@@ -7,9 +7,9 @@ use std::time::Duration;
 use agent_client_protocol_schema::ProtocolVersion;
 use agent_client_protocol_schema::v1::{
     CancelNotification, ClientCapabilities, ContentBlock, FileSystemCapabilities, ForkSessionRequest, ForkSessionResponse, Implementation, InitializeRequest,
-    InitializeResponse, LoadSessionRequest, NewSessionRequest, NewSessionResponse, PromptRequest, PromptResponse, RequestPermissionOutcome,
-    RequestPermissionRequest, RequestPermissionResponse, SelectedPermissionOutcome, SessionId, SessionNotification, SessionUpdate, SetSessionModeRequest,
-    TextContent,
+    InitializeResponse, ListSessionsRequest, ListSessionsResponse, LoadSessionRequest, NewSessionRequest, NewSessionResponse, PromptRequest, PromptResponse,
+    RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse, SelectedPermissionOutcome, SessionId, SessionInfo, SessionNotification,
+    SessionUpdate, SetSessionModeRequest, TextContent,
 };
 use serde_json::Value;
 use tokio::sync::mpsc;
@@ -86,6 +86,11 @@ impl AcpClient {
         self.init.agent_capabilities.session_capabilities.fork.is_some()
     }
 
+    /// Whether the agent advertises `sessionCapabilities.list` (`session/list`)
+    pub fn supports_list(&self) -> bool {
+        self.init.agent_capabilities.session_capabilities.list.is_some()
+    }
+
     /// Whether prompts may contain image blocks (if not, images are passed as file links)
     pub fn supports_images(&self) -> bool {
         self.init.agent_capabilities.prompt_capabilities.image
@@ -106,6 +111,27 @@ impl AcpClient {
         let (v, barrier) = self.conn.request_with_barrier("session/fork", serde_json::to_value(&req).expect("serialize"), Some(SESSION_TIMEOUT)).await?;
         let _: ForkSessionResponse = serde_json::from_value(v.clone()).map_err(|source| AcpError::Decode { method: "session/fork".into(), source })?;
         Ok((v, barrier))
+    }
+
+    /// Sessions the agent already has for this directory. Follows `nextCursor` until it stops or repeats.
+    /// The caller checks `supports_list` first; a missing method comes back as an RPC error.
+    pub async fn list_sessions(&self, cwd: &Path) -> Result<Vec<SessionInfo>, AcpError> {
+        let mut cursor: Option<String> = None;
+        let mut seen = std::collections::HashSet::new();
+        let mut out = Vec::new();
+        for _ in 0..32 {
+            let mut req = ListSessionsRequest::new().cwd(cwd.to_path_buf());
+            if let Some(c) = cursor.clone() {
+                req = req.cursor(c);
+            }
+            let page: ListSessionsResponse = self.conn.request("session/list", &req, Some(SESSION_TIMEOUT)).await?;
+            out.extend(page.sessions);
+            match page.next_cursor {
+                Some(next) if !next.is_empty() && seen.insert(next.clone()) => cursor = Some(next),
+                _ => break,
+            }
+        }
+        Ok(out)
     }
 
     /// Reopens an existing session. The history is replayed as session/update notifications.

@@ -25,4 +25,9 @@ export const draft = {
   repoSuggestions: "リポジトリの候補",
   recent: "最近",
   folders: "フォルダ",
+  cliSessions: "この CLI の会話",
+  cliSessionsHint: "新しい worktree で開きます。未コミットの変更は元の場所に残ります",
+  cliSessionsLoading: "読み込んでいます",
+  cliSessionsEmpty: "このリポジトリには、まだ取り込める会話がありません",
+  cliSessionsUntitled: "（無題）",
 } satisfies Record<string, string>;

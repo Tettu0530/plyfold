@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, Check, Coins, FolderOpen, GitBranch, MessageSquare, Plus, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { money, repoName, tokens } from "@/lib/format";
@@ -16,6 +16,8 @@ import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 import { withChoices } from "@/state/infoCache";
 import type { Category, ProfileSummary, ProfileUsage } from "@/lib/types";
+import { api } from "@/lib/api";
+import type { CliSession } from "@/lib/types";
 import { isSendKey } from "@/lib/keys";
 import { useT, type MessageKey } from "@/i18n";
 import { startDrag } from "./dnd";
@@ -244,6 +246,9 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
                     <GitBranch className="size-3" aria-hidden />
                     {draft.worktree ? "worktree" : t("draft.inPlace")}
                   </button>
+                  {current?.agent !== "gemini" && draft.profile && (
+                    <CliSessions key={`${draft.profile}:${draft.repo}`} draftId={id} profile={draft.profile} repo={draft.repo} busy={draft.busy} />
+                  )}
                 </div>
                 <span className="grow" />
                 <ControlRow
@@ -319,5 +324,88 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
         </PopoverContent>
       </Popover>
     </section>
+  );
+}
+
+/** Conversations this CLI already has in the chosen repository. Gemini does not advertise session/list. */
+function CliSessions({ draftId, profile, repo, busy }: { draftId: string; profile: string; repo: string; busy: boolean }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [items, setItems] = useState<CliSession[]>([]);
+  const anchor = `${draftId}:cli`;
+  const menu = useLiquidMenu(`menu:${anchor}`, anchor);
+  const raised = useLiquidActiveAnchors().has(anchor);
+  // Listing launches an agent, so a slow reply must not replace a newer one
+  const request = useRef(0);
+  const toggle = (o: boolean) => {
+    menu.onOpenChange(o);
+    setOpen(o);
+    const current = ++request.current;
+    if (!o) return;
+    setLoading(true);
+    setError(null);
+    setItems([]);
+    void api.listCliSessions(profile, repo).then(
+      (rows) => {
+        if (request.current !== current) return;
+        setItems(rows);
+        setLoading(false);
+      },
+      (e: unknown) => {
+        if (request.current !== current) return;
+        setError(String(e));
+        setLoading(false);
+      },
+    );
+  };
+  return (
+    <Popover open={open} onOpenChange={toggle}>
+      <PopoverTrigger asChild>
+        <button
+          ref={liquidAnchor(anchor)}
+          type="button"
+          disabled={busy || !repo}
+          className={cn(
+            "relative flex h-6 items-center gap-1.5 rounded-md px-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40 data-[state=open]:bg-accent",
+            raised && "z-[57]",
+          )}
+        >
+          <MessageSquare className="size-3" aria-hidden />
+          {t("draft.cliSessions")}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        ref={menu.ref as React.Ref<HTMLDivElement>}
+        style={menu.style}
+        side="top"
+        align="start"
+        sideOffset={6}
+        className={cn("z-[58] w-80 p-1.5", menu.moving && "opacity-0")}
+      >
+        <p className="px-2 pt-1 pb-1.5 text-xs text-muted-foreground">{t("draft.cliSessionsHint")}</p>
+        {loading && <p className="px-2 py-1 text-xs text-muted-foreground">{t("draft.cliSessionsLoading")}</p>}
+        {error && <p className="max-w-72 px-2 py-1 text-xs whitespace-pre-wrap text-error">{error}</p>}
+        {!loading && !error && items.length === 0 && <p className="px-2 py-1 text-xs text-muted-foreground">{t("draft.cliSessionsEmpty")}</p>}
+        <div className="flex max-h-64 flex-col gap-0.5 overflow-y-auto">
+          {items.map((s) => (
+            <button
+              key={s.acp_session_id}
+              type="button"
+              title={s.updated_at ?? undefined}
+              disabled={busy}
+              onClick={() => {
+                toggle(false);
+                void useStore.getState().adoptCliSession(draftId, s.acp_session_id, s.title ?? "");
+              }}
+              className="flex h-7 items-center rounded-md px-2 text-left text-sm hover:bg-accent disabled:opacity-40"
+            >
+              <span className="truncate">{s.title?.trim() || t("draft.cliSessionsUntitled")}</span>
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

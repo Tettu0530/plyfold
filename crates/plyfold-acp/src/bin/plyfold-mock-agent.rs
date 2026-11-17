@@ -7,7 +7,7 @@
 //! - otherwise    : answers `echo: <prompt>`
 //!
 //! History is kept in `<cwd>/.plyfold-mock/<sessionId>.jsonl` and replayed on session/load.
-//! A pointer in the temp dir lets a later process `session/fork` that id (agents persist sessions outside the worktree).
+//! A pointer in the temp dir lets a later process `session/fork` or `session/list` that id (agents persist sessions outside the worktree).
 //! Also reports config options (model / effort / mode) and usage (usage_update, per-turn usage).
 
 use std::collections::{HashMap, HashSet};
@@ -105,6 +105,45 @@ impl State {
     }
 }
 
+/// The history file in this directory, or the one recorded when the session was created in another directory
+fn history_file(sid: &str, cwd: &std::path::Path) -> Option<PathBuf> {
+    let local = cwd.join(".plyfold-mock").join(format!("{sid}.jsonl"));
+    if local.is_file() {
+        return Some(local);
+    }
+    let pointer = std::env::temp_dir().join("plyfold-mock-sessions").join(sid);
+    let dir = std::fs::read_to_string(pointer).ok()?;
+    let path = PathBuf::from(dir.trim()).join(".plyfold-mock").join(format!("{sid}.jsonl"));
+    path.is_file().then_some(path)
+}
+
+fn same_dir(stored: &str, asked: &std::path::Path) -> bool {
+    let stored = PathBuf::from(stored);
+    if stored == asked {
+        return true;
+    }
+    match (stored.canonicalize(), asked.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    }
+}
+
+/// The first thing the user said, used as the title session/list reports
+fn title_of(path: &std::path::Path) -> Option<String> {
+    let text = std::fs::read_to_string(path).ok()?;
+    for line in text.lines() {
+        let Ok(v) = serde_json::from_str::<Value>(line) else { continue };
+        if v["sessionUpdate"] != "user_message_chunk" {
+            continue;
+        }
+        let title = v["content"]["text"].as_str().unwrap_or("").trim();
+        if !title.is_empty() {
+            return Some(title.chars().take(80).collect());
+        }
+    }
+    None
+}
+
 fn text_chunk(kind: &str, text: &str) -> Value {
     json!({"sessionUpdate": kind, "content": {"type": "text", "text": text}})
 }
@@ -191,7 +230,7 @@ fn handle_request(st: &Arc<State>, id: Value, method: &str, params: Value) {
     match method {
         "initialize" => reply(json!({
             "protocolVersion": 1,
-            "agentCapabilities": {"loadSession": true, "promptCapabilities": {}, "mcpCapabilities": {}, "sessionCapabilities": {"fork": {}}},
+            "agentCapabilities": {"loadSession": true, "promptCapabilities": {}, "mcpCapabilities": {}, "sessionCapabilities": {"fork": {}, "list": {}}},
             "authMethods": [],
             "agentInfo": {"name": "plyfold-mock-agent", "version": env!("CARGO_PKG_VERSION")}
         })),
@@ -210,7 +249,10 @@ fn handle_request(st: &Arc<State>, id: Value, method: &str, params: Value) {
         "session/load" => {
             let sid = params["sessionId"].as_str().unwrap_or_default().to_string();
             let cwd = PathBuf::from(params["cwd"].as_str().unwrap_or("."));
-            let path = cwd.join(".plyfold-mock").join(format!("{sid}.jsonl"));
+            let Some(path) = history_file(&sid, &cwd) else {
+                st.send(json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32002, "message": "session not found"}}));
+                return;
+            };
             let Ok(text) = std::fs::read_to_string(&path) else {
                 st.send(json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32002, "message": "session not found"}}));
                 return;
@@ -221,8 +263,40 @@ fn handle_request(st: &Arc<State>, id: Value, method: &str, params: Value) {
                     st.send(json!({"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": sid, "update": update}}));
                 }
             }
+            // A later load uses the new directory, so the history has to live there too
+            let dest = cwd.join(".plyfold-mock").join(format!("{sid}.jsonl"));
+            if path != dest {
+                if let Some(parent) = dest.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                let _ = std::fs::copy(&path, &dest);
+            }
             st.bind(&sid, cwd);
             reply(json!({}));
+        }
+        "session/list" => {
+            let want = params["cwd"].as_str().map(str::to_string);
+            let mut sessions = Vec::new();
+            let dir = std::env::temp_dir().join("plyfold-mock-sessions");
+            if let Ok(rd) = std::fs::read_dir(&dir) {
+                for ent in rd.flatten() {
+                    let sid = ent.file_name().to_string_lossy().to_string();
+                    let Ok(cwd) = std::fs::read_to_string(ent.path()) else { continue };
+                    let cwd = cwd.trim();
+                    if let Some(want) = &want
+                        && !same_dir(cwd, std::path::Path::new(want))
+                    {
+                        continue;
+                    }
+                    let hist = std::path::PathBuf::from(cwd).join(".plyfold-mock").join(format!("{sid}.jsonl"));
+                    let mut obj = json!({"sessionId": sid, "cwd": cwd});
+                    if let Some(title) = title_of(&hist) {
+                        obj["title"] = json!(title);
+                    }
+                    sessions.push(obj);
+                }
+            }
+            reply(json!({ "sessions": sessions }));
         }
         "session/fork" => {
             let old = params["sessionId"].as_str().unwrap_or_default().to_string();
