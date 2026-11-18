@@ -313,6 +313,10 @@ const RUNNING: SessionStatus[] = ["idle", "working", "awaiting_permission", "sta
 
 /** Apply an engine event to the state (pure) */
 export function reduceEvent(sessions: Record<string, SessionView>, e: EngineEvent): Record<string, SessionView> {
+  if (e.type === "workspace_changed") {
+    const v = sessions[e.session.id];
+    return v ? { ...sessions, [e.session.id]: { ...v, record: e.session } } : sessions;
+  }
   if (e.type === "session_created") {
     return { ...sessions, [e.session.id]: { ...newView(e.session), historyLoaded: true } };
   }

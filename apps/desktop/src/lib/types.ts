@@ -104,7 +104,9 @@ export type EngineEvent =
   | { type: "turn_ended"; session_id: string; stop_reason: string | null; error: string | null }
   | { type: "notice"; session_id: string; message: string }
   | { type: "info"; session_id: string; info: SessionInfo }
-  | { type: "renamed"; session_id: string; title: string };
+  | { type: "renamed"; session_id: string; title: string }
+  /** Where the session works changed (its worktree folder was removed, so it continues in the repository) */
+  | { type: "workspace_changed"; session: SessionRecord };
 
 /** A conversation the CLI already has, which Plyfold has not recorded */
 export interface CliSession {

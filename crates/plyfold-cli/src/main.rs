@@ -360,7 +360,7 @@ fn prompt_mark(working: bool) {
 
 fn belongs(e: &EngineEvent, sid: &str) -> bool {
     let id = match e {
-        EngineEvent::SessionCreated { session } => &session.id,
+        EngineEvent::SessionCreated { session } | EngineEvent::WorkspaceChanged { session } => &session.id,
         EngineEvent::Status { session_id, .. }
         | EngineEvent::Update { session_id, .. }
         | EngineEvent::PermissionRequested { session_id, .. }

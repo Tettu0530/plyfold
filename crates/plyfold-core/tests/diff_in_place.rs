@@ -5,7 +5,7 @@ use std::process::Command;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use plyfold_core::{Engine, EngineOptions, StartSession};
+use plyfold_core::{Engine, EngineEvent, EngineOptions, StartSession};
 use plyfold_profile::{Config, MemoryStore};
 
 fn mock_agent() -> PathBuf {
@@ -78,5 +78,72 @@ async fn a_session_in_place_shows_its_uncommitted_changes() {
     assert_eq!(paths, vec![("a.txt", 1, false), ("new.txt", 1, true)]);
     // Worktree operations stay with worktree sessions
     assert!(eng.worktree_status(&s.id).is_err());
+    eng.close_session(&s.id).await.unwrap();
+}
+
+#[tokio::test]
+async fn git_info_after_the_worktree_is_cleaned_up() {
+    let base = tmp("cleanup");
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    git(&repo, &["init", "-q", "-b", "main"]);
+    std::fs::write(repo.join("a.txt"), "one\n").unwrap();
+    git(&repo, &["add", "a.txt"]);
+    git(&repo, &["commit", "-qm", "init"]);
+
+    let eng = engine(&base.join("state"));
+    let s = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: repo.clone(), worktree: true }).await.unwrap();
+    let wt = std::path::PathBuf::from(s.worktree_path.clone().unwrap());
+    std::fs::write(wt.join("b.txt"), "two\n").unwrap();
+    eng.close_session(&s.id).await.unwrap();
+    eng.commit(&s.id, "add b").unwrap();
+    eng.merge(&s.id).unwrap();
+    assert!(eng.cleanup_worktree(&s.id).await.unwrap());
+    let rec = eng.store().get_session(&s.id).unwrap();
+    println!("after cleanup: repo={:?} worktree={:?} branch={:?}", rec.repo_path, rec.worktree_path, rec.branch);
+    let info = eng.git_info(&s.id);
+    println!("git_info: {:?}", info.as_ref().map(|i| (&i.branch, &i.base, i.ahead_base)).map_err(|e| e.to_string()));
+    let diff = eng.diff(&s.id);
+    println!("diff: {:?}", diff.as_ref().map(|d| d.files.len()).map_err(|e| e.to_string()));
+    assert!(info.is_ok() && diff.is_ok());
+}
+
+#[tokio::test]
+async fn a_worktree_removed_outside_plyfold_falls_back_to_the_repository() {
+    let base = tmp("gone");
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    git(&repo, &["init", "-q", "-b", "main"]);
+    std::fs::write(repo.join("a.txt"), "one\n").unwrap();
+    git(&repo, &["add", "a.txt"]);
+    git(&repo, &["commit", "-qm", "init"]);
+
+    let eng = engine(&base.join("state"));
+    let mut rx = eng.subscribe();
+    let s = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: repo.clone(), worktree: true }).await.unwrap();
+    eng.close_session(&s.id).await.unwrap();
+    // Removed by hand (or by the agent), not through Plyfold
+    let wt = s.worktree_path.clone().unwrap();
+    git(&repo, &["worktree", "remove", "--force", &wt]);
+
+    let info = eng.git_info(&s.id).unwrap();
+    assert_eq!(info.branch.as_deref(), Some("main"));
+    let rec = eng.store().get_session(&s.id).unwrap();
+    assert_eq!(rec.worktree_path, None);
+    assert_eq!(rec.repo_path, s.repo_path);
+    assert!(eng.diff(&s.id).unwrap().files.is_empty());
+    assert!(eng.store().events(&s.id, None, 1000).unwrap().iter().any(|e| e.payload.contains("が見つからないので")));
+    let changed = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            if let Ok(EngineEvent::WorkspaceChanged { session }) = rx.recv().await {
+                return session;
+            }
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(changed.worktree_path, None);
+    // Reopening runs in the repository instead of the missing folder
+    eng.reopen_session(&s.id).await.unwrap();
     eng.close_session(&s.id).await.unwrap();
 }

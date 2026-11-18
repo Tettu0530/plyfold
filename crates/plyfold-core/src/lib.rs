@@ -145,6 +145,11 @@ pub enum EngineEvent {
         session_id: String,
         title: String,
     },
+    /// Where the session works changed outside the usual actions (its worktree folder was removed, so it continues in
+    /// the original repository)
+    WorkspaceChanged {
+        session: SessionRecord,
+    },
 }
 
 pub struct EngineOptions {
@@ -372,7 +377,7 @@ impl Engine {
         if self.is_running(id) {
             return Err(CoreError::AlreadyRunning(id.into()));
         }
-        let rec = self.inner.store.get_session(id)?;
+        let rec = self.reconcile_workspace(id)?;
         let cwd = rec.worktree_path.clone().or(rec.repo_path.clone()).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
         let resume = match rec.acp_session_id {
             Some(session_id) => Resume::Load { session_id, adopted: false },
@@ -920,7 +925,7 @@ impl Engine {
     /// The changes since the base commit for a worktree session. A session working in the repository itself shows its
     /// uncommitted changes (against HEAD); committing, merging and discarding stay with worktree sessions
     pub fn diff(&self, id: &str) -> Result<Diff, CoreError> {
-        let rec = self.inner.store.get_session(id)?;
+        let rec = self.reconcile_workspace(id)?;
         let wt = match worktree_of(&rec) {
             Some(wt) => wt,
             None => {
@@ -930,6 +935,29 @@ impl Engine {
             }
         };
         Ok(plyfold_worktree::diff(&wt)?)
+    }
+
+    /// The session's record, after checking that its worktree still exists. One removed outside Plyfold (by hand, or by
+    /// an agent running `git worktree remove`) would leave every Git action failing on a missing folder; the session
+    /// then continues in the original repository, as after a cleanup, and the UI is told
+    fn reconcile_workspace(&self, id: &str) -> Result<SessionRecord, CoreError> {
+        let rec = self.inner.store.get_session(id)?;
+        let Some(wt) = rec.worktree_path.as_deref() else { return Ok(rec) };
+        if Path::new(wt).exists() {
+            return Ok(rec);
+        }
+        self.inner.store.set_workspace(id, rec.repo_path.as_deref(), None, None, None)?;
+        self.inner.notice(
+            id,
+            plyfold_i18n::tr!(
+                "worktree {wt} が見つからないので、元のリポジトリで続けます",
+                "The worktree {wt} is gone, so this session continues in the original repository",
+                "找不到 worktree {wt}，此会话将在原仓库中继续"
+            ),
+        );
+        let rec = self.inner.store.get_session(id)?;
+        self.inner.emit(EngineEvent::WorkspaceChanged { session: rec.clone() });
+        Ok(rec)
     }
 
     fn idle_worktree(&self, id: &str) -> Result<Worktree, CoreError> {
@@ -943,7 +971,7 @@ impl Engine {
     /// The directory a session works in (its worktree, or the repository itself) and the branch to compare it with:
     /// the branch it will be merged into for a worktree, the remote's default branch otherwise
     fn git_dir(&self, id: &str) -> Result<(PathBuf, Option<String>), CoreError> {
-        let rec = self.inner.store.get_session(id)?;
+        let rec = self.reconcile_workspace(id)?;
         if let Some(wt) = worktree_of(&rec) {
             let base = plyfold_worktree::ops::status(&wt).ok().and_then(|s| s.target);
             return Ok((wt.path, base));
@@ -988,7 +1016,7 @@ impl Engine {
     }
 
     pub fn worktree_status(&self, id: &str) -> Result<plyfold_worktree::WtStatus, CoreError> {
-        let rec = self.inner.store.get_session(id)?;
+        let rec = self.reconcile_workspace(id)?;
         let wt = worktree_of(&rec).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
         Ok(plyfold_worktree::ops::status(&wt)?)
     }
