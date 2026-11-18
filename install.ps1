@@ -16,7 +16,7 @@ if ($env:PLYFOLD_VERSION) {
     # The newest release (pre-releases included) from the releases feed, which unlike the API has no rate limit
     # for shared addresses
     $feed = [string](Invoke-WebRequest "https://github.com/$repo/releases.atom" -UseBasicParsing).Content
-    if ($feed -notmatch '/releases/tag/([^"<]+)"') { throw 'No release found' }
+    if ($feed -notmatch '/releases/tag/(v[0-9][^"<]*)"') { throw 'No release found' }
     $tag = $Matches[1]
 }
 $version = $tag.TrimStart('v')

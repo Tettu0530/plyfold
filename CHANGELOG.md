@@ -11,6 +11,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ### Platforms
 
+- Updates from inside the app: the installed app looks for a newer version a little after it starts and every six hours, and the sidebar offers to update; Settings → Info checks on demand. Updates are verified against the release's signature before they are installed, then Plyfold restarts. A development build never updates
 - A development build (`npm run tauri dev`) keeps its sessions in a `dev` folder of its own (the database, worktrees, conversation folders and attachments), so running it beside the installed app no longer mixes their sessions. Profiles and settings stay shared. `PLYFOLD_DATA_DIR` sets the folder
 
 ### Panes

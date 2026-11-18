@@ -1,6 +1,8 @@
 import {
   Bell,
   ChevronLeft,
+  CircleArrowUp,
+  RefreshCw,
   ExternalLink,
   FolderGit2,
   FolderOpen,
@@ -25,6 +27,7 @@ import { useLiquidClip, useLiquidRevealed } from "./liquid/stage";
 import { Segmented } from "./Segmented";
 import { ShortcutSettings } from "./ShortcutSettings";
 import { RepoSettings } from "./RepoSettings";
+import { checkForUpdate, installUpdate, useUpdate } from "@/state/update";
 import { agentName, ProviderLogo } from "./icons";
 import { useLiquidMenu } from "./liquid/stage";
 import { liquidAnchor } from "./liquid/liquid";
@@ -492,6 +495,7 @@ function InfoSection() {
           </div>
         ))}
       </dl>
+      <UpdateCheck />
       {repo && (
         <div className="flex flex-wrap gap-2">
           <button
@@ -529,5 +533,49 @@ function InfoSection() {
         {!info && <span className="text-xs text-muted-foreground">—</span>}
       </div>
     </>
+  );
+}
+
+/** Settings → Info: look for a newer version now, and install it from here */
+function UpdateCheck() {
+  const t = useT();
+  const state = useUpdate((s) => s.state);
+  if (!inTauri) return null;
+  const detail = import.meta.env.DEV
+    ? t("settings.updateDev")
+    : state.kind === "checking"
+      ? t("settings.updateChecking")
+      : state.kind === "current"
+        ? t("settings.updateCurrent")
+        : state.kind === "available"
+          ? t("settings.updateFound", { version: state.version })
+          : state.kind === "downloading"
+            ? t("settings.updateDownloading", { version: state.version })
+            : state.kind === "error"
+              ? t("settings.updateError", { error: state.message })
+              : t("settings.updateDetail");
+  return (
+    <Row label={t("settings.update")} detail={detail}>
+      {state.kind === "available" ? (
+        <button
+          type="button"
+          onClick={() => void installUpdate()}
+          className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-primary-foreground hover:bg-primary/90"
+        >
+          <CircleArrowUp className="size-3.5" aria-hidden />
+          {t("settings.updateInstall")}
+        </button>
+      ) : (
+        <button
+          type="button"
+          disabled={import.meta.env.DEV || state.kind === "checking" || state.kind === "downloading"}
+          onClick={() => void checkForUpdate()}
+          className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent disabled:opacity-50 disabled:hover:bg-transparent"
+        >
+          <RefreshCw className={cn("size-3.5", state.kind === "checking" && "animate-spin")} aria-hidden />
+          {t("settings.updateCheck")}
+        </button>
+      )}
+    </Row>
   );
 }

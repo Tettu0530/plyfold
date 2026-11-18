@@ -14,4 +14,6 @@ export const sidebar: Record<keyof typeof source, string> = {
   resize: "侧边栏宽度",
   resizeHint: "拖动以调整宽度，双击恢复默认宽度。",
   conversations: "对话",
+  updateAvailable: "更新到 {version}",
+  updating: "正在安装 {version}",
 };

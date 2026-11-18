@@ -1,4 +1,5 @@
-import { ChevronRight, KeyRound, Plus, Search, Settings } from "lucide-react";
+import { ChevronRight, CircleArrowUp, KeyRound, Plus, Search, Settings } from "lucide-react";
+import { Spinner } from "./icons";
 import { motion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
 
@@ -16,6 +17,7 @@ import { isImeKey } from "@/lib/keys";
 import { startDrag } from "./pane/dnd";
 import { keysOf } from "@/lib/keymap";
 import { useBindings } from "@/state/keys";
+import { installUpdate, useUpdate } from "@/state/update";
 
 /** Group key for everyday conversations (no repository name can contain a NUL) */
 const CHAT_GROUP = "\0chat";
@@ -216,6 +218,7 @@ export function Sidebar() {
       </div>
 
       <div className="flex flex-col border-t p-2">
+        <UpdateRow />
         <motion.button
           ref={liquidAnchor("profiles")}
           type="button"
@@ -323,5 +326,27 @@ function SidebarResizer() {
         )}
       />
     </div>
+  );
+}
+
+/** A newer version: one click downloads it, installs it and restarts (shown only when there is one) */
+function UpdateRow() {
+  const t = useT();
+  const state = useUpdate((s) => s.state);
+  if (state.kind !== "available" && state.kind !== "downloading") return null;
+  const percent = state.kind === "downloading" && state.total ? Math.min(100, Math.round((state.done / state.total) * 100)) : null;
+  return (
+    <button
+      type="button"
+      disabled={state.kind === "downloading"}
+      onClick={() => void installUpdate()}
+      className="flex h-7 items-center gap-2 rounded-lg px-2 text-foreground hover:bg-accent disabled:hover:bg-transparent"
+    >
+      {state.kind === "downloading" ? <Spinner className="size-4" /> : <CircleArrowUp className="size-4" aria-hidden />}
+      <span className="grow truncate text-left">
+        {state.kind === "downloading" ? t("sidebar.updating", { version: state.version }) : t("sidebar.updateAvailable", { version: state.version })}
+      </span>
+      {percent !== null && <span className="font-mono text-xs text-muted-foreground tabular">{percent}%</span>}
+    </button>
   );
 }
