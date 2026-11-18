@@ -145,6 +145,23 @@ describe("markHast", () => {
     ]);
   });
 
+  it("marks a match inside inline code whose position includes the backticks", () => {
+    const source = "see `merge()`";
+    const tree = {
+      type: "root",
+      children: [
+        {
+          type: "element",
+          tagName: "code",
+          children: [{ type: "text", value: "merge()", position: { start: { offset: 4 }, end: { offset: 13 } } }],
+        },
+      ],
+    };
+    markHast(tree, source, "merge", 0);
+    const code = tree.children[0] as { children?: { type: string; value?: string; properties?: Record<string, unknown> }[] };
+    expect(code.children?.map((n) => (n.type === "text" ? n.value : n.properties))).toEqual([{ dataFindHit: "0", dataCurrent: "true" }, "()"]);
+  });
+
   it("leaves a text node whose value is not the source slice", () => {
     const tree = {
       type: "root",

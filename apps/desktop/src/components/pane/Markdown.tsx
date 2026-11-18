@@ -158,7 +158,10 @@ const components: Components = {
   mark: ({ children, ...props }) => (
     <span
       data-find-hit={(props as { "data-find-hit"?: string })["data-find-hit"]}
-      className={cn("rounded-sm bg-foreground/15", (props as { "data-current"?: string })["data-current"] && "bg-foreground/30")}
+      className={cn(
+        "rounded-sm bg-foreground/12",
+        (props as { "data-current"?: string })["data-current"] && "bg-foreground/35 text-foreground ring-1 ring-foreground/60",
+      )}
     >
       {children}
     </span>

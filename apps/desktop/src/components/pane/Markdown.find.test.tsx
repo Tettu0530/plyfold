@@ -9,7 +9,14 @@ describe("Markdown find marks", () => {
     const html = renderToStaticMarkup(createElement(Markdown, { text: "one two one", needle: "one", activeOccurrence: 1 }));
     expect(html).toContain('data-find-hit="0"');
     expect(html).toContain('data-find-hit="1"');
-    expect(html).toContain("bg-foreground/30");
+    expect(html).toContain("bg-foreground/35");
+  });
+
+  it("marks a match inside inline code, in the same order as the text around it", () => {
+    const html = renderToStaticMarkup(createElement(Markdown, { text: "merge then `merge()`", needle: "merge", activeOccurrence: 1 }));
+    expect(html).toContain('data-find-hit="0"');
+    expect(html).toContain('data-find-hit="1"');
+    expect(html).toContain("bg-foreground/35");
   });
 
   it("leaves a message alone when there is no query", () => {

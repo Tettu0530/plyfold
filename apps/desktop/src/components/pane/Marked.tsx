@@ -11,7 +11,11 @@ export function Marked({ text, query, active }: { text: string; query: string; a
   spans.forEach((s, i) => {
     if (s.start > at) out.push(text.slice(at, s.start));
     out.push(
-      <span key={i} data-find-hit={i} className={cn("rounded-sm bg-foreground/15", i === active && "bg-foreground/30")}>
+      <span
+        key={i}
+        data-find-hit={i}
+        className={cn("rounded-sm bg-foreground/12", i === active && "bg-foreground/35 text-foreground ring-1 ring-foreground/60")}
+      >
         {text.slice(s.start, s.end)}
       </span>,
     );

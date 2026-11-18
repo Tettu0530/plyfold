@@ -162,12 +162,28 @@ export function markHast(tree: HastNode, source: string, query: string, active: 
     if (!node.children) return;
     const next: HastNode[] = [];
     for (const child of node.children) {
-      const start = child.position?.start?.offset;
-      const end = child.position?.end?.offset;
-      if (child.type !== "text" || !child.value || start == null || end == null || source.slice(start, end) !== child.value) {
+      if (child.type !== "text" || !child.value) {
         visit(child);
         next.push(child);
         continue;
+      }
+      let start = child.position?.start?.offset;
+      let end = child.position?.end?.offset;
+      if (start == null || end == null) {
+        next.push(child);
+        continue;
+      }
+      // Inline code reports the position of the whole `code` node, backticks included, so the slice is "`merge()`"
+      // while the text is "merge()". Shift to the value inside the fence. Other mismatches (KaTeX already replaced
+      // the text) stay unmarked.
+      if (source.slice(start, end) !== child.value) {
+        const inside = node.tagName === "code" ? source.slice(start, end).indexOf(child.value) : -1;
+        if (inside < 0) {
+          next.push(child);
+          continue;
+        }
+        start += inside;
+        end = start + child.value.length;
       }
       const local = spans.map((s, index) => ({ ...s, index })).filter((s) => s.start < end && s.end > start);
       if (local.length === 0) {
