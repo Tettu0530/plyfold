@@ -7,6 +7,8 @@ export const diff: Record<keyof typeof source, string> = {
   badgeModified: "修改",
   badgeRenamed: "重命名",
   dialogLabel: "Git 与更改：{title}",
+  resizeColumn: "左栏宽度",
+  resizeColumnHint: "拖动以调整宽度。双击恢复默认宽度",
   backToPane: "返回窗格",
   changedFilesLabel: "已更改的文件",
   changedFilesCount: "{count, plural, other {已更改 # 个文件}}",

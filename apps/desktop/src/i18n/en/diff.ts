@@ -7,6 +7,8 @@ export const diff: Record<keyof typeof source, string> = {
   badgeModified: "Modified",
   badgeRenamed: "Renamed",
   dialogLabel: "Git and changes: {title}",
+  resizeColumn: "Width of the left column",
+  resizeColumnHint: "Drag to resize. Double-click for the default width",
   backToPane: "Back to pane",
   changedFilesLabel: "Changed files",
   changedFilesCount: "{count, plural, one {# file changed} other {# files changed}}",

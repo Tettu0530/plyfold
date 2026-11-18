@@ -47,6 +47,7 @@ export function DiffView() {
   const status = view?.record.status;
   const busy = status === "working" || status === "awaiting_permission" || status === "starting" || status === "stalled";
   const git = useGitInfo(id ?? "", busy);
+  const [columnWidth, setColumnWidth] = useColumnWidth();
 
   // The worktree status exists only for worktree sessions (one in the repository itself has no actions here)
   const reload = (sid: string) =>
@@ -117,52 +118,55 @@ export function DiffView() {
 
       <div className="flex min-h-0 grow">
         {/* One scroll for the Git section and the file list */}
-        <aside aria-label={t("diff.changedFilesLabel")} className="flex w-[340px] shrink-0 flex-col overflow-y-auto border-r bg-sidebar">
-          <section aria-label={t("pane.git")} className="border-b px-2 pt-3 pb-3">
-            <GitPanel key={diff.id} id={diff.id} git={git} busy={busy} title={r.title} />
-          </section>
-          <div className="flex h-10 shrink-0 items-center gap-2 px-4 text-xs">
-            <span className="font-medium text-muted-foreground">{data ? t("diff.changedFilesCount", { count: files.length }) : t("diff.loading")}</span>
-            <span className="grow" />
-            {data && (
-              <span className="font-mono tabular">
-                <span className="text-working">+{total.add}</span> <span className="text-error">−{total.del}</span>
-              </span>
-            )}
-          </div>
-          <div role="listbox" aria-label={t("diff.filesLabel")} className="flex flex-col gap-0.5 px-2 pb-2">
-            {files.map((f, i) => {
-              const b = BADGE[f.patch?.status ?? (f.stat.untracked ? "added" : "modified")];
-              return (
-                <button
-                  key={f.stat.path}
-                  type="button"
-                  role="option"
-                  aria-selected={i === sel}
-                  onClick={() => setSel(i)}
-                  className={cn("flex h-7 w-full shrink-0 items-center gap-2 rounded-lg px-2 hover:bg-accent", i === sel && "bg-muted")}
-                >
-                  <span title={t(b.label)} className={cn("w-4 shrink-0 font-mono text-xs font-medium", b.className)}>
-                    {b.letter}
-                  </span>
-                  <span className="min-w-0 grow truncate text-left font-mono text-xs" title={f.stat.path}>
-                    {f.stat.path}
-                  </span>
-                  <span className="flex shrink-0 gap-1.5 font-mono text-xs tabular">
-                    {f.stat.binary ? (
-                      <span className="text-muted-foreground">bin</span>
-                    ) : (
-                      <>
-                        <span className="text-working">+{f.stat.added}</span>
-                        <span className="text-error">−{f.stat.removed}</span>
-                      </>
-                    )}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </aside>
+        <div className="relative flex shrink-0" style={{ width: columnWidth }}>
+          <aside aria-label={t("diff.changedFilesLabel")} className="flex min-w-0 grow flex-col overflow-y-auto border-r bg-sidebar">
+            <section aria-label={t("pane.git")} className="border-b px-2 pt-3 pb-3">
+              <GitPanel key={diff.id} id={diff.id} git={git} busy={busy} title={r.title} />
+            </section>
+            <div className="flex h-10 shrink-0 items-center gap-2 px-4 text-xs">
+              <span className="font-medium text-muted-foreground">{data ? t("diff.changedFilesCount", { count: files.length }) : t("diff.loading")}</span>
+              <span className="grow" />
+              {data && (
+                <span className="font-mono tabular">
+                  <span className="text-working">+{total.add}</span> <span className="text-error">−{total.del}</span>
+                </span>
+              )}
+            </div>
+            <div role="listbox" aria-label={t("diff.filesLabel")} className="flex flex-col gap-0.5 px-2 pb-2">
+              {files.map((f, i) => {
+                const b = BADGE[f.patch?.status ?? (f.stat.untracked ? "added" : "modified")];
+                return (
+                  <button
+                    key={f.stat.path}
+                    type="button"
+                    role="option"
+                    aria-selected={i === sel}
+                    onClick={() => setSel(i)}
+                    className={cn("flex h-7 w-full shrink-0 items-center gap-2 rounded-lg px-2 hover:bg-accent", i === sel && "bg-muted")}
+                  >
+                    <span title={t(b.label)} className={cn("w-4 shrink-0 font-mono text-xs font-medium", b.className)}>
+                      {b.letter}
+                    </span>
+                    <span className="min-w-0 grow truncate text-left font-mono text-xs" title={f.stat.path}>
+                      {f.stat.path}
+                    </span>
+                    <span className="flex shrink-0 gap-1.5 font-mono text-xs tabular">
+                      {f.stat.binary ? (
+                        <span className="text-muted-foreground">bin</span>
+                      ) : (
+                        <>
+                          <span className="text-working">+{f.stat.added}</span>
+                          <span className="text-error">−{f.stat.removed}</span>
+                        </>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+          <ColumnResizer width={columnWidth} onChange={setColumnWidth} />
+        </div>
 
         <main className="flex min-w-0 grow flex-col">
           {error && <p className="p-4 text-xs whitespace-pre-wrap text-error">{t("diff.loadFailed", { error })}</p>}
@@ -216,6 +220,87 @@ export function DiffView() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+const COLUMN_DEFAULT = 340;
+const COLUMN_MIN = 260;
+const COLUMN_KEY = "plyfold.gitColumnWidth";
+const clampColumn = (w: number) => Math.round(Math.min(Math.max(w, COLUMN_MIN), Math.max(COLUMN_MIN, window.innerWidth * 0.6)));
+
+/** The left column's width, remembered on this machine (a viewer convenience, so local storage is enough) */
+function useColumnWidth(): [number, (w: number) => void] {
+  const [w, setW] = useState(() => {
+    try {
+      const v = Number(localStorage.getItem(COLUMN_KEY));
+      return v > 0 ? clampColumn(v) : COLUMN_DEFAULT;
+    } catch {
+      return COLUMN_DEFAULT;
+    }
+  });
+  const set = (v: number) => {
+    const c = clampColumn(v);
+    setW(c);
+    try {
+      localStorage.setItem(COLUMN_KEY, String(c));
+    } catch {
+      // Not remembered, still applied
+    }
+  };
+  return [w, set];
+}
+
+/** The left column's right edge: drag to resize, double-click or Enter for the default width, arrow keys to nudge */
+function ColumnResizer({ width, onChange }: { width: number; onChange: (w: number) => void }) {
+  const t = useT();
+  const drag = useRef<{ left: number } | null>(null);
+  const [active, setActive] = useState(false);
+  const end = () => {
+    drag.current = null;
+    document.body.classList.remove("resizing");
+    setActive(false);
+  };
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={t("diff.resizeColumn")}
+      aria-valuenow={width}
+      aria-valuemin={COLUMN_MIN}
+      title={t("diff.resizeColumnHint")}
+      tabIndex={0}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          // Synthetic events have no capturable pointer
+        }
+        drag.current = { left: e.currentTarget.parentElement?.getBoundingClientRect().left ?? 0 };
+        document.body.classList.add("resizing");
+        setActive(true);
+      }}
+      onPointerMove={(e) => drag.current && onChange(e.clientX - drag.current.left)}
+      onPointerUp={end}
+      onPointerCancel={end}
+      onDoubleClick={() => onChange(COLUMN_DEFAULT)}
+      onKeyDown={(e) => {
+        const step = e.shiftKey ? 40 : 8;
+        if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+          e.preventDefault();
+          onChange(width + (e.key === "ArrowLeft" ? -step : step));
+        } else if (e.key === "Enter") onChange(COLUMN_DEFAULT);
+      }}
+      className="group absolute top-0 -right-1 bottom-0 z-10 flex w-2 cursor-col-resize justify-center outline-none"
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "h-full w-0.5 bg-foreground/25 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100",
+          active && "opacity-100",
+        )}
+      />
     </div>
   );
 }
