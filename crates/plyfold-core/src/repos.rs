@@ -52,11 +52,19 @@ impl Repos {
     }
 
     pub(crate) fn get(&self, repo: &str) -> RepoSettings {
-        self.all().remove(repo).unwrap_or_default()
+        let mut all = self.all();
+        match key_for(&all, repo) {
+            Some(k) => all.remove(&k).unwrap_or_default(),
+            None => RepoSettings::default(),
+        }
     }
 
     pub(crate) fn set(&self, repo: &str, settings: RepoSettings) -> std::io::Result<()> {
         let mut all = self.all();
+        // The same folder written another way (separators, a link, Windows' \\?\ form) is one entry
+        if let Some(k) = key_for(&all, repo) {
+            all.remove(&k);
+        }
         if settings.is_empty() {
             all.remove(repo);
         } else {
@@ -69,6 +77,15 @@ impl Repos {
         std::fs::write(&tmp, serde_json::to_string_pretty(&all).map_err(std::io::Error::other)?)?;
         std::fs::rename(tmp, &self.path)
     }
+}
+
+/// The stored key naming the same folder as `repo`: the same text, or the same folder once both are resolved
+fn key_for(all: &BTreeMap<String, RepoSettings>, repo: &str) -> Option<String> {
+    if all.contains_key(repo) {
+        return Some(repo.to_string());
+    }
+    let want = std::fs::canonicalize(repo).ok()?;
+    all.keys().find(|k| std::fs::canonicalize(k).is_ok_and(|p| p == want)).cloned()
 }
 
 /// A relative path that stays inside the folder it is joined to
@@ -189,6 +206,20 @@ mod tests {
         assert_eq!(repos.get("/r"), s);
         repos.set("/r", RepoSettings::default()).unwrap();
         assert!(repos.all().is_empty());
+    }
+
+    #[test]
+    fn the_same_folder_written_another_way_is_one_entry() {
+        let d = tmp("alias");
+        let repo = d.join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        let repos = Repos::new(&d);
+        let s = RepoSettings { setup: "make".into(), ..Default::default() };
+        repos.set(&repo.display().to_string(), s.clone()).unwrap();
+        let other = d.join(".").join("repo").display().to_string();
+        assert_eq!(repos.get(&other), s);
+        repos.set(&other, RepoSettings { setup: "make all".into(), ..Default::default() }).unwrap();
+        assert_eq!(repos.all().len(), 1);
     }
 
     #[test]
