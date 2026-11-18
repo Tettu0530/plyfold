@@ -156,7 +156,10 @@ jobs:
         env:
           VERSION: ${{ needs.check.outputs.version }}
         run: |
-          (cd dist && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          # The Windows and Linux builds come in subfolders (nsis/, msi/, appimage/, deb/): attach the files side by side
+          mkdir out
+          find dist -type f -exec mv -t out {} +
+          (cd out && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt)
           # This version's section of the changelog, without its heading
           awk -v v="$VERSION" '
             index($0, "## [" v "]") == 1 { on = 1; next }
@@ -173,10 +176,10 @@ jobs:
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
             # Built again (workflow_dispatch): replace the files, keep the notes as edited
-            gh release upload "$TAG" dist/* --clobber
+            gh release upload "$TAG" out/* --clobber
           else
             # Versions below 1.0 are marked as pre-releases
             flags=()
             if [[ "$VERSION" == 0.* || "$VERSION" == *-* ]]; then flags+=(--prerelease); fi
-            gh release create "$TAG" dist/* --verify-tag --title "Plyfold $VERSION" --notes-file notes.md "${flags[@]}"
+            gh release create "$TAG" out/* --verify-tag --title "Plyfold $VERSION" --notes-file notes.md "${flags[@]}"
           fi
