@@ -242,6 +242,7 @@ function SessionPane({ index }: { index: number }) {
             streaming={r.status === "working"}
             busy={view.transcript.inTurn}
             onResend={(t, a) => void sendPrompt(id, t, a)}
+            commands={view.info?.commands?.length ? view.info.commands : view.commands?.length ? view.commands : (cached?.commands ?? [])}
           />
 
           <div className="px-5">
