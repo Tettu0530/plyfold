@@ -3,6 +3,7 @@
 mod dirs;
 mod files;
 mod platform;
+mod registry;
 mod shell_path;
 
 pub use shell_path::adopt_login_path;
@@ -238,28 +239,79 @@ struct ProfileSummary {
     keyed: bool,
     /// Has a custom endpoint (base URL)
     custom_provider: bool,
+    /// The agent's name, for agents added from the ACP Registry (built-in ones are named by the UI)
+    agent_name: Option<String>,
+    /// The agent's icon (SVG text), kept when it was added from the ACP Registry
+    agent_icon: Option<String>,
 }
 
 #[tauri::command]
 fn list_profiles(state: State<'_, AppState>) -> Vec<ProfileSummary> {
     let cfg = state.config.read().unwrap();
+    let meta = |agent: &str| {
+        let name = cfg.agents.get(agent).and_then(|a| a.name.clone());
+        let icon = std::fs::read_to_string(registry::icon_path(&state.state_dir, agent)).ok();
+        (name, icon)
+    };
     let mut out: Vec<ProfileSummary> = cfg
         .profiles
         .iter()
-        .map(|(name, p)| ProfileSummary {
-            name: name.clone(),
-            agent: p.agent.clone(),
-            label: p.label.clone().unwrap_or_else(|| name.clone()),
-            isolate: p.isolate,
-            keyed: !p.keys.is_empty(),
-            custom_provider: p.env.keys().any(|k| k.ends_with("BASE_URL")) || p.files.contains_key("config.toml"),
+        .map(|(name, p)| {
+            let (agent_name, agent_icon) = meta(&p.agent);
+            ProfileSummary {
+                name: name.clone(),
+                agent: p.agent.clone(),
+                label: p.label.clone().unwrap_or_else(|| name.clone()),
+                isolate: p.isolate,
+                keyed: !p.keys.is_empty(),
+                custom_provider: p.env.keys().any(|k| k.ends_with("BASE_URL")) || p.files.contains_key("config.toml"),
+                agent_name,
+                agent_icon,
+            }
         })
         .collect();
     // A bare agent name can also be chosen, as a default profile that uses the existing login
     for agent in cfg.agents.keys() {
-        out.push(ProfileSummary { name: agent.clone(), agent: agent.clone(), label: "default".into(), isolate: false, keyed: false, custom_provider: false });
+        let (agent_name, agent_icon) = meta(agent);
+        out.push(ProfileSummary {
+            name: agent.clone(),
+            agent: agent.clone(),
+            label: "default".into(),
+            isolate: false,
+            keyed: false,
+            custom_provider: false,
+            agent_name,
+            agent_icon,
+        });
     }
     out
+}
+
+/// The agents in the ACP Registry, and which of them are built in or already added
+#[tauri::command]
+async fn registry_agents(state: State<'_, AppState>) -> CmdResult<Vec<registry::Listed>> {
+    let dir = state.state_dir.clone();
+    let agents = state.config.read().unwrap().agents.clone();
+    tauri::async_runtime::spawn_blocking(move || registry::list(&dir, &agents)).await.map_err(err)?
+}
+
+/// Add an agent from the ACP Registry (or update it to the registry's version)
+#[tauri::command]
+async fn add_registry_agent(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    let (dir, path) = (state.state_dir.clone(), state.config_path.clone());
+    tauri::async_runtime::spawn_blocking(move || registry::add(&dir, &path, &id)).await.map_err(err)??;
+    state.reload()
+}
+
+#[tauri::command]
+fn remove_registry_agent(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    let (agents, used_by) = {
+        let cfg = state.config.read().unwrap();
+        let used_by: Vec<String> = cfg.profiles.iter().filter(|(_, p)| p.agent == id).map(|(n, _)| n.clone()).collect();
+        (cfg.agents.clone(), used_by)
+    };
+    registry::remove(&state.state_dir, &state.config_path, &agents, &used_by, &id)?;
+    state.reload()
 }
 
 #[tauri::command]
@@ -725,6 +777,9 @@ pub fn run() {
             open_side_chat,
             close_side_chat,
             list_cli_sessions,
+            registry_agents,
+            add_registry_agent,
+            remove_registry_agent,
             adopt_cli_session,
             close_session,
             delete_session,

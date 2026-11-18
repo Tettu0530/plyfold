@@ -4,6 +4,18 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Agents
+
+- Agents from the ACP Registry: Profiles → Add agents lists the agents that speak ACP; the ones started through npx or uvx (Qwen Code, Kimi Code, GitHub Copilot, Cline, Auggie and more) can be added, updated to the registry's version and removed. They run with their default profile, with the name and icon they come with. Agents shipped only as binaries are listed but cannot be added yet
+- The mock agent used by the tests is no longer offered as a built-in agent
+
+### Fixed
+
+- On macOS the window buttons sit centred in the header, level with the sidebar button, and a little further from the edge
+- On Windows the app no longer opens a Command Prompt window beside itself
+- Windows and Linux draw thin, rounded scrollbars on a transparent track instead of the system's grey bars
+- A button the liquid pulls on stretches by a few pixels at most, and rows inside menus no longer move, so a wide row (the effort row) does not stick out past its menu; the effort submenu grows out of its chevron
+
 ### Platforms
 
 - Linux (preview): AppImage and `.deb` packages, API keys in the Secret Service (GNOME Keyring, KWallet), the distribution's name in Settings → Info, and WebKitGTK's DMA-BUF renderer turned off by default (it draws a blank window on some GPUs)

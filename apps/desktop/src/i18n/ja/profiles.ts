@@ -59,4 +59,16 @@ export const profiles = {
   delete: "削除…",
   saving: "保存中",
   save: "保存",
+  addAgent: "エージェントを追加",
+  registryTitle: "ACP Registry",
+  registrySearch: "検索",
+  registryHint:
+    "ACP に対応したエージェントの一覧です。追加すると、対応した CLI をオンデバイスで動作させます。提供元を確認してから追加してください。追加したエージェントは、CLI のログインのまま使えます",
+  registryLoading: "読み込み中",
+  registryAdd: "追加",
+  registryUpdate: "{version} に更新",
+  registryRemove: "削除",
+  registryBuiltIn: "組み込み済み",
+  registryBinary: "未対応",
+  registryBinaryHint: "バイナリで配布されているエージェントには、まだ対応していません",
 } satisfies Record<string, string>;

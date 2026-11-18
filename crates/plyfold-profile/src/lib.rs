@@ -56,6 +56,12 @@ pub struct AgentDef {
     /// Env vars not inherited from the parent except in the default profile
     #[serde(default)]
     pub key_envs: Vec<String>,
+    /// Name to show (agents added from the ACP Registry; built-in ones are named by the UI)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The ACP Registry version this agent was added at (None: built in or written by hand)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registry_version: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -109,6 +115,8 @@ pub fn builtin_agents() -> BTreeMap<String, AgentDef> {
         env: BTreeMap::new(),
         config_dir_env: config_dir_env.map(str::to_string),
         key_envs: key_envs.iter().map(|s| s.to_string()).collect(),
+        name: None,
+        registry_version: None,
     };
     BTreeMap::from([
         (
@@ -123,7 +131,6 @@ pub fn builtin_agents() -> BTreeMap<String, AgentDef> {
         ("codex".into(), a("npx", &["-y", "@agentclientprotocol/codex-acp@2.6.0"], Some("CODEX_HOME"), &["OPENAI_API_KEY", "CODEX_API_KEY"])),
         ("opencode".into(), a("opencode", &["acp"], Some("XDG_DATA_HOME"), &["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"])),
         ("gemini".into(), a("npx", &["-y", "@google/gemini-cli@0.68.0", "--experimental-acp"], None, &["GEMINI_API_KEY", "GOOGLE_API_KEY"])),
-        ("mock".into(), a("plyfold-mock-agent", &[], None, &[])),
     ])
 }
 

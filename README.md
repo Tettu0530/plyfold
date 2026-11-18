@@ -40,6 +40,7 @@ Plyfold does not implement its own agent loop. It is an ACP client: the agent CL
 - A Git pane per session, next to it (⌘⇧D): the branch, how it stands against its base and upstream, fetch / push / pull, the pull request and the commits, above the changes built from git (including untracked files) in unified and split layouts. A session working in the repository itself shows its uncommitted changes
 - Side chat (⌘J): ask about a session in a read-only fork beside it, without adding to its conversation, even while it works
 - From the Git pane (worktree sessions): commit, merge into the branch currently checked out in the original repository (`--no-ff`; on conflict the merge is aborted and the repository restored), push and open a pull request with `gh`, discard back to the base commit, or open the worktree in Zed, Cursor, VS Code or Finder
+- More agents from the [ACP Registry](https://agentclientprotocol.com/registry) (Profiles → Add agents): agents started through npx or uvx are added to `config.toml` pinned to the registry's version, and can be updated or removed there
 - Profiles per agent with three kinds of authentication: the CLI's existing login, the official API with a key, or a custom provider (base URL plus key)
 - Optional separate config directory per profile, so its login and history don't mix with your usual CLI setup
 - Connection test per profile: configured model, the model the agent reports, and time to first text. When the two models differ, sessions with that profile show the reported model in the pane header

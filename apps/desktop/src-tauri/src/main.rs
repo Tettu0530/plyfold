@@ -1,3 +1,7 @@
+// On Windows a release build is a GUI program: without this the system opens a Command Prompt window beside the app.
+// Debug builds keep the console for their logs
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 fn main() {
     // WebKitGTK's DMA-BUF renderer draws a blank window on some GPUs (NVIDIA's driver in particular). Turn it off unless
     // the user has set it either way

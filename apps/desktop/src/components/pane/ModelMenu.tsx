@@ -121,11 +121,14 @@ export function ModelMenu({
             <>
               <DropdownMenu.Separator className="-mx-1 my-1 h-px bg-border" />
               <DropdownMenu.Sub onOpenChange={onSubOpenChange}>
-                <DropdownMenu.SubTrigger ref={liquidAnchor(`${scope}:effort-row`)} className={cn(ITEM, "pr-2")}>
+                <DropdownMenu.SubTrigger className={cn(ITEM, "pr-2")}>
                   <EffortBars effort={effort} />
                   {t("composer.effortLabel")}
                   <span className="ml-auto text-xs text-muted-foreground">{effort.current}</span>
-                  <ChevronRight className="size-3.5 text-muted-foreground" aria-hidden />
+                  {/* The submenu grows out of this chevron at the menu's edge, not out of the whole row */}
+                  <span ref={liquidAnchor(`${scope}:effort-row`)} className="flex rounded-sm">
+                    <ChevronRight className="size-3.5 text-muted-foreground" aria-hidden />
+                  </span>
                 </DropdownMenu.SubTrigger>
                 <DropdownMenu.Portal>
                   <DropdownMenu.SubContent

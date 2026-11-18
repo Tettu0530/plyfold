@@ -9,10 +9,11 @@ import { seconds } from "@/lib/format";
 import type { AuthKind, CheckResult, ProfileDetail, ProfileForm, ProfileSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useStore, isListed } from "@/state/store";
-import { AGENT_NAMES, ProviderLogo } from "./icons";
+import { agentName, ProviderLogo } from "./icons";
 import { Keys } from "./Keys";
 import { useLiquidClip, useLiquidRevealed } from "./liquid/stage";
 import { Segmented } from "./Segmented";
+import { RegistryList } from "./RegistryList";
 
 const AUTH_LABEL: Record<AuthKind, MessageKey> = { api: "profiles.authApi", login: "profiles.authLogin", custom: "profiles.authCustom" };
 const AUTH_ORDER: AuthKind[] = ["api", "login", "custom"];
@@ -53,6 +54,8 @@ export function ProfilesView() {
   // Selected profile. null means a new one
   const [selected, setSelected] = useState<string | null>("claude");
   const [checks, setChecks] = useState<Record<string, CheckResult>>({});
+  // The ACP Registry list in place of the agent's profiles
+  const [registry, setRegistry] = useState(false);
 
   useEffect(() => {
     if (!view) return;
@@ -72,6 +75,7 @@ export function ProfilesView() {
     .sort((a, b) => Number(b.name === b.agent) - Number(a.name === a.agent) || a.name.localeCompare(b.name));
   const sessionCount = (name: string) => Object.values(sessions).filter((v) => isListed(v) && v.record.profile === name).length;
   const pickAgent = (a: string) => {
+    setRegistry(false);
     setAgent(a);
     setSelected(a);
   };
@@ -109,87 +113,107 @@ export function ProfilesView() {
             <button
               key={a}
               type="button"
-              aria-current={a === agent ? "page" : undefined}
+              aria-current={a === agent && !registry ? "page" : undefined}
               onClick={() => pickAgent(a)}
-              className={cn("flex h-7 items-center gap-2 rounded-lg px-2 hover:bg-accent", a === agent ? "bg-muted font-medium" : "text-muted-foreground")}
+              className={cn(
+                "flex h-7 items-center gap-2 rounded-lg px-2 hover:bg-accent",
+                a === agent && !registry ? "bg-muted font-medium" : "text-muted-foreground",
+              )}
             >
               <ProviderLogo agent={a} className="size-3.5" />
-              <span className="grow text-left">{AGENT_NAMES[a] ?? a}</span>
+              <span className="grow text-left">{agentName(a)}</span>
               <span className="font-mono text-xs text-muted-foreground tabular">{profiles.filter((p) => p.agent === a).length}</span>
             </button>
           ))}
+          <button
+            type="button"
+            aria-current={registry ? "page" : undefined}
+            onClick={() => setRegistry(true)}
+            className={cn("mt-1 flex h-7 items-center gap-2 rounded-lg px-2 hover:bg-accent", registry ? "bg-muted font-medium" : "text-muted-foreground")}
+          >
+            <Plus className="size-3.5" aria-hidden />
+            <span className="grow text-left">{t("profiles.addAgent")}</span>
+          </button>
           <span className="grow" />
           <p className="px-2 pb-1 text-xs leading-relaxed text-muted-foreground">{t("profiles.keychainNote")}</p>
         </nav>
 
-        <section aria-label={t("profiles.agentProfiles", { agent: AGENT_NAMES[agent] ?? agent })} className="flex w-[340px] shrink-0 flex-col border-r">
-          <div className="flex h-12 shrink-0 items-center gap-2 px-4">
-            <h1 className="text-base font-semibold">{AGENT_NAMES[agent] ?? agent}</h1>
-            <span className="grow" />
-            <button
-              type="button"
-              onClick={() => setSelected(null)}
-              className="flex h-7 items-center gap-1.5 rounded-lg border border-input px-2 hover:bg-accent"
-            >
-              <Plus className="size-3.5" aria-hidden />
-              {t("profiles.add")}
-            </button>
-          </div>
-          <div role="listbox" aria-label={t("profiles.title")} className="flex min-h-0 grow flex-col gap-1 overflow-y-auto px-2 pb-2">
-            {rows.map((p) => {
-              const c = checks[p.name];
-              const on = p.name === selected;
-              return (
+        {registry ? (
+          <RegistryList onAdded={(id) => pickAgent(id)} />
+        ) : (
+          <>
+            <section aria-label={t("profiles.agentProfiles", { agent: agentName(agent) })} className="flex w-[340px] shrink-0 flex-col border-r">
+              <div className="flex h-12 shrink-0 items-center gap-2 px-4">
+                <h1 className="text-base font-semibold">{agentName(agent)}</h1>
+                <span className="grow" />
                 <button
-                  key={p.name}
                   type="button"
-                  role="option"
-                  aria-selected={on}
-                  onClick={() => setSelected(p.name)}
-                  className={cn(
-                    "flex flex-col gap-1 rounded-lg border px-3 py-2 text-left",
-                    on ? "border-foreground/40 bg-muted" : "border-transparent hover:bg-accent",
-                  )}
+                  onClick={() => setSelected(null)}
+                  className="flex h-7 items-center gap-1.5 rounded-lg border border-input px-2 hover:bg-accent"
                 >
-                  <span className="flex items-center gap-2">
-                    <span className="font-medium">{p.name === p.agent ? "default" : p.label}</span>
-                    <span className="text-xs text-muted-foreground">{t(AUTH_LABEL[summaryAuth(p)])}</span>
-                    <span className="grow" />
-                    <span className="text-xs text-muted-foreground">{t("profiles.sessionCount", { count: sessionCount(p.name) })}</span>
-                  </span>
-                  {c && (
-                    <span className={cn("flex items-center gap-1.5 text-xs", c.ok ? "text-muted-foreground" : "text-error")}>
-                      {c.ok ? <CircleCheck className="size-3 text-working" aria-hidden /> : <CircleAlert className="size-3" aria-hidden />}
-                      <span className="truncate">
-                        {c.ok
-                          ? t("profiles.replied", { model: c.reported_model ?? c.configured_model ?? t("profiles.noModelName") })
-                          : t("profiles.cannotConnect")}
-                      </span>
-                      {c.ok && c.first_text_ms !== null && <span className="ml-auto font-mono tabular">{seconds(c.first_text_ms)}</span>}
-                    </span>
-                  )}
+                  <Plus className="size-3.5" aria-hidden />
+                  {t("profiles.add")}
                 </button>
-              );
-            })}
-          </div>
-        </section>
+              </div>
+              <div role="listbox" aria-label={t("profiles.title")} className="flex min-h-0 grow flex-col gap-1 overflow-y-auto px-2 pb-2">
+                {rows.map((p) => {
+                  const c = checks[p.name];
+                  const on = p.name === selected;
+                  return (
+                    <button
+                      key={p.name}
+                      type="button"
+                      role="option"
+                      aria-selected={on}
+                      onClick={() => setSelected(p.name)}
+                      className={cn(
+                        "flex flex-col gap-1 rounded-lg border px-3 py-2 text-left",
+                        on ? "border-foreground/40 bg-muted" : "border-transparent hover:bg-accent",
+                      )}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className="font-medium">{p.name === p.agent ? "default" : p.label}</span>
+                        <span className="text-xs text-muted-foreground">{t(AUTH_LABEL[summaryAuth(p)])}</span>
+                        <span className="grow" />
+                        <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">
+                          {t("profiles.sessionCount", { count: sessionCount(p.name) })}
+                        </span>
+                      </span>
+                      {c && (
+                        <span className={cn("flex items-center gap-1.5 text-xs", c.ok ? "text-muted-foreground" : "text-error")}>
+                          {c.ok ? <CircleCheck className="size-3 text-working" aria-hidden /> : <CircleAlert className="size-3" aria-hidden />}
+                          <span className="truncate">
+                            {c.ok
+                              ? t("profiles.replied", { model: c.reported_model ?? c.configured_model ?? t("profiles.noModelName") })
+                              : t("profiles.cannotConnect")}
+                          </span>
+                          {c.ok && c.first_text_ms !== null && <span className="ml-auto font-mono tabular">{seconds(c.first_text_ms)}</span>}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
 
-        <main className="min-w-0 grow overflow-y-auto">
-          {selected === agent ? (
-            <DefaultProfile agent={agent} />
-          ) : (
-            <Editor
-              key={selected ?? `new:${agent}`}
-              agent={agent}
-              name={selected}
-              sessions={selected ? sessionCount(selected) : 0}
-              check={selected ? checks[selected] : undefined}
-              onCheck={(name, r) => setChecks((c) => ({ ...c, [name]: r }))}
-              onSaved={(name) => setSelected(name)}
-              onDeleted={() => setSelected(agent)}
-            />
-          )}
-        </main>
+            <main className="min-w-0 grow overflow-y-auto">
+              {selected === agent ? (
+                <DefaultProfile agent={agent} />
+              ) : (
+                <Editor
+                  key={selected ?? `new:${agent}`}
+                  agent={agent}
+                  name={selected}
+                  sessions={selected ? sessionCount(selected) : 0}
+                  check={selected ? checks[selected] : undefined}
+                  onCheck={(name, r) => setChecks((c) => ({ ...c, [name]: r }))}
+                  onSaved={(name) => setSelected(name)}
+                  onDeleted={() => setSelected(agent)}
+                />
+              )}
+            </main>
+          </>
+        )}
       </div>
     </div>
   );
@@ -198,9 +222,9 @@ export function ProfilesView() {
 function DefaultProfile({ agent }: { agent: string }) {
   const t = useT();
   return (
-    <div className="flex max-w-[560px] flex-col gap-2 p-6">
+    <div className="mx-auto flex max-w-[640px] flex-col gap-2 px-6 py-8">
       <h2 className="text-base font-semibold">default</h2>
-      <p className="text-muted-foreground">{t("profiles.defaultDetail", { agent: AGENT_NAMES[agent] ?? agent })}</p>
+      <p className="text-muted-foreground">{t("profiles.defaultDetail", { agent: agentName(agent) })}</p>
     </div>
   );
 }
@@ -318,7 +342,7 @@ function Editor({ agent, name, sessions, check, onCheck, onSaved, onDeleted }: E
     check?.ok && check.reported_model && check.configured_model && !check.reported_model.toLowerCase().includes(check.configured_model.toLowerCase());
 
   return (
-    <div className="flex max-w-[600px] flex-col gap-6 p-6">
+    <div className="mx-auto flex max-w-[640px] flex-col gap-6 px-6 py-8">
       <div className="flex flex-col gap-1">
         <h2 className="text-base font-semibold">{name ?? t("profiles.newProfile")}</h2>
         <p className="text-muted-foreground">{t(AUTH_DETAIL[form.auth])}</p>

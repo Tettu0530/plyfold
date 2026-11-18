@@ -210,6 +210,28 @@
   color: var(--muted-foreground) !important;
 }
 
+/* Scrollbars on Windows and Linux: thin, rounded and on a transparent track, like macOS's overlay bars, instead of the
+   system's grey bars that sit on top of the dark surfaces. macOS keeps its own */
+.own-scrollbars ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.own-scrollbars ::-webkit-scrollbar-track,
+.own-scrollbars ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+.own-scrollbars ::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.14) padding-box;
+}
+.own-scrollbars ::-webkit-scrollbar-thumb:hover {
+  background: rgb(255 255 255 / 0.26) padding-box;
+}
+.own-scrollbars ::-webkit-scrollbar-button {
+  display: none;
+}
+
 /* While a pane or sidebar edge is dragged, iframes (the preview pane) must not swallow the pointer */
 body.resizing iframe {
   pointer-events: none;
