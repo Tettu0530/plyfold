@@ -187,13 +187,19 @@ pub fn verify(wt: &Worktree) -> Result<(), WorktreeError> {
 /// Whether git still lists `path` as a worktree of `repo` (it does after the folder is deleted, until it is pruned)
 pub fn is_registered(repo: &Path, path: &Path) -> bool {
     let Ok(list) = git(repo, &["worktree", "list", "--porcelain"]) else { return false };
-    // git prints forward slashes on Windows; the folder may be gone, so compare the text
-    let norm = |s: &str| {
-        let s = s.replace('\\', "/").trim_end_matches('/').to_string();
+    // The folder may be gone, so its parent (which stays) is resolved and the name added: that settles links, and on
+    // Windows short names (RUNNER~1) and git's forward slashes
+    let key = |p: &Path| {
+        let full = match (p.parent().and_then(|d| std::fs::canonicalize(d).ok()), p.file_name()) {
+            (Some(d), Some(f)) => d.join(f),
+            _ => p.to_path_buf(),
+        };
+        let s = full.display().to_string();
+        let s = s.strip_prefix(r"\\?\").unwrap_or(&s).replace('\\', "/").trim_end_matches('/').to_string();
         if cfg!(windows) { s.to_lowercase() } else { s }
     };
-    let want = norm(&path.display().to_string());
-    list.lines().filter_map(|l| l.strip_prefix("worktree ")).any(|p| norm(p) == want)
+    let want = key(path);
+    list.lines().filter_map(|l| l.strip_prefix("worktree ")).any(|p| key(Path::new(p)) == want)
 }
 
 /// Diff from the base commit to the current working tree (committed, uncommitted and untracked)
