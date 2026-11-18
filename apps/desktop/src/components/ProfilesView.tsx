@@ -175,7 +175,9 @@ export function ProfilesView() {
                         <span className="font-medium">{p.name === p.agent ? "default" : p.label}</span>
                         <span className="text-xs text-muted-foreground">{t(AUTH_LABEL[summaryAuth(p)])}</span>
                         <span className="grow" />
-                        <span className="text-xs text-muted-foreground">{t("profiles.sessionCount", { count: sessionCount(p.name) })}</span>
+                        <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">
+                          {t("profiles.sessionCount", { count: sessionCount(p.name) })}
+                        </span>
                       </span>
                       {c && (
                         <span className={cn("flex items-center gap-1.5 text-xs", c.ok ? "text-muted-foreground" : "text-error")}>
@@ -220,7 +222,7 @@ export function ProfilesView() {
 function DefaultProfile({ agent }: { agent: string }) {
   const t = useT();
   return (
-    <div className="flex max-w-[560px] flex-col gap-2 p-6">
+    <div className="mx-auto flex max-w-[640px] flex-col gap-2 px-6 py-8">
       <h2 className="text-base font-semibold">default</h2>
       <p className="text-muted-foreground">{t("profiles.defaultDetail", { agent: agentName(agent) })}</p>
     </div>
@@ -340,7 +342,7 @@ function Editor({ agent, name, sessions, check, onCheck, onSaved, onDeleted }: E
     check?.ok && check.reported_model && check.configured_model && !check.reported_model.toLowerCase().includes(check.configured_model.toLowerCase());
 
   return (
-    <div className="flex max-w-[600px] flex-col gap-6 p-6">
+    <div className="mx-auto flex max-w-[640px] flex-col gap-6 px-6 py-8">
       <div className="flex flex-col gap-1">
         <h2 className="text-base font-semibold">{name ?? t("profiles.newProfile")}</h2>
         <p className="text-muted-foreground">{t(AUTH_DETAIL[form.auth])}</p>
