@@ -139,7 +139,10 @@ async fn a_worktree_removed_outside_plyfold_falls_back_to_the_repository() {
     assert!(eng.store().events(&s.id, None, 1000).unwrap().iter().any(|e| e.payload.contains("が見つからないので")));
     let changed = tokio::time::timeout(std::time::Duration::from_secs(2), async {
         loop {
-            if let Ok(EngineEvent::WorkspaceChanged { session }) = rx.recv().await {
+            // The first one is from the start (the record with its worktree); the one after the fallback has none
+            if let Ok(EngineEvent::WorkspaceChanged { session }) = rx.recv().await
+                && session.worktree_path.is_none()
+            {
                 return session;
             }
         }
