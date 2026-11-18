@@ -164,6 +164,33 @@ async fn switching_to_a_mode_that_does_not_ask_allows_what_is_waiting() {
 }
 
 #[tokio::test]
+async fn a_new_worktree_is_prepared_and_the_repository_rules_answer_for_it() {
+    use plyfold_core::repos::RepoSettings;
+    let base = tmp("prepare");
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    git_repo(&repo);
+    std::fs::write(repo.join(".env"), "SECRET=1").unwrap();
+    let eng = engine(&base.join("state"), 60_000);
+    let settings = RepoSettings { setup: "echo ready > setup-ran.txt".into(), copy: vec![".env".into()], allow: vec!["edit".into()] };
+    eng.set_repo_settings(&repo.display().to_string(), settings).unwrap();
+    assert_eq!(eng.known_repos().unwrap(), [repo.display().to_string()]);
+    let mut rx = eng.subscribe();
+
+    let s = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: repo.clone(), worktree: true }).await.unwrap();
+    let wt = PathBuf::from(s.worktree_path.clone().unwrap());
+    assert_eq!(std::fs::read_to_string(wt.join(".env")).unwrap(), "SECRET=1");
+    assert_eq!(std::fs::read_to_string(wt.join("setup-ran.txt")).unwrap().trim(), "ready");
+
+    // Edits are always allowed in this repository: no request reaches the UI
+    eng.prompt(&s.id, "write with permission").unwrap();
+    let ended = wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { .. } | EngineEvent::PermissionRequested { .. })).await;
+    assert!(matches!(ended, EngineEvent::TurnEnded { .. }), "asked anyway: {ended:?}");
+    assert!(wt.join("mock-output.txt").exists());
+    eng.delete_session(&s.id, true).await.unwrap();
+}
+
+#[tokio::test]
 async fn cancel_resolves_pending_permission_and_stops_turn() {
     let base = tmp("cancel");
     let eng = engine(&base.join("state"), 60_000);

@@ -6,6 +6,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ### Sessions
 
+- Settings → Repositories: per repository, files to copy into every new worktree (untracked ones such as `.env`), a setup script run in it before the agent starts (in your login shell; its outcome and, on failure, its last output appear in the conversation), and the kinds of tool calls always allowed without asking (reading and searching, editing files, running commands, fetching from the web), whichever agent asks
 - Switching a session to a mode that does not ask also answers the permission requests it is waiting on: bypass permissions (Claude Code), full access (Codex) and YOLO (Gemini CLI) allow all of them, accept-edits modes allow file edits. A note in the conversation says how many were allowed
 
 ### Platforms

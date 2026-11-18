@@ -482,6 +482,24 @@ async fn read_text_file(path: String) -> CmdResult<TextFile> {
     Ok(TextFile { text, size, truncated })
 }
 
+/// A repository Plyfold knows, with its settings (Settings → Repositories)
+#[derive(serde::Serialize)]
+struct RepoEntry {
+    path: String,
+    settings: plyfold_core::repos::RepoSettings,
+}
+
+#[tauri::command]
+fn list_repos(state: State<'_, AppState>) -> CmdResult<Vec<RepoEntry>> {
+    let repos = state.engine.known_repos().map_err(err)?;
+    Ok(repos.into_iter().map(|path| RepoEntry { settings: state.engine.repo_settings(&path), path }).collect())
+}
+
+#[tauri::command]
+fn save_repo_settings(state: State<'_, AppState>, path: String, settings: plyfold_core::repos::RepoSettings) -> CmdResult<()> {
+    state.engine.set_repo_settings(&path, settings).map_err(err)
+}
+
 /// Open one file in the editor chosen in Settings (or the system's app for it)
 #[tauri::command]
 fn open_file_in_editor(state: State<'_, AppState>, path: String) -> CmdResult<String> {
@@ -828,6 +846,8 @@ pub fn run() {
             search_files,
             read_image,
             read_text_file,
+            list_repos,
+            save_repo_settings,
             open_file_in_editor,
             open_url,
             reveal_file,

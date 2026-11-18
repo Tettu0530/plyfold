@@ -177,11 +177,7 @@ function SessionPane({ index }: { index: number }) {
           )}
           <span className="grow" />
           <span className="hidden items-center gap-2 @[30rem]:flex">
-            <PaneTools
-              scope={id}
-              items={view.transcript.items}
-              alive={r.status !== "closed" && r.status !== "error"}
-            />
+            <PaneTools scope={id} items={view.transcript.items} alive={r.status !== "closed" && r.status !== "error"} />
           </span>
           {/* Git and the changes, one view: here for any session in a git repository. The Git mark, then +added −removed
               once there are changes, and the commits not pushed yet */}

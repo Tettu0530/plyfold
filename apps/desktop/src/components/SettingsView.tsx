@@ -1,4 +1,17 @@
-import { Bell, ChevronLeft, ExternalLink, FolderOpen, GitCompare, HardDrive, Info, Keyboard, MessagesSquare, SlidersHorizontal, Sparkles } from "lucide-react";
+import {
+  Bell,
+  ChevronLeft,
+  ExternalLink,
+  FolderGit2,
+  FolderOpen,
+  GitCompare,
+  HardDrive,
+  Info,
+  Keyboard,
+  MessagesSquare,
+  SlidersHorizontal,
+  Sparkles,
+} from "lucide-react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 import { Switch } from "@/components/ui/switch";
@@ -11,6 +24,7 @@ import { Keys } from "./Keys";
 import { useLiquidClip, useLiquidRevealed } from "./liquid/stage";
 import { Segmented } from "./Segmented";
 import { ShortcutSettings } from "./ShortcutSettings";
+import { RepoSettings } from "./RepoSettings";
 import { agentName, ProviderLogo } from "./icons";
 import { useLiquidMenu } from "./liquid/stage";
 import { liquidAnchor } from "./liquid/liquid";
@@ -37,6 +51,7 @@ const SECTIONS: { id: string; label: MessageKey; Icon: typeof Info }[] = [
   { id: "keyboard", label: "settings.sectionKeyboard", Icon: Keyboard },
   { id: "notifications", label: "settings.sectionNotifications", Icon: Bell },
   { id: "diff", label: "settings.sectionDiff", Icon: GitCompare },
+  { id: "repos", label: "settings.sectionRepos", Icon: FolderGit2 },
   { id: "storage", label: "settings.sectionStorage", Icon: HardDrive },
   { id: "motion", label: "settings.sectionMotion", Icon: Sparkles },
 ];
@@ -313,6 +328,10 @@ export function SettingsView() {
                 >
                   <Switch id="st-cleanup" checked={settings.cleanup_after_merge} onCheckedChange={(v) => change({ cleanup_after_merge: v })} />
                 </Row>
+              </Section>
+
+              <Section id="repos" title={t("settings.sectionRepos")}>
+                <RepoSettings onError={setError} />
               </Section>
 
               <Section id="storage" title={t("settings.sectionStorage")}>

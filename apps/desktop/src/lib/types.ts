@@ -310,6 +310,19 @@ export interface ProfileUsage {
 
 /** Completion candidates for the repository picker (apps/desktop/src-tauri/src/dirs.rs) */
 /** A file offered for an @-mention (apps/desktop/src-tauri/src/files.rs) */
+/** Per repository (Settings → Repositories): what a new worktree gets, and the kinds allowed without asking */
+export interface RepoSettings {
+  setup: string;
+  copy: string[];
+  /** "read" | "edit" | "execute" | "fetch" */
+  allow: string[];
+}
+
+export interface RepoEntry {
+  path: string;
+  settings: RepoSettings;
+}
+
 /** A file's contents for the touched-files pane (read_text_file) */
 export interface TextFile {
   /** null for a binary file */
