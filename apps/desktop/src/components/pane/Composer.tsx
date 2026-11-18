@@ -17,7 +17,7 @@ import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 import type { Attached } from "@/lib/attachments";
 import { AttachBox, useAttachments } from "./Attachments";
 import { MentionMenu, removeMention, useMention } from "./Mention";
-import { SlashMenu, useSlash } from "./Slash";
+import { commandAt, ghostHint, SlashMenu, useSlash } from "./Slash";
 import { useAutoGrow } from "./autoGrow";
 import { isImeKey, isSendKey } from "@/lib/keys";
 import { useStore, type Queued } from "@/state/store";
@@ -384,6 +384,37 @@ function QueueEdit({ initial, onSave, onCancel }: { initial: string; onSave: (te
   );
 }
 
+/**
+ * Drawn behind the composer's textarea while its text starts with a whole slash command: the same text, laid out the
+ * same way, with the command in blue and the command's input hint after "/name ". The textarea's own text is
+ * transparent then, so typing, the caret, selection and IME input are untouched
+ */
+function CommandLayer({
+  text,
+  name,
+  ghost,
+  textRef,
+}: {
+  text: string;
+  name: string;
+  ghost: string | null;
+  textRef: React.RefObject<HTMLTextAreaElement | null>;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  // Follow the textarea's scroll when it is taller than its box
+  useEffect(() => {
+    if (ref.current && textRef.current) ref.current.scrollTop = textRef.current.scrollTop;
+  });
+  const head = name.length + 1;
+  return (
+    <div ref={ref} aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden py-1 text-sm leading-relaxed break-words whitespace-pre-wrap">
+      <span className="text-command">{text.slice(0, head)}</span>
+      {text.slice(head)}
+      {ghost && <span className="text-muted-foreground">{ghost}</span>}
+    </div>
+  );
+}
+
 export function Composer({
   scope,
   agent,
@@ -429,7 +460,12 @@ export function Composer({
   const textRef = useAutoGrow(text);
   const mention = useMention({ root, text, setText, textRef, boxRef: att.boxRef, scope, onPick: (h) => att.addMention(h.abs, h.path) });
   // "/" at the start lists the agent's slash commands
-  const slash = useSlash({ commands: commands ?? info?.commands ?? [], text, setText, textRef, boxRef: att.boxRef, scope });
+  const cmds = commands ?? info?.commands ?? [];
+  const models = option(info, "model")?.choices.map((c) => c.value) ?? [];
+  const slash = useSlash({ commands: cmds, models, text, setText, textRef, boxRef: att.boxRef, scope });
+  // A whole command at the start is shown in blue, and its input hint faintly after "/name " (see CommandLayer)
+  const command = commandAt(text, cmds);
+  const ghost = ghostHint(text, slash.caret, cmds);
   useEffect(() => {
     att.syncMentions(text);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -462,39 +498,50 @@ export function Composer({
       <MentionMenu m={mention} boxRef={att.boxRef} />
       <SlashMenu m={slash} boxRef={att.boxRef} />
       <AttachBox att={att}>
-        <textarea
-          ref={textRef}
-          aria-label={t("composer.message")}
-          rows={1}
-          value={text}
-          placeholder={placeholder}
-          onChange={(e) => {
-            setText(e.target.value);
-            mention.syncCaret();
-            slash.syncCaret();
-          }}
-          onSelect={() => {
-            mention.syncCaret();
-            slash.syncCaret();
-          }}
-          onKeyDown={(e) => {
-            // The @-mention list takes ↑↓, ⏎, ⇥ and esc while it is open
-            if (mention.onKeyDown(e) || slash.onKeyDown(e)) return;
-            if (isSendKey(e, sendKey)) {
-              e.preventDefault();
-              send();
-            } else if (e.key === "Escape" && busy && onStop && !isImeKey(e)) {
-              // While working, esc interrupts (same as Claude Code)
-              e.preventDefault();
-              onStop();
-            } else if (e.key === "Tab" && e.shiftKey && modes.length > 0) {
-              e.preventDefault();
-              const i = mode ? modes.indexOf(mode) : -1;
-              onSet("mode", modes[(i + 1) % modes.length]);
-            }
-          }}
-          className="min-h-0 grow resize-none bg-transparent py-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
-        />
+        <div className="relative flex min-h-0 grow">
+          {command && <CommandLayer text={text} name={command.name} ghost={ghost} textRef={textRef} />}
+          <textarea
+            ref={textRef}
+            aria-label={t("composer.message")}
+            rows={1}
+            value={text}
+            placeholder={placeholder}
+            onChange={(e) => {
+              setText(e.target.value);
+              mention.syncCaret();
+              slash.syncCaret();
+            }}
+            onSelect={() => {
+              mention.syncCaret();
+              slash.syncCaret();
+            }}
+            onKeyDown={(e) => {
+              // The @-mention list takes ↑↓, ⏎, ⇥ and esc while it is open
+              if (mention.onKeyDown(e) || slash.onKeyDown(e)) return;
+              if (isSendKey(e, sendKey)) {
+                e.preventDefault();
+                send();
+              } else if (e.key === "Escape" && busy && onStop && !isImeKey(e)) {
+                // While working, esc interrupts (same as Claude Code)
+                e.preventDefault();
+                onStop();
+              } else if (e.key === "Tab" && e.shiftKey && modes.length > 0) {
+                e.preventDefault();
+                const i = mode ? modes.indexOf(mode) : -1;
+                onSet("mode", modes[(i + 1) % modes.length]);
+              }
+            }}
+            onScroll={(e) => {
+              const layer = e.currentTarget.previousElementSibling as HTMLElement | null;
+              if (layer) layer.scrollTop = e.currentTarget.scrollTop;
+            }}
+            className={cn(
+              "relative min-h-0 w-full grow resize-none bg-transparent py-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground",
+              // The layer behind draws the text while a command is recognised; the caret and selection stay here
+              command && "text-transparent caret-foreground",
+            )}
+          />
+        </div>
         {stopMode ? (
           <button
             type="button"

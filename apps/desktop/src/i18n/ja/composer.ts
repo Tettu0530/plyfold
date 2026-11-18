@@ -25,5 +25,6 @@ export const composer = {
   mentionEmpty: "一致するファイルがありません",
   mentionLoading: "ファイルを探しています",
   slashLabel: "コマンド",
+  slashArgLabel: "{command} の引数",
   slashEmpty: "一致するコマンドはありません",
 } satisfies Record<string, string>;

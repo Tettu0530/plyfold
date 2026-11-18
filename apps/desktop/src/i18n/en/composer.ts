@@ -27,5 +27,6 @@ export const composer: Record<keyof typeof source, string> = {
   mentionEmpty: "No matching files",
   mentionLoading: "Searching files",
   slashLabel: "Commands",
+  slashArgLabel: "Arguments of {command}",
   slashEmpty: "No matching commands",
 };

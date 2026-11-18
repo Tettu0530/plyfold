@@ -26,6 +26,7 @@ Do not ship anything that breaks the rules below unless you can explain why.
 - **Color must carry meaning**. Color is allowed only for "state" and "diff"
   - Working = emerald `#34d399`, waiting for permission = amber `#fbbf24`, stalled = orange `#fb923c`, error = red `#f87171`, idle / stopped = neutral
   - Added = emerald tones, removed = red tones
+  - One exception: a slash command recognised in the composer is blue (`text-command`, `--command: #60a5fa`), so a line that runs a command reads differently from a message. Nothing else uses it
 - Never convey state by color alone. Always add a **per-state icon** and text
   - Working = the twelve-bar spinner (`Spinner` in `components/icons.tsx`: short bars around a circle that fade in turn), waiting for permission = shield, stalled = hourglass, error = circle with ×, idle = circle, stopped = square
 - Don't invent new brand colors. At most one accent color
