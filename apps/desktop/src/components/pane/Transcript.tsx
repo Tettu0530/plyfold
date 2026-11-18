@@ -55,13 +55,16 @@ export function TurnStatsRow({
   error?: string | null;
   stopReason?: string | null;
   endedAt?: number | null;
-  /** The answer's buttons (copy…), right after the numbers */
+  /** The answer's buttons (copy…), on the left of the numbers */
   actions?: React.ReactNode;
 }) {
   const t = useT();
   if (error) return <p className="text-xs text-error">{error}</p>;
   return (
+    // The answer's buttons on the left, the numbers on the right
     <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground tabular">
+      {actions}
+      <span className="grow" />
       {stats?.tokens_per_sec != null && (
         <Stat icon={Gauge} title={stats.estimated ? t("transcript.tokPerSecEstimated") : t("transcript.tokPerSec")}>
           {stats.estimated ? "~" : ""}
@@ -90,9 +93,8 @@ export function TurnStatsRow({
       )}
       {stopReason === "cancelled" && <span>{t("transcript.stopped")}</span>}
       {stopReason === INTERRUPTED && <span>{t("transcript.interrupted")}</span>}
-      {actions}
       {endedAt != null && (
-        <time dateTime={new Date(endedAt).toISOString()} title={t("transcript.endedAt")} className="ml-auto">
+        <time dateTime={new Date(endedAt).toISOString()} title={t("transcript.endedAt")}>
           {clock(endedAt)}
         </time>
       )}
