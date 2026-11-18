@@ -118,6 +118,7 @@ export function ControlRow({
   empty,
   scope,
   noPickers = false,
+  noMode = false,
 }: {
   agent: string;
   info: SessionInfo | null;
@@ -128,6 +129,8 @@ export function ControlRow({
   scope: string;
   /** No model, effort or mode pickers (the side chat), only the context meter */
   noPickers?: boolean;
+  /** No mode picker (an everyday conversation keeps the mode Plyfold chose) */
+  noMode?: boolean;
 }) {
   const t = useT();
   const raised = useLiquidActiveAnchors();
@@ -136,7 +139,7 @@ export function ControlRow({
   const model = noPickers ? null : option(info, "model");
   const effort = noPickers ? null : option(info, "thought_level");
   const mode = currentMode(info);
-  const modes = noPickers ? [] : modeChoices(info);
+  const modes = noPickers || noMode ? [] : modeChoices(info);
   const ctxPct = info?.context_used != null && info.context_size ? Math.round((info.context_used / info.context_size) * 100) : null;
 
   return (
@@ -369,6 +372,7 @@ export function Composer({
   root = null,
   commands,
   noPickers = false,
+  noMode = false,
 }: {
   scope: string;
   agent: string;
@@ -389,6 +393,8 @@ export function Composer({
   commands?: SlashCommand[];
   /** Hide the model, effort and mode pickers, and ⇧⇥ (the side chat) */
   noPickers?: boolean;
+  /** Hide only the mode picker and ⇧⇥ (an everyday conversation) */
+  noMode?: boolean;
 }) {
   const t = useT();
   const [text, setText] = useState("");
@@ -425,14 +431,14 @@ export function Composer({
     setText("");
     att.clear();
   };
-  const modes = noPickers ? [] : modeChoices(info);
+  const modes = noPickers || noMode ? [] : modeChoices(info);
   const mode = currentMode(info);
 
   return (
     // Same width as the conversation above in a wide pane (its edges line up with the messages, as in a narrow one)
     <div className="flex shrink-0 flex-col gap-1 px-[max(0.75rem,calc((100%_-_53rem)/2))] pb-3">
       <QueueList scope={scope} items={queue} busy={busy} onRemove={(k) => onUnqueue?.(k)} onSendNow={() => onSendQueued?.()} />
-      <ControlRow scope={scope} agent={agent} info={info} onSet={onSet} noPickers={noPickers} />
+      <ControlRow scope={scope} agent={agent} info={info} onSet={onSet} noPickers={noPickers} noMode={noMode} />
       <MentionMenu m={mention} boxRef={att.boxRef} />
       <SlashMenu m={slash} boxRef={att.boxRef} />
       <AttachBox att={att}>

@@ -749,8 +749,9 @@ export const useStore = create<State>((set, get) => ({
       }
       const title = prompt.trim().split("\n")[0].slice(0, 40) || (d.chat ? t("store.newChatTitle") : t("store.newSessionTitle"));
       const rec = d.chat ? await api.startChat(d.profile, title) : await api.startSession({ profile: d.profile, repo: d.repo, title, worktree: d.worktree });
-      // Apply the model / effort / mode chosen in the draft before the first prompt
-      await applyChoices(rec.id, d.choices);
+      // Apply the model / effort / mode chosen in the draft before the first prompt (a conversation keeps its own mode)
+      const { mode: _mode, ...rest } = d.choices;
+      await applyChoices(rec.id, d.chat ? rest : d.choices);
       set((s) => {
         const panes = s.panes.map((p) => (p === id ? rec.id : p));
         const drafts = { ...s.drafts };

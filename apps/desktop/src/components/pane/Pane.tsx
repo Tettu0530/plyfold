@@ -259,6 +259,7 @@ function SessionPane({ index }: { index: number }) {
           </div>
 
           <Composer
+            noMode={!!r.chat}
             scope={id}
             agent={r.agent}
             info={(() => {

@@ -81,6 +81,9 @@ async fn a_conversation_looks_things_up_but_does_not_edit() {
     let info = eng.session_info(&c.id).unwrap();
     assert_eq!(info.option(plyfold_core::Category::Mode).and_then(|o| o.current.as_deref()), Some("default"));
 
+    // The mode stays: one that acts without asking would get past the policy
+    assert!(matches!(eng.set_by_category(&c.id, plyfold_core::Category::Mode, "auto").await, Err(plyfold_core::CoreError::ModeLocked)));
+
     // A fetch is allowed without asking
     eng.prompt(&c.id, "permission fetch").unwrap();
     wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { session_id, .. } if session_id == &c.id)).await;

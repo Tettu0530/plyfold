@@ -42,6 +42,15 @@ pub enum CoreError {
     Acp(#[from] AcpError),
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error(
+        "{}",
+        plyfold_i18n::tr!(
+            "会話とサイドチャットのモードは変えられません（ファイルの編集やコマンドを防ぐため）",
+            "The mode of a conversation or side chat cannot be changed (it keeps files from being edited and commands from running)",
+            "对话和侧边对话的模式不能更改（以防编辑文件或执行命令）"
+        )
+    )]
+    ModeLocked,
     #[error("{}", plyfold_i18n::tr!("セッション {} のエージェントは動いていません", "The agent for session {} is not running", "会话 {} 的代理未在运行", .0))]
     NotRunning(String),
     #[error("{}", plyfold_i18n::tr!("セッション {} のエージェントはもう動いています", "The agent for session {} is already running", "会话 {} 的代理已在运行", .0))]
@@ -412,7 +421,7 @@ impl Engine {
         // A mode in which the agent asks before acting (so Plyfold's policy answers) or only reads, rather than one that
         // acts on its own (Claude Code's auto, for example)
         if let Some(mode) = self.session_info(&rec.id).and_then(|info| chat_mode(&info)) {
-            let _ = self.set_by_category(&rec.id, Category::Mode, &mode).await;
+            let _ = self.set_category(&rec.id, Category::Mode, &mode).await;
         }
         Ok(inner.store.get_session(&rec.id)?)
     }
@@ -541,7 +550,7 @@ impl Engine {
         }
         // Ask the agent itself not to edit too, where it has such a mode (Claude Code: plan, Codex: read-only, OpenCode: plan)
         if let Some(mode) = self.session_info(&rec.id).and_then(|info| read_only_mode(&info)) {
-            let _ = self.set_by_category(&rec.id, Category::Mode, &mode).await;
+            let _ = self.set_category(&rec.id, Category::Mode, &mode).await;
         }
         Ok(inner.store.get_session(&rec.id)?)
     }
@@ -918,7 +927,16 @@ impl Engine {
 
     /// Change model / effort / mode without caring how each agent names them.
     /// For mode, fall back to the legacy session/set_mode when configOptions lacks it
+    /// A conversation or a side chat keeps the mode Plyfold chose for it: one that acts without asking (bypass, auto)
+    /// would let it edit files and run commands that Plyfold otherwise declines
     pub async fn set_by_category(&self, id: &str, category: Category, value: &str) -> Result<(), CoreError> {
+        if category == Category::Mode && Policy::of(&self.inner.store.get_session(id)?) != Policy::Ask {
+            return Err(CoreError::ModeLocked);
+        }
+        self.set_category(id, category, value).await
+    }
+
+    async fn set_category(&self, id: &str, category: Category, value: &str) -> Result<(), CoreError> {
         let live = self.inner.live(id)?;
         let config_id = live.info.lock().unwrap().option(category).map(|o| o.id.clone());
         match (config_id, category) {

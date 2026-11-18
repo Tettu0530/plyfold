@@ -274,6 +274,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
                   agent={current?.agent ?? ""}
                   info={info}
                   onSet={choose}
+                  noMode={draft.chat}
                   empty={draft.profile ? t("draft.choicesAfterStart") : undefined}
                 />
               </div>
