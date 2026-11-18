@@ -178,13 +178,13 @@ pub fn add(state_dir: &Path, config_path: &Path, id: &str) -> Result<(), String>
         .find(|e| e.id == id)
         .ok_or_else(|| plyfold_i18n::tr!("ACP Registry に {id} がありません", "{id} is not in the ACP Registry", "ACP Registry 中没有 {id}"))?;
     if BUILT_IN.iter().any(|(rid, _)| *rid == id) {
-        return Err(plyfold_i18n::tr!("{id} は最初から入っています", "{id} is built in", "{id} 已内置"));
+        return Err(plyfold_i18n::tr!("{id} は組み込み済みです", "{id} is built in", "{id} 已内置"));
     }
     let def = definition(e).ok_or_else(|| {
         plyfold_i18n::tr!(
-            "{} は配布の形式（バイナリ）にまだ対応していません",
-            "{} is only shipped as a binary, which Plyfold cannot add yet",
-            "{} 仅以二进制发布，Plyfold 暂不支持添加",
+            "{} はバイナリで配布されているため、まだ対応していません",
+            "{} is distributed as a binary, which is not supported yet",
+            "{} 以二进制发布，暂不支持",
             e.name
         )
     })?;
@@ -205,14 +205,14 @@ pub fn add(state_dir: &Path, config_path: &Path, id: &str) -> Result<(), String>
 pub fn remove(state_dir: &Path, config_path: &Path, agents: &BTreeMap<String, AgentDef>, used_by: &[String], id: &str) -> Result<(), String> {
     if agents.get(id).and_then(|a| a.registry_version.as_ref()).is_none() {
         return Err(plyfold_i18n::tr!(
-            "{id} は ACP Registry から足したものではありません",
+            "{id} は ACP Registry から追加したエージェントではありません",
             "{id} was not added from the ACP Registry",
-            "{id} 不是从 ACP Registry 添加的"
+            "{id} 不是从 ACP Registry 添加的代理"
         ));
     }
     if !used_by.is_empty() {
         return Err(plyfold_i18n::tr!(
-            "プロファイル {} がこのエージェントを使っています。先にプロファイルを消してください",
+            "プロファイル {} がこのエージェントを使っています。先にプロファイルを削除してください",
             "The profile {} uses this agent; delete it first",
             "配置文件 {} 正在使用此代理，请先删除它",
             used_by.join(", ")
