@@ -6,11 +6,12 @@ import { useT } from "@/i18n";
 import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/keys";
 import { cn } from "@/lib/utils";
-import { isDraft, isPreview, useStore } from "@/state/store";
+import { gitPaneOf, isDraft, isGit, isPreview, leavesShowing, useStore } from "@/state/store";
 import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidRevealed } from "../liquid/stage";
 import { DraftPane } from "./DraftPane";
 import { PreviewPane } from "./PreviewPane";
+import { GitPane } from "./GitPane";
 import { withChoices } from "@/state/infoCache";
 import { ProviderLogo, StatusIcon } from "../icons";
 import { Keys } from "../Keys";
@@ -76,7 +77,15 @@ export function Pane({ index }: { index: number }) {
   const id = useStore((s) => s.panes[index]);
   return (
     <div className="flex min-w-0 grow transition-opacity duration-150" style={{ opacity: revealed ? 1 : 0 }}>
-      {isDraft(id) ? <DraftPane index={index} id={id} /> : isPreview(id) ? <PreviewPane index={index} id={id} /> : <SessionPane index={index} />}
+      {isDraft(id) ? (
+        <DraftPane index={index} id={id} />
+      ) : isPreview(id) ? (
+        <PreviewPane index={index} id={id} />
+      ) : isGit(id) ? (
+        <GitPane index={index} id={id} />
+      ) : (
+        <SessionPane index={index} />
+      )}
     </div>
   );
 }
@@ -91,7 +100,7 @@ function SessionPane({ index }: { index: number }) {
   const [diffStat, setDiffStat] = useState<{ added: number; removed: number } | null>(null);
   const openDiff = useStore((s) => s.openDiff);
   const diffActive = useLiquidActiveAnchors().has(`diff:${id}`);
-  const diffOpen = useStore((s) => s.diff?.id === id);
+  const diffOpen = useStore((s) => !!id && leavesShowing(s, gitPaneOf(id)));
   const diffVersion = useStore((s) => s.diffVersion);
   const cached = useStore((s) => (view ? s.infoCache[view.record.profile] : undefined));
   const paneRef = useRef<HTMLElement>(null);

@@ -1,19 +1,18 @@
-import { ChevronLeft, ExternalLink, GitCommitHorizontal, GitMerge, GitPullRequest, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, ExternalLink, GitBranch, GitCommitHorizontal, GitMerge, GitPullRequest, Trash2, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
 import { parsePatch, toSplit, type FilePatch, type PatchLine } from "@/lib/patch";
-import type { Diff, WtStatus } from "@/lib/types";
+import type { Diff, FileStat, WtStatus } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useT, type MessageKey } from "@/i18n";
-import { useStore } from "@/state/store";
-import { ProviderLogo } from "./icons";
-import { Keys } from "./Keys";
-import { useLiquidClip, useLiquidRevealed } from "./liquid/stage";
-import { Num, ROW, Unified } from "./PatchLines";
-import { Segmented } from "./Segmented";
-import { GitPanel, useGitInfo } from "./pane/GitMenu";
+import { gitSessionOf, useStore } from "@/state/store";
+import { Num, ROW, Unified } from "../PatchLines";
+import { Segmented } from "../Segmented";
+import { GitPanel, useGitInfo } from "./GitMenu";
+import { startDrag } from "./dnd";
+import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
 
 type View = "unified" | "split";
 
@@ -24,54 +23,79 @@ const BADGE: Record<FilePatch["status"], { letter: string; className: string; la
   renamed: { letter: "R", className: "text-muted-foreground", label: "diff.badgeRenamed" },
 };
 
+/** Below this pane width the Git pane shows one column: the list, or one file's diff */
+const NARROW_PX = 720;
+
+function useWidth(ref: React.RefObject<HTMLElement | null>) {
+  const [w, setW] = useState(1000);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setW(el.clientWidth));
+    setW(el.clientWidth);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+  return w;
+}
+
+type FileRow = { stat: FileStat; patch: FilePatch | undefined };
+
 /**
- * Git and the changes, in one view. Overlays the sidebar and panes, expanding out of the pane's Git button.
- * Left: the branch, remote and commits, then the changed files; right: the selected file's diff; bottom (worktree
- * sessions): commit, merge, discard and pull requests
+ * Git and the changes of a session, as a pane (it opens next to the session's pane, out of its Git button).
+ * Wide: the branch, remote, commits and changed files in a resizable column, the selected file's diff beside it.
+ * Narrow: one column, the list, and a file's diff in its place once picked. Bottom (worktree sessions): commit,
+ * merge, discard and pull requests
  */
-export function DiffView() {
+export function GitPane({ index, id }: { index: number; id: string }) {
   const t = useT();
-  const diff = useStore((s) => s.diff);
-  const view = useStore((s) => (diff ? s.sessions[diff.id] : undefined));
-  const closeDiff = useStore((s) => s.closeDiff);
-  const revealed = useLiquidRevealed("diff");
-  const surface = useRef<HTMLDivElement>(null);
-  const moving = useLiquidClip("diff", surface, { cover: true });
+  const sid = gitSessionOf(id);
+  const view = useStore((s) => s.sessions[sid]);
+  const focused = useStore((s) => s.focusedPane === index);
+  const { focusPane, closePane, bumpDiff } = useStore.getState();
+  const diffVersion = useStore((s) => s.diffVersion);
+  const pane = useRef<HTMLElement>(null);
+  const width = useWidth(pane);
+  const narrow = width < NARROW_PX;
   const [data, setData] = useState<Diff | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sel, setSel] = useState(0);
+  // Narrow: whether a file's diff replaces the list
+  const [reading, setReading] = useState(false);
   const [mode, setMode] = useState<View>("unified");
-  const id = diff?.id;
   const [wt, setWt] = useState<WtStatus | null>(null);
-  const bumpDiff = useStore((s) => s.bumpDiff);
   const status = view?.record.status;
   const busy = status === "working" || status === "awaiting_permission" || status === "starting" || status === "stalled";
-  const git = useGitInfo(id ?? "", busy);
+  const git = useGitInfo(sid, busy);
   const [columnWidth, setColumnWidth] = useColumnWidth();
 
   // The worktree status exists only for worktree sessions (one in the repository itself has no actions here)
-  const reload = (sid: string) =>
-    Promise.all([api.sessionDiff(sid).then(setData, (e) => setError(String(e))), api.worktreeStatus(sid).then(setWt, () => setWt(null))]).then(() => {});
+  const reload = () =>
+    Promise.all([
+      api.sessionDiff(sid).then(
+        (d) => {
+          setData(d);
+          setError(null);
+        },
+        (e) => setError(String(e)),
+      ),
+      api.worktreeStatus(sid).then(setWt, () => setWt(null)),
+    ]).then(() => {});
 
+  // On open, after worktree actions and status changes, when the window comes back, and every few seconds while the
+  // agent works (it edits files mid-turn)
   useEffect(() => {
-    if (!id) return;
-    setData(null);
-    setWt(null);
-    setError(null);
-    setSel(0);
-    void reload(id);
-  }, [id]);
-
-  useEffect(() => {
-    if (!id) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeDiff();
+    void reload();
+    window.addEventListener("focus", reload);
+    const timer = busy ? setInterval(reload, 5000) : undefined;
+    return () => {
+      window.removeEventListener("focus", reload);
+      if (timer) clearInterval(timer);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [id, closeDiff]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sid, status, busy, diffVersion]);
 
-  const files = useMemo(() => {
+  const files: FileRow[] = useMemo(() => {
     if (!data) return [];
     const parsed = parsePatch(data.patch);
     // Counts come from the engine (--numstat); lines come from the patch
@@ -79,147 +103,209 @@ export function DiffView() {
   }, [data]);
   const total = files.reduce((a, f) => ({ add: a.add + f.stat.added, del: a.del + f.stat.removed }), { add: 0, del: 0 });
 
-  if (!diff || !view) return null;
+  if (!view) {
+    return (
+      <section ref={pane} className="flex min-w-0 flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
+        <p>{t("diff.sessionGone")}</p>
+        <button type="button" onClick={() => closePane(index)} className="rounded-md px-2 py-1 hover:bg-accent hover:text-foreground">
+          {t("pane.closePane")}
+        </button>
+      </section>
+    );
+  }
   const r = view.record;
   const current = files[Math.min(sel, files.length - 1)];
-  const visible = revealed && !diff.closing;
+  const empty =
+    data && files.length === 0 ? (
+      <p className="p-4 text-xs text-muted-foreground">{r.base_ref ? t("diff.noChangesSince", { base: r.base_ref.slice(0, 7) }) : t("diff.noChanges")}</p>
+    ) : null;
+
+  const list = (
+    <>
+      <section aria-label={t("pane.git")} className="border-b px-2 pt-3 pb-3">
+        <GitPanel key={sid} id={sid} git={git} busy={busy} title={r.title} />
+      </section>
+      <div className="flex h-10 shrink-0 items-center gap-2 px-4 text-xs">
+        <span className="font-medium text-muted-foreground">{data ? t("diff.changedFilesCount", { count: files.length }) : t("diff.loading")}</span>
+        <span className="grow" />
+        {data && (
+          <span className="font-mono tabular">
+            <span className="text-working">+{total.add}</span> <span className="text-error">−{total.del}</span>
+          </span>
+        )}
+      </div>
+      <FileList
+        files={files}
+        sel={narrow ? -1 : sel}
+        onPick={(i) => {
+          setSel(i);
+          if (narrow) setReading(true);
+        }}
+      />
+      {narrow && error && <p className="p-4 text-xs whitespace-pre-wrap text-error">{t("diff.loadFailed", { error })}</p>}
+      {narrow && empty}
+    </>
+  );
 
   return (
-    <div
-      ref={surface}
-      data-diff-view
-      role="dialog"
+    <section
+      ref={pane}
       aria-label={t("diff.dialogLabel", { title: r.title })}
-      aria-hidden={!visible}
-      className={cn(
-        "fixed inset-x-0 top-10 bottom-0 flex flex-col bg-background transition-opacity duration-150",
-        moving ? "pointer-events-none z-[56]" : "z-40",
-        visible ? "opacity-100" : "pointer-events-none opacity-0",
-      )}
+      onMouseDown={() => focusPane(index)}
+      className={cn("@container flex min-w-0 flex-col", focused && "bg-white/[0.01]")}
     >
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b pr-3 pl-2">
-        <button
-          type="button"
-          onClick={closeDiff}
-          className="flex h-7 items-center gap-1 rounded-lg pr-2 pl-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+      <PaneMenu slot={index}>
+        <div
+          ref={paneHeadAnchor(index)}
+          onPointerDown={(e) => startDrag(e, () => ({ kind: "pane", slot: index, title: `Git: ${r.title}`, agent: r.agent }))}
+          className="flex h-9 shrink-0 cursor-grab items-center gap-2 border-b pr-1.5 pl-3"
         >
-          <ChevronLeft className="size-4" aria-hidden />
-          {t("diff.backToPane")}
-          <Keys keys={["esc"]} />
-        </button>
-        <span className="text-muted-foreground">/</span>
-        <span className="truncate font-medium">{r.title}</span>
-        <span className="flex items-center gap-1 text-xs whitespace-nowrap text-muted-foreground">
-          <ProviderLogo agent={r.agent} className="size-3" />
-          {r.profile === r.agent ? "default" : r.profile}
-        </span>
-        <span className="grow" />
-      </div>
-
-      <div className="flex min-h-0 grow">
-        {/* One scroll for the Git section and the file list */}
-        <div className="relative flex shrink-0" style={{ width: columnWidth }}>
-          <aside aria-label={t("diff.changedFilesLabel")} className="flex min-w-0 grow flex-col overflow-y-auto border-r bg-sidebar">
-            <section aria-label={t("pane.git")} className="border-b px-2 pt-3 pb-3">
-              <GitPanel key={diff.id} id={diff.id} git={git} busy={busy} title={r.title} />
-            </section>
-            <div className="flex h-10 shrink-0 items-center gap-2 px-4 text-xs">
-              <span className="font-medium text-muted-foreground">{data ? t("diff.changedFilesCount", { count: files.length }) : t("diff.loading")}</span>
-              <span className="grow" />
-              {data && (
-                <span className="font-mono tabular">
-                  <span className="text-working">+{total.add}</span> <span className="text-error">−{total.del}</span>
-                </span>
-              )}
-            </div>
-            <div role="listbox" aria-label={t("diff.filesLabel")} className="flex flex-col gap-0.5 px-2 pb-2">
-              {files.map((f, i) => {
-                const b = BADGE[f.patch?.status ?? (f.stat.untracked ? "added" : "modified")];
-                return (
-                  <button
-                    key={f.stat.path}
-                    type="button"
-                    role="option"
-                    aria-selected={i === sel}
-                    onClick={() => setSel(i)}
-                    className={cn("flex h-7 w-full shrink-0 items-center gap-2 rounded-lg px-2 hover:bg-accent", i === sel && "bg-muted")}
-                  >
-                    <span title={t(b.label)} className={cn("w-4 shrink-0 font-mono text-xs font-medium", b.className)}>
-                      {b.letter}
-                    </span>
-                    <span className="min-w-0 grow truncate text-left font-mono text-xs" title={f.stat.path}>
-                      {f.stat.path}
-                    </span>
-                    <span className="flex shrink-0 gap-1.5 font-mono text-xs tabular">
-                      {f.stat.binary ? (
-                        <span className="text-muted-foreground">bin</span>
-                      ) : (
-                        <>
-                          <span className="text-working">+{f.stat.added}</span>
-                          <span className="text-error">−{f.stat.removed}</span>
-                        </>
-                      )}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </aside>
-          <ColumnResizer width={columnWidth} onChange={setColumnWidth} />
+          <GitBranch className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="truncate font-medium">{r.title}</span>
+          {git.info?.branch && <span className="hidden truncate font-mono text-xs text-muted-foreground @[26rem]:inline">{git.info.branch}</span>}
+          <span className="grow" />
+          {data && total.add + total.del > 0 && (
+            <span className="shrink-0 font-mono text-xs tabular">
+              <span className="text-working">+{total.add}</span> <span className="text-error">−{total.del}</span>
+            </span>
+          )}
+          <button
+            type="button"
+            aria-label={t("pane.closePane")}
+            onClick={() => closePane(index)}
+            className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <X className="size-3.5" aria-hidden />
+          </button>
         </div>
+      </PaneMenu>
 
-        <main className="flex min-w-0 grow flex-col">
-          {error && <p className="p-4 text-xs whitespace-pre-wrap text-error">{t("diff.loadFailed", { error })}</p>}
-          {data && files.length === 0 && (
-            <p className="p-4 text-xs text-muted-foreground">{r.base_ref ? t("diff.noChangesSince", { base: r.base_ref.slice(0, 7) }) : t("diff.noChanges")}</p>
-          )}
-          {current && (
-            <>
-              <div className="flex h-11 shrink-0 items-center gap-3 border-b px-4">
-                <span className="truncate font-mono">{current.stat.path}</span>
-                <span className="shrink-0 font-mono text-xs tabular">
-                  <span className="text-working">+{current.stat.added}</span> <span className="text-error">−{current.stat.removed}</span>
-                </span>
-                <span className="grow" />
-                <Segmented<View>
-                  label={t("diff.viewLabel")}
-                  value={mode}
-                  onChange={setMode}
-                  options={[
-                    { value: "unified", label: t("diff.viewUnified") },
-                    { value: "split", label: t("diff.viewSplit") },
-                  ]}
-                />
-              </div>
-              <div className="min-h-0 grow overflow-auto py-1 font-mono text-xs leading-5">
-                {current.stat.binary || current.patch?.binary ? (
-                  <p className="px-4 py-2 text-muted-foreground">{t("diff.binaryFile")}</p>
-                ) : !current.patch ? (
-                  <p className="px-4 py-2 text-muted-foreground">{t("diff.noPatchLines")}</p>
-                ) : mode === "unified" ? (
-                  <Unified lines={current.patch.lines} />
-                ) : (
-                  <Split lines={current.patch.lines} />
-                )}
-              </div>
-            </>
-          )}
-        </main>
-      </div>
+      {narrow ? (
+        // One column: the list, or the picked file's diff in its place
+        reading && current ? (
+          <FileDiff file={current} mode="unified" onBack={() => setReading(false)} />
+        ) : (
+          <div className="flex min-h-0 grow flex-col overflow-y-auto">{list}</div>
+        )
+      ) : (
+        <div className="flex min-h-0 grow">
+          {/* One scroll for the Git section and the file list */}
+          <div className="relative flex shrink-0" style={{ width: Math.min(columnWidth, Math.round(width * 0.6)) }}>
+            <aside aria-label={t("diff.changedFilesLabel")} className="flex min-w-0 grow flex-col overflow-y-auto border-r">
+              {list}
+            </aside>
+            <ColumnResizer width={columnWidth} onChange={setColumnWidth} />
+          </div>
+          <div className="flex min-w-0 grow flex-col">
+            {error && <p className="p-4 text-xs whitespace-pre-wrap text-error">{t("diff.loadFailed", { error })}</p>}
+            {empty}
+            {current && <FileDiff file={current} mode={mode} onMode={setMode} />}
+          </div>
+        </div>
+      )}
+
       {wt && (
         <Actions
-          key={id}
-          id={diff.id}
+          key={sid}
+          id={sid}
           title={r.title}
           status={wt}
           busy={busy}
           onDone={() => {
             bumpDiff();
             void git.refresh();
-            return reload(diff.id);
+            return reload();
           }}
         />
       )}
+    </section>
+  );
+}
+
+function FileList({ files, sel, onPick }: { files: FileRow[]; sel: number; onPick: (i: number) => void }) {
+  const t = useT();
+  return (
+    <div role="listbox" aria-label={t("diff.filesLabel")} className="flex flex-col gap-0.5 px-2 pb-2">
+      {files.map((f, i) => {
+        const b = BADGE[f.patch?.status ?? (f.stat.untracked ? "added" : "modified")];
+        return (
+          <button
+            key={f.stat.path}
+            type="button"
+            role="option"
+            aria-selected={i === sel}
+            onClick={() => onPick(i)}
+            className={cn("flex h-7 w-full shrink-0 items-center gap-2 rounded-lg px-2 hover:bg-accent", i === sel && "bg-muted")}
+          >
+            <span title={t(b.label)} className={cn("w-4 shrink-0 font-mono text-xs font-medium", b.className)}>
+              {b.letter}
+            </span>
+            <span className="min-w-0 grow truncate text-left font-mono text-xs" title={f.stat.path}>
+              {f.stat.path}
+            </span>
+            <span className="flex shrink-0 gap-1.5 font-mono text-xs tabular">
+              {f.stat.binary ? (
+                <span className="text-muted-foreground">bin</span>
+              ) : (
+                <>
+                  <span className="text-working">+{f.stat.added}</span>
+                  <span className="text-error">−{f.stat.removed}</span>
+                </>
+              )}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** One file's diff: its path and counts, then the lines. With onBack (narrow), a way back to the list */
+function FileDiff({ file, mode, onMode, onBack }: { file: FileRow; mode: View; onMode?: (v: View) => void; onBack?: () => void }) {
+  const t = useT();
+  return (
+    <div className="flex min-h-0 min-w-0 grow flex-col">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b px-2">
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="flex h-7 shrink-0 items-center gap-1 rounded-md pr-2 pl-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <ArrowLeft className="size-3.5" aria-hidden />
+            {t("diff.backToFiles")}
+          </button>
+        )}
+        <span className={cn("min-w-0 truncate font-mono text-xs", !onBack && "pl-2")} title={file.stat.path}>
+          {file.stat.path}
+        </span>
+        <span className="shrink-0 font-mono text-xs tabular">
+          <span className="text-working">+{file.stat.added}</span> <span className="text-error">−{file.stat.removed}</span>
+        </span>
+        <span className="grow" />
+        {onMode && (
+          <Segmented<View>
+            label={t("diff.viewLabel")}
+            value={mode}
+            onChange={onMode}
+            options={[
+              { value: "unified", label: t("diff.viewUnified") },
+              { value: "split", label: t("diff.viewSplit") },
+            ]}
+          />
+        )}
+      </div>
+      <div className="min-h-0 grow overflow-auto py-1 font-mono text-xs leading-5">
+        {file.stat.binary || file.patch?.binary ? (
+          <p className="px-4 py-2 text-muted-foreground">{t("diff.binaryFile")}</p>
+        ) : !file.patch ? (
+          <p className="px-4 py-2 text-muted-foreground">{t("diff.noPatchLines")}</p>
+        ) : mode === "unified" ? (
+          <Unified lines={file.patch.lines} />
+        ) : (
+          <Split lines={file.patch.lines} />
+        )}
+      </div>
     </div>
   );
 }
@@ -394,7 +480,7 @@ function Actions({ id, title, status, busy, onDone }: { id: string; title: strin
           </button>
         </form>
       ) : (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => void openEditor()} className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent">
             <ExternalLink className="size-3.5" aria-hidden />
             {t("diff.openInEditor")}
@@ -422,7 +508,10 @@ function Actions({ id, title, status, busy, onDone }: { id: string; title: strin
                 {t("diff.createPr")}
               </button>
             ))}
-          <span className="pl-2 text-xs text-muted-foreground">{busy ? t("diff.busyDuringTurn") : summary}</span>
+          {/* Narrow: the status takes its own line above the buttons */}
+          <span className="order-first basis-full text-xs text-muted-foreground @[44rem]:order-none @[44rem]:basis-auto @[44rem]:pl-2">
+            {busy ? t("diff.busyDuringTurn") : summary}
+          </span>
           <span className="grow" />
           {!nothing &&
             (confirmDiscard ? (

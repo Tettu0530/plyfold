@@ -11,7 +11,8 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ### Git
 
-- Git and the changes are one view, opened from the pane header (⌘⇧D): the branch, its base and upstream, fetch, push and pull, the pull request and the commits sit above the changed files. The separate Git menu is gone
+- Git and the changes are one pane, opened next to the session from its header (⌘⇧D): the branch, its base and upstream, fetch, push and pull, the pull request and the commits sit above the changed files, with the diff beside them (in a narrow pane, a file's diff takes the list's place). The column is resizable. The separate Git menu and the full-window changes screen are gone
+- A worktree removed outside Plyfold no longer breaks the Git pane: the session continues in the original repository
 - A session working in the repository itself also shows its uncommitted changes (against HEAD). Commit, merge and discard stay with worktree sessions
 
 ### Composer

@@ -55,6 +55,11 @@ export const isDraft = (id: string | null | undefined): id is string => !!id && 
 /** A pane showing a web page (a dev server the agent started, or any URL) */
 export const isPreview = (id: string | null | undefined): id is string => !!id && id.startsWith("preview:");
 
+/** A pane showing a session's Git and changes ("git:<session id>") */
+export const isGit = (id: string | null | undefined): id is string => !!id && id.startsWith("git:");
+export const gitSessionOf = (id: string) => id.slice("git:".length);
+export const gitPaneOf = (sessionId: string) => `git:${sessionId}`;
+
 export interface PreviewPage {
   url: string;
   /** liquidAnchor of the button it was opened from (the pane grows out of it and shrinks back into it) */
@@ -65,9 +70,15 @@ export interface PreviewPage {
 const PANE_LOOK: Look = { background: "rgba(10, 10, 10, 1)", border: "rgba(255, 255, 255, 0.1)", shadow: "0px 0px 0px rgba(0, 0, 0, 0)", blur: 0 };
 const settingsEl = () => document.querySelector<HTMLElement>("[data-settings-view]");
 const profilesEl = () => document.querySelector<HTMLElement>("[data-profiles-view]");
-const diffEl = () => document.querySelector<HTMLElement>("[data-diff-view]");
 const paneEl = (i: number) => document.querySelector<HTMLElement>(`[data-pane-index="${i}"]`);
-const anchorOf = (id: string) => (isDraft(id) ? "new-session" : isPreview(id) ? (useStore.getState().previews[id]?.anchor ?? "new-session") : `session:${id}`);
+const anchorOf = (id: string) =>
+  isDraft(id)
+    ? "new-session"
+    : isPreview(id)
+      ? (useStore.getState().previews[id]?.anchor ?? "new-session")
+      : isGit(id)
+        ? `diff:${gitSessionOf(id)}`
+        : `session:${id}`;
 const LAST_REPO_KEY = "plyfold.lastRepo";
 function lastRepo(): string {
   try {
@@ -147,7 +158,7 @@ export function restoreLayout(saved: unknown, exists: (id: string) => boolean): 
   const size = Math.max(4, ...leaves(layout).map((i) => i + 1));
   const panes = Array.from({ length: size }, (_, i) => {
     const id = o.panes![i];
-    return typeof id === "string" && !isDraft(id) && !isPreview(id) && exists(id) ? id : null;
+    return typeof id === "string" && !isDraft(id) && !isPreview(id) && !isGit(id) && exists(id) ? id : null;
   });
   const visible = leaves(layout);
   const focusedPane = typeof o.focusedPane === "number" && visible.includes(o.focusedPane) ? o.focusedPane : visible[0];
@@ -219,12 +230,10 @@ interface State {
   startDraft: (id: string, prompt: string, attachments?: Attached[]) => Promise<void>;
   closePane: (pane: number) => void;
   /** Diff screen. Kept mounted while closing so it can shrink away */
-  diff: { id: string; closing: boolean } | null;
   openDiff: (id: string) => void;
   /** Bumped after worktree operations (so panes refetch their diff counts) */
   diffVersion: number;
   bumpDiff: () => void;
-  closeDiff: () => void;
   /** Profiles screen (kept mounted during the close animation, like the diff screen) */
   profilesView: { closing: boolean } | null;
   settingsView: { closing: boolean } | null;
@@ -383,7 +392,6 @@ export const useStore = create<State>((set, get) => ({
   focusedPane: 0,
   searchOpen: false,
   labOpen: false,
-  diff: null,
   diffVersion: 0,
   bumpDiff: () => set((s) => ({ diffVersion: s.diffVersion + 1 })),
   profilesView: null,
@@ -527,21 +535,22 @@ export const useStore = create<State>((set, get) => ({
       if (isPreview(displaced)) delete previews[displaced!];
       set({ panes, focusedPane: target, drafts, previews });
     }
-    if (isDraft(id) || isPreview(id)) return;
+    if (isDraft(id) || isPreview(id) || isGit(id)) return;
     await loadSession(id);
   },
 
   openDiff: (id) => {
-    // The diff screen expands out of the pane's diff count (+12 −3)
-    liquidOpen("diff", { cover: true, anchor: `diff:${id}`, target: diffEl, toLook: PANE_LOOK });
-    set({ diff: { id, closing: false } });
-  },
-
-  closeDiff: () => {
-    const d = get().diff;
-    if (!d || d.closing) return;
-    set({ diff: { ...d, closing: true } });
-    liquidCloseFrom("diff", { cover: true, anchor: `diff:${d.id}`, target: diffEl, toLook: PANE_LOOK, onDone: () => set({ diff: null }) });
+    const s = get();
+    const git = gitPaneOf(id);
+    const shown = leaves(s.layout).find((i) => s.panes[i] === git);
+    if (shown !== undefined) {
+      set({ focusedPane: shown });
+      return;
+    }
+    // Next to the session's pane (or the focused one), growing out of the session's Git button
+    const beside = leaves(s.layout).find((i) => s.panes[i] === id) ?? s.focusedPane;
+    const slot = get().splitPane(beside, "right", null);
+    void get().openInPane(git, slot, `diff:${id}`);
   },
 
   openProfiles: () => {
@@ -865,6 +874,8 @@ export const useStore = create<State>((set, get) => ({
     // Remove it from any open pane with a close animation
     const pane = leaves(get().layout).find((i) => get().panes[i] === id);
     if (pane !== undefined) get().closePane(pane);
+    const git = leaves(get().layout).find((i) => get().panes[i] === gitPaneOf(id));
+    if (git !== undefined) get().closePane(git);
     await api.deleteSession(id, removeWorktree);
     set((s) => {
       const sessions = { ...s.sessions };
@@ -918,8 +929,8 @@ useStore.subscribe((st, prev) => {
   )
     return;
   const layout: Layout = {
-    // Drafts and previews are not restored on the next launch
-    panes: st.panes.map((p) => (isDraft(p) || isPreview(p) ? null : p)),
+    // Drafts, previews and Git panes are not restored on the next launch
+    panes: st.panes.map((p) => (isDraft(p) || isPreview(p) || isGit(p) ? null : p)),
     layout: st.layout,
     focusedPane: st.focusedPane,
     sidebarOpen: st.sidebarOpen,
@@ -957,6 +968,8 @@ function firstFreePane(panes: (string | null)[], shown: number[], focused: numbe
 }
 
 /** Session ids shown in panes right now */
+/** Whether a pane in the layout shows this id */
+export const leavesShowing = (s: { panes: (string | null)[]; layout: LayoutNode }, id: string) => leaves(s.layout).some((i) => s.panes[i] === id);
 export const visibleSessions = (s: { panes: (string | null)[]; layout: LayoutNode }) => leaves(s.layout).map((i) => s.panes[i]);
 
 // When a session's config options change, remember them per profile

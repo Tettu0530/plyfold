@@ -5,7 +5,6 @@ import { Suspense, lazy, useEffect } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { GooDefs } from "./components/liquid/liquid";
 import { LiquidStage } from "./components/liquid/stage";
-import { DiffView } from "./components/DiffView";
 import { ImagePreview } from "./components/ImagePreview";
 import { ProfilesView } from "./components/ProfilesView";
 import { Notifications } from "./components/Notifications";
@@ -161,7 +160,6 @@ export default function App() {
           {!inTauri && <p className="fixed right-3 bottom-3 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">{t("app.browserOnly")}</p>}
         </div>
         <GooDefs />
-        <DiffView />
         <ProfilesView />
         <SettingsView />
         <LiquidStage />
