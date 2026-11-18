@@ -164,6 +164,9 @@ pub enum EngineEvent {
     },
 }
 
+/// How long a session stays in the trash before it is deleted at the next start
+const TRASH_KEEP_MS: i64 = 30 * 24 * 60 * 60 * 1000;
+
 pub struct EngineOptions {
     /// Config and profiles (each profile's own config directory lives under it)
     pub state_dir: PathBuf,
@@ -344,6 +347,11 @@ impl Engine {
                 if let Some(acp) = &s.acp_session_id {
                     store.dismiss_conversation(acp)?;
                 }
+                store.delete_session(&s.id)?;
+                continue;
+            }
+            // Sessions in the trash for 30 days go for good; their worktrees stay, so no work is lost
+            if s.trashed_at.is_some_and(|at| plyfold_store::now_ms() - at > TRASH_KEEP_MS) {
                 store.delete_session(&s.id)?;
                 continue;
             }
@@ -1116,6 +1124,37 @@ impl Engine {
         }
         self.inner.set_status(id, SessionStatus::Closed);
         Ok(())
+    }
+
+    /// Move to the trash: the agent stops and the session leaves the list, but its record, conversation and worktree
+    /// stay, so restore_session puts it back as it was
+    pub async fn trash_session(&self, id: &str) -> Result<SessionRecord, CoreError> {
+        for side in self.inner.store.list_sessions()?.into_iter().filter(|s| s.side_of.as_deref() == Some(id)) {
+            self.close_side_chat(&side.id).await?;
+        }
+        self.close_session(id).await?;
+        self.inner.store.set_trashed(id, Some(plyfold_store::now_ms()))?;
+        let rec = self.inner.store.get_session(id)?;
+        self.inner.emit(EngineEvent::WorkspaceChanged { session: rec.clone() });
+        Ok(rec)
+    }
+
+    /// Take a session out of the trash (it stays stopped until it is opened)
+    pub fn restore_session(&self, id: &str) -> Result<SessionRecord, CoreError> {
+        self.inner.store.set_trashed(id, None)?;
+        let rec = self.inner.store.get_session(id)?;
+        self.inner.emit(EngineEvent::WorkspaceChanged { session: rec.clone() });
+        Ok(rec)
+    }
+
+    /// Delete every session in the trash for good (with `remove_worktree`, their worktrees and branches too).
+    /// Returns the ids deleted
+    pub async fn empty_trash(&self, remove_worktree: bool) -> Result<Vec<String>, CoreError> {
+        let trashed: Vec<String> = self.inner.store.list_sessions()?.into_iter().filter(|s| s.trashed_at.is_some()).map(|s| s.id).collect();
+        for id in &trashed {
+            self.delete_session(id, remove_worktree).await?;
+        }
+        Ok(trashed)
     }
 
     /// Delete the session and its record. With `remove_worktree`, also delete the worktree and branch (work is lost),

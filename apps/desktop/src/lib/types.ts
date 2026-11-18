@@ -17,6 +17,8 @@ export interface SessionRecord {
   updated_at: number;
   /** A side chat: the session it was forked from (read-only, not listed, deleted when closed) */
   side_of?: string | null;
+  /** When it was moved to the trash (ms); trashed sessions stay out of the list until restored */
+  trashed_at?: number | null;
   /** An everyday conversation (no repository; it may look things up but not edit or run commands) */
   chat?: boolean;
 }

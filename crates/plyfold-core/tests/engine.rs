@@ -191,6 +191,32 @@ async fn a_new_worktree_is_prepared_and_the_repository_rules_answer_for_it() {
 }
 
 #[tokio::test]
+async fn a_trashed_session_keeps_its_work_until_the_trash_is_emptied() {
+    let base = tmp("trash");
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    git_repo(&repo);
+    let eng = engine(&base.join("state"), 60_000);
+    let s = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: repo.clone(), worktree: true }).await.unwrap();
+    let wt = PathBuf::from(s.worktree_path.clone().unwrap());
+
+    let trashed = eng.trash_session(&s.id).await.unwrap();
+    assert!(trashed.trashed_at.is_some());
+    assert!(!eng.is_running(&s.id));
+    assert!(wt.exists(), "the worktree stays while the session is in the trash");
+
+    let back = eng.restore_session(&s.id).unwrap();
+    assert!(back.trashed_at.is_none());
+    eng.reopen_session(&s.id).await.unwrap();
+    assert!(eng.is_running(&s.id));
+
+    eng.trash_session(&s.id).await.unwrap();
+    assert_eq!(eng.empty_trash(true).await.unwrap(), std::slice::from_ref(&s.id));
+    assert!(eng.store().get_session(&s.id).is_err());
+    assert!(!wt.exists());
+}
+
+#[tokio::test]
 async fn cancel_resolves_pending_permission_and_stops_turn() {
     let base = tmp("cancel");
     let eng = engine(&base.join("state"), 60_000);

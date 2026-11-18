@@ -14,4 +14,9 @@ export const sidebar = {
   conversations: "会話",
   updateAvailable: "{version} に更新",
   updating: "{version} を入れています",
+  trash: "ゴミ箱",
+  restore: "「{title}」を元に戻す",
+  deleteForGood: "「{title}」を完全に削除",
+  emptyTrash: "ゴミ箱を空にする",
+  trashNote: "30 日たつと記録は自動で消えます。worktree は残ります",
 } satisfies Record<string, string>;

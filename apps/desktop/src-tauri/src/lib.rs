@@ -395,6 +395,21 @@ async fn close_session(state: State<'_, AppState>, id: String) -> CmdResult<()> 
 }
 
 #[tauri::command]
+async fn trash_session(state: State<'_, AppState>, id: String) -> CmdResult<SessionRecord> {
+    state.engine.trash_session(&id).await.map_err(err)
+}
+
+#[tauri::command]
+fn restore_session(state: State<'_, AppState>, id: String) -> CmdResult<SessionRecord> {
+    state.engine.restore_session(&id).map_err(err)
+}
+
+#[tauri::command]
+async fn empty_trash(state: State<'_, AppState>, remove_worktree: bool) -> CmdResult<Vec<String>> {
+    state.engine.empty_trash(remove_worktree).await.map_err(err)
+}
+
+#[tauri::command]
 async fn delete_session(state: State<'_, AppState>, id: String, remove_worktree: bool) -> CmdResult<()> {
     state.engine.delete_session(&id, remove_worktree).await.map_err(err)
 }
@@ -855,6 +870,9 @@ pub fn run() {
             search_files,
             read_image,
             read_text_file,
+            trash_session,
+            restore_session,
+            empty_trash,
             list_repos,
             save_repo_settings,
             open_file_in_editor,

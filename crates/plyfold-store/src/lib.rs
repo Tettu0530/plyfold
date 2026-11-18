@@ -89,6 +89,10 @@ pub struct SessionRecord {
     /// read the web but not edit or run commands
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub chat: bool,
+    /// When it was moved to the trash (ms). A trashed session keeps its record and worktree until it is deleted for
+    /// good, so it can be restored as it was
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trashed_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -196,7 +200,7 @@ CREATE TABLE IF NOT EXISTS dismissed_conversations (
 ";
 
 const SESSION_COLS: &str =
-    "id, title, profile, agent, repo_path, worktree_path, branch, base_ref, acp_session_id, status, created_at, updated_at, side_of, chat";
+    "id, title, profile, agent, repo_path, worktree_path, branch, base_ref, acp_session_id, status, created_at, updated_at, side_of, chat, trashed_at";
 
 fn row_to_session(r: &rusqlite::Row) -> rusqlite::Result<SessionRecord> {
     Ok(SessionRecord {
@@ -214,6 +218,7 @@ fn row_to_session(r: &rusqlite::Row) -> rusqlite::Result<SessionRecord> {
         updated_at: r.get(11)?,
         side_of: r.get(12)?,
         chat: r.get::<_, i64>(13)? != 0,
+        trashed_at: r.get(14)?,
     })
 }
 
@@ -247,6 +252,10 @@ impl Store {
         if !has_chat {
             conn.execute_batch("ALTER TABLE sessions ADD COLUMN chat INTEGER NOT NULL DEFAULT 0")?;
         }
+        let has_trash: bool = conn.prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'trashed_at'")?.exists([])?;
+        if !has_trash {
+            conn.execute_batch("ALTER TABLE sessions ADD COLUMN trashed_at INTEGER")?;
+        }
         Ok(Self { conn: Mutex::new(conn) })
     }
 
@@ -267,9 +276,10 @@ impl Store {
             updated_at: now,
             side_of: s.side_of,
             chat: s.chat,
+            trashed_at: None,
         };
         self.conn.lock().unwrap().execute(
-            &format!("INSERT INTO sessions ({SESSION_COLS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)"),
+            &format!("INSERT INTO sessions ({SESSION_COLS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)"),
             params![
                 rec.id,
                 rec.title,
@@ -284,7 +294,8 @@ impl Store {
                 rec.created_at,
                 rec.updated_at,
                 rec.side_of,
-                rec.chat as i64
+                rec.chat as i64,
+                rec.trashed_at
             ],
         )?;
         Ok(rec)
@@ -320,6 +331,11 @@ impl Store {
         self.update(id, "status", &status.as_str())?;
         self.append_event(id, EventKind::Status, status.as_str())?;
         Ok(())
+    }
+
+    /// Move to the trash (Some(now)) or back out of it (None)
+    pub fn set_trashed(&self, id: &str, at: Option<i64>) -> Result<(), StoreError> {
+        self.update(id, "trashed_at", &at)
     }
 
     pub fn set_acp_session_id(&self, id: &str, acp_session_id: &str) -> Result<(), StoreError> {
