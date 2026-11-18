@@ -132,6 +132,37 @@ async fn worktree_session_with_permission_and_diff() {
 }
 
 #[tokio::test]
+async fn switching_to_a_mode_that_does_not_ask_allows_what_is_waiting() {
+    use plyfold_core::Category;
+    let base = tmp("bypass");
+    let eng = engine(&base.join("state"), 60_000);
+    let mut rx = eng.subscribe();
+    let s = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.clone(), worktree: false }).await.unwrap();
+
+    // A fetch is not a file edit: accept-edits leaves it waiting, bypass allows it
+    eng.prompt(&s.id, "permission fetch").unwrap();
+    wait_for(&mut rx, |e| matches!(e, EngineEvent::PermissionRequested { .. })).await;
+    eng.set_by_category(&s.id, Category::Mode, "acceptEdits").await.unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    while let Ok(e) = rx.try_recv() {
+        assert!(!matches!(e, EngineEvent::PermissionResolved { .. }), "accept-edits allowed a fetch");
+    }
+    eng.set_by_category(&s.id, Category::Mode, "bypassPermissions").await.unwrap();
+    wait_for(&mut rx, |e| matches!(e, EngineEvent::PermissionResolved { option_id: Some(o), .. } if o == "allow")).await;
+    wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { .. })).await;
+
+    // An edit is allowed by accept-edits
+    eng.set_by_category(&s.id, Category::Mode, "default").await.unwrap();
+    eng.prompt(&s.id, "write with permission").unwrap();
+    wait_for(&mut rx, |e| matches!(e, EngineEvent::PermissionRequested { .. })).await;
+    eng.set_by_category(&s.id, Category::Mode, "acceptEdits").await.unwrap();
+    wait_for(&mut rx, |e| matches!(e, EngineEvent::PermissionResolved { option_id: Some(o), .. } if o == "allow")).await;
+    wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { .. })).await;
+    assert!(base.join("mock-output.txt").exists());
+    eng.close_session(&s.id).await.unwrap();
+}
+
+#[tokio::test]
 async fn cancel_resolves_pending_permission_and_stops_turn() {
     let base = tmp("cancel");
     let eng = engine(&base.join("state"), 60_000);

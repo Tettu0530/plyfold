@@ -202,11 +202,21 @@ pub struct StartSession {
     pub worktree: bool,
 }
 
+/// A permission request the user has not answered yet
+struct Pending {
+    /// JSON-RPC request ID
+    request_id: Value,
+    /// The option that allows it once (or the first that allows), if the agent offered one
+    allow: Option<String>,
+    /// The tool call's kind (edit, execute, fetch…)
+    kind: Option<String>,
+}
+
 struct Live {
     client: AcpClient,
     acp_sid: Mutex<String>,
-    /// permission_id → JSON-RPC request ID
-    permissions: Mutex<HashMap<String, Value>>,
+    /// permission_id → the request waiting for an answer
+    permissions: Mutex<HashMap<String, Pending>>,
     last_activity: Mutex<Instant>,
     in_turn: AtomicBool,
     stalled: AtomicBool,
@@ -888,9 +898,9 @@ impl Engine {
     /// Cancel. Pending permission requests are answered with "cancelled" (per the ACP spec)
     pub async fn cancel(&self, id: &str) -> Result<(), CoreError> {
         let live = self.inner.live(id)?;
-        let pending: Vec<(String, Value)> = live.permissions.lock().unwrap().drain().collect();
-        for (pid, request_id) in pending {
-            live.client.respond_permission(request_id, None).await?;
+        let pending: Vec<(String, Pending)> = live.permissions.lock().unwrap().drain().collect();
+        for (pid, p) in pending {
+            live.client.respond_permission(p.request_id, None).await?;
             self.inner.emit(EngineEvent::PermissionResolved { session_id: id.into(), permission_id: pid, option_id: None });
         }
         live.client.cancel(&live.sid()).await?;
@@ -900,7 +910,7 @@ impl Engine {
     /// An option_id of None is treated as a cancel
     pub async fn respond_permission(&self, id: &str, permission_id: &str, option_id: Option<&str>) -> Result<(), CoreError> {
         let live = self.inner.live(id)?;
-        let request_id = live.permissions.lock().unwrap().remove(permission_id).ok_or_else(|| CoreError::UnknownPermission(permission_id.into()))?;
+        let request_id = live.permissions.lock().unwrap().remove(permission_id).ok_or_else(|| CoreError::UnknownPermission(permission_id.into()))?.request_id;
         live.client.respond_permission(request_id, option_id).await?;
         live.touch();
         self.inner.emit(EngineEvent::PermissionResolved {
@@ -936,7 +946,44 @@ impl Engine {
         if category == Category::Mode && Policy::of(&self.inner.store.get_session(id)?) != Policy::Ask {
             return Err(CoreError::ModeLocked);
         }
-        self.set_category(id, category, value).await
+        self.set_category(id, category, value).await?;
+        if category == Category::Mode {
+            self.allow_pending_for_mode(id, value).await?;
+        }
+        Ok(())
+    }
+
+    /// After switching to a mode that would not have asked, answer the requests still waiting as that mode would:
+    /// everything for bypass, file edits for accept-edits. The agent keeps asking for the request it already sent
+    async fn allow_pending_for_mode(&self, id: &str, mode: &str) -> Result<(), CoreError> {
+        let Some(covers) = mode_allows(mode) else { return Ok(()) };
+        let live = self.inner.live(id)?;
+        let allowed: Vec<(String, Pending)> = {
+            let mut pending = live.permissions.lock().unwrap();
+            let ids: Vec<String> = pending.iter().filter(|(_, p)| p.allow.is_some() && covers(p.kind.as_deref())).map(|(k, _)| k.clone()).collect();
+            ids.into_iter().filter_map(|k| pending.remove(&k).map(|p| (k, p))).collect()
+        };
+        if allowed.is_empty() {
+            return Ok(());
+        }
+        for (pid, p) in &allowed {
+            live.client.respond_permission(p.request_id.clone(), p.allow.as_deref()).await?;
+            self.inner.emit(EngineEvent::PermissionResolved { session_id: id.into(), permission_id: pid.clone(), option_id: p.allow.clone() });
+        }
+        live.touch();
+        self.inner.notice(
+            id,
+            plyfold_i18n::tr!(
+                "モードを切り替えたので、確認待ちだった {} 件を許可しました",
+                "Allowed {} waiting permission request(s), since the new mode does not ask",
+                "已切换模式，因此允许了 {} 个等待中的权限请求",
+                allowed.len()
+            ),
+        );
+        if live.in_turn.load(Ordering::SeqCst) && live.permissions.lock().unwrap().is_empty() {
+            self.inner.set_status(id, SessionStatus::Working);
+        }
+        Ok(())
     }
 
     async fn set_category(&self, id: &str, category: Category, value: &str) -> Result<(), CoreError> {
@@ -1185,6 +1232,16 @@ impl Engine {
 }
 
 /// True when a running session already uses this directory
+/// Which waiting requests a mode would not have asked about: all of them for the modes that never ask
+/// (Claude Code's bypassPermissions, Codex's full-access, Gemini CLI's yolo), file edits for accept-edits modes
+fn mode_allows(mode: &str) -> Option<fn(Option<&str>) -> bool> {
+    match mode {
+        "bypassPermissions" | "full-access" | "yolo" => Some(|_| true),
+        "acceptEdits" | "autoEdit" | "auto_edit" => Some(|kind| matches!(kind, Some("edit" | "delete" | "move"))),
+        _ => None,
+    }
+}
+
 /// The mode for an everyday conversation: read-only where the agent has one (Codex), else one that asks before acting
 /// (Claude Code's default), else planning (OpenCode)
 fn chat_mode(info: &SessionInfo) -> Option<String> {
@@ -1325,8 +1382,16 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
             AgentMessage::PermissionRequest { request_id, request } => {
                 live.touch();
                 let pid = format!("perm-{}", inner.perm_seq.fetch_add(1, Ordering::SeqCst));
-                live.permissions.lock().unwrap().insert(pid.clone(), request_id);
                 let v = serde_json::to_value(&*request).unwrap_or(Value::Null);
+                let allow = v["options"].as_array().and_then(|a| {
+                    let kind = |k: &str| a.iter().find(|o| o["kind"] == k);
+                    kind("allow_once")
+                        .or_else(|| a.iter().find(|o| o["kind"].as_str().is_some_and(|k| k.starts_with("allow"))))
+                        .and_then(|o| o["optionId"].as_str())
+                        .map(str::to_string)
+                });
+                let kind = v["toolCall"]["kind"].as_str().map(str::to_string);
+                live.permissions.lock().unwrap().insert(pid.clone(), Pending { request_id, allow, kind });
                 let options = v["options"]
                     .as_array()
                     .map(|a| {

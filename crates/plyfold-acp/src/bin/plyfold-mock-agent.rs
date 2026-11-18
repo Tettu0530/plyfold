@@ -37,7 +37,7 @@ struct State {
 const CONFIG: &[(&str, &str, &[&str])] = &[
     ("model", "model", &["mock-large", "mock-small"]),
     ("effort", "thought_level", &["low", "medium", "high"]),
-    ("mode", "mode", &["default", "plan", "auto"]),
+    ("mode", "mode", &["default", "plan", "auto", "acceptEdits", "bypassPermissions"]),
 ];
 
 fn config_options(values: &HashMap<String, String>) -> Value {
