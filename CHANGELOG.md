@@ -4,13 +4,21 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
-### Panes
-
-- The touched-files pane steps to the previous or next file with ← and →, or the buttons beside the file name, which also show where it is (2 / 5)
-
 ### Fixed
 
 - Opening a conversation the CLI already has no longer fails in a folder that is not a git repository: it opens in the folder itself, as it also does when the new session screen is set to work in place
+
+### Security
+
+Fixes from a dynamic review that reproduced each finding of a static review:
+
+- Git: Plyfold's own git calls turn off what a repository's config could make them run (the file system monitor, external diff and text conversion), so viewing a diff or searching files no longer runs it. Before running git in a worktree, Plyfold checks that its `.git` still points at the repository; an agent that replaced it to point git at a directory of its own is refused. A worktree folder deleted from inside no longer moves its session to the repository itself. A branch named like an option is not pushed
+- Permissions Plyfold answers itself (conversations, side chats, Settings → Repositories) are allowed only once, never from now on; a request that carries a command counts as one whatever the agent labels it; reads and searches are allowed only inside the conversation's folder or the repository; unknown kinds are not allowed. A conversation's mode can no longer be changed through the older mode call, and a conversation whose agent has no mode that asks says so
+- Images are read only when their bytes are an image, from a regular file and up to the limit, so a link named like an image cannot read out another file, a pipe or a device
+- An agent line over 64 MiB closes the connection instead of growing memory without end
+- `plyfold.db` and `config.toml` are readable by their user only
+- A profile name in a hand-written `config.toml` cannot leave the profiles folder, and a profile's files are never written through a link
+- Developer tools: `plyfold-probe` no longer reads `probe.toml` from the current directory and applies `--permission reject` to file reads and writes; the mock agent is swapped in only in debug builds
 
 ### Sessions
 
@@ -26,6 +34,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ### Panes
 
+- The touched-files pane steps to the previous or next file with ← and →, or the buttons beside the file name, which also show where it is (2 / 5)
 - Touched files open as a pane beside the session instead of a menu: the files it read or edited in a list, and the picked one's contents beside it (text with line numbers, or the image). Show in Finder (File Explorer on Windows), open in the editor and copy the path are buttons above the contents. ↑ and ↓ move through the list
 
 ### Conversation

@@ -522,8 +522,24 @@ impl Engine {
         self.launch(&rec.id, profile, &dir, Resume::New).await?;
         // A mode in which the agent asks before acting (so Plyfold's policy answers) or only reads, rather than one that
         // acts on its own (Claude Code's auto, for example)
-        if let Some(mode) = self.session_info(&rec.id).and_then(|info| chat_mode(&info)) {
-            let _ = self.set_category(&rec.id, Category::Mode, &mode).await;
+        let info = self.session_info(&rec.id);
+        match info.as_ref().and_then(chat_mode) {
+            Some(mode) => {
+                let _ = self.set_category(&rec.id, Category::Mode, &mode).await;
+            }
+            // The agent has modes, but none Plyfold knows to ask before acting: its own default may act without asking,
+            // and then no request reaches Plyfold's policy
+            None if info.is_some_and(|i| !i.modes.is_empty() || i.option(Category::Mode).is_some()) => {
+                inner.notice(
+                    &rec.id,
+                    plyfold_i18n::tr!(
+                        "このエージェントには、操作の前に確認するモードが見つかりませんでした。会話でも、エージェントが確認せずにファイルを編集したりコマンドを実行したりすることがあります",
+                        "This agent has no mode Plyfold knows to ask before acting, so even in a conversation it may edit files or run commands without asking",
+                        "未找到此代理在操作前确认的模式，因此即使在对话中，代理也可能不经确认就编辑文件或执行命令"
+                    ),
+                );
+            }
+            None => {}
         }
         Ok(inner.store.get_session(&rec.id)?)
     }
@@ -1041,7 +1057,16 @@ impl Engine {
     }
 
     /// Change a config option by ID
+    /// A conversation's or side chat's mode option stays as Plyfold set it (see set_by_category)
     pub async fn set_config_option(&self, id: &str, config_id: &str, value: &str) -> Result<(), CoreError> {
+        let is_mode = self.inner.live(id)?.info.lock().unwrap().option(Category::Mode).is_some_and(|o| o.id == config_id);
+        if is_mode && Policy::of(&self.inner.store.get_session(id)?) != Policy::Ask {
+            return Err(CoreError::ModeLocked);
+        }
+        self.apply_config_option(id, config_id, value).await
+    }
+
+    async fn apply_config_option(&self, id: &str, config_id: &str, value: &str) -> Result<(), CoreError> {
         let live = self.inner.live(id)?;
         let opts = live.client.set_config_option(&live.sid(), config_id, value).await?;
         live.info.lock().unwrap().set_config(&opts);
@@ -1101,13 +1126,21 @@ impl Engine {
         let live = self.inner.live(id)?;
         let config_id = live.info.lock().unwrap().option(category).map(|o| o.id.clone());
         match (config_id, category) {
-            (Some(cid), _) => self.set_config_option(id, &cid, value).await,
-            (None, Category::Mode) => self.set_mode(id, value).await,
+            (Some(cid), _) => self.apply_config_option(id, &cid, value).await,
+            (None, Category::Mode) => self.apply_mode(id, value).await,
             (None, c) => Err(CoreError::NoSuchOption(c)),
         }
     }
 
+    /// The legacy session/set_mode. Locked for conversations and side chats, like set_by_category
     pub async fn set_mode(&self, id: &str, mode_id: &str) -> Result<(), CoreError> {
+        if Policy::of(&self.inner.store.get_session(id)?) != Policy::Ask {
+            return Err(CoreError::ModeLocked);
+        }
+        self.apply_mode(id, mode_id).await
+    }
+
+    async fn apply_mode(&self, id: &str, mode_id: &str) -> Result<(), CoreError> {
         let live = self.inner.live(id)?;
         live.client.set_mode(&live.sid(), mode_id).await?;
         live.info.lock().unwrap().current_mode = Some(mode_id.to_string());
@@ -1213,6 +1246,19 @@ impl Engine {
         if Path::new(wt).exists() {
             return Ok(rec);
         }
+        // Removed through git (git worktree remove, or Plyfold's cleanup): continue in the repository. A folder that
+        // vanished while git still lists it (deleted from inside, by the agent for one) is not taken as permission to
+        // work in the repository itself
+        if let Some(repo) = rec.repo_path.as_deref()
+            && plyfold_worktree::is_registered(Path::new(repo), Path::new(wt))
+        {
+            return Err(plyfold_worktree::WorktreeError::Op(plyfold_i18n::tr!(
+                "worktree {wt} のフォルダがありませんが、git にはまだ登録されています。元のリポジトリで続けるなら、リポジトリで git worktree prune を実行してから開き直してください",
+                "The folder of the worktree {wt} is gone, but git still lists it. To continue in the original repository, run git worktree prune in it and open the session again",
+                "worktree {wt} 的文件夹不存在，但 git 中仍有登记。若要在原仓库中继续，请在仓库中运行 git worktree prune 后重新打开会话"
+            ))
+            .into());
+        }
         self.inner.store.set_workspace(id, rec.repo_path.as_deref(), None, None, None)?;
         self.inner.notice(
             id,
@@ -1240,6 +1286,7 @@ impl Engine {
     fn git_dir(&self, id: &str) -> Result<(PathBuf, Option<String>), CoreError> {
         let rec = self.reconcile_workspace(id)?;
         if let Some(wt) = worktree_of(&rec) {
+            plyfold_worktree::verify(&wt)?;
             let base = plyfold_worktree::ops::status(&wt).ok().and_then(|s| s.target);
             return Ok((wt.path, base));
         }
@@ -1374,6 +1421,58 @@ impl Engine {
 }
 
 /// True when a running session already uses this directory
+/// The option that allows a request this once. Never the one that allows it from now on: an answer Plyfold gives on
+/// the user's behalf must not outlast the request
+fn allow_once(v: &Value) -> Option<String> {
+    v["options"].as_array()?.iter().find(|o| o["kind"] == "allow_once")?["optionId"].as_str().map(str::to_string)
+}
+
+/// The kind a request is treated as: "execute" when it carries a command, whatever the agent labelled it
+fn effective_kind(v: &Value) -> Option<&str> {
+    let raw = &v["toolCall"]["rawInput"];
+    if raw.get("command").or_else(|| raw.get("cmd")).is_some_and(|c| !c.is_null()) {
+        return Some("execute");
+    }
+    v["toolCall"]["kind"].as_str()
+}
+
+/// The paths a request is about (toolCall.locations)
+fn locations(v: &Value) -> Vec<PathBuf> {
+    v["toolCall"]["locations"].as_array().map(|a| a.iter().filter_map(|l| l["path"].as_str()).map(PathBuf::from).collect()).unwrap_or_default()
+}
+
+/// A path with `.` and `..` resolved, through links where it exists
+fn resolved(p: &Path) -> PathBuf {
+    if let Ok(c) = std::fs::canonicalize(p) {
+        return c;
+    }
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        match c {
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => out.push(other),
+        }
+    }
+    // An existing parent may itself be a link
+    match (out.parent().and_then(|d| std::fs::canonicalize(d).ok()), out.file_name()) {
+        (Some(d), Some(f)) => d.join(f),
+        _ => out,
+    }
+}
+
+/// Whether there are paths and each is inside one of the roots
+fn inside(paths: &[PathBuf], roots: &[PathBuf]) -> bool {
+    let roots: Vec<PathBuf> = roots.iter().map(|r| resolved(r)).collect();
+    !paths.is_empty() && paths.iter().all(|p| p.is_absolute() && roots.iter().any(|r| resolved(p).starts_with(r)))
+}
+
+fn self_chat_dir(inner: &Inner, id: &str) -> PathBuf {
+    inner.data_dir.join("chats").join(id)
+}
+
 /// Which waiting requests a mode would not have asked about: all of them for the modes that never ask
 /// (Claude Code's bypassPermissions, Codex's full-access, Gemini CLI's yolo), file edits for accept-edits modes
 fn mode_allows(mode: &str) -> Option<fn(Option<&str>) -> bool> {
@@ -1498,10 +1597,17 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
                         .map(str::to_string)
                 };
                 let title = v["toolCall"]["title"].as_str().unwrap_or_default().to_string();
-                // An everyday chat may look things up; nothing that changes files or runs commands
-                let looks_up = matches!(v["toolCall"]["kind"].as_str(), Some("fetch" | "search" | "read" | "think"));
-                if live.policy == Policy::LookUpOnly && looks_up {
-                    let _ = live.client.respond_permission(request_id, option("allow").as_deref()).await;
+                // An everyday chat may look things up on the web, and read or search inside its own folder; nothing that
+                // changes files, runs commands, or reaches the rest of the disk. The kind is the agent's own label, so a
+                // request that carries a command counts as one whatever it is labelled, and paths are checked
+                let looks_up = live.policy == Policy::LookUpOnly
+                    && match effective_kind(&v) {
+                        Some("fetch") => true,
+                        Some("read" | "search") => inside(&locations(&v), &[self_chat_dir(inner, &id)]),
+                        _ => false,
+                    };
+                if let (true, Some(once)) = (looks_up, allow_once(&v)) {
+                    let _ = live.client.respond_permission(request_id, Some(&once)).await;
                 } else {
                     // Decline once rather than cancel, so the agent carries on and answers without the change
                     let _ = live.client.respond_permission(request_id, option("reject").as_deref()).await;
@@ -1533,11 +1639,26 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
                         .map(str::to_string)
                 });
                 let kind = v["toolCall"]["kind"].as_str().map(str::to_string);
-                // A kind the repository always allows is answered here, without showing the request
-                let repo = inner.store.get_session(&id).ok().and_then(|r| r.repo_path);
-                if allow.is_some() && repo.is_some_and(|r| inner.repos.get(&r).allows(kind.as_deref())) {
-                    let _ = live.client.respond_permission(request_id, allow.as_deref()).await;
-                    return;
+                // A kind the repository always allows is answered here, once, without showing the request: reads and
+                // edits only inside the repository or its worktree, and a request carrying a command only when commands
+                // are allowed (the kind is the agent's own label)
+                if let Ok(rec) = inner.store.get_session(&id)
+                    && let Some(repo) = rec.repo_path.as_deref()
+                    && let Some(once) = allow_once(&v)
+                {
+                    let kind = effective_kind(&v);
+                    let roots: Vec<PathBuf> = [rec.worktree_path.as_deref(), Some(repo)].into_iter().flatten().map(PathBuf::from).collect();
+                    let within = || inside(&locations(&v), &roots);
+                    let rule = inner.repos.get(repo);
+                    let ok = rule.allows(kind)
+                        && match kind {
+                            Some("read" | "search" | "edit" | "delete" | "move") => within(),
+                            _ => true,
+                        };
+                    if ok {
+                        let _ = live.client.respond_permission(request_id, Some(&once)).await;
+                        return;
+                    }
                 }
                 live.permissions.lock().unwrap().insert(pid.clone(), Pending { request_id, allow, kind });
                 let options = v["options"]

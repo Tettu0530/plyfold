@@ -216,6 +216,12 @@ fn write_doc(path: &Path, doc: &DocumentMut) -> Result<(), ProfileError> {
     // Write to a separate file and then replace, so a crash midway cannot corrupt it
     let tmp = path.with_extension("toml.tmp");
     std::fs::write(&tmp, doc.to_string())?;
+    // Profiles name providers and keys' keychain entries: this user only
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))?;
+    }
     std::fs::rename(tmp, path)?;
     Ok(())
 }

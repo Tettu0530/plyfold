@@ -21,9 +21,10 @@ use scenario::Opts;
 #[derive(Parser)]
 #[command(name = "plyfold-probe", about = "Checks how well each agent CLI supports ACP")]
 struct Cli {
-    /// Config file
-    #[arg(long, global = true, default_value = "probe.toml")]
-    config: PathBuf,
+    /// Config file (default: probe.toml at the root of the repository this probe was built from; never one found in
+    /// the current directory, which a checkout could use to run commands of its own)
+    #[arg(long, global = true)]
+    config: Option<PathBuf>,
     /// Working directory (default: probe-runs/workspace)
     #[arg(long, global = true)]
     cwd: Option<PathBuf>,
@@ -112,9 +113,11 @@ async fn main() -> Result<()> {
         };
     }
 
-    let cfg = Config::load(&cli.config)?;
+    let config = cli.config.clone().unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../probe.toml"));
+    eprintln!("config: {}", config.display());
+    let cfg = Config::load(&config)?;
     let opts =
-        Opts { root: scenario::root_of(&cli.config), policy: Policy::Ask, quiet: false, cwd: cli.cwd.clone(), auth: cli.auth.clone(), mode: cli.mode.clone() };
+        Opts { root: scenario::root_of(&config), policy: Policy::Ask, quiet: false, cwd: cli.cwd.clone(), auth: cli.auth.clone(), mode: cli.mode.clone() };
 
     match cli.cmd {
         Cmd::List => {

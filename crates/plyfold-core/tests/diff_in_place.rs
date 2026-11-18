@@ -151,3 +151,25 @@ async fn a_worktree_removed_outside_plyfold_falls_back_to_the_repository() {
     eng.reopen_session(&s.id).await.unwrap();
     eng.close_session(&s.id).await.unwrap();
 }
+
+#[tokio::test]
+async fn a_worktree_deleted_from_inside_does_not_move_the_session_to_the_repository() {
+    let base = tmp("deleted");
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    git(&repo, &["init", "-q", "-b", "main"]);
+    std::fs::write(repo.join("a.txt"), "one\n").unwrap();
+    git(&repo, &["add", "a.txt"]);
+    git(&repo, &["commit", "-qm", "init"]);
+
+    let eng = engine(&base.join("state"));
+    let s = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: repo.clone(), worktree: true }).await.unwrap();
+    eng.close_session(&s.id).await.unwrap();
+    // The folder goes, but git still lists the worktree (as when the agent deletes its own folder)
+    std::fs::remove_dir_all(s.worktree_path.as_deref().unwrap()).unwrap();
+
+    assert!(eng.git_info(&s.id).is_err());
+    assert!(eng.reopen_session(&s.id).await.is_err());
+    let rec = eng.store().get_session(&s.id).unwrap();
+    assert_eq!(rec.worktree_path, s.worktree_path, "still the worktree session it was");
+}

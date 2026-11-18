@@ -168,12 +168,22 @@ impl Config {
         let mut env_summary = Vec::new();
         let mut secret_values = Vec::new();
 
-        let profile_dir = state_dir.join("profiles").join(target);
+        // A name from a hand-written config.toml is a folder name here: one plain component, as the UI allows
+        let name = safe_rel("profile", target)?;
+        if name.components().count() != 1 {
+            return Err(ProfileError::PathEscape("profile", target.into()));
+        }
+        let profile_dir = state_dir.join("profiles").join(name);
         if profile.isolate {
             let var = agent.config_dir_env.as_ref().ok_or_else(|| ProfileError::CannotIsolate(profile.agent.clone()))?;
             std::fs::create_dir_all(&profile_dir)?;
             for (rel, content) in &profile.files {
-                let p = profile_dir.join(safe_rel("files", rel)?);
+                let rel_path = safe_rel("files", rel)?;
+                // Never through a link (one an earlier run's "links" made, say): the file would land outside
+                if through_link(&profile_dir, &rel_path) {
+                    return Err(ProfileError::PathEscape("files", rel.clone()));
+                }
+                let p = profile_dir.join(rel_path);
                 if let Some(parent) = p.parent() {
                     std::fs::create_dir_all(parent)?;
                 }
@@ -224,6 +234,22 @@ impl Config {
             env_summary,
         })
     }
+}
+
+/// Whether the folder itself, or any part of `rel` under it, is a symbolic link
+fn through_link(dir: &Path, rel: &Path) -> bool {
+    let is_link = |p: &Path| p.symlink_metadata().is_ok_and(|m| m.file_type().is_symlink());
+    let mut p = dir.to_path_buf();
+    if is_link(&p) {
+        return true;
+    }
+    for c in rel.components() {
+        p.push(c);
+        if is_link(&p) {
+            return true;
+        }
+    }
+    false
 }
 
 fn safe_rel(kind: &'static str, rel: &str) -> Result<PathBuf, ProfileError> {
@@ -290,6 +316,39 @@ isolate = true
 keys = { OPENAI_API_KEY = "keychain" }
 links = { "auth.json" = "/nonexistent/auth.json" }
 "#;
+
+    #[test]
+    fn names_and_files_stay_inside_the_profile_folder() {
+        let d = tmp("escape");
+        let outside = d.join("outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        let secrets = MemoryStore::default();
+        // A name that is a path
+        let toml = r#"
+[agents.c]
+command = "c"
+config_dir_env = "C_HOME"
+[profiles."../../x"]
+agent = "c"
+isolate = true
+"#;
+        let cfg = Config::from_toml(toml).unwrap();
+        assert!(matches!(cfg.resolve("../../x", &d, &d, &secrets), Err(ProfileError::PathEscape("profile", _))));
+        // One run's links leave a link where the next run's files write: that write must not go through it
+        // (Windows needs a privilege to make links to folders)
+        #[cfg(unix)]
+        {
+            let profile = |body: String| {
+                Config::from_toml(&format!("[agents.c]\ncommand = \"c\"\nconfig_dir_env = \"C_HOME\"\n[profiles.p]\nagent = \"c\"\nisolate = true\n{body}"))
+                    .unwrap()
+            };
+            let links = profile(format!("links = {{ \"sub\" = \"{}\" }}\n", outside.display().to_string().replace('\\', "/")));
+            links.resolve("p", &d, &d, &secrets).unwrap();
+            let files = profile("files = { \"sub/note\" = \"PLYFOLD-CANARY\" }\n".into());
+            assert!(matches!(files.resolve("p", &d, &d, &secrets), Err(ProfileError::PathEscape("files", _))));
+            assert!(!outside.join("note").exists());
+        }
+    }
 
     #[test]
     fn builtin_agent_as_default_profile() {

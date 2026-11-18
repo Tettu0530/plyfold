@@ -21,18 +21,20 @@ fn fail(msg: impl Into<String>) -> WorktreeError {
 }
 
 pub fn status(wt: &Worktree) -> Result<WtStatus, WorktreeError> {
+    crate::verify(wt)?;
     let dirty = !git(&wt.path, &["status", "--porcelain"])?.trim().is_empty();
     let commits = git(&wt.path, &["rev-list", "--count", &format!("{}..HEAD", wt.base)])?.trim().parse().unwrap_or(0);
     let target = git(&wt.repo, &["symbolic-ref", "--quiet", "--short", "HEAD"]).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
     let merged = commits > 0
         && target.as_ref().is_some_and(|t| {
-            crate::command("git").args(["merge-base", "--is-ancestor", &wt.branch, t]).current_dir(&wt.repo).status().is_ok_and(|s| s.success())
+            crate::git_command().args(["merge-base", "--is-ancestor", &wt.branch, t]).current_dir(&wt.repo).status().is_ok_and(|s| s.success())
         });
     Ok(WtStatus { dirty, commits, target, merged })
 }
 
 /// Commits all changes in the working tree. Returns the short hash
 pub fn commit(wt: &Worktree, message: &str) -> Result<String, WorktreeError> {
+    crate::verify(wt)?;
     let message = message.trim();
     if message.is_empty() {
         return Err(fail(plyfold_i18n::tr!("コミットのメッセージが空です", "The commit message is empty", "提交信息为空")));
@@ -48,6 +50,7 @@ pub fn commit(wt: &Worktree, message: &str) -> Result<String, WorktreeError> {
 /// Merges the session branch into the branch currently checked out in the original repository. Returns the target's name.
 /// On a conflict, aborts the merge and restores the original repository to its previous state
 pub fn merge(wt: &Worktree) -> Result<String, WorktreeError> {
+    crate::verify(wt)?;
     let st = status(wt)?;
     if st.dirty {
         return Err(fail(plyfold_i18n::tr!(
@@ -87,6 +90,7 @@ fn has(cmd: &str) -> bool {
 
 /// Pushes the branch to origin and opens a GitHub PR (via gh). Returns the PR URL
 pub fn create_pr(wt: &Worktree, title: &str) -> Result<String, WorktreeError> {
+    crate::verify(wt)?;
     let st = status(wt)?;
     if st.dirty {
         return Err(fail(plyfold_i18n::tr!(
@@ -174,6 +178,7 @@ pub fn open_path_in_editor(path: &std::path::Path, prefer: &str) -> Result<Strin
 
 /// Resets to the base commit (drops commits, uncommitted changes and untracked files; ignored files are kept)
 pub fn discard(wt: &Worktree) -> Result<(), WorktreeError> {
+    crate::verify(wt)?;
     git(&wt.path, &["reset", "-q", "--hard", &wt.base])?;
     git(&wt.path, &["clean", "-fdq"])?;
     Ok(())

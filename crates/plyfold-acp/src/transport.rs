@@ -10,7 +10,7 @@ use std::time::Duration;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{mpsc, oneshot};
 
@@ -130,8 +130,15 @@ impl Connection {
             let tail = stderr_tail.clone();
             let redactor = redactor.clone();
             tokio::spawn(async move {
-                let mut lines = BufReader::new(stderr).lines();
-                while let Ok(Some(line)) = lines.next_line().await {
+                let mut reader = BufReader::new(stderr);
+                let mut buf = Vec::new();
+                loop {
+                    let line = match read_line_capped(&mut reader, &mut buf, MAX_STDERR_LINE).await {
+                        Ok(LineRead::Line) => String::from_utf8_lossy(&buf).into_owned(),
+                        // Only the part kept is shown
+                        Ok(LineRead::TooLong) => format!("{}…", String::from_utf8_lossy(&buf)),
+                        Ok(LineRead::End) | Err(_) => break,
+                    };
                     let mut t = tail.lock().unwrap();
                     if t.len() == STDERR_TAIL {
                         t.pop_front();
@@ -149,9 +156,27 @@ impl Connection {
             let delivered = delivered.clone();
             let redactor = redactor.clone();
             let sink = sink.clone();
+            let tail = stderr_tail.clone();
             tokio::spawn(async move {
-                let mut lines = BufReader::new(stdout).lines();
-                while let Ok(Some(line)) = lines.next_line().await {
+                let mut reader = BufReader::new(stdout);
+                let mut buf = Vec::new();
+                loop {
+                    match read_line_capped(&mut reader, &mut buf, MAX_FRAME).await {
+                        Ok(LineRead::Line) => {}
+                        Ok(LineRead::End) | Err(_) => break,
+                        // A message this large is not one Plyfold can hold: the connection ends rather than the app
+                        Ok(LineRead::TooLong) => {
+                            tracing::warn!("the agent sent a line over {} MiB; closing the connection", MAX_FRAME >> 20);
+                            tail.lock().unwrap().push_back(plyfold_i18n::tr!(
+                                "（エージェントが {} MiB を超える 1 行を送ったので、接続を閉じました）",
+                                "(the agent sent a line over {} MiB, so the connection was closed)",
+                                "（代理发送了超过 {} MiB 的一行，因此已关闭连接）",
+                                MAX_FRAME >> 20
+                            ));
+                            break;
+                        }
+                    }
+                    let line = String::from_utf8_lossy(&buf).into_owned();
                     if line.trim().is_empty() {
                         continue;
                     }
@@ -288,5 +313,74 @@ fn dispatch(msg: Value, pending: &Pending, tx: &mpsc::UnboundedSender<Incoming>,
             let _ = waiter.send(result);
         }
         (None, None) => {}
+    }
+}
+
+/// The longest message read from an agent (one JSON line). Large enough for images and long outputs; past it the
+/// connection is closed instead of growing memory without end
+const MAX_FRAME: usize = 64 << 20;
+/// The longest stderr line kept (the rest of it is dropped)
+const MAX_STDERR_LINE: usize = 64 << 10;
+
+enum LineRead {
+    Line,
+    /// `buf` holds the first `max` bytes; the rest of the line is skipped
+    TooLong,
+    End,
+}
+
+/// Read one line (without its newline) into `buf`, keeping at most `max` bytes of it
+async fn read_line_capped<R: AsyncBufRead + Unpin>(r: &mut R, buf: &mut Vec<u8>, max: usize) -> std::io::Result<LineRead> {
+    buf.clear();
+    let mut over = false;
+    loop {
+        let avail = r.fill_buf().await?;
+        if avail.is_empty() {
+            return Ok(if over {
+                LineRead::TooLong
+            } else if buf.is_empty() {
+                LineRead::End
+            } else {
+                LineRead::Line
+            });
+        }
+        let (chunk, done) = match avail.iter().position(|&b| b == b'\n') {
+            Some(i) => (&avail[..i], Some(i + 1)),
+            None => (avail, None),
+        };
+        if !over {
+            let room = max.saturating_sub(buf.len());
+            buf.extend_from_slice(&chunk[..chunk.len().min(room)]);
+            over = chunk.len() > room;
+        }
+        let used = done.unwrap_or(avail.len());
+        r.consume(used);
+        if done.is_some() {
+            if buf.last() == Some(&b'\r') {
+                buf.pop();
+            }
+            return Ok(if over { LineRead::TooLong } else { LineRead::Line });
+        }
+    }
+}
+
+#[cfg(test)]
+mod capped_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn lines_are_read_up_to_the_cap() {
+        let data = b"one\r\ntwo\nthree-is-long\nfour".to_vec();
+        let mut r = BufReader::with_capacity(4, &data[..]);
+        let mut buf = Vec::new();
+        let mut got = Vec::new();
+        loop {
+            match read_line_capped(&mut r, &mut buf, 8).await.unwrap() {
+                LineRead::Line => got.push(String::from_utf8(buf.clone()).unwrap()),
+                LineRead::TooLong => got.push(format!("{}…", String::from_utf8(buf.clone()).unwrap())),
+                LineRead::End => break,
+            }
+        }
+        assert_eq!(got, ["one", "two", "three-is…", "four"]);
     }
 }
