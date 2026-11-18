@@ -56,6 +56,10 @@ function useShortcuts() {
       const step = (d: number) => s.focusPane(shown[(shown.indexOf(s.focusedPane) + d + shown.length) % shown.length]);
       const run: Record<Exclude<Action, "attach">, () => void> = {
         search: () => s.setSearchOpen(!s.searchOpen),
+        find: () => {
+          const id = s.panes[s.focusedPane];
+          if (id && s.sessions[id]) s.toggleFind(id);
+        },
         settings: () => (s.settingsView ? s.closeSettings() : s.openSettings()),
         toggleSidebar: () => s.toggleSidebar(),
         newSession: () => s.newDraft(),

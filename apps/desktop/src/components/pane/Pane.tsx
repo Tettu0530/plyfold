@@ -242,6 +242,7 @@ function SessionPane({ index }: { index: number }) {
             onResend={(t, a) => void sendPrompt(id, t, a)}
             base={r.worktree_path ?? r.repo_path ?? undefined}
             commands={view.info?.commands?.length ? view.info.commands : view.commands?.length ? view.commands : (cached?.commands ?? [])}
+            sessionId={id}
           />
 
           <div className="px-5">

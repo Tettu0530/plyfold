@@ -11,6 +11,7 @@ import { isMac } from "./platform";
 export const ACTIONS = [
   "newSession",
   "search",
+  "find",
   "settings",
   "toggleSidebar",
   "stop",
@@ -33,6 +34,7 @@ export type Bindings = Record<Action, string>;
 export const DEFAULT_BINDINGS: Bindings = {
   newSession: "cmd+n",
   search: "cmd+k",
+  find: "cmd+f",
   settings: "cmd+,",
   toggleSidebar: "cmd+b",
   stop: "cmd+.",

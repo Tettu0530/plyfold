@@ -74,6 +74,7 @@ export const settings: Record<keyof typeof source, string> = {
   kbFixed: "不可更改",
   kbNewSession: "新建会话",
   kbSearch: "搜索",
+  kbFind: "在会话中查找",
   kbSettings: "打开设置",
   kbToggleSidebar: "显示或隐藏侧边栏",
   kbStop: "停止",

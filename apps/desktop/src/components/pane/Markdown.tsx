@@ -16,6 +16,7 @@ import { useT, contentLang } from "@/i18n";
 import { api, inTauri } from "@/lib/api";
 import { normalizeMath } from "@/lib/math";
 import { cn } from "@/lib/utils";
+import { markHast } from "@/state/find";
 import { CopyButton } from "./MessageActions";
 import { imageSource } from "@/lib/imageSrc";
 import { PreviewGroup, useFileImage } from "../ImagePreview";
@@ -28,8 +29,16 @@ export function openLink(href: string | undefined) {
   else window.open(href, "_blank", "noopener");
 }
 
-/** Code block: shows the language name and a copy button on top */
-function CodeBlock({ lang, code }: { lang: string | null; code: string }) {
+/** Text of a React node, skipping the find marks wrapped around it */
+function plainText(node: React.ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(plainText).join("");
+  if (node && typeof node === "object" && "props" in node) return plainText((node as React.ReactElement<{ children?: React.ReactNode }>).props.children);
+  return "";
+}
+
+/** Code block: shows the language name and a copy button on top. `shown` is the code with find marks, when there are any */
+function CodeBlock({ lang, code, shown }: { lang: string | null; code: string; shown?: React.ReactNode }) {
   const t = useT();
   return (
     <div className="my-2 overflow-hidden rounded-[10px] border bg-card">
@@ -38,7 +47,7 @@ function CodeBlock({ lang, code }: { lang: string | null; code: string }) {
         <CopyButton text={code} label={t("transcript.copyCode")} />
       </div>
       <pre className="m-0 overflow-x-auto px-3 py-2 font-mono text-xs leading-5 select-text">
-        <code>{code}</code>
+        <code>{shown ?? code}</code>
       </pre>
     </div>
   );
@@ -138,12 +147,22 @@ const components: Components = {
   ),
   pre: ({ children }) => <>{children}</>,
   code: ({ className, children }) => {
-    const text = String(children ?? "");
+    const text = plainText(children);
     const lang = /language-([\w+-]+)/.exec(className ?? "")?.[1] ?? null;
-    // Block code (fenced with ```) has a language class or contains a newline
-    if (lang || text.includes("\n")) return <CodeBlock lang={lang} code={text.replace(/\n$/, "")} />;
+    const marked = Array.isArray(children) ? children.some((c) => typeof c !== "string") : typeof children === "object" && children !== null;
+    // Block code (fenced with ```) has a language class or contains a newline. Marks replace the text only while finding
+    if (lang || text.includes("\n")) return <CodeBlock lang={lang} code={text.replace(/\n$/, "")} shown={marked ? children : undefined} />;
     return <code className="rounded-[4px] bg-muted px-1 py-px font-mono text-[12px]">{children}</code>;
   },
+  // Find marks (see markHast). A real <mark> is yellow; this stays on the neutral tokens
+  mark: ({ children, ...props }) => (
+    <span
+      data-find-hit={(props as { "data-find-hit"?: string })["data-find-hit"]}
+      className={cn("rounded-sm bg-foreground/15", (props as { "data-current"?: string })["data-current"] && "bg-foreground/30")}
+    >
+      {children}
+    </span>
+  ),
 };
 
 // Math: $…$ inline and $$…$$ blocks (\(…\) and \[…\] are turned into those first). KaTeX runs with its defaults that
@@ -192,13 +211,31 @@ function rehypeGallery() {
 
 const urlTransform = (url: string, key: string) => (/^file:/i.test(url) || (key === "src" && /^data:image\//i.test(url)) ? url : defaultUrlTransform(url));
 
-export const Markdown = memo(function Markdown({ text, streaming, base }: { text: string; streaming?: boolean; base?: string }) {
+export const Markdown = memo(function Markdown({
+  text,
+  streaming,
+  base,
+  needle,
+  activeOccurrence,
+}: {
+  text: string;
+  streaming?: boolean;
+  base?: string;
+  /** Find query. Marks the matches; `activeOccurrence` is the one the find bar is on, within this message */
+  needle?: string;
+  activeOccurrence?: number | null;
+}) {
+  const source = normalizeMath(text);
+  const plugins =
+    needle && needle.trim().length >= 2
+      ? [...rehypePlugins, () => (tree: HastNode) => markHast(tree, source, needle, activeOccurrence ?? null)]
+      : rehypePlugins;
   return (
     <div lang={contentLang(text)} className={cn("min-w-0 break-words select-text", streaming && "md-streaming")}>
       <ImageBase.Provider value={base}>
         <PreviewGroup>
-          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={rehypePlugins} components={components} urlTransform={urlTransform}>
-            {normalizeMath(text)}
+          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={plugins} components={components} urlTransform={urlTransform}>
+            {source}
           </ReactMarkdown>
         </PreviewGroup>
       </ImageBase.Provider>

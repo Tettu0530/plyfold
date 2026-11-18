@@ -26,5 +26,9 @@ export const transcript: Record<keyof typeof source, string> = {
   copyCode: "Copy code",
   image: "Image: {alt}",
   scrollToBottom: "Jump to latest",
+  findPlaceholder: "Find in this conversation",
+  findNone: "No matches",
+  findPrevious: "Previous match",
+  findNext: "Next match",
   newBelow: "New output below",
 };

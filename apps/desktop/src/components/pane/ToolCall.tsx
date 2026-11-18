@@ -9,6 +9,7 @@ import { seconds } from "@/lib/format";
 import { lineDiff } from "@/lib/lineDiff";
 import { cn } from "@/lib/utils";
 import type { DiffPreview, ToolCall } from "@/state/transcript";
+import { Marked } from "./Marked";
 import { smooth, snappy } from "../motion";
 import { Unified } from "../PatchLines";
 import { Spinner } from "../icons";
@@ -142,21 +143,22 @@ function Output({ text }: { text: string }) {
   );
 }
 
-/** The executed command (long ones such as heredocs are collapsed) */
-function Command({ text }: { text: string }) {
+/** The executed command (long ones such as heredocs are collapsed). A find match shows the whole command, marks included */
+function Command({ text, query, active }: { text: string; query?: string; active?: number | null }) {
   const c = useClamp(text, 12);
+  const marked = !!query && active != null;
   return (
     <div>
       <pre className="m-0 font-mono text-xs leading-5 break-all whitespace-pre-wrap select-text">
         <span className="text-muted-foreground select-none">$ </span>
-        {c.text}
+        {marked ? <Marked text={text} query={query} active={active ?? null} /> : c.text}
       </pre>
-      {c.more && <div className="-mx-3">{c.more}</div>}
+      {!marked && c.more && <div className="-mx-3">{c.more}</div>}
     </div>
   );
 }
 
-function Detail({ t }: { t: ToolCall }) {
+function Detail({ t, query, active }: { t: ToolCall; query?: string; active?: number | null }) {
   const tr = useT();
   const output = t.stream || t.result;
   const web = t.toolKind === "fetch" || t.toolKind === "search";
@@ -197,7 +199,7 @@ function Detail({ t }: { t: ToolCall }) {
   return (
     <div className="flex flex-col gap-2 px-3 pt-0.5 pb-3">
       {t.note && <p className="m-0 text-xs text-muted-foreground">{t.note}</p>}
-      {showCommand && <Command text={t.command!} />}
+      {showCommand && <Command text={t.command!} query={query} active={active} />}
       {showPath && <p className="m-0 font-mono text-xs break-all text-muted-foreground select-text">{t.path}</p>}
       {output ? (
         <Output text={output} />
@@ -208,15 +210,23 @@ function Detail({ t }: { t: ToolCall }) {
   );
 }
 
-function ToolRow({ t, first }: { t: ToolCall; first: boolean }) {
+function ToolRow({ t, first, itemIndex, query, active }: { t: ToolCall; first: boolean; itemIndex: number; query?: string; active: number | null }) {
   const tr = useT();
   const [open, setOpen] = useState(false);
+  // The match may be in the command under the row, which is closed until then
+  const current = active != null;
+  useEffect(() => {
+    if (current) setOpen(true);
+  }, [current]);
   // Agents report web searches with the fetch kind too: tell them apart by the title
   const Icon = isWebSearch(t.title, t.toolKind) ? Search : (TOOL_ICONS[t.toolKind] ?? Wrench);
   const hasDetail = !!(t.command || t.path || t.note || t.stream || t.result);
   const title = t.title || t.command || tr("transcript.tool");
+  // A short command is the title itself (it is not repeated below); longer ones are marked in the detail
+  const showCommand = !!t.command && (t.command !== t.title || t.command.length > 60);
+  const markTitle = !!query && !!t.command && !showCommand;
   return (
-    <div className={cn(!first && "border-t")}>
+    <div data-find-item={itemIndex} className={cn(!first && "border-t")}>
       <button
         type="button"
         aria-expanded={hasDetail ? open : undefined}
@@ -226,7 +236,7 @@ function ToolRow({ t, first }: { t: ToolCall; first: boolean }) {
       >
         <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         <span className="min-w-0 grow truncate font-mono text-xs" title={title}>
-          {title}
+          {markTitle ? <Marked text={title} query={query} active={active} /> : title}
         </span>
         <span className="flex shrink-0">
           <Status t={t} />
@@ -247,7 +257,7 @@ function ToolRow({ t, first }: { t: ToolCall; first: boolean }) {
             transition={smooth}
             className="overflow-hidden"
           >
-            <Detail t={t} />
+            <Detail t={t} query={query} active={active} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -255,12 +265,25 @@ function ToolRow({ t, first }: { t: ToolCall; first: boolean }) {
   );
 }
 
-/** Consecutive tool calls in one frame */
-export function ToolCalls({ tools }: { tools: ToolCall[] }) {
+/** Consecutive tool calls in one frame. `find` marks the command the in-pane find is on (`active` is that occurrence, or null) */
+export function ToolCalls({
+  tools,
+  find,
+}: {
+  tools: { tool: ToolCall; itemIndex: number }[];
+  find?: { query: string; activeItem: number | null; activeOccurrence: number | null };
+}) {
   return (
     <div className="overflow-hidden rounded-[10px] border bg-card">
       {tools.map((t, j) => (
-        <ToolRow key={t.id || j} t={t} first={j === 0} />
+        <ToolRow
+          key={t.tool.id || j}
+          t={t.tool}
+          first={j === 0}
+          itemIndex={t.itemIndex}
+          query={find?.query}
+          active={find?.activeItem === t.itemIndex ? (find.activeOccurrence ?? null) : null}
+        />
       ))}
     </div>
   );
