@@ -155,7 +155,7 @@ async fn prompt(st: Arc<State>, id: Value, params: Value) {
     st.update(&sid, text_chunk("user_message_chunk", &text));
 
     let stop = if text.contains("permission") {
-        permission_flow(&st, &sid).await
+        permission_flow(&st, &sid, if text.contains("fetch") { "fetch" } else { "edit" }).await
     } else if text.contains("hang") {
         st.update(&sid, text_chunk("agent_message_chunk", "working forever..."));
         loop {
@@ -184,18 +184,20 @@ async fn prompt(st: Arc<State>, id: Value, params: Value) {
         "usage": {"inputTokens": 100, "outputTokens": output, "cachedReadTokens": 50, "totalTokens": 100 + output}}}));
 }
 
-async fn permission_flow(st: &State, sid: &str) -> &'static str {
+/// A tool call that needs permission: "edit" writes mock-output.txt when allowed, "fetch" only reports it fetched a page
+async fn permission_flow(st: &State, sid: &str, kind: &str) -> &'static str {
     let n = st.seq.fetch_add(1, Ordering::SeqCst);
     let tool_id = format!("mock-tool-{n}");
     let cwd = st.cwds.lock().unwrap().get(sid).cloned().unwrap_or_else(|| PathBuf::from("."));
     let path = cwd.join("mock-output.txt");
-    st.update(sid, json!({"sessionUpdate": "tool_call", "toolCallId": tool_id, "title": "Write mock-output.txt", "kind": "edit", "status": "pending"}));
+    let title = if kind == "fetch" { "Fetch https://example.invalid" } else { "Write mock-output.txt" };
+    st.update(sid, json!({"sessionUpdate": "tool_call", "toolCallId": tool_id, "title": title, "kind": kind, "status": "pending"}));
     let resp = st
         .request(
             "session/request_permission",
             json!({
                 "sessionId": sid,
-                "toolCall": {"toolCallId": tool_id, "title": "Write mock-output.txt", "kind": "edit"},
+                "toolCall": {"toolCallId": tool_id, "title": title, "kind": kind},
                 "options": [
                     {"optionId": "allow", "name": "Allow", "kind": "allow_once"},
                     {"optionId": "reject", "name": "Reject", "kind": "reject_once"}
@@ -208,7 +210,10 @@ async fn permission_flow(st: &State, sid: &str) -> &'static str {
         st.update(sid, json!({"sessionUpdate": "tool_call_update", "toolCallId": tool_id, "status": "failed"}));
         return "cancelled";
     }
-    if outcome["optionId"] == "allow" {
+    if outcome["optionId"] == "allow" && kind == "fetch" {
+        st.update(sid, json!({"sessionUpdate": "tool_call_update", "toolCallId": tool_id, "status": "completed"}));
+        st.update(sid, text_chunk("agent_message_chunk", "fetched the page"));
+    } else if outcome["optionId"] == "allow" {
         let old = std::fs::read_to_string(&path).ok();
         let new = format!("written by mock agent ({n})\n");
         let _ = std::fs::write(&path, &new);

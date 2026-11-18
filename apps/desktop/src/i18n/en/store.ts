@@ -8,4 +8,5 @@ export const store: Record<keyof typeof source, string> = {
   notifyTurnEnded: "Turn ended",
   newSessionTitle: "New session",
   skippedLines: "… {count, plural, one {# line} other {# lines}}",
+  newChatTitle: "New conversation",
 };

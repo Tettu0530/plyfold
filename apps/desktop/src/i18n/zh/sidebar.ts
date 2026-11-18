@@ -13,4 +13,5 @@ export const sidebar: Record<keyof typeof source, string> = {
   rowTitle: "{title}（{profile}，{age}）",
   resize: "侧边栏宽度",
   resizeHint: "拖动以调整宽度，双击恢复默认宽度。",
+  conversations: "对话",
 };

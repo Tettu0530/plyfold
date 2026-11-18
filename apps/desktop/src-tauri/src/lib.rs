@@ -304,6 +304,11 @@ async fn fork_session(state: State<'_, AppState>, id: String, new_worktree: bool
 }
 
 #[tauri::command]
+async fn start_chat(state: State<'_, AppState>, profile: String, title: String) -> CmdResult<SessionRecord> {
+    state.engine.start_chat(&profile, &title).await.map_err(err)
+}
+
+#[tauri::command]
 async fn open_side_chat(state: State<'_, AppState>, id: String) -> CmdResult<SessionRecord> {
     state.engine.open_side_chat(&id).await.map_err(err)
 }
@@ -716,6 +721,7 @@ pub fn run() {
             start_session,
             reopen_session,
             fork_session,
+            start_chat,
             open_side_chat,
             close_side_chat,
             list_cli_sessions,

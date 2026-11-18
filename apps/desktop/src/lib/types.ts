@@ -17,6 +17,8 @@ export interface SessionRecord {
   updated_at: number;
   /** A side chat: the session it was forked from (read-only, not listed, deleted when closed) */
   side_of?: string | null;
+  /** An everyday conversation (no repository; it may look things up but not edit or run commands) */
+  chat?: boolean;
 }
 
 export type Category = "model" | "thought_level" | "mode" | "other";

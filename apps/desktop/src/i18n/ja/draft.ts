@@ -20,6 +20,7 @@ export const draft = {
   choicesAfterStart: "model と effort は起動後に選べます",
   firstPrompt: "初期プロンプト",
   firstPromptPlaceholder: "初期プロンプトを入力して始める",
+  chatPlaceholder: "話しかけて始める",
   start: "始める",
   repoPath: "リポジトリのパス",
   repoSuggestions: "リポジトリの候補",
@@ -30,4 +31,7 @@ export const draft = {
   cliSessionsLoading: "読み込んでいます",
   cliSessionsEmpty: "このリポジトリには、まだ取り込める会話がありません",
   cliSessionsUntitled: "（無題）",
+  chat: "会話",
+  chatOn: "会話: リポジトリなしで話す。Web の検索と取得はでき、ファイルの編集とコマンドは使わない",
+  chatOff: "作業: リポジトリで作業する",
 } satisfies Record<string, string>;

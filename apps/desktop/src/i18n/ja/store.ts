@@ -6,4 +6,5 @@ export const store = {
   notifyTurnEnded: "ターンが終わりました",
   newSessionTitle: "新しいセッション",
   skippedLines: "… {count} 行",
+  newChatTitle: "新しい会話",
 } satisfies Record<string, string>;

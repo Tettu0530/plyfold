@@ -22,6 +22,7 @@ export const draft: Record<keyof typeof source, string> = {
   choicesAfterStart: "Choose model and effort after the agent starts",
   firstPrompt: "First prompt",
   firstPromptPlaceholder: "Type a first prompt to start",
+  chatPlaceholder: "Say something to start",
   start: "Start",
   repoPath: "Repository path",
   repoSuggestions: "Repository suggestions",
@@ -32,4 +33,7 @@ export const draft: Record<keyof typeof source, string> = {
   cliSessionsLoading: "Loading",
   cliSessionsEmpty: "This repository has no conversation to open yet",
   cliSessionsUntitled: "(untitled)",
+  chat: "Conversation",
+  chatOn: "Conversation: talk without a repository. It can search and read the web, but does not edit files or run commands",
+  chatOff: "Work: work in a repository",
 };

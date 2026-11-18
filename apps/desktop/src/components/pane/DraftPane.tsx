@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Check, Coins, FolderOpen, GitBranch, MessageSquare, Plus, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Coins, FolderOpen, GitBranch, MessageCircle, MessageSquare, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -217,37 +217,55 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
               {/* If there's not enough width, model / effort / mode wrap to a second row */}
               <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 text-xs">
                 <div className="flex items-center gap-0.5">
-                  <PopoverTrigger asChild>
-                    <button
-                      ref={liquidAnchor(repoAnchor)}
-                      type="button"
-                      aria-label={t("draft.repo")}
-                      title={draft.repo}
-                      className={cn(
-                        "relative flex h-6 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent data-[state=open]:bg-accent",
-                        repoRaised && "z-[57]",
-                      )}
-                    >
-                      <FolderOpen className="size-3 text-muted-foreground" aria-hidden />
-                      <span className="font-mono">{repoName(draft.repo)}</span>
-                    </button>
-                  </PopoverTrigger>
-
+                  {/* Work in a repository, or an everyday conversation (no repository, nothing edited) */}
                   <button
                     type="button"
-                    aria-pressed={draft.worktree}
-                    onClick={() => updateDraft(id, { worktree: !draft.worktree })}
-                    title={draft.worktree ? t("draft.worktreeOn") : t("draft.worktreeOff")}
+                    aria-pressed={draft.chat}
+                    onClick={() => updateDraft(id, { chat: !draft.chat })}
+                    title={draft.chat ? t("draft.chatOn") : t("draft.chatOff")}
                     className={cn(
-                      "flex h-6 items-center gap-1.5 rounded-md border px-1.5 hover:bg-accent",
-                      draft.worktree ? "border-border text-foreground" : "border-dashed border-border text-muted-foreground",
+                      "flex h-6 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent",
+                      draft.chat ? "bg-accent text-foreground" : "text-muted-foreground",
                     )}
                   >
-                    <GitBranch className="size-3" aria-hidden />
-                    {draft.worktree ? "worktree" : t("draft.inPlace")}
+                    <MessageCircle className="size-3" aria-hidden />
+                    {t("draft.chat")}
                   </button>
-                  {current?.agent !== "gemini" && draft.profile && (
-                    <CliSessions key={`${draft.profile}:${draft.repo}`} draftId={id} profile={draft.profile} repo={draft.repo} busy={draft.busy} />
+                  {!draft.chat && (
+                    <>
+                      <PopoverTrigger asChild>
+                        <button
+                          ref={liquidAnchor(repoAnchor)}
+                          type="button"
+                          aria-label={t("draft.repo")}
+                          title={draft.repo}
+                          className={cn(
+                            "relative flex h-6 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent data-[state=open]:bg-accent",
+                            repoRaised && "z-[57]",
+                          )}
+                        >
+                          <FolderOpen className="size-3 text-muted-foreground" aria-hidden />
+                          <span className="font-mono">{repoName(draft.repo)}</span>
+                        </button>
+                      </PopoverTrigger>
+
+                      <button
+                        type="button"
+                        aria-pressed={draft.worktree}
+                        onClick={() => updateDraft(id, { worktree: !draft.worktree })}
+                        title={draft.worktree ? t("draft.worktreeOn") : t("draft.worktreeOff")}
+                        className={cn(
+                          "flex h-6 items-center gap-1.5 rounded-md border px-1.5 hover:bg-accent",
+                          draft.worktree ? "border-border text-foreground" : "border-dashed border-border text-muted-foreground",
+                        )}
+                      >
+                        <GitBranch className="size-3" aria-hidden />
+                        {draft.worktree ? "worktree" : t("draft.inPlace")}
+                      </button>
+                      {current?.agent !== "gemini" && draft.profile && (
+                        <CliSessions key={`${draft.profile}:${draft.repo}`} draftId={id} profile={draft.profile} repo={draft.repo} busy={draft.busy} />
+                      )}
+                    </>
                   )}
                 </div>
                 <span className="grow" />
@@ -269,7 +287,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
                   rows={1}
                   autoFocus
                   value={text}
-                  placeholder={t("draft.firstPromptPlaceholder")}
+                  placeholder={draft.chat ? t("draft.chatPlaceholder") : t("draft.firstPromptPlaceholder")}
                   onChange={(e) => {
                     setText(e.target.value);
                     mention.syncCaret();

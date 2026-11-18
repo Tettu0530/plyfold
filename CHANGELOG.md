@@ -7,6 +7,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 ### Sessions
 
 - Open a conversation the CLI already has, from the new-session screen, in its own worktree. Gemini CLI has no conversation list
+- Everyday conversations: choose Conversation on the new session screen to talk without a repository. Each runs in a folder of its own, may search and read the web, and does not edit files or run commands (the agent is put in a mode that asks, and Plyfold declines). They are grouped apart from the repositories in the sidebar
 - Side chat (⌘J, or the button in the pane header): ask about a session without adding to its conversation, even while it works. It is a read-only fork in the same workspace; edits and commands are declined, answers can be added to the main input, and closing it clears it. Gemini CLI cannot fork
 
 ### Git
