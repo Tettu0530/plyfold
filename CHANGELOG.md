@@ -4,6 +4,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Panes
+
+- The touched-files pane steps to the previous or next file with ← and →, or the buttons beside the file name, which also show where it is (2 / 5)
+
 ### Sessions
 
 - Settings → Repositories: per repository, files to copy into every new worktree (untracked ones such as `.env`), a setup script run in it before the agent starts (in your login shell; its outcome and, on failure, its last output appear in the conversation), and the kinds of tool calls always allowed without asking (reading and searching, editing files, running commands, fetching from the web), whichever agent asks

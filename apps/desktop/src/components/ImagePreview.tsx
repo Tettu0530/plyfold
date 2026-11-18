@@ -35,6 +35,9 @@ const CLEAR = { background: "rgba(23, 23, 23, 0)", border: "rgba(255, 255, 255, 
 // The shown image (while stepping, the one leaving is still in the page for a moment)
 const target = () => document.querySelector<HTMLElement>(`[data-image-preview="${usePreview.getState().index}"]`);
 
+/** Whether the large preview is open (it takes ← and → for itself) */
+export const isImagePreviewOpen = () => usePreview.getState().current !== null;
+
 /** Open p large. With items (p among them), ← and → step through them */
 export function openImagePreview(p: Preview, items: Preview[] = [p]) {
   const index = Math.max(
