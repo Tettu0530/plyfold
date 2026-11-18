@@ -31,6 +31,8 @@ export const pane: Record<keyof typeof source, string> = {
   revealLinux: "打开文件夹",
   openFile: "在编辑器中打开",
   copyPath: "复制路径",
+  previousFile: "上一个文件",
+  nextFile: "下一个文件",
   pathCopied: "已复制",
   fileBinary: "此文件不是文本，无法显示内容",
   fileTruncated: "文件较大，仅显示前 1 MB",

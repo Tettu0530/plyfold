@@ -29,6 +29,8 @@ export const pane = {
   revealLinux: "フォルダを開く",
   openFile: "エディタで開く",
   copyPath: "パスをコピー",
+  previousFile: "前のファイル",
+  nextFile: "次のファイル",
   pathCopied: "コピーしました",
   fileBinary: "このファイルは文字ではないので、中身を出せません",
   fileTruncated: "大きいので、最初の 1 MB だけを出しています",

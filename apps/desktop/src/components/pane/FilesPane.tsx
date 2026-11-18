@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Copy, FileText, FolderOpen, ImageIcon, PanelTopOpen, Pencil, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Copy, FileText, FolderOpen, ImageIcon, PanelTopOpen, Pencil, X } from "lucide-react";
 import { useMemo, useRef, useState, useEffect } from "react";
 
 import { useT } from "@/i18n";
@@ -8,7 +8,7 @@ import type { TextFile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { touchedFiles, type TouchedFile } from "@/state/paneData";
 import { filesSessionOf, useStore } from "@/state/store";
-import { useFileImage } from "../ImagePreview";
+import { isImagePreviewOpen, useFileImage } from "../ImagePreview";
 import { Thumb } from "./Attachments";
 import { ColumnResizer, NARROW_PX, useColumnWidth, useWidth } from "./GitPane";
 import { startDrag } from "./dnd";
@@ -56,6 +56,13 @@ export function FilesPane({ index, id }: { index: number; id: string }) {
     setPicked(f.path);
     if (narrow) setReading(true);
   };
+  const at = current ? files.findIndex((f) => f.path === current.path) : -1;
+  // Previous or next file in the list (stops at the ends)
+  const step = (d: number) => {
+    const next = files[at + d];
+    if (next) setPicked(next.path);
+  };
+  const stepping = { index: at, count: files.length, onStep: step };
 
   const list = (
     <FileList
@@ -78,6 +85,7 @@ export function FilesPane({ index, id }: { index: number; id: string }) {
       onMouseDown={() => focusPane(index)}
       className={cn("@container flex min-w-0 flex-col", focused && "bg-white/[0.01]")}
     >
+      {focused && (!narrow || reading) && <StepKeys onStep={step} />}
       <PaneMenu slot={index}>
         <div
           ref={paneHeadAnchor(index)}
@@ -104,7 +112,7 @@ export function FilesPane({ index, id }: { index: number; id: string }) {
         <p className="p-4 text-xs text-muted-foreground">{t("pane.filesEmpty")}</p>
       ) : narrow ? (
         reading && current ? (
-          <FileView file={current} base={base} onBack={() => setReading(false)} />
+          <FileView file={current} base={base} onBack={() => setReading(false)} {...stepping} />
         ) : (
           <div className="flex min-h-0 grow flex-col overflow-y-auto pt-2">{list}</div>
         )
@@ -116,7 +124,7 @@ export function FilesPane({ index, id }: { index: number; id: string }) {
             </aside>
             <ColumnResizer width={columnWidth} onChange={setColumnWidth} />
           </div>
-          <div className="flex min-w-0 grow flex-col">{current ? <FileView file={current} base={base} /> : null}</div>
+          <div className="flex min-w-0 grow flex-col">{current ? <FileView file={current} base={base} {...stepping} /> : null}</div>
         </div>
       )}
     </section>
@@ -178,7 +186,41 @@ function FileList({
 const revealLabel = isMac ? "pane.revealMac" : isWindows ? "pane.revealWindows" : "pane.revealLinux";
 
 /** One file: its path and actions, then an image or the text with line numbers. With onBack (narrow), a way back */
-function FileView({ file, base, onBack }: { file: TouchedFile; base: string | null; onBack?: () => void }) {
+/** ← and → step through the files while this pane is focused, unless typing or the image preview has them */
+function StepKeys({ onStep }: { onStep: (d: number) => void }) {
+  const latest = useRef(onStep);
+  latest.current = onStep;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key !== "ArrowLeft" && e.key !== "ArrowRight") || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      const el = e.target instanceof Element ? e.target : null;
+      if (el?.closest("input, textarea, [contenteditable=true]") || isImagePreviewOpen()) return;
+      // Text selected in the file: the arrows are left alone
+      if (window.getSelection()?.toString()) return;
+      e.preventDefault();
+      latest.current(e.key === "ArrowLeft" ? -1 : 1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  return null;
+}
+
+function FileView({
+  file,
+  base,
+  onBack,
+  index,
+  count,
+  onStep,
+}: {
+  file: TouchedFile;
+  base: string | null;
+  onBack?: () => void;
+  index: number;
+  count: number;
+  onStep: (d: number) => void;
+}) {
   const t = useT();
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -205,6 +247,19 @@ function FileView({ file, base, onBack }: { file: TouchedFile; base: string | nu
           {relative(file.path, base)}
         </span>
         <span className="grow" />
+        {count > 1 && (
+          <span className="flex shrink-0 items-center">
+            <Action label={t("pane.previousFile")} disabled={index <= 0} onClick={() => onStep(-1)}>
+              <ChevronLeft className="size-3.5" aria-hidden />
+            </Action>
+            <span className="px-0.5 font-mono text-xs text-muted-foreground tabular">
+              {index + 1} / {count}
+            </span>
+            <Action label={t("pane.nextFile")} disabled={index >= count - 1} onClick={() => onStep(1)}>
+              <ChevronRight className="size-3.5" aria-hidden />
+            </Action>
+          </span>
+        )}
         {inTauri && (
           <>
             <Action label={t(revealLabel)} onClick={() => act(api.revealFile(file.path))}>
@@ -235,14 +290,15 @@ function FileView({ file, base, onBack }: { file: TouchedFile; base: string | nu
   );
 }
 
-function Action({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+function Action({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
   return (
     <button
       type="button"
       aria-label={label}
       title={label}
+      disabled={disabled}
       onClick={onClick}
-      className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+      className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
     >
       {children}
     </button>

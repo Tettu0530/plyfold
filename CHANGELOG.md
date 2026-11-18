@@ -4,6 +4,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Panes
+
+- The touched-files pane steps to the previous or next file with ← and →, or the buttons beside the file name, which also show where it is (2 / 5)
+
 ### Sessions
 
 - The repository picker on the new session screen has a button beside the path that opens the system's folder chooser (Finder, File Explorer), starting from the folder typed in

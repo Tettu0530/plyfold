@@ -31,6 +31,8 @@ export const pane: Record<keyof typeof source, string> = {
   revealLinux: "Open folder",
   openFile: "Open in editor",
   copyPath: "Copy path",
+  previousFile: "Previous file",
+  nextFile: "Next file",
   pathCopied: "Copied",
   fileBinary: "This file is not text, so its contents cannot be shown",
   fileTruncated: "Large file: showing the first 1 MB",
