@@ -57,6 +57,21 @@ function loadImage(path: string): Promise<string | null> {
   return p;
 }
 
+/** An image file's data URL: undefined while loading, null when it cannot be read (or outside the app) */
+export function useFileImage(path: string | null): string | null | undefined {
+  const [src, setSrc] = useState<{ path: string; src: string | null } | null>(null);
+  useEffect(() => {
+    if (!path) return;
+    let alive = true;
+    void loadImage(path).then((s) => alive && setSrc({ path, src: s }));
+    return () => {
+      alive = false;
+    };
+  }, [path]);
+  if (!path) return null;
+  return src?.path === path ? src.src : undefined;
+}
+
 /** The image's data URL: the one it already has, or read from its path. null while loading or for non-images */
 export function useImageSrc(preview: AttachmentPreview): string | null {
   const [src, setSrc] = useState<string | null>(preview.src ?? null);

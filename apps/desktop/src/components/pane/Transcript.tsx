@@ -187,6 +187,7 @@ export function Transcript({
   onQuote,
   compact = false,
   commands = [],
+  base,
 }: {
   items: TranscriptItem[];
   info: SessionInfo | null;
@@ -201,6 +202,8 @@ export function Transcript({
   compact?: boolean;
   /** The agent's slash commands: a message that starts with one shows it in blue, as the composer does */
   commands?: SlashCommand[];
+  /** The session's folder: relative image paths in answers start here */
+  base?: string;
 }) {
   const tr = useT();
   // The user message being edited (index in blocks)
@@ -316,7 +319,7 @@ export function Transcript({
               const st = statsOf.get(i);
               return (
                 <div key={i} className="group flex flex-col gap-0.5">
-                  <Markdown text={b.text} streaming={streaming && i === blocks.length - 1} />
+                  <Markdown text={b.text} streaming={streaming && i === blocks.length - 1} base={base} />
                   {!(streaming && i === blocks.length - 1) &&
                     (st && showStats(st) ? (
                       <TurnStatsRow stats={st.stats} stopReason={st.stopReason} cost={undefined} endedAt={st.endedAt} actions={actions} />
