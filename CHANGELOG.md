@@ -14,6 +14,19 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 - Git and the changes are one view, opened from the pane header (⌘⇧D): the branch, its base and upstream, fetch, push and pull, the pull request and the commits sit above the changed files. The separate Git menu is gone
 - A session working in the repository itself also shows its uncommitted changes (against HEAD). Commit, merge and discard stay with worktree sessions
 
+### Composer
+
+- Queued messages can be edited in place (the pencil, or double-click). While one is being edited it is not sent, nor anything after it; saving sends it if the agent is idle. The side chat queues messages typed mid-turn too
+
+### App
+
+- The working indicator is a twelve-bar spinner
+
+### Fixed
+
+- A turn cut off by quitting the app (or the agent exiting) no longer looks like it is still generating after the next start; it ends as interrupted
+- After a pull request is merged on the host and its branch deleted there, the branch's commits are no longer shown as unpushed
+
 ## [0.1.0] - 2026-11-17
 
 The first release, for macOS (Apple Silicon) and Windows 10/11 (x64; new, please report what doesn't work).

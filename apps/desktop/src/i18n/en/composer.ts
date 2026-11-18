@@ -16,6 +16,8 @@ export const composer: Record<keyof typeof source, string> = {
   sendFirst: "Send next",
   attachmentsCount: "{count, plural, one {# attachment} other {# attachments}}",
   removeFromQueue: "Remove from queue",
+  queueHeldWhileEditing: "Held until you finish editing",
+  editQueued: "Edit",
   message: "Message",
   stopEsc: "Stop (esc)",
   addToQueue: "Add to queue",

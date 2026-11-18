@@ -106,6 +106,8 @@ export interface Queued {
   key: string;
   text: string;
   attachments: Attached[];
+  /** Being edited: it is not sent (nor anything after it) until the edit is saved or cancelled */
+  editing?: boolean;
 }
 let queueSeq = 0;
 
@@ -265,6 +267,10 @@ interface State {
   queues: Record<string, Queued[]>;
   enqueue: (id: string, text: string, attachments: Attached[]) => void;
   unqueue: (id: string, key: string) => void;
+  /** Start or stop editing a queued message (cancelling keeps the text it had) */
+  editQueued: (id: string, key: string, editing: boolean) => void;
+  /** Save an edited queued message. If the agent is idle and it is first, it goes now */
+  saveQueued: (id: string, key: string, text: string) => void;
   /** Send the head of the queue now (no-op mid-turn) */
   sendQueued: (id: string) => void;
   cancel: (id: string) => Promise<void>;
@@ -647,8 +653,12 @@ export const useStore = create<State>((set, get) => ({
       const sideChats = { ...s.sideChats };
       delete sideChats[mainId];
       const sessions = { ...s.sessions };
-      if (side.id) delete sessions[side.id];
-      return { sideChats, sessions };
+      const queues = { ...s.queues };
+      if (side.id) {
+        delete sessions[side.id];
+        delete queues[side.id];
+      }
+      return { sideChats, sessions, queues };
     });
     if (side.id) await api.closeSideChat(side.id).catch(() => {});
   },
@@ -661,10 +671,20 @@ export const useStore = create<State>((set, get) => ({
   queues: {},
   enqueue: (id, text, attachments) => set((s) => ({ queues: { ...s.queues, [id]: [...(s.queues[id] ?? []), { key: `q${++queueSeq}`, text, attachments }] } })),
   unqueue: (id, key) => set((s) => ({ queues: { ...s.queues, [id]: (s.queues[id] ?? []).filter((q) => q.key !== key) } })),
+  editQueued: (id, key, editing) => {
+    set((s) => ({ queues: { ...s.queues, [id]: (s.queues[id] ?? []).map((q) => (q.key === key ? { ...q, editing } : q)) } }));
+    // Cancelling an edit of the first message while idle: it was held back, so send it now
+    if (!editing) get().sendQueued(id);
+  },
+  saveQueued: (id, key, text) => {
+    set((s) => ({ queues: { ...s.queues, [id]: (s.queues[id] ?? []).map((q) => (q.key === key ? { ...q, text, editing: false } : q)) } }));
+    get().sendQueued(id);
+  },
   sendQueued: (id) => {
     const s = get();
     const [next, ...rest] = s.queues[id] ?? [];
-    if (!next || s.sessions[id]?.transcript.inTurn) return;
+    // Messages go in order, so one being edited holds back the ones after it too
+    if (!next || next.editing || s.sessions[id]?.transcript.inTurn) return;
     set({ queues: { ...s.queues, [id]: rest } });
     void get().sendPrompt(id, next.text, next.attachments);
   },

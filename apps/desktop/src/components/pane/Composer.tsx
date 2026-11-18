@@ -1,6 +1,6 @@
-import { ArrowUp, ChevronsUpDown, CornerDownRight, ListOrdered, ListPlus, Paperclip, Square, X } from "lucide-react";
+import { ArrowUp, ChevronsUpDown, CornerDownRight, ListOrdered, ListPlus, Paperclip, Pencil, Square, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
@@ -257,8 +257,22 @@ export function ControlRow({
 }
 
 /** Messages sent mid-turn. Sent in order from the front once the turn ends */
-function QueueList({ items, busy, onRemove, onSendNow }: { items: Queued[]; busy: boolean; onRemove: (key: string) => void; onSendNow: () => void }) {
+function QueueList({
+  scope,
+  items,
+  busy,
+  onRemove,
+  onSendNow,
+}: {
+  scope: string;
+  items: Queued[];
+  busy: boolean;
+  onRemove: (key: string) => void;
+  onSendNow: () => void;
+}) {
   const t = useT();
+  const { editQueued, saveQueued } = useStore.getState();
+  const held = items[0]?.editing;
   return (
     <AnimatePresence initial={false}>
       {items.length > 0 && (
@@ -273,9 +287,9 @@ function QueueList({ items, busy, onRemove, onSendNow }: { items: Queued[]; busy
           <div className="flex flex-col gap-0.5 pb-1">
             <div className="flex items-center gap-1.5 px-1.5 text-xs text-muted-foreground">
               <ListOrdered className="size-3.5" aria-hidden />
-              {busy ? t("composer.queueSendAfterTurn") : t("composer.queueUnsent")}
+              {held ? t("composer.queueHeldWhileEditing") : busy ? t("composer.queueSendAfterTurn") : t("composer.queueUnsent")}
               <span className="font-mono tabular">{items.length}</span>
-              {!busy && (
+              {!busy && !held && (
                 <button type="button" onClick={onSendNow} className="ml-auto flex h-6 items-center gap-1 rounded-md px-1.5 text-foreground hover:bg-accent">
                   <ArrowUp className="size-3" aria-hidden />
                   {t("composer.sendFirst")}
@@ -291,12 +305,29 @@ function QueueList({ items, busy, onRemove, onSendNow }: { items: Queued[]; busy
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, height: 0 }}
                   transition={smooth}
-                  className="flex h-7 items-center gap-2 rounded-md bg-card pr-0.5 pl-2.5"
+                  className={cn("flex min-h-7 items-center gap-2 rounded-md bg-card pr-0.5 pl-2.5", q.editing && "outline outline-ring")}
                 >
                   <CornerDownRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                  <span className="min-w-0 grow truncate">{q.text || q.attachments.map((a) => a.preview.name).join(" ")}</span>
+                  {q.editing ? (
+                    <QueueEdit initial={q.text} onSave={(text) => saveQueued(scope, q.key, text)} onCancel={() => editQueued(scope, q.key, false)} />
+                  ) : (
+                    <span className="min-w-0 grow cursor-text truncate" title={t("composer.editQueued")} onDoubleClick={() => editQueued(scope, q.key, true)}>
+                      {q.text || q.attachments.map((a) => a.preview.name).join(" ")}
+                    </span>
+                  )}
                   {q.attachments.length > 0 && (
                     <Paperclip className="size-3 shrink-0 text-muted-foreground" aria-label={t("composer.attachmentsCount", { count: q.attachments.length })} />
+                  )}
+                  {!q.editing && (
+                    <button
+                      type="button"
+                      aria-label={t("composer.editQueued")}
+                      title={t("composer.editQueued")}
+                      onClick={() => editQueued(scope, q.key, true)}
+                      className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                    >
+                      <Pencil className="size-3" aria-hidden />
+                    </button>
                   )}
                   <button
                     type="button"
@@ -313,6 +344,43 @@ function QueueList({ items, busy, onRemove, onSendNow }: { items: Queued[]; busy
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+/** Editing a queued message in place: ⏎ saves (⇧⏎ for a new line), esc cancels, leaving the field saves */
+function QueueEdit({ initial, onSave, onCancel }: { initial: string; onSave: (text: string) => void; onCancel: () => void }) {
+  const t = useT();
+  const [text, setText] = useState(initial);
+  const done = useRef(false);
+  const ref = useAutoGrow(text);
+  const save = () => {
+    if (done.current) return;
+    done.current = true;
+    if (text.trim()) onSave(text.trim());
+    else onCancel();
+  };
+  return (
+    <textarea
+      ref={ref}
+      aria-label={t("composer.editQueued")}
+      value={text}
+      autoFocus
+      rows={1}
+      onChange={(e) => setText(e.target.value)}
+      onFocus={(e) => e.currentTarget.setSelectionRange(e.currentTarget.value.length, e.currentTarget.value.length)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && !e.shiftKey && !isImeKey(e)) {
+          e.preventDefault();
+          save();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          done.current = true;
+          onCancel();
+        }
+      }}
+      onBlur={save}
+      className="min-w-0 grow resize-none bg-transparent py-1 leading-relaxed outline-none"
+    />
   );
 }
 
@@ -389,7 +457,7 @@ export function Composer({
   return (
     // Same width as the conversation above in a wide pane (its edges line up with the messages, as in a narrow one)
     <div className="flex shrink-0 flex-col gap-1 px-[max(0.75rem,calc((100%_-_53rem)/2))] pb-3">
-      <QueueList items={queue} busy={busy} onRemove={(k) => onUnqueue?.(k)} onSendNow={() => onSendQueued?.()} />
+      <QueueList scope={scope} items={queue} busy={busy} onRemove={(k) => onUnqueue?.(k)} onSendNow={() => onSendQueued?.()} />
       <ControlRow scope={scope} agent={agent} info={info} onSet={onSet} noPickers={noPickers} />
       <MentionMenu m={mention} boxRef={att.boxRef} />
       <SlashMenu m={slash} boxRef={att.boxRef} />
