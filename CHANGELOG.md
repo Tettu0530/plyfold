@@ -4,6 +4,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-18
+
+Side chats, everyday conversations and a Git pane, for macOS (Apple Silicon) and Windows 10/11 (x64).
+
 ### Sessions
 
 - Open a conversation the CLI already has, from the new-session screen, in its own worktree. Gemini CLI has no conversation list
@@ -73,4 +77,5 @@ The first release, for macOS (Apple Silicon) and Windows 10/11 (x64; new, please
 - Settings for display size, reduced motion, notifications, defaults for new sessions and more
 - Spring-based motion modelled on SwiftUI, with a fade-only mode for Reduce motion
 
+[0.2.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.1.0
