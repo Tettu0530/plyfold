@@ -1,0 +1,182 @@
+name: Release
+
+# Pushing a tag such as v0.3.0 builds the installers for macOS (universal), Windows and Linux and publishes them
+# as a GitHub release, with that version's section of CHANGELOG.md as its notes. See docs/releasing.md.
+# A pull request that changes this file builds everything without publishing, to try the workflow.
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+    paths: [.github/workflows/release.yml]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: An existing tag to build and publish again (e.g. v0.3.0)
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  PUBLISH: ${{ github.event_name != 'pull_request' }}
+
+jobs:
+  check:
+    name: Check version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Match the tag with the app version and the changelog
+        id: version
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          version=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
+          if [ "$PUBLISH" = true ] && [ "$TAG" != "v$version" ]; then
+            echo "::error::The tag $TAG does not match the app version $version in tauri.conf.json"
+            exit 1
+          fi
+          if [ "$PUBLISH" = true ] && ! grep -q "^## \[$version\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no section for $version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            # One .dmg for Apple silicon and Intel
+            targets: aarch64-apple-darwin,x86_64-apple-darwin
+            args: --target universal-apple-darwin
+            files: target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          - name: Windows
+            os: windows-latest
+            targets: ""
+            args: ""
+            files: |
+              target/release/bundle/nsis/*.exe
+              target/release/bundle/msi/*.msi
+          - name: Linux
+            # The oldest supported Ubuntu with WebKitGTK 4.1, so the AppImage runs on more distributions
+            os: ubuntu-22.04
+            targets: ""
+            args: ""
+            files: |
+              target/release/bundle/appimage/*.AppImage
+              target/release/bundle/deb/*.deb
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev pkg-config file
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.targets }}
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.name }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: Build
+        working-directory: apps/desktop
+        shell: bash
+        run: npm run tauri build -- ${{ matrix.args }}
+
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: plyfold-${{ matrix.name }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish
+    needs: [check, build]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.check.outputs.tag }}
+
+      - name: Download the builds
+        uses: actions/download-artifact@v7
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Write checksums and notes
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          (cd dist && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          # This version's section of the changelog, without its heading
+          awk -v v="$VERSION" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          cat .github/release-install.md >> notes.md
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.check.outputs.tag }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # Built again (workflow_dispatch): replace the files, keep the notes as edited
+            gh release upload "$TAG" dist/* --clobber
+          else
+            # Versions below 1.0 are marked as pre-releases
+            flags=()
+            if [[ "$VERSION" == 0.* || "$VERSION" == *-* ]]; then flags+=(--prerelease); fi
+            gh release create "$TAG" dist/* --verify-tag --title "Plyfold $VERSION" --notes-file notes.md "${flags[@]}"
+          fi
