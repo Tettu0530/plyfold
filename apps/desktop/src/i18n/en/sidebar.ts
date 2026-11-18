@@ -21,4 +21,6 @@ export const sidebar: Record<keyof typeof source, string> = {
   deleteForGood: "Delete “{title}” for good",
   emptyTrash: "Empty trash",
   trashNote: "Records are deleted after 30 days. Worktrees are kept",
+  groupName: "Group name",
+  renameGroup: "Rename “{name}”",
 };

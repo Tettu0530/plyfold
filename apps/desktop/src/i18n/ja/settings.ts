@@ -129,4 +129,6 @@ export const settings = {
   updateInstall: "更新して再起動",
   updateError: "確かめられませんでした: {error}",
   updateDev: "開発版は更新しません",
+  repoName: "サイドバーでの名前",
+  repoNameDetail: "サイドバーのグループに出す名前です。空にすると、フォルダの名前に戻ります",
 } satisfies Record<string, string>;

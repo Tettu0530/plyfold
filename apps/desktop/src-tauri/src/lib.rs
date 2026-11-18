@@ -67,6 +67,8 @@ struct AppSettings {
     restore_panes: bool,
     /// Profile for new sessions: "" uses the one used last
     default_profile: String,
+    /// Name of the sidebar group for everyday conversations ("" = the default)
+    chat_group_name: String,
 }
 
 impl Default for AppSettings {
@@ -87,6 +89,7 @@ impl Default for AppSettings {
             thoughts_expanded: false,
             restore_panes: true,
             default_profile: String::new(),
+            chat_group_name: String::new(),
         }
     }
 }
@@ -184,7 +187,8 @@ fn save_settings(state: State<'_, AppState>, settings: AppSettings) -> CmdResult
             "显示大小须在 80% 到 150% 之间"
         ));
     }
-    if !["system", "reduce"].contains(&settings.reduce_motion.as_str()) || settings.default_profile.len() > 128 {
+    if !["system", "reduce"].contains(&settings.reduce_motion.as_str()) || settings.default_profile.len() > 128 || settings.chat_group_name.chars().count() > 80
+    {
         return Err(plyfold_i18n::tr!("設定の値が正しくありません", "A setting has an invalid value", "某项设置的值无效"));
     }
     // Shortcuts are checked fully in the UI; here only keep the file small and plain
@@ -516,6 +520,18 @@ struct RepoEntry {
 fn list_repos(state: State<'_, AppState>) -> CmdResult<Vec<RepoEntry>> {
     let repos = state.engine.known_repos().map_err(err)?;
     Ok(repos.into_iter().map(|path| RepoEntry { settings: state.engine.repo_settings(&path), path }).collect())
+}
+
+/// Rename a repository's group in the sidebar ("" goes back to the folder's name)
+#[tauri::command]
+fn rename_repo(state: State<'_, AppState>, path: String, name: String) -> CmdResult<()> {
+    let name = name.trim();
+    if name.chars().count() > 80 {
+        return Err(plyfold_i18n::tr!("名前が長すぎます（80 文字まで）", "The name is too long (80 characters max)", "名称太长（最多 80 个字符）"));
+    }
+    let mut settings = state.engine.repo_settings(&path);
+    settings.name = name.to_string();
+    state.engine.set_repo_settings(&path, settings).map_err(err)
 }
 
 #[tauri::command]
@@ -879,6 +895,7 @@ pub fn run() {
             restore_session,
             empty_trash,
             list_repos,
+            rename_repo,
             save_repo_settings,
             open_file_in_editor,
             open_url,

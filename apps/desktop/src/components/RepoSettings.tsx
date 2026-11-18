@@ -4,7 +4,9 @@ import { FolderGit2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useStore } from "@/state/store";
 import { useT, type MessageKey } from "@/i18n";
 import { api, inTauri } from "@/lib/api";
 import type { RepoEntry, RepoSettings as Settings } from "@/lib/types";
@@ -39,7 +41,10 @@ export function RepoSettings({ onError }: { onError: (e: string | null) => void 
   const save = (settings: Settings) => {
     setRepos((rs) => rs && rs.map((r) => (r.path === current.path ? { ...r, settings } : r)));
     api.saveRepoSettings(current.path, settings).then(
-      () => onError(null),
+      () => {
+        onError(null);
+        void useStore.getState().loadRepoNames();
+      },
       (e) => onError(String(e)),
     );
   };
@@ -56,7 +61,7 @@ export function RepoSettings({ onError }: { onError: (e: string | null) => void 
             className={cn("flex h-8 items-center gap-2 rounded-lg px-2 text-left hover:bg-accent", r.path === current.path && "bg-muted")}
           >
             <FolderGit2 className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-            <span className="shrink-0 font-medium">{base(r.path)}</span>
+            <span className="shrink-0 font-medium">{r.settings.name || base(r.path)}</span>
             <span className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={r.path}>
               {r.path}
             </span>
@@ -70,6 +75,7 @@ export function RepoSettings({ onError }: { onError: (e: string | null) => void 
 
 function RepoForm({ settings, onSave }: { settings: Settings; onSave: (s: Settings) => void }) {
   const t = useT();
+  const [name, setName] = useState(settings.name ?? "");
   const [setup, setSetup] = useState(settings.setup);
   const [copy, setCopy] = useState(settings.copy.join("\n"));
   const lines = (v: string) =>
@@ -79,6 +85,15 @@ function RepoForm({ settings, onSave }: { settings: Settings; onSave: (s: Settin
       .filter(Boolean);
   return (
     <div className="flex flex-col gap-5 border-t pt-5">
+      <Field id="repo-name" label={t("settings.repoName")} detail={t("settings.repoNameDetail")}>
+        <Input
+          id="repo-name"
+          value={name}
+          maxLength={80}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => name.trim() !== (settings.name ?? "") && onSave({ ...settings, name: name.trim() })}
+        />
+      </Field>
       <Field id="repo-setup" label={t("settings.repoSetup")} detail={t("settings.repoSetupDetail")}>
         <Textarea
           id="repo-setup"

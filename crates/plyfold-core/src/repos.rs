@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RepoSettings {
+    /// The name shown for the repository's group in the sidebar ("" = the folder's name)
+    pub name: String,
     /// A shell script run in every new worktree before the agent starts (`npm install`, for example)
     pub setup: String,
     /// Files and folders copied from the repository into every new worktree, relative to its root (`.env`, for
@@ -22,7 +24,7 @@ pub struct RepoSettings {
 
 impl RepoSettings {
     pub fn is_empty(&self) -> bool {
-        self.setup.trim().is_empty() && self.copy.is_empty() && self.allow.is_empty()
+        self.name.trim().is_empty() && self.setup.trim().is_empty() && self.copy.is_empty() && self.allow.is_empty()
     }
 
     /// Whether a permission request for this tool kind is allowed without asking
@@ -201,7 +203,7 @@ mod tests {
     fn settings_round_trip_and_empty_ones_are_dropped() {
         let d = tmp("store");
         let repos = Repos::new(&d);
-        let s = RepoSettings { setup: "npm install".into(), copy: vec![".env".into()], allow: vec!["read".into()] };
+        let s = RepoSettings { setup: "npm install".into(), copy: vec![".env".into()], allow: vec!["read".into()], ..Default::default() };
         repos.set("/r", s.clone()).unwrap();
         assert_eq!(repos.get("/r"), s);
         repos.set("/r", RepoSettings::default()).unwrap();

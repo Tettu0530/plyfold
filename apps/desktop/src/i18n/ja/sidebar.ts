@@ -19,4 +19,6 @@ export const sidebar = {
   deleteForGood: "「{title}」を完全に削除",
   emptyTrash: "ゴミ箱を空にする",
   trashNote: "30 日たつと記録は自動で消えます。worktree は残ります",
+  groupName: "グループの名前",
+  renameGroup: "「{name}」の名前を変える",
 } satisfies Record<string, string>;

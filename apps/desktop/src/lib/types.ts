@@ -164,6 +164,8 @@ export interface AppSettings {
   restore_panes: boolean;
   /** Profile for new sessions ("" = the one used last) */
   default_profile: string;
+  /** Name of the sidebar group for everyday conversations ("" = the default) */
+  chat_group_name?: string;
 }
 
 /** Settings → Info (src-tauri app_info) */
@@ -314,6 +316,8 @@ export interface ProfileUsage {
 /** A file offered for an @-mention (apps/desktop/src-tauri/src/files.rs) */
 /** Per repository (Settings → Repositories): what a new worktree gets, and the kinds allowed without asking */
 export interface RepoSettings {
+  /** Name of its group in the sidebar ("" = the folder's name) */
+  name: string;
   setup: string;
   copy: string[];
   /** "read" | "edit" | "execute" | "fetch" */
