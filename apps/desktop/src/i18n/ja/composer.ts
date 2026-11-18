@@ -27,4 +27,6 @@ export const composer = {
   slashLabel: "コマンド",
   slashArgLabel: "{command} の引数",
   slashEmpty: "一致するコマンドはありません",
+  modelLabel: "モデル",
+  effortLabel: "エフォート",
 } satisfies Record<string, string>;

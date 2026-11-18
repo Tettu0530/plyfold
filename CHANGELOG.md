@@ -7,6 +7,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 ### Sessions
 
 - Open a conversation the CLI already has, from the new-session screen, in its own worktree. Gemini CLI has no conversation list
+- Everyday conversations: choose Conversation on the new session screen to talk without a repository. Each runs in a folder of its own, may search and read the web, and does not edit files or run commands (the agent is put in a mode that asks, and Plyfold declines). They are grouped apart from the repositories in the sidebar. Their mode cannot be changed (a mode that acts without asking would get past the policy), so they have no mode picker
 - Side chat (⌘J, or the button in the pane header): ask about a session without adding to its conversation, even while it works. It is a read-only fork in the same workspace; edits and commands are declined, answers can be added to the main input, and closing it clears it. Gemini CLI cannot fork
 
 ### Git
@@ -17,6 +18,9 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ### Composer
 
+- Model and effort share one chip and one menu: the models, then Effort › with the levels in a submenu
+- Web searches and page fetches read better: a search lists its hits as links (title and site, opening in the browser), a fetch shows the page as a link and the agent's answer as Markdown, each with its own icon
+- Math in messages is typeset with KaTeX: `$…$`, `$$…$$`, `\(…\)` and `\[…\]` (code is left as written; a formula KaTeX cannot read is shown as typed)
 - Slash commands: a whole command at the start of the message turns blue, its input hint shows faintly after it, and values its argument can take (from the hint's `[a|b]` choices, or the session's models for `/model`) are offered as you type; ⇥ takes one
 - Queued messages can be edited in place (the pencil, or double-click). While one is being edited it is not sent, nor anything after it; saving sends it if the agent is idle. The side chat queues messages typed mid-turn too
 

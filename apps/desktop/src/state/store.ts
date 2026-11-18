@@ -45,6 +45,8 @@ export interface Draft {
   profile: string | null;
   repo: string;
   worktree: boolean;
+  /** An everyday conversation instead of work in a repository */
+  chat: boolean;
   /** model / effort / mode chosen before starting (applied right after start) */
   choices: Partial<Record<Category, string>>;
   busy: boolean;
@@ -722,6 +724,7 @@ export const useStore = create<State>((set, get) => ({
           profile: defaultProfile(s.profiles, s.settings.default_profile),
           repo: lastRepo(),
           worktree: s.settings.worktree_default,
+          chat: false,
           choices: {},
           busy: false,
           error: null,
@@ -739,15 +742,16 @@ export const useStore = create<State>((set, get) => ({
     get().updateDraft(id, { busy: true, error: null });
     try {
       try {
-        localStorage.setItem(LAST_REPO_KEY, d.repo);
+        if (!d.chat) localStorage.setItem(LAST_REPO_KEY, d.repo);
         localStorage.setItem(LAST_PROFILE_KEY, d.profile);
       } catch {
         // Continue even if saving fails
       }
-      const title = prompt.trim().split("\n")[0].slice(0, 40) || t("store.newSessionTitle");
-      const rec = await api.startSession({ profile: d.profile, repo: d.repo, title, worktree: d.worktree });
-      // Apply the model / effort / mode chosen in the draft before the first prompt
-      await applyChoices(rec.id, d.choices);
+      const title = prompt.trim().split("\n")[0].slice(0, 40) || (d.chat ? t("store.newChatTitle") : t("store.newSessionTitle"));
+      const rec = d.chat ? await api.startChat(d.profile, title) : await api.startSession({ profile: d.profile, repo: d.repo, title, worktree: d.worktree });
+      // Apply the model / effort / mode chosen in the draft before the first prompt (a conversation keeps its own mode)
+      const { mode: _mode, ...rest } = d.choices;
+      await applyChoices(rec.id, d.chat ? rest : d.choices);
       set((s) => {
         const panes = s.panes.map((p) => (p === id ? rec.id : p));
         const drafts = { ...s.drafts };

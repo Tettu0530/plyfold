@@ -31,6 +31,7 @@ export const api = {
   listSessions: () => invoke<SessionRecord[]>("list_sessions"),
   sessionHistory: (id: string) => invoke<EventRecord[]>("session_history", { id }),
   startSession: (args: { profile: string; repo: string; title: string; worktree: boolean }) => invoke<SessionRecord>("start_session", args),
+  startChat: (profile: string, title: string) => invoke<SessionRecord>("start_chat", { profile, title }),
   reopenSession: (id: string) => invoke<void>("reopen_session", { id }),
   forkSession: (id: string, newWorktree: boolean) => invoke<SessionRecord>("fork_session", { id, newWorktree }),
   openSideChat: (id: string) => invoke<SessionRecord>("open_side_chat", { id }),

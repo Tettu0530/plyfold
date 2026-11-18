@@ -22,6 +22,7 @@ export const draft: Record<keyof typeof source, string> = {
   choicesAfterStart: "启动后可选择 model 和 effort",
   firstPrompt: "初始提示词",
   firstPromptPlaceholder: "输入初始提示词以开始",
+  chatPlaceholder: "说点什么来开始",
   start: "开始",
   repoPath: "仓库路径",
   repoSuggestions: "仓库建议",
@@ -32,4 +33,7 @@ export const draft: Record<keyof typeof source, string> = {
   cliSessionsLoading: "正在读取",
   cliSessionsEmpty: "此仓库还没有可打开的对话",
   cliSessionsUntitled: "（无标题）",
+  chat: "对话",
+  chatOn: "对话：不使用仓库直接交谈。可以搜索和读取网页，但不编辑文件、不执行命令",
+  chatOff: "工作：在仓库中工作",
 };

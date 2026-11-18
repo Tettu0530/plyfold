@@ -108,7 +108,8 @@ function SessionPane({ index }: { index: number }) {
   const status = view?.record.status;
   // The worktree's change count: on every status change and after worktree actions, when the window comes back,
   // and every few seconds while the agent works (it edits files mid-turn)
-  const inRepo = !!view?.record.repo_path;
+  // An everyday conversation's folder is not a repository: no Git button, no change counts
+  const inRepo = !!view?.record.repo_path && !view?.record.chat;
   const busyNow = status === "working" || status === "awaiting_permission" || status === "stalled";
   // Branch, upstream and commits (for the header button; the Git view loads its own)
   const git = useGitInfo(id && inRepo ? id : "", busyNow);
@@ -258,6 +259,7 @@ function SessionPane({ index }: { index: number }) {
           </div>
 
           <Composer
+            noMode={!!r.chat}
             scope={id}
             agent={r.agent}
             info={(() => {

@@ -40,6 +40,17 @@ pub enum CoreError {
     Worktree(#[from] WorktreeError),
     #[error(transparent)]
     Acp(#[from] AcpError),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(
+        "{}",
+        plyfold_i18n::tr!(
+            "会話とサイドチャットのモードは変えられません（ファイルの編集やコマンドを防ぐため）",
+            "The mode of a conversation or side chat cannot be changed (it keeps files from being edited and commands from running)",
+            "对话和侧边对话的模式不能更改（以防编辑文件或执行命令）"
+        )
+    )]
+    ModeLocked,
     #[error("{}", plyfold_i18n::tr!("セッション {} のエージェントは動いていません", "The agent for session {} is not running", "会话 {} 的代理未在运行", .0))]
     NotRunning(String),
     #[error("{}", plyfold_i18n::tr!("セッション {} のエージェントはもう動いています", "The agent for session {} is already running", "会话 {} 的代理已在运行", .0))]
@@ -210,8 +221,28 @@ struct Live {
     /// SessionInfo, but are not sent to the UI: it already has the conversation from the event log, and showing the
     /// resend would duplicate it and push the message being sent above the earlier output
     replaying: AtomicBool,
-    /// A side chat: every permission request (edits, commands) is declined without asking
-    read_only: bool,
+    /// Permission requests answered without asking: a side chat declines them all, an everyday chat allows looking things
+    /// up (search, fetch, read) and declines the rest
+    policy: Policy,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Policy {
+    Ask,
+    DeclineAll,
+    LookUpOnly,
+}
+
+impl Policy {
+    fn of(rec: &SessionRecord) -> Self {
+        if rec.side_of.is_some() {
+            Policy::DeclineAll
+        } else if rec.chat {
+            Policy::LookUpOnly
+        } else {
+            Policy::Ask
+        }
+    }
 }
 
 impl Live {
@@ -372,6 +403,33 @@ impl Engine {
         Ok(inner.store.get_session(&rec.id)?)
     }
 
+    /// An everyday conversation: no repository, but a folder of its own (agents need one to work in), under the state
+    /// directory. The agent may search and read the web; edits and commands are declined
+    pub async fn start_chat(&self, profile: &str, title: &str) -> Result<SessionRecord, CoreError> {
+        let inner = &self.inner;
+        let agent = inner.config.read().unwrap().profiles.get(profile).map(|p| p.agent.clone()).unwrap_or_else(|| profile.to_string());
+        let rec = inner.store.create_session(NewSession { title: title.to_string(), profile: profile.to_string(), agent, chat: true, ..Default::default() })?;
+        let dir = self.chat_dir(&rec.id);
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            inner.store.delete_session(&rec.id)?;
+            return Err(CoreError::Io(e));
+        }
+        inner.store.set_workspace(&rec.id, Some(&dir.display().to_string()), None, None, None)?;
+        let rec = inner.store.get_session(&rec.id)?;
+        inner.emit(EngineEvent::SessionCreated { session: rec.clone() });
+        self.launch(&rec.id, profile, &dir, Resume::New).await?;
+        // A mode in which the agent asks before acting (so Plyfold's policy answers) or only reads, rather than one that
+        // acts on its own (Claude Code's auto, for example)
+        if let Some(mode) = self.session_info(&rec.id).and_then(|info| chat_mode(&info)) {
+            let _ = self.set_category(&rec.id, Category::Mode, &mode).await;
+        }
+        Ok(inner.store.get_session(&rec.id)?)
+    }
+
+    fn chat_dir(&self, id: &str) -> PathBuf {
+        self.inner.state_dir.join("chats").join(id)
+    }
+
     /// Restart the agent for a stopped session. If supported, session/load restores the full context
     pub async fn reopen_session(&self, id: &str) -> Result<(), CoreError> {
         if self.is_running(id) {
@@ -379,6 +437,9 @@ impl Engine {
         }
         let rec = self.reconcile_workspace(id)?;
         let cwd = rec.worktree_path.clone().or(rec.repo_path.clone()).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
+        if rec.chat {
+            std::fs::create_dir_all(&cwd)?;
+        }
         let resume = match rec.acp_session_id {
             Some(session_id) => Resume::Load { session_id, adopted: false },
             None => Resume::New,
@@ -480,6 +541,7 @@ impl Engine {
             branch: src.branch.clone(),
             base_ref: src.base_ref.clone(),
             side_of: Some(id.to_string()),
+            chat: src.chat,
         })?;
         inner.emit(EngineEvent::SessionCreated { session: rec.clone() });
         if let Err(e) = self.launch(&rec.id, &src.profile, Path::new(&cwd), Resume::Fork(acp)).await {
@@ -488,7 +550,7 @@ impl Engine {
         }
         // Ask the agent itself not to edit too, where it has such a mode (Claude Code: plan, Codex: read-only, OpenCode: plan)
         if let Some(mode) = self.session_info(&rec.id).and_then(|info| read_only_mode(&info)) {
-            let _ = self.set_by_category(&rec.id, Category::Mode, &mode).await;
+            let _ = self.set_category(&rec.id, Category::Mode, &mode).await;
         }
         Ok(inner.store.get_session(&rec.id)?)
     }
@@ -630,7 +692,7 @@ impl Engine {
                 clock: Mutex::new(None),
                 last_live_emit: Mutex::new(Instant::now()),
                 replaying: AtomicBool::new(false),
-                read_only: inner.store.get_session(id).map(|r| r.side_of.is_some()).unwrap_or(false),
+                policy: inner.store.get_session(id).map(|r| Policy::of(&r)).unwrap_or(Policy::Ask),
             });
             // Start receiving first so the history resent by session/load is captured
             tokio::spawn(pump(inner.clone(), id.to_string(), live.clone(), rx));
@@ -865,7 +927,16 @@ impl Engine {
 
     /// Change model / effort / mode without caring how each agent names them.
     /// For mode, fall back to the legacy session/set_mode when configOptions lacks it
+    /// A conversation or a side chat keeps the mode Plyfold chose for it: one that acts without asking (bypass, auto)
+    /// would let it edit files and run commands that Plyfold otherwise declines
     pub async fn set_by_category(&self, id: &str, category: Category, value: &str) -> Result<(), CoreError> {
+        if category == Category::Mode && Policy::of(&self.inner.store.get_session(id)?) != Policy::Ask {
+            return Err(CoreError::ModeLocked);
+        }
+        self.set_category(id, category, value).await
+    }
+
+    async fn set_category(&self, id: &str, category: Category, value: &str) -> Result<(), CoreError> {
         let live = self.inner.live(id)?;
         let config_id = live.info.lock().unwrap().option(category).map(|o| o.id.clone());
         match (config_id, category) {
@@ -916,6 +987,10 @@ impl Engine {
                     self.inner.notice(other, note.clone());
                 }
             }
+        }
+        // A conversation's folder is Plyfold's own; it goes with the session
+        if rec.chat {
+            let _ = std::fs::remove_dir_all(self.chat_dir(id));
         }
         self.inner.store.delete_session(id)?;
         Ok(())
@@ -1107,6 +1182,17 @@ impl Engine {
 }
 
 /// True when a running session already uses this directory
+/// The mode for an everyday conversation: read-only where the agent has one (Codex), else one that asks before acting
+/// (Claude Code's default), else planning (OpenCode)
+fn chat_mode(info: &SessionInfo) -> Option<String> {
+    const PREFERRED: [&str; 4] = ["read-only", "read_only", "default", "plan"];
+    let ids: Vec<&str> = match info.option(Category::Mode) {
+        Some(o) => o.choices.iter().map(|c| c.value.as_str()).collect(),
+        None => info.modes.iter().map(|c| c.value.as_str()).collect(),
+    };
+    PREFERRED.iter().find(|m| ids.contains(m)).map(|m| m.to_string())
+}
+
 /// The mode in which the agent does not edit, if it has one
 fn read_only_mode(info: &SessionInfo) -> Option<String> {
     const READ_ONLY: [&str; 3] = ["plan", "read-only", "read_only"];
@@ -1199,25 +1285,39 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
                     emit_info(inner, &id, live);
                 }
             }
-            AgentMessage::PermissionRequest { request_id, request } if live.read_only => {
+            AgentMessage::PermissionRequest { request_id, request } if live.policy != Policy::Ask => {
                 live.touch();
                 let v = serde_json::to_value(&*request).unwrap_or(Value::Null);
-                // Decline once rather than cancel, so the agent carries on and answers without the change
-                let reject = v["options"]
-                    .as_array()
-                    .and_then(|a| a.iter().find(|o| o["kind"].as_str().is_some_and(|k| k.starts_with("reject"))))
-                    .and_then(|o| o["optionId"].as_str())
-                    .map(str::to_string);
-                let _ = live.client.respond_permission(request_id, reject.as_deref()).await;
+                let option = |prefix: &str| {
+                    v["options"]
+                        .as_array()
+                        .and_then(|a| a.iter().find(|o| o["kind"].as_str().is_some_and(|k| k.starts_with(prefix))))
+                        .and_then(|o| o["optionId"].as_str())
+                        .map(str::to_string)
+                };
                 let title = v["toolCall"]["title"].as_str().unwrap_or_default().to_string();
-                inner.notice(
-                    &id,
-                    plyfold_i18n::tr!(
-                        "サイドチャットは読み取りだけなので、断りました: {title}",
-                        "Declined, because a side chat only reads: {title}",
-                        "侧边对话只能读取，因此已拒绝：{title}"
-                    ),
-                );
+                // An everyday chat may look things up; nothing that changes files or runs commands
+                let looks_up = matches!(v["toolCall"]["kind"].as_str(), Some("fetch" | "search" | "read" | "think"));
+                if live.policy == Policy::LookUpOnly && looks_up {
+                    let _ = live.client.respond_permission(request_id, option("allow").as_deref()).await;
+                } else {
+                    // Decline once rather than cancel, so the agent carries on and answers without the change
+                    let _ = live.client.respond_permission(request_id, option("reject").as_deref()).await;
+                    let note = if live.policy == Policy::DeclineAll {
+                        plyfold_i18n::tr!(
+                            "サイドチャットは読み取りだけなので、断りました: {title}",
+                            "Declined, because a side chat only reads: {title}",
+                            "侧边对话只能读取，因此已拒绝：{title}"
+                        )
+                    } else {
+                        plyfold_i18n::tr!(
+                            "会話ではファイルの編集とコマンドを使わないので、断りました: {title}",
+                            "Declined, because a conversation does not edit files or run commands: {title}",
+                            "对话中不编辑文件也不执行命令，因此已拒绝：{title}"
+                        )
+                    };
+                    inner.notice(&id, note);
+                }
             }
             AgentMessage::PermissionRequest { request_id, request } => {
                 live.touch();

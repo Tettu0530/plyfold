@@ -17,6 +17,9 @@ import { startDrag } from "./pane/dnd";
 import { keysOf } from "@/lib/keymap";
 import { useBindings } from "@/state/keys";
 
+/** Group key for everyday conversations (no repository name can contain a NUL) */
+const CHAT_GROUP = "\0chat";
+
 export function Sidebar() {
   const t = useT();
   const bindings = useBindings();
@@ -52,8 +55,9 @@ export function Sidebar() {
     const list = Object.values(sessions)
       .filter(isListed)
       .sort((a, b) => b.record.updated_at - a.record.updated_at);
+    // Everyday conversations are a group of their own, apart from the repositories
     for (const v of list) {
-      const repo = repoName(v.record.repo_path);
+      const repo = v.record.chat ? CHAT_GROUP : repoName(v.record.repo_path);
       byRepo.set(repo, [...(byRepo.get(repo) ?? []), v]);
     }
     return [...byRepo.entries()];
@@ -116,7 +120,7 @@ export function Sidebar() {
                 <motion.span animate={{ rotate: isClosed ? 0 : 90 }} transition={snappy} className="flex">
                   <ChevronRight className="size-3.5" aria-hidden />
                 </motion.span>
-                <span className="grow text-left">{repo}</span>
+                <span className="grow text-left">{repo === CHAT_GROUP ? t("sidebar.conversations") : repo}</span>
                 <span className="font-mono tabular">{items.length}</span>
               </button>
               {!isClosed &&

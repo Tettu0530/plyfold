@@ -4,16 +4,22 @@
 // - Links open in the default browser (opening inside the WebView would replace the app's screen)
 // - External images are not loaded (no network requests from the transcript). Their alt text is shown as a link instead
 // - HTML is not rendered (react-markdown's default; HTML mixed into agent output never runs)
+// - Math ($…$, $$…$$, \(…\), \[…\]) is typeset with KaTeX
 import { memo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 
 import { useT, contentLang } from "@/i18n";
 import { api, inTauri } from "@/lib/api";
+import { normalizeMath } from "@/lib/math";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "./MessageActions";
 
-function openLink(href: string | undefined) {
+/** Open a link in the default browser (inside the WebView it would replace the app) */
+export function openLink(href: string | undefined) {
   if (!href) return;
   if (inTauri) void api.openUrl(href).catch(() => {});
   else window.open(href, "_blank", "noopener");
@@ -115,12 +121,17 @@ const components: Components = {
   },
 };
 
+// Math: $…$ inline and $$…$$ blocks (\(…\) and \[…\] are turned into those first). KaTeX runs with its defaults that
+// matter here: untrusted (no \href, \url or \includegraphics actions), and a formula it cannot read is shown as typed
+// instead of breaking the message
+const rehypePlugins: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [[rehypeKatex, { throwOnError: false, strict: "ignore", trust: false }]];
+
 /** Markdown body. While streaming, shows a typing indicator after the last element */
 export const Markdown = memo(function Markdown({ text, streaming }: { text: string; streaming?: boolean }) {
   return (
     <div lang={contentLang(text)} className={cn("min-w-0 break-words select-text", streaming && "md-streaming")}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {text}
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={rehypePlugins} components={components}>
+        {normalizeMath(text)}
       </ReactMarkdown>
     </div>
   );

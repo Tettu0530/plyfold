@@ -85,6 +85,10 @@ pub struct SessionRecord {
     /// and deleted when closed
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub side_of: Option<String>,
+    /// An everyday conversation rather than work in a repository: it runs in its own empty folder, and may search and
+    /// read the web but not edit or run commands
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub chat: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -97,6 +101,7 @@ pub struct NewSession {
     pub branch: Option<String>,
     pub base_ref: Option<String>,
     pub side_of: Option<String>,
+    pub chat: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -190,7 +195,8 @@ CREATE TABLE IF NOT EXISTS dismissed_conversations (
 );
 ";
 
-const SESSION_COLS: &str = "id, title, profile, agent, repo_path, worktree_path, branch, base_ref, acp_session_id, status, created_at, updated_at, side_of";
+const SESSION_COLS: &str =
+    "id, title, profile, agent, repo_path, worktree_path, branch, base_ref, acp_session_id, status, created_at, updated_at, side_of, chat";
 
 fn row_to_session(r: &rusqlite::Row) -> rusqlite::Result<SessionRecord> {
     Ok(SessionRecord {
@@ -207,6 +213,7 @@ fn row_to_session(r: &rusqlite::Row) -> rusqlite::Result<SessionRecord> {
         created_at: r.get(10)?,
         updated_at: r.get(11)?,
         side_of: r.get(12)?,
+        chat: r.get::<_, i64>(13)? != 0,
     })
 }
 
@@ -236,6 +243,10 @@ impl Store {
         if !has_side {
             conn.execute_batch("ALTER TABLE sessions ADD COLUMN side_of TEXT")?;
         }
+        let has_chat: bool = conn.prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'chat'")?.exists([])?;
+        if !has_chat {
+            conn.execute_batch("ALTER TABLE sessions ADD COLUMN chat INTEGER NOT NULL DEFAULT 0")?;
+        }
         Ok(Self { conn: Mutex::new(conn) })
     }
 
@@ -255,9 +266,10 @@ impl Store {
             created_at: now,
             updated_at: now,
             side_of: s.side_of,
+            chat: s.chat,
         };
         self.conn.lock().unwrap().execute(
-            &format!("INSERT INTO sessions ({SESSION_COLS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)"),
+            &format!("INSERT INTO sessions ({SESSION_COLS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)"),
             params![
                 rec.id,
                 rec.title,
@@ -271,7 +283,8 @@ impl Store {
                 rec.status.as_str(),
                 rec.created_at,
                 rec.updated_at,
-                rec.side_of
+                rec.side_of,
+                rec.chat as i64
             ],
         )?;
         Ok(rec)
