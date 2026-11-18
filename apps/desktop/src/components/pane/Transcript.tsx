@@ -120,10 +120,12 @@ function Thought({ text }: { text: string }) {
         <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} aria-hidden />
         {t("transcript.thought")}
       </button>
+      {/* Thinking is written in Markdown like answers (lists, emphasis, code); shown small and muted, headings
+          included, so it stays a side note */}
       {open && (
-        <p lang={contentLang(text)} className="mt-1 border-l pl-3 text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
-          {text}
-        </p>
+        <div className="mt-1 border-l pl-3 text-xs leading-relaxed text-muted-foreground [&_:is(h3,h4,h5,h6)]:text-xs [&_:is(h3,h4,h5,h6)]:text-foreground/80">
+          <Markdown text={text} />
+        </div>
       )}
     </div>
   );

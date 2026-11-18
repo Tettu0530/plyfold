@@ -4,6 +4,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Conversation
+
+- The agent's thinking is shown as Markdown like its answers (lists, emphasis, code, headings), still small and muted
+
 ### Fixed
 
 - On macOS in full screen, where the window buttons are hidden, the sidebar button moves to the left edge of the header instead of keeping their space
