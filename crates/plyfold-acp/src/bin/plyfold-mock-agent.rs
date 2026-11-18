@@ -175,9 +175,12 @@ async fn prompt(st: Arc<State>, id: Value, params: Value) {
         if text.contains("silent") {
             tokio::time::sleep(Duration::from_secs(3)).await;
         }
-        for part in ["echo: ", text.as_str()] {
-            st.update(&sid, text_chunk("agent_message_chunk", part));
-        }
+        // "env NAME": answer with the value of an environment variable the agent was started with
+        let reply = match text.strip_prefix("env ") {
+            Some(var) => format!("{var}={}", std::env::var(var.trim()).unwrap_or_default()),
+            None => format!("echo: {text}"),
+        };
+        st.update(&sid, text_chunk("agent_message_chunk", &reply));
         "end_turn"
     };
     let output = (text.len() as u64 / 2).max(1);

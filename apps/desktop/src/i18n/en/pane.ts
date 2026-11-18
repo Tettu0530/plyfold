@@ -58,6 +58,7 @@ export const pane: Record<keyof typeof source, string> = {
   preview: "Preview",
   previewPlaceholder: "localhost:3000",
   previewFound: "URLs in the output",
+  previewPorts: "Session ports (PORT)",
   removePane: "Close pane",
   dropOpen: "Open here",
   dropSwap: "Swap panes",

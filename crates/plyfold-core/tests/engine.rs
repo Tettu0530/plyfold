@@ -217,6 +217,41 @@ async fn a_trashed_session_keeps_its_work_until_the_trash_is_emptied() {
 }
 
 #[tokio::test]
+async fn each_session_gets_a_port_of_its_own_and_keeps_it() {
+    let base = tmp("port");
+    let eng = engine(&base.join("state"), 60_000);
+    let mut rx = eng.subscribe();
+    let answer = |id: &str| {
+        let events = eng.store().events(id, None, 10_000).unwrap();
+        events
+            .iter()
+            .rev()
+            .find_map(|e| e.payload.split("PORT=").nth(1).map(|v| v.chars().take_while(char::is_ascii_digit).collect::<String>()))
+            .unwrap_or_default()
+    };
+    let mut ports = Vec::new();
+    for title in ["a", "b"] {
+        let s = eng.start_session(StartSession { profile: "mock".into(), title: title.into(), repo: base.clone(), worktree: false }).await.unwrap();
+        eng.prompt(&s.id, "env PORT").unwrap();
+        wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { session_id, .. } if session_id == &s.id)).await;
+        let rec = eng.store().get_session(&s.id).unwrap();
+        let port = rec.port.expect("a port");
+        assert!((3101..=3999).contains(&port));
+        assert_eq!(answer(&s.id), port.to_string(), "the agent sees it as PORT");
+        ports.push((s.id, port));
+    }
+    assert_ne!(ports[0].1, ports[1].1);
+    // Reopened, a session keeps its port
+    let (id, port) = ports[0].clone();
+    eng.close_session(&id).await.unwrap();
+    eng.reopen_session(&id).await.unwrap();
+    assert_eq!(eng.store().get_session(&id).unwrap().port, Some(port));
+    // A conversation runs no dev servers
+    let c = eng.start_chat("mock", "Talk").await.unwrap();
+    assert_eq!(eng.store().get_session(&c.id).unwrap().port, None);
+}
+
+#[tokio::test]
 async fn cancel_resolves_pending_permission_and_stops_turn() {
     let base = tmp("cancel");
     let eng = engine(&base.join("state"), 60_000);

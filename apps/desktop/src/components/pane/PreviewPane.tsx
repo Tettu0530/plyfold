@@ -9,7 +9,7 @@ import { api, inTauri } from "@/lib/api";
 import { normalizeUrl } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
-import { useFoundUrls } from "../BrowserButton";
+import { useFoundUrls, useSessionPorts } from "../BrowserButton";
 import { startDrag } from "./dnd";
 import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
 
@@ -21,6 +21,10 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
   const page = useStore((s) => s.previews[id]);
   const { closePane, focusPane, setPreviewUrl } = useStore.getState();
   const [draft, setDraft] = useState(page?.url ?? "");
+  // The example in the address bar: the port of the session in focus, when it has one
+  const port = useSessionPorts()[0]
+    ?.url.replace(/^http:\/\//, "")
+    .replace(/\/$/, "");
   // Changing the key reloads the frame (a cross-origin frame can't be reloaded from here otherwise)
   const [nonce, setNonce] = useState(0);
   const [loaded, setLoaded] = useState(false);
@@ -76,7 +80,7 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
             }}
             onFocus={(e) => e.currentTarget.select()}
             autoFocus={empty}
-            placeholder={t("pane.previewPlaceholder")}
+            placeholder={port ?? t("pane.previewPlaceholder")}
             className="h-6 min-w-0 grow rounded-md bg-transparent px-1.5 font-mono text-xs outline-none focus:bg-background focus:outline focus:outline-ring"
           />
           <button
@@ -137,6 +141,7 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
 function StartPage({ onOpen }: { onOpen: (url: string) => void }) {
   const t = useT();
   const urls = useFoundUrls();
+  const ports = useSessionPorts().filter((p) => !urls.some((u) => u.startsWith(p.url.replace(/\/$/, ""))));
   return (
     <div className="flex min-h-0 grow flex-col gap-2 overflow-y-auto px-4 py-4">
       <p className="m-0 text-xs text-muted-foreground">{t("pane.previewStart")}</p>
@@ -147,6 +152,23 @@ function StartPage({ onOpen }: { onOpen: (url: string) => void }) {
             <button key={u} type="button" onClick={() => onOpen(u)} className="-mx-1.5 flex h-7 items-center gap-2 rounded-md px-1.5 text-left hover:bg-accent">
               <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
               <span className="min-w-0 truncate font-mono text-xs">{u}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {ports.length > 0 && (
+        <div className="flex flex-col">
+          <span className="pb-1 text-xs font-medium text-muted-foreground">{t("pane.previewPorts")}</span>
+          {ports.map((p) => (
+            <button
+              key={p.url}
+              type="button"
+              onClick={() => onOpen(p.url)}
+              className="-mx-1.5 flex h-7 items-center gap-2 rounded-md px-1.5 text-left hover:bg-accent"
+            >
+              <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              <span className="shrink-0 font-mono text-xs">{p.url}</span>
+              <span className="min-w-0 truncate text-xs text-muted-foreground">{p.title}</span>
             </button>
           ))}
         </div>

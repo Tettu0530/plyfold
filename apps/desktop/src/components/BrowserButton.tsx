@@ -25,6 +25,19 @@ export function useFoundUrls(): string[] {
   }, [sessions, panes, layout, focused]);
 }
 
+/** The ports given to the sessions shown in panes (the focused pane's first), with their titles */
+export function useSessionPorts(): { url: string; title: string }[] {
+  const sessions = useStore((s) => s.sessions);
+  const panes = useStore((s) => s.panes);
+  const layout = useStore((s) => s.layout);
+  const focused = useStore((s) => s.panes[s.focusedPane]);
+  return useMemo(() => {
+    const ids = visibleSessions({ panes, layout }).filter((id): id is string => !!id && !!sessions[id]?.record.port);
+    ids.sort((a, b) => Number(b === focused) - Number(a === focused));
+    return ids.map((id) => ({ url: `http://localhost:${sessions[id].record.port}/`, title: sessions[id].record.title }));
+  }, [sessions, panes, layout, focused]);
+}
+
 export function BrowserButton() {
   const t = useT();
   const raised = useLiquidActiveAnchors().has(ANCHOR);
