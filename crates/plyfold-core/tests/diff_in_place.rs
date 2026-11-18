@@ -90,6 +90,9 @@ async fn git_info_after_the_worktree_is_cleaned_up() {
     std::fs::write(repo.join("a.txt"), "one\n").unwrap();
     git(&repo, &["add", "a.txt"]);
     git(&repo, &["commit", "-qm", "init"]);
+    // Plyfold commits with the repository's identity; CI machines have none of their own
+    git(&repo, &["config", "user.name", "t"]);
+    git(&repo, &["config", "user.email", "t@example.invalid"]);
 
     let eng = engine(&base.join("state"));
     let s = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: repo.clone(), worktree: true }).await.unwrap();
