@@ -113,6 +113,19 @@ export default function App() {
     return id ? (s.sessions[id]?.record.repo_path ?? null) : null;
   });
   const fullscreen = useFullscreen();
+  // In full screen, macOS takes an Esc the page did not handle as "exit full screen". Esc closes menus, the find bar,
+  // previews and the like here, so in full screen it is always marked handled: on reaching its target, after the
+  // menus' own handling (which runs while it travels down) and before any handler that might stop it on the way up.
+  // Leave full screen with ⌃⌘F or the window button
+  useEffect(() => {
+    if (!isMac || !fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.isComposing || !e.target) return;
+      e.target.addEventListener("keydown", (ev) => ev.preventDefault(), { once: true });
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [fullscreen]);
   useShortcuts();
   useEffect(() => {
     void init();

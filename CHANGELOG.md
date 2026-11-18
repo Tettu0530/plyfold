@@ -7,6 +7,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 ### Fixed
 
 - On macOS in full screen, where the window buttons are hidden, the sidebar button moves to the left edge of the header instead of keeping their space
+- On macOS in full screen, Esc closes what it closes (menus, the find bar, previews) without also leaving full screen; ⌃⌘F or the window button leaves it
 
 ## [0.4.0] - 2026-11-18
 
