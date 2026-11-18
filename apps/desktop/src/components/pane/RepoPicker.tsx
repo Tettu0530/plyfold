@@ -1,6 +1,7 @@
 // Repository picker: recent repositories plus completion of folders continuing the input
 //   ↑↓ to select, Tab to descend into that folder (keeps completing), ⏎ to confirm
-import { Folder, GitBranch } from "lucide-react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { Folder, FolderOpen, GitBranch } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api, inTauri } from "@/lib/api";
@@ -10,6 +11,7 @@ import { useStore, isListed } from "@/state/store";
 import { Keys } from "../Keys";
 import { isImeKey } from "@/lib/keys";
 import { useT } from "@/i18n";
+import { isMac, isWindows } from "@/lib/platform";
 
 const baseName = (p: string) => p.replace(/\/+$/, "").split("/").pop() || p;
 
@@ -92,23 +94,49 @@ export function RepoPicker({ value, onPick }: { value: string; onPick: (path: st
     }
   };
 
+  // The system's folder chooser (Finder, File Explorer), starting from the folder in the input when it is a full path
+  const browse = async () => {
+    const start = query.replace(/\/+$/, "");
+    const picked = await openDialog({
+      directory: true,
+      multiple: false,
+      title: t("draft.browseTitle"),
+      defaultPath: start.startsWith("/") || /^[A-Za-z]:[\\/]/.test(start) ? start : undefined,
+    }).catch(() => null);
+    if (typeof picked === "string" && picked) onPick(picked);
+  };
+  const browseLabel = t(isMac ? "draft.browseMac" : isWindows ? "draft.browseWindows" : "draft.browseLinux");
+
   return (
     <div className="flex flex-col gap-1">
-      <input
-        aria-label={t("draft.repoPath")}
-        role="combobox"
-        aria-expanded={rows.length > 0}
-        aria-controls="repo-picker-list"
-        aria-activedescendant={rows[cur] ? `repo-row-${cur}` : undefined}
-        autoFocus
-        spellCheck={false}
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onFocus={(e) => e.currentTarget.select()}
-        onKeyDown={onKeyDown}
-        placeholder="~/projects/…"
-        className="h-8 rounded-md border border-input bg-transparent px-2 font-mono text-xs outline-none focus:border-ring"
-      />
+      <div className="flex gap-1">
+        <input
+          aria-label={t("draft.repoPath")}
+          role="combobox"
+          aria-expanded={rows.length > 0}
+          aria-controls="repo-picker-list"
+          aria-activedescendant={rows[cur] ? `repo-row-${cur}` : undefined}
+          autoFocus
+          spellCheck={false}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={(e) => e.currentTarget.select()}
+          onKeyDown={onKeyDown}
+          placeholder="~/projects/…"
+          className="h-8 min-w-0 grow rounded-md border border-input bg-transparent px-2 font-mono text-xs outline-none focus:border-ring"
+        />
+        {inTauri && (
+          <button
+            type="button"
+            aria-label={browseLabel}
+            title={browseLabel}
+            onClick={() => void browse()}
+            className="flex size-8 shrink-0 items-center justify-center rounded-md border border-input text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <FolderOpen className="size-3.5" aria-hidden />
+          </button>
+        )}
+      </div>
       {rows.length > 0 && (
         <div ref={listRef} id="repo-picker-list" role="listbox" aria-label={t("draft.repoSuggestions")} className="max-h-64 overflow-y-auto">
           {rows.map((r, i) => {
