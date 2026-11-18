@@ -275,17 +275,31 @@ async fn permission(shared: &Shared, params: &Value) -> Value {
 }
 
 /// Refuse reads and writes outside the working directory
+/// The path, resolved through links, when it is inside the working directory. A relative path is taken from the
+/// working directory (not the probe's own), and a link anywhere on the way counts where it leads
 fn inside_cwd(shared: &Shared, path: &Path) -> Result<PathBuf, String> {
     let cwd = shared.cwd.canonicalize().map_err(|e| e.to_string())?;
-    let parent = path.parent().ok_or("no parent directory")?;
-    let parent = parent.canonicalize().map_err(|e| format!("{}: {e}", parent.display()))?;
-    if !parent.starts_with(&cwd) {
+    let path = if path.is_absolute() { path.to_path_buf() } else { shared.cwd.join(path) };
+    let resolved = match path.canonicalize() {
+        Ok(p) => p,
+        // A new file: its folder must exist and be inside; a link with nothing at its end is refused
+        Err(_) if path.symlink_metadata().is_err() => {
+            let parent = path.parent().ok_or("no parent directory")?;
+            let parent = parent.canonicalize().map_err(|e| format!("{}: {e}", parent.display()))?;
+            parent.join(path.file_name().ok_or("no file name")?)
+        }
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    };
+    if !resolved.starts_with(&cwd) {
         return Err(format!("outside the working directory: {}", path.display()));
     }
-    Ok(parent.join(path.file_name().ok_or("no file name")?))
+    Ok(resolved)
 }
 
 fn read_text_file(shared: &Shared, params: &Value) -> Result<String, String> {
+    if shared.policy == Policy::Reject {
+        return Err("rejected by policy".into());
+    }
     let path = inside_cwd(shared, Path::new(params["path"].as_str().ok_or("missing path")?))?;
     let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let line = params["line"].as_u64().unwrap_or(1).max(1) as usize;
@@ -298,6 +312,9 @@ fn read_text_file(shared: &Shared, params: &Value) -> Result<String, String> {
 }
 
 fn write_text_file(shared: &Shared, params: &Value) -> Result<(), String> {
+    if shared.policy == Policy::Reject {
+        return Err("rejected by policy".into());
+    }
     let path = inside_cwd(shared, Path::new(params["path"].as_str().ok_or("missing path")?))?;
     let content = params["content"].as_str().ok_or("missing content")?;
     std::fs::write(&path, content).map_err(|e| e.to_string())?;

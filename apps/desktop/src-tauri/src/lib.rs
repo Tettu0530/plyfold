@@ -558,8 +558,12 @@ fn expand_home(p: &str) -> String {
     }
 }
 
-/// During development, use the mock agent in the workspace's target directory
+/// During development, use the mock agent in the workspace's target directory. A release build never swaps in a
+/// program found next to it or named by an environment variable
 fn resolve_mock_agent(config: &mut Config) {
+    if !cfg!(debug_assertions) {
+        return;
+    }
     let Some(mock) = config.agents.get_mut("mock") else { return };
     if mock.command != "plyfold-mock-agent" {
         return;

@@ -4,7 +4,7 @@ A verification CLI that checks each CLI's ACP support. It speaks raw JSON-RPC wi
 
 ```sh
 cargo build
-alias probe=./target/debug/plyfold-probe   # run from the repository root (reads probe.toml)
+alias probe=./target/debug/plyfold-probe   # reads probe.toml at the repository root (or pass --config)
 
 probe list                         # configured agents and profiles
 probe caps claude                  # results of initialize and session/new (uses no tokens)
