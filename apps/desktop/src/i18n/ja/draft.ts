@@ -38,4 +38,8 @@ export const draft = {
   chat: "会話",
   chatOn: "会話: リポジトリなしで話す。Web の検索と取得はでき、ファイルの編集とコマンドは使わない",
   chatOff: "作業: リポジトリで作業する",
+  compare: "並べて比べる",
+  compareHint: "同じ指示を、選んだプロファイルのそれぞれに出します（2〜{max} 個）。どれも専用の worktree で動き、横に並べて開きます",
+  compareProfiles: "比べるプロファイル（{count} / {max}）",
+  compareWorktree: "比べるときは、セッションごとに worktree を作ります",
 } satisfies Record<string, string>;

@@ -1,0 +1,22 @@
+// pane/ComparePane.tsx (sessions started together from one prompt)
+export const compare = {
+  title: "比べる",
+  paneLabel: "「{title}」の比較",
+  empty: "比べるセッションがありません（ゴミ箱に移したか、消しました）",
+  time: "時間",
+  tokens: "トークン",
+  cost: "費用",
+  changes: "変更",
+  files: "{count} ファイル",
+  open: "開く",
+  diff: "差分",
+  merge: "これを取り込む",
+  mergeConfirm: "未コミットの変更をコミットしてから、元のブランチに取り込みます",
+  mergeYes: "取り込む",
+  mergeBusy: "作業が終わってから取り込めます",
+  mergeNothing: "取り込む変更がありません",
+  mergedInto: "{target} に取り込みました",
+  trashOthersHint: "ほかの {count} つは、もう要らなければゴミ箱に移せます（そこから戻せます）",
+  trashOthers: "ほかをゴミ箱へ",
+  openPane: "一緒に始めた {count} つを比べる",
+} satisfies Record<string, string>;

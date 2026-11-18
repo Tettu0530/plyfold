@@ -1188,6 +1188,14 @@ impl Engine {
         Ok(rec)
     }
 
+    /// Tie sessions started from one prompt into a comparison (None takes a session out of it)
+    pub fn set_run_group(&self, id: &str, group: Option<&str>) -> Result<SessionRecord, CoreError> {
+        self.inner.store.set_run_group(id, group)?;
+        let rec = self.inner.store.get_session(id)?;
+        self.inner.emit(EngineEvent::WorkspaceChanged { session: rec.clone() });
+        Ok(rec)
+    }
+
     /// Take a session out of the trash (it stays stopped until it is opened)
     pub fn restore_session(&self, id: &str) -> Result<SessionRecord, CoreError> {
         self.inner.store.set_trashed(id, None)?;

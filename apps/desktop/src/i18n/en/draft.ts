@@ -40,4 +40,8 @@ export const draft: Record<keyof typeof source, string> = {
   chat: "Conversation",
   chatOn: "Conversation: talk without a repository. It can search and read the web, but does not edit files or run commands",
   chatOff: "Work: work in a repository",
+  compare: "Compare",
+  compareHint: "Give the same prompt to each profile you pick (2 to {max}). Each runs in a worktree of its own, opened side by side",
+  compareProfiles: "Profiles to compare ({count} / {max})",
+  compareWorktree: "Comparing gives each session a worktree of its own",
 };

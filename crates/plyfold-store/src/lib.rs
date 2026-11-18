@@ -96,6 +96,9 @@ pub struct SessionRecord {
     /// The port given to this session's dev servers (PORT in the agent's environment); kept for its lifetime
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
+    /// Sessions started together from one prompt to compare share this id
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_group: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -202,8 +205,7 @@ CREATE TABLE IF NOT EXISTS dismissed_conversations (
 );
 ";
 
-const SESSION_COLS: &str =
-    "id, title, profile, agent, repo_path, worktree_path, branch, base_ref, acp_session_id, status, created_at, updated_at, side_of, chat, trashed_at, port";
+const SESSION_COLS: &str = "id, title, profile, agent, repo_path, worktree_path, branch, base_ref, acp_session_id, status, created_at, updated_at, side_of, chat, trashed_at, port, run_group";
 
 fn row_to_session(r: &rusqlite::Row) -> rusqlite::Result<SessionRecord> {
     Ok(SessionRecord {
@@ -223,6 +225,7 @@ fn row_to_session(r: &rusqlite::Row) -> rusqlite::Result<SessionRecord> {
         chat: r.get::<_, i64>(13)? != 0,
         trashed_at: r.get(14)?,
         port: r.get(15)?,
+        run_group: r.get(16)?,
     })
 }
 
@@ -276,6 +279,10 @@ impl Store {
         if !has_port {
             conn.execute_batch("ALTER TABLE sessions ADD COLUMN port INTEGER")?;
         }
+        let has_group: bool = conn.prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'run_group'")?.exists([])?;
+        if !has_group {
+            conn.execute_batch("ALTER TABLE sessions ADD COLUMN run_group TEXT")?;
+        }
         Ok(Self { conn: Mutex::new(conn) })
     }
 
@@ -298,9 +305,10 @@ impl Store {
             chat: s.chat,
             trashed_at: None,
             port: None,
+            run_group: None,
         };
         self.conn.lock().unwrap().execute(
-            &format!("INSERT INTO sessions ({SESSION_COLS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)"),
+            &format!("INSERT INTO sessions ({SESSION_COLS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)"),
             params![
                 rec.id,
                 rec.title,
@@ -317,7 +325,8 @@ impl Store {
                 rec.side_of,
                 rec.chat as i64,
                 rec.trashed_at,
-                rec.port
+                rec.port,
+                rec.run_group
             ],
         )?;
         Ok(rec)
@@ -353,6 +362,10 @@ impl Store {
         self.update(id, "status", &status.as_str())?;
         self.append_event(id, EventKind::Status, status.as_str())?;
         Ok(())
+    }
+
+    pub fn set_run_group(&self, id: &str, group: Option<&str>) -> Result<(), StoreError> {
+        self.update(id, "run_group", &group)
     }
 
     pub fn set_port(&self, id: &str, port: u16) -> Result<(), StoreError> {
