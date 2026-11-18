@@ -9,6 +9,12 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 - Agents from the ACP Registry: Profiles → Add agents lists the agents that speak ACP; the ones started through npx or uvx (Qwen Code, Kimi Code, GitHub Copilot, Cline, Auggie and more) can be added, updated to the registry's version and removed. They run with their default profile, with the name and icon they come with. Agents shipped only as binaries are listed but cannot be added yet
 - The mock agent used by the tests is no longer offered as a built-in agent
 
+### Conversation
+
+- A turn's numbers (speed, tokens, time) sit beside the copy button under its last answer instead of on a row of their own; a turn with no answer text keeps the row
+- The scroll-to-bottom button materializes in place (from nothing, slightly small and out of focus) instead of sliding up; when new output arrives below while it is shown, its dot pops in and the arrow dips once
+- A turn that used no tokens at all (a command the agent answers itself, such as `/usage` or `/context`) shows no stats row under it; a stop or an error still does
+
 ### Fixed
 
 - On macOS the window buttons sit centred in the header, level with the sidebar button, and a little further from the edge

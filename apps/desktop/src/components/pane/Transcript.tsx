@@ -12,7 +12,7 @@ import { SentAttachments } from "./Attachments";
 import { Markdown } from "./Markdown";
 import { ActionRow, CopyButton, EditBox, QuoteButton, UserActions, Working, workingLabel } from "./MessageActions";
 import { DiffBlock, ToolCalls } from "./ToolCall";
-import { snappy } from "../motion";
+import { bouncy, smooth } from "../motion";
 import { useStore } from "@/state/store";
 import { commandAt } from "./Slash";
 
@@ -33,23 +33,38 @@ function clock(ms: number): string {
   return d.toDateString() === new Date().toDateString() ? hm : `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
 }
 
+/**
+ * A turn that used no tokens at all: a command the agent answers by itself, without the model (/usage, /context…).
+ * Only when the agent reports usage; without it nothing is known
+ */
+export function usedNoTokens(stats: TurnStats | null): boolean {
+  const u = stats?.usage;
+  return !!u && u.input + u.cached_read + u.cached_write + u.output === 0;
+}
+
 export function TurnStatsRow({
   stats,
   cost,
   error,
   stopReason,
   endedAt,
+  actions,
 }: {
   stats: TurnStats | null;
   cost?: string;
   error?: string | null;
   stopReason?: string | null;
   endedAt?: number | null;
+  /** The answer's buttons (copy…), on the left of the numbers */
+  actions?: React.ReactNode;
 }) {
   const t = useT();
   if (error) return <p className="text-xs text-error">{error}</p>;
   return (
+    // The answer's buttons on the left, the numbers on the right
     <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground tabular">
+      {actions}
+      <span className="grow" />
       {stats?.tokens_per_sec != null && (
         <Stat icon={Gauge} title={stats.estimated ? t("transcript.tokPerSecEstimated") : t("transcript.tokPerSec")}>
           {stats.estimated ? "~" : ""}
@@ -79,7 +94,7 @@ export function TurnStatsRow({
       {stopReason === "cancelled" && <span>{t("transcript.stopped")}</span>}
       {stopReason === INTERRUPTED && <span>{t("transcript.interrupted")}</span>}
       {endedAt != null && (
-        <time dateTime={new Date(endedAt).toISOString()} title={t("transcript.endedAt")} className="ml-auto">
+        <time dateTime={new Date(endedAt).toISOString()} title={t("transcript.endedAt")}>
           {clock(endedAt)}
         </time>
       )}
@@ -121,6 +136,45 @@ function CommandText({ text, commands }: { text: string; commands: SlashCommand[
       <span className="text-command">{text.slice(0, head)}</span>
       {text.slice(head)}
     </>
+  );
+}
+
+/**
+ * Scroll to the bottom. When new output arrives below while it is shown, its dot pops in and the arrow dips once
+ * (no looping)
+ */
+function ToBottomButton({ unseen, label, title, onClick }: { unseen: boolean; label: string; title: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={title}
+      onClick={onClick}
+      className="relative flex size-8 items-center justify-center rounded-full border bg-card text-muted-foreground shadow-[0_4px_12px_rgba(0,0,0,.45)] hover:bg-accent hover:text-foreground"
+    >
+      <motion.span
+        key={unseen ? "new" : "idle"}
+        initial={unseen ? { y: 0 } : false}
+        animate={unseen ? { y: [0, 3, 0] } : { y: 0 }}
+        transition={{ duration: 0.45 }}
+        className="flex"
+      >
+        <ArrowDown className="size-4" aria-hidden />
+      </motion.span>
+      <AnimatePresence>
+        {unseen && (
+          <motion.span
+            key="dot"
+            aria-hidden
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            exit={{ scale: 0 }}
+            transition={bouncy}
+            className="absolute top-0.5 right-0.5 size-2 rounded-full border-2 border-card bg-foreground"
+          />
+        )}
+      </AnimatePresence>
+    </button>
   );
 }
 
@@ -189,6 +243,24 @@ export function Transcript({
       else blocks.push({ kind: "tools", tools: [it] });
     } else blocks.push(it);
   }
+  // A turn's numbers go beside the buttons under its last answer (an error, or a turn with no answer, keeps its own row)
+  const statsOf = new Map<number, Extract<TranscriptItem, { kind: "stats" }>>();
+  const attached = new Set<number>();
+  blocks.forEach((b, j) => {
+    if (b.kind !== "stats" || b.error) return;
+    for (let k = j - 1; k >= 0; k--) {
+      const prev = blocks[k];
+      if (prev.kind === "user" || prev.kind === "stats") break;
+      if (prev.kind === "agent") {
+        statsOf.set(k, b);
+        attached.add(j);
+        break;
+      }
+    }
+  });
+  // A local command (no tokens either way) has nothing to report; a stop or an error still shows
+  const showStats = (b: Extract<TranscriptItem, { kind: "stats" }>) =>
+    !!b.error || b.stopReason === "cancelled" || b.stopReason === INTERRUPTED || !usedNoTokens(b.stats);
 
   return (
     <div className="relative flex min-h-0 grow flex-col">
@@ -234,18 +306,26 @@ export function Transcript({
                   )}
                 </div>
               );
-            case "agent":
+            case "agent": {
+              const actions = (
+                <ActionRow align="start">
+                  <CopyButton text={b.text} />
+                  {onQuote && <QuoteButton text={b.text} label={onQuote.label} onQuote={onQuote.run} />}
+                </ActionRow>
+              );
+              const st = statsOf.get(i);
               return (
                 <div key={i} className="group flex flex-col gap-0.5">
                   <Markdown text={b.text} streaming={streaming && i === blocks.length - 1} />
-                  {!(streaming && i === blocks.length - 1) && (
-                    <ActionRow align="start">
-                      <CopyButton text={b.text} />
-                      {onQuote && <QuoteButton text={b.text} label={onQuote.label} onQuote={onQuote.run} />}
-                    </ActionRow>
-                  )}
+                  {!(streaming && i === blocks.length - 1) &&
+                    (st && showStats(st) ? (
+                      <TurnStatsRow stats={st.stats} stopReason={st.stopReason} cost={undefined} endedAt={st.endedAt} actions={actions} />
+                    ) : (
+                      actions
+                    ))}
                 </div>
               );
+            }
             case "thought":
               return <Thought key={i} text={b.text} />;
             case "tools":
@@ -272,7 +352,10 @@ export function Transcript({
             case "stats":
               return (
                 <div key={i} className="flex flex-col gap-3">
-                  <TurnStatsRow stats={b.stats} error={b.error} stopReason={b.stopReason} cost={undefined} endedAt={b.endedAt} />
+                  {/* Shown under the answer when there is one (see statsOf) */}
+                  {!attached.has(i) && showStats(b) && (
+                    <TurnStatsRow stats={b.stats} error={b.error} stopReason={b.stopReason} cost={undefined} endedAt={b.endedAt} />
+                  )}
                   {i < blocks.length - 1 && <div className="h-px bg-border" />}
                 </div>
               );
@@ -305,23 +388,24 @@ export function Transcript({
         {info?.cost && <span className="sr-only">{tr("transcript.sessionCost", { cost: money(info.cost.amount, info.cost.currency) })}</span>}
       </div>
       {/* Shown only while scrolled up; a dot means new output arrived below */}
+      {/* Materializes in place (no travel): from nothing, slightly small and out of focus */}
       <AnimatePresence>
         {awayFromBottom && (
-          <motion.button
+          <motion.div
             key="to-bottom"
-            type="button"
-            aria-label={unseen ? `${tr("transcript.scrollToBottom")}. ${tr("transcript.newBelow")}` : tr("transcript.scrollToBottom")}
-            title={tr("transcript.scrollToBottom")}
-            initial={{ opacity: 0, y: 8, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.9 }}
-            transition={snappy}
-            onClick={jumpToBottom}
-            className="absolute bottom-3 left-1/2 -ml-4 flex size-8 items-center justify-center rounded-full border bg-card text-muted-foreground shadow-[0_4px_12px_rgba(0,0,0,.45)] hover:bg-accent hover:text-foreground"
+            initial={{ opacity: 0, scale: 0.6, filter: "blur(6px)" }}
+            animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+            exit={{ opacity: 0, scale: 0.6, filter: "blur(6px)" }}
+            transition={smooth}
+            className="absolute bottom-3 left-1/2 -ml-4"
           >
-            <ArrowDown className="size-4" aria-hidden />
-            {unseen && <span aria-hidden className="absolute top-0.5 right-0.5 size-2 rounded-full border-2 border-card bg-foreground" />}
-          </motion.button>
+            <ToBottomButton
+              unseen={unseen}
+              label={unseen ? `${tr("transcript.scrollToBottom")}. ${tr("transcript.newBelow")}` : tr("transcript.scrollToBottom")}
+              title={tr("transcript.scrollToBottom")}
+              onClick={jumpToBottom}
+            />
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
