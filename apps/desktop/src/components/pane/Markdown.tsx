@@ -18,7 +18,7 @@ import { normalizeMath } from "@/lib/math";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "./MessageActions";
 import { imageSource } from "@/lib/imageSrc";
-import { useFileImage } from "../ImagePreview";
+import { PreviewGroup, useFileImage } from "../ImagePreview";
 import { Thumb } from "./Attachments";
 
 /** Open a link in the default browser (inside the WebView it would replace the app) */
@@ -56,9 +56,9 @@ function AnswerImage({ src, alt }: { src: string | undefined; alt: string | unde
   const read = useFileImage(source?.kind === "file" ? source.path : null);
   const shown = source?.kind === "data" ? source.src : read;
   const anchor = `md-img:${useId()}`;
-  if (shown) return <Thumb src={shown} name={alt || src || ""} anchor={anchor} className="max-h-72 max-w-full object-contain" />;
-  // Keeps its place while the file is read, so the answer does not jump twice
-  if (source?.kind === "file" && shown === undefined) return <span className="inline-block h-6" aria-hidden />;
+  if (shown) return <Thumb src={shown} name={alt || src || ""} anchor={anchor} className="size-28 object-cover" />;
+  // Keeps its place while the file is read, so the answer does not jump
+  if (source?.kind === "file" && shown === undefined) return <span className="block size-28 rounded-md border bg-muted" aria-hidden />;
   return <ImageLink src={src} alt={alt} />;
 }
 
@@ -92,8 +92,10 @@ const components: Components = {
       {children}
     </ul>
   ),
+  // Numbered by a counter drawn inside the column (index.css .md-ol): browser markers hang outside it, and the wide
+  // mono digits stuck out past the left edge of the text
   ol: ({ children, start }) => (
-    <ol start={start} className="my-2 flex list-decimal flex-col gap-1 pl-5 marker:font-mono marker:text-muted-foreground">
+    <ol start={start} style={{ counterReset: `md-ol ${(start ?? 1) - 1}` }} className="md-ol my-2 flex flex-col gap-1">
       {children}
     </ol>
   ),
@@ -101,6 +103,8 @@ const components: Components = {
   input: ({ checked }) => <input type="checkbox" checked={!!checked} disabled readOnly className="mr-1.5 translate-y-px accent-foreground" />,
   blockquote: ({ children }) => <blockquote className="my-2 border-l-2 pl-3 text-muted-foreground">{children}</blockquote>,
   hr: () => <hr className="my-4 border-border" />,
+  div: ({ node: _node, className, ...props }) =>
+    className === "md-gallery" ? <div className="my-2 flex flex-wrap gap-2" {...props} /> : <div className={className} {...props} />,
   a: ({ href, children }) => (
     <a
       href={href}
@@ -145,20 +149,58 @@ const components: Components = {
 // Math: $…$ inline and $$…$$ blocks (\(…\) and \[…\] are turned into those first). KaTeX runs with its defaults that
 // matter here: untrusted (no \href, \url or \includegraphics actions), and a formula it cannot read is shown as typed
 // instead of breaking the message
-const rehypePlugins: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [[rehypeKatex, { throwOnError: false, strict: "ignore", trust: false }]];
+const rehypePlugins: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [
+  [rehypeKatex, { throwOnError: false, strict: "ignore", trust: false }],
+  rehypeGallery,
+];
 
 /** Markdown body. While streaming, shows a typing indicator after the last element */
 // Images on this machine (file:) and embedded images (data:image/) are kept; everything else is filtered as
 // react-markdown does by default
+type HastNode = { type: string; tagName?: string; value?: string; children?: HastNode[]; properties?: Record<string, unknown> };
+
+const isImage = (n: HastNode) => n.type === "element" && n.tagName === "img";
+const isBlank = (n: HastNode) => n.type === "text" && !n.value?.trim();
+const isImageParagraph = (n: HastNode) =>
+  n.type === "element" && n.tagName === "p" && !!n.children?.some(isImage) && n.children.every((c) => isImage(c) || isBlank(c));
+
+/** Paragraphs that hold only images, one after another, become one gallery: square thumbnails side by side */
+function rehypeGallery() {
+  const walk = (node: HastNode) => {
+    if (!node.children) return;
+    const out: HastNode[] = [];
+    let run: HastNode[] | null = null;
+    for (const child of node.children) {
+      if (isImageParagraph(child)) {
+        if (!run) {
+          run = [];
+          out.push({ type: "element", tagName: "div", properties: { className: ["md-gallery"] }, children: run });
+        }
+        run.push(...child.children!.filter(isImage));
+      } else if (run && isBlank(child)) {
+        // the line breaks between the paragraphs
+      } else {
+        run = null;
+        walk(child);
+        out.push(child);
+      }
+    }
+    node.children = out;
+  };
+  return (tree: HastNode) => walk(tree);
+}
+
 const urlTransform = (url: string, key: string) => (/^file:/i.test(url) || (key === "src" && /^data:image\//i.test(url)) ? url : defaultUrlTransform(url));
 
 export const Markdown = memo(function Markdown({ text, streaming, base }: { text: string; streaming?: boolean; base?: string }) {
   return (
     <div lang={contentLang(text)} className={cn("min-w-0 break-words select-text", streaming && "md-streaming")}>
       <ImageBase.Provider value={base}>
-        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={rehypePlugins} components={components} urlTransform={urlTransform}>
-          {normalizeMath(text)}
-        </ReactMarkdown>
+        <PreviewGroup>
+          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={rehypePlugins} components={components} urlTransform={urlTransform}>
+            {normalizeMath(text)}
+          </ReactMarkdown>
+        </PreviewGroup>
       </ImageBase.Provider>
     </div>
   );

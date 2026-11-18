@@ -10,4 +10,6 @@ export const attach: Record<keyof typeof source, string> = {
   attachFiles: "添加文件或图片",
   preview: "查看 {name}",
   closePreview: "关闭",
+  previousImage: "上一张",
+  nextImage: "下一张",
 };

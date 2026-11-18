@@ -6,7 +6,9 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ### Conversation
 
-- Images in an answer that are files on this machine (a path relative to the session's folder, an absolute path or a `file:` URL) or embedded in it are shown as thumbnails that open large. Images on the web are still not fetched and stay links
+- Images in an answer that are files on this machine (a path relative to the session's folder, an absolute path or a `file:` URL) or embedded in it are shown as square thumbnails; images one after another line up as a gallery. Images on the web are still not fetched and stay links
+- The image preview steps through the other images of the same answer or message (← and →, or the buttons at the sides), with a counter
+- Numbers of a numbered list in an answer sit inside the text column instead of sticking out past its left edge
 
 ## [0.3.0] - 2026-11-18
 
