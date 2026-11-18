@@ -248,3 +248,25 @@ body.dragging,
 body.dragging * {
   cursor: grabbing !important;
 }
+
+/* Numbered lists in answers (Markdown.tsx): the number sits inside the text column, right-aligned in a fixed slot so
+   1. to 99. line up, in mono digits that do not jitter */
+.md-ol {
+  list-style: none;
+  padding-left: 0;
+}
+.md-ol > li {
+  counter-increment: md-ol;
+  position: relative;
+  padding-left: 2rem;
+}
+.md-ol > li::before {
+  content: counter(md-ol) ".";
+  position: absolute;
+  left: 0;
+  width: 1.5rem;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
