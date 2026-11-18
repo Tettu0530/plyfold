@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useT, contentLang } from "@/i18n";
 import { money, seconds, tokens } from "@/lib/format";
-import type { SessionInfo, TurnStats } from "@/lib/types";
+import type { SessionInfo, SlashCommand, TurnStats } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { INTERRUPTED, type ToolCall, type TranscriptItem } from "@/state/transcript";
 import { resendable, type Attached } from "@/lib/attachments";
@@ -14,6 +14,7 @@ import { ActionRow, CopyButton, EditBox, QuoteButton, UserActions, Working, work
 import { DiffBlock, ToolCalls } from "./ToolCall";
 import { snappy } from "../motion";
 import { useStore } from "@/state/store";
+import { commandAt } from "./Slash";
 
 function Stat({ icon: Icon, children, title, className }: { icon: typeof Gauge; children: React.ReactNode; title: string; className?: string }) {
   return (
@@ -110,6 +111,19 @@ function Thought({ text }: { text: string }) {
   );
 }
 
+/** A sent message, with a slash command at its start in blue */
+function CommandText({ text, commands }: { text: string; commands: SlashCommand[] }) {
+  const command = commandAt(text, commands);
+  if (!command) return <>{text}</>;
+  const head = command.name.length + 1;
+  return (
+    <>
+      <span className="text-command">{text.slice(0, head)}</span>
+      {text.slice(head)}
+    </>
+  );
+}
+
 export function Transcript({
   items,
   info,
@@ -118,6 +132,7 @@ export function Transcript({
   onResend,
   onQuote,
   compact = false,
+  commands = [],
 }: {
   items: TranscriptItem[];
   info: SessionInfo | null;
@@ -130,6 +145,8 @@ export function Transcript({
   onQuote?: { label: string; run: (text: string) => void };
   /** A narrow column (the side chat): no centred reading width, tighter padding */
   compact?: boolean;
+  /** The agent's slash commands: a message that starts with one shows it in blue, as the composer does */
+  commands?: SlashCommand[];
 }) {
   const tr = useT();
   // The user message being edited (index in blocks)
@@ -202,7 +219,7 @@ export function Transcript({
                     <>
                       {b.text && (
                         <div lang={contentLang(b.text)} className="rounded-[10px] bg-muted px-3 py-1.5 leading-relaxed whitespace-pre-wrap select-text">
-                          {b.text}
+                          <CommandText text={b.text} commands={commands} />
                         </div>
                       )}
                       {onResend && (

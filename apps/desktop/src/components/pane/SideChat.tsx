@@ -145,6 +145,7 @@ function SideChatBody({ mainId }: { mainId: string }) {
             streaming={r.status === "working"}
             busy={view.transcript.inTurn}
             compact
+            commands={view.info?.commands ?? []}
             onQuote={{ label: t("side.quote"), run: (text) => insertIntoComposer(mainId, text) }}
           />
           <Composer
