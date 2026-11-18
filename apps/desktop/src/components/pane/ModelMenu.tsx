@@ -2,6 +2,7 @@
 // Agents with only one of the two get just that list. Both menus open with the same liquid motion as other menus
 import { Check, ChevronRight, ChevronsUpDown } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
+import { useRef } from "react";
 
 import { useT } from "@/i18n";
 import type { ConfigOption } from "@/lib/types";
@@ -60,12 +61,23 @@ export function ModelMenu({
   const menu = useLiquidMenu(`menu:${scope}:model`, `${scope}:model`);
   // The effort submenu grows out of its row in the model menu
   const sub = useLiquidMenu(`menu:${scope}:effort`, `${scope}:effort-row`);
+  // Closing the whole menu (esc, a click outside, picking a level) removes the submenu without telling it, which would
+  // leave its blob on screen; close the submenu's blob along with the menu
+  const subOpen = useRef(false);
+  const onSubOpenChange = (open: boolean) => {
+    subOpen.current = open;
+    sub.onOpenChange(open);
+  };
+  const onOpenChange = (open: boolean) => {
+    if (!open && subOpen.current) onSubOpenChange(false);
+    menu.onOpenChange(open);
+  };
   if (!model && !effort) return null;
   const modelName = model ? (model.choices.find((c) => c.value === model.current)?.name ?? model.current) : null;
   const label = [model && t("composer.modelLabel"), effort && t("composer.effortLabel")].filter(Boolean).join(" / ");
 
   return (
-    <DropdownMenu.Root onOpenChange={menu.onOpenChange}>
+    <DropdownMenu.Root onOpenChange={onOpenChange}>
       <DropdownMenu.Trigger asChild>
         <button
           ref={liquidAnchor(`${scope}:model`)}
@@ -108,7 +120,7 @@ export function ModelMenu({
           {model && effort && (
             <>
               <DropdownMenu.Separator className="-mx-1 my-1 h-px bg-border" />
-              <DropdownMenu.Sub onOpenChange={sub.onOpenChange}>
+              <DropdownMenu.Sub onOpenChange={onSubOpenChange}>
                 <DropdownMenu.SubTrigger ref={liquidAnchor(`${scope}:effort-row`)} className={cn(ITEM, "pr-2")}>
                   <EffortBars effort={effort} />
                   {t("composer.effortLabel")}

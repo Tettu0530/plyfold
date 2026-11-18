@@ -194,6 +194,21 @@
   font-family: "Geist Variable", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", system-ui, sans-serif;
 }
 
+/* Math in messages (KaTeX): a little larger than the text, long display formulas scroll sideways rather than
+   widening the pane, and a formula KaTeX cannot read is shown as typed in the secondary text color */
+.katex {
+  font-size: 1.08em;
+}
+.katex-display {
+  margin: 0.5rem 0;
+  padding: 2px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.katex-error {
+  color: var(--muted-foreground) !important;
+}
+
 /* While a pane or sidebar edge is dragged, iframes (the preview pane) must not swallow the pointer */
 body.resizing iframe {
   pointer-events: none;

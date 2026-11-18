@@ -19,6 +19,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 ### Composer
 
 - Model and effort share one chip and one menu: the models, then Effort › with the levels in a submenu
+- Math in messages is typeset with KaTeX: `$…$`, `$$…$$`, `\(…\)` and `\[…\]` (code is left as written; a formula KaTeX cannot read is shown as typed)
 - Slash commands: a whole command at the start of the message turns blue, its input hint shows faintly after it, and values its argument can take (from the hint's `[a|b]` choices, or the session's models for `/model`) are offered as you type; ⇥ takes one
 - Queued messages can be edited in place (the pencil, or double-click). While one is being edited it is not sent, nor anything after it; saving sends it if the agent is idle. The side chat queues messages typed mid-turn too
 
