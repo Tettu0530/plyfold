@@ -155,6 +155,8 @@ It also works inside `#[error(...)]` for `thiserror`. Developer-only output (log
 
 A maintainer will review the pull request. Expect questions and requested changes; that is normal. Once CI passes and the review is approved, a maintainer merges it.
 
+Releases are cut by maintainers by pushing a version tag; see [docs/releasing.md](docs/releasing.md).
+
 ## Reporting bugs
 
 Open an issue with the bug report template and include:

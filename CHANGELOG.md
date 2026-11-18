@@ -24,6 +24,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ### Platforms
 
+- Releases are built and published by GitHub Actions when a version tag is pushed: a universal `.dmg` for Apple silicon and Intel Macs, the Windows `.exe` and `.msi`, and the Linux AppImage and `.deb`, with checksums and install steps in the notes (see `docs/releasing.md`)
 - Linux (preview): AppImage and `.deb` packages, API keys in the Secret Service (GNOME Keyring, KWallet), the distribution's name in Settings → Info, and WebKitGTK's DMA-BUF renderer turned off by default (it draws a blank window on some GPUs)
 
 ## [0.2.0] - 2026-11-18

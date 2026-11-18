@@ -65,7 +65,13 @@ A default profile (just the agent name) passes your environment through unchange
 
 You can override these definitions or add other ACP agents in `config.toml` under `[agents.<name>]`. There is also a `mock` agent (`plyfold-mock-agent`) for development, which uses no tokens.
 
-## Requirements
+## Install
+
+Download the installer for your system from the [latest release](https://github.com/Tettu0530/plyfold/releases): a `.dmg` for macOS (Apple silicon and Intel), a `.exe` or `.msi` for Windows 10/11, and an AppImage or `.deb` for Linux. The release notes say how to get past the warning the system shows for an unsigned app.
+
+You also need the agent CLIs you want to use, with their logins or API keys. `npx` (bundled with [Node.js](https://nodejs.org)) is enough for Claude Code, Codex and Gemini CLI; OpenCode needs `opencode` installed. For creating pull requests from the Git pane, install the [GitHub CLI](https://cli.github.com) and log in.
+
+## Requirements for building
 
 - macOS, Windows 10/11, or Linux with WebKitGTK 4.1 (Windows and Linux support is new: please report what doesn't work)
 - Xcode Command Line Tools on macOS; on Windows, the Microsoft C++ Build Tools and WebView2 (already part of Windows 11)
@@ -144,7 +150,7 @@ The UI is available in Japanese, English and Simplified Chinese. By default it f
 
 ## Status
 
-Plyfold is early. There is no prebuilt release yet, and the app is not signed, so for now you build it from source. Expect rough edges and breaking changes to `config.toml` and the database.
+Plyfold is early. The builds are not signed or notarized yet. Expect rough edges and breaking changes to `config.toml` and the database.
 
 ## Contributing
 
