@@ -101,8 +101,9 @@ impl SecretStore for KeychainStore {
     }
 }
 
-/// The Windows Credential Manager (generic credentials, through the keyring crate)
-#[cfg(windows)]
+/// The Windows Credential Manager (generic credentials), or on Linux the Secret Service (GNOME Keyring, KWallet), through
+/// the keyring crate
+#[cfg(any(windows, target_os = "linux"))]
 impl SecretStore for KeychainStore {
     fn get(&self, account: &str) -> Result<String, ProfileError> {
         let entry = keyring::Entry::new(&self.service, account).map_err(|_| not_found(account))?;
@@ -110,8 +111,8 @@ impl SecretStore for KeychainStore {
     }
 
     fn set(&self, account: &str, value: &str) -> Result<(), ProfileError> {
-        let entry = keyring::Entry::new(&self.service, account).map_err(|_| save_failed(account))?;
-        entry.set_password(value).map_err(|_| save_failed(account))
+        let entry = keyring::Entry::new(&self.service, account).map_err(|e| unavailable_or(account, &e))?;
+        entry.set_password(value).map_err(|e| unavailable_or(account, &e))
     }
 
     fn delete(&self, account: &str) -> Result<(), ProfileError> {
@@ -120,8 +121,25 @@ impl SecretStore for KeychainStore {
     }
 }
 
+/// Saving failed: on Linux, say when it is because no Secret Service is running (a desktop without GNOME Keyring or
+/// KWallet), since that is the usual reason and the fix is outside Plyfold
+#[cfg(any(windows, target_os = "linux"))]
+fn unavailable_or(account: &str, e: &keyring::Error) -> ProfileError {
+    if cfg!(target_os = "linux") && matches!(e, keyring::Error::NoStorageAccess(_) | keyring::Error::PlatformFailure(_)) {
+        return err(
+            account,
+            plyfold_i18n::tr!(
+                "キーを保存できません。GNOME キーリングや KWallet などの Secret Service が動いている必要があります",
+                "Cannot save the key: a Secret Service (GNOME Keyring, KWallet) needs to be running",
+                "无法保存密钥：需要运行 Secret Service（GNOME 密钥环、KWallet 等）"
+            ),
+        );
+    }
+    save_failed(account)
+}
+
 /// Other systems have no supported credential store yet
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
 impl SecretStore for KeychainStore {
     fn get(&self, account: &str) -> Result<String, ProfileError> {
         Err(not_found(account))

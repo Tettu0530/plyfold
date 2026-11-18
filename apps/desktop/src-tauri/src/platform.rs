@@ -62,7 +62,15 @@ pub fn os_version() -> (&'static str, Option<String>) {
         });
         ("Windows", v)
     }
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(target_os = "linux")]
+    {
+        // PRETTY_NAME="Ubuntu 24.04.1 LTS" → ("Linux", "Ubuntu 24.04.1 LTS")
+        let v = std::fs::read_to_string("/etc/os-release")
+            .ok()
+            .and_then(|s| s.lines().find_map(|l| l.strip_prefix("PRETTY_NAME=")).map(|v| v.trim().trim_matches('"').to_string()).filter(|v| !v.is_empty()));
+        ("Linux", v)
+    }
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     {
         (std::env::consts::OS, None)
     }

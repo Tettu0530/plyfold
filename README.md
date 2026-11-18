@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/Tettu0530/plyfold/actions/workflows/ci.yml/badge.svg)](https://github.com/Tettu0530/plyfold/actions/workflows/ci.yml)
 
-Plyfold is a desktop app for macOS (and, in preview, Windows) for running coding agents side by side. It drives existing agent CLIs (Claude Code, Codex, OpenCode and Gemini CLI) over the [Agent Client Protocol](https://agentclientprotocol.com) (ACP). Each session gets its own git worktree, and you can keep several API keys for the same CLI.
+Plyfold is a desktop app for macOS (and, in preview, Windows and Linux) for running coding agents side by side. It drives existing agent CLIs (Claude Code, Codex, OpenCode and Gemini CLI) over the [Agent Client Protocol](https://agentclientprotocol.com) (ACP). Each session gets its own git worktree, and you can keep several API keys for the same CLI.
 
 Plyfold does not implement its own agent loop. It is an ACP client: the agent CLI does the model calls, tool use and file edits, and Plyfold launches it, shows what it does, answers its permission requests and handles the git side.
 
@@ -12,7 +12,7 @@ Plyfold does not implement its own agent loop. It is an ACP client: the agent CL
 
 ## Why
 
-- **Multiple keys per CLI.** A *profile* is a CLI plus credentials plus a config directory. You can have a `work` and a `default` profile for Claude Code, each with its own key or endpoint, and pick one per session. Keys live in the macOS Keychain (the Credential Manager on Windows) and are passed to the agent only as environment variables at launch.
+- **Multiple keys per CLI.** A *profile* is a CLI plus credentials plus a config directory. You can have a `work` and a `default` profile for Claude Code, each with its own key or endpoint, and pick one per session. Keys live in the macOS Keychain (the Credential Manager on Windows, the Secret Service on Linux) and are passed to the agent only as environment variables at launch.
 - **One worktree per session.** Agents work in their own git worktree, so parallel sessions don't edit the same files and your checkout stays as it is. Diffs come from git, not from the agent, so they look the same for every CLI.
 - **Panes.** A session is the record (ACP log, worktree, profile). A pane only shows a running session. Close a pane and the session is still there in the sidebar.
 - **Motion.** Springs use the same formula as SwiftUI, and popovers and permission cards separate from the element they come from, like liquid. With Reduce motion turned on in macOS, animations become fades.
@@ -66,8 +66,9 @@ You can override these definitions or add other ACP agents in `config.toml` unde
 
 ## Requirements
 
-- macOS, or Windows 10/11 (Windows support is new: please report what doesn't work)
+- macOS, Windows 10/11, or Linux with WebKitGTK 4.1 (Windows and Linux support is new: please report what doesn't work)
 - Xcode Command Line Tools on macOS; on Windows, the Microsoft C++ Build Tools and WebView2 (already part of Windows 11)
+- On Linux, the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/#linux) plus libdbus (Debian and Ubuntu: `libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev`), and a Secret Service such as GNOME Keyring or KWallet for API keys
 - Rust, latest stable (via [rustup](https://rustup.rs)). The workspace uses edition 2024
 - Node.js 22.12 or later, with npm
 - git
@@ -113,9 +114,9 @@ Everything is under `~/Library/Application Support/plyfold/`:
 | `worktrees/` | One git worktree per session |
 | `profiles/<name>/` | Separate config directories for profiles that use one |
 
-On Windows the same files are under `%APPDATA%\plyfold\`.
+On Windows the same files are under `%APPDATA%\plyfold\`, and on Linux under `~/.local/share/plyfold/`.
 
-API keys are not stored in these files. They are kept in the macOS Keychain (on Windows, the Credential Manager) under the service name `plyfold`, with the account `<profile>/<VARIABLE>`. The UI shows only the last four characters.
+API keys are not stored in these files. They are kept in the macOS Keychain (on Windows, the Credential Manager; on Linux, the Secret Service) under the service name `plyfold`, with the account `<profile>/<VARIABLE>`. The UI shows only the last four characters.
 
 ## Project layout
 

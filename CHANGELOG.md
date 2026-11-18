@@ -4,6 +4,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Platforms
+
+- Linux (preview): AppImage and `.deb` packages, API keys in the Secret Service (GNOME Keyring, KWallet), the distribution's name in Settings → Info, and WebKitGTK's DMA-BUF renderer turned off by default (it draws a blank window on some GPUs)
+
 ## [0.2.0] - 2026-11-18
 
 Side chats, everyday conversations and a Git pane, for macOS (Apple Silicon) and Windows 10/11 (x64).
