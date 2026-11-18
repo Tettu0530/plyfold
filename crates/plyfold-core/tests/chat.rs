@@ -100,6 +100,22 @@ async fn a_conversation_looks_things_up_but_does_not_edit() {
     assert!(events.iter().any(|e| e.payload.contains("permission rejected")));
     assert!(events.iter().any(|e| e.payload.contains("会話ではファイルの編集とコマンドを使わない")));
 
+    // Reading inside its own folder is allowed; outside it, a command labelled as a read, or an answer that would allow
+    // from now on, is not
+    for (prompt, allowed) in
+        [("permission read", true), ("permission read outside", false), ("permission read with-command", false), ("permission fetch always-only", false)]
+    {
+        let before = eng.store().events(&c.id, None, 100_000).unwrap().len();
+        eng.prompt(&c.id, prompt).unwrap();
+        wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { session_id, .. } if session_id == &c.id)).await;
+        let events = eng.store().events(&c.id, None, 100_000).unwrap();
+        let turn = &events[before..];
+        let ran = turn.iter().any(|e| e.payload.contains("read the notes") || e.payload.contains("fetched the page"));
+        assert_eq!(ran, allowed, "{prompt}");
+        // Plyfold's answer (not the agent's list of options)
+        assert!(!turn.iter().any(|e| e.payload.contains("\"selected\"") && e.payload.contains("\"optionId\":\"always\"")), "{prompt}: allowed from now on");
+    }
+
     // Reopening works even if the folder went missing; deleting removes it
     eng.close_session(&c.id).await.unwrap();
     std::fs::remove_dir_all(&dir).unwrap();

@@ -24,6 +24,16 @@ pub(crate) fn command(program: &str) -> Command {
     }
 }
 
+/// git, with the settings that would let a repository run programs of its own during Plyfold's read-only calls
+/// turned off: the file system monitor (run by status, diff and ls-files) and the untracked cache. Diffs add
+/// --no-ext-diff and --no-textconv. Hooks still run for commit, merge and push, as they do for the git CLI; a worktree
+/// whose `.git` was replaced is refused before those run (see verify)
+pub fn git_command() -> Command {
+    let mut c = command("git");
+    c.args(["-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false"]);
+    c
+}
+
 /// Whether a program is on the PATH
 pub(crate) fn has_program(program: &str) -> bool {
     which::which(program).is_ok()
@@ -75,7 +85,7 @@ pub struct Diff {
 }
 
 fn git(dir: &Path, args: &[&str]) -> Result<String, WorktreeError> {
-    let out = command("git").args(args).current_dir(dir).output()?;
+    let out = git_command().args(args).current_dir(dir).output()?;
     if !out.status.success() {
         return Err(WorktreeError::Git { args: args.join(" "), stderr: String::from_utf8_lossy(&out.stderr).trim().to_string() });
     }
@@ -84,7 +94,7 @@ fn git(dir: &Path, args: &[&str]) -> Result<String, WorktreeError> {
 
 /// Exit code 1 also counts as success (`git diff --no-index` returns 1 when there are differences)
 fn git_diff_ok(dir: &Path, args: &[&str]) -> Result<String, WorktreeError> {
-    let out = command("git").args(args).current_dir(dir).output()?;
+    let out = git_command().args(args).current_dir(dir).output()?;
     match out.status.code() {
         Some(0) | Some(1) => Ok(String::from_utf8_lossy(&out.stdout).to_string()),
         _ => Err(WorktreeError::Git { args: args.join(" "), stderr: String::from_utf8_lossy(&out.stderr).trim().to_string() }),
@@ -135,22 +145,74 @@ impl Worktrees {
     }
 }
 
+/// Check that the worktree is still the repository's own: its `.git` is a plain file pointing at an entry under the
+/// repository's .git/worktrees, and that entry points back at it. An agent may write anywhere inside its worktree,
+/// including over `.git`, to point git at a directory (with a config and hooks) of its own; Plyfold then refuses to run
+/// git there rather than run what that directory says
+pub fn verify(wt: &Worktree) -> Result<(), WorktreeError> {
+    let tampered = |why: &str| {
+        WorktreeError::Op(plyfold_i18n::tr!(
+            "worktree {} の .git が書き換えられているので、git を実行しません（{why}）",
+            "The .git of the worktree {} has been changed, so Plyfold does not run git in it ({why})",
+            "worktree {} 的 .git 已被更改，因此不在其中运行 git（{why}）",
+            wt.path.display()
+        ))
+    };
+    // A session working in the repository itself (no worktree of its own) has the repository's .git
+    if wt.path == wt.repo {
+        return Ok(());
+    }
+    let dotgit = wt.path.join(".git");
+    let meta = std::fs::symlink_metadata(&dotgit).map_err(|_| tampered("no .git"))?;
+    if !meta.is_file() {
+        return Err(tampered("not a file"));
+    }
+    let text = std::fs::read_to_string(&dotgit)?;
+    let pointed = text.trim().strip_prefix("gitdir:").map(str::trim).ok_or_else(|| tampered("no gitdir line"))?;
+    let pointed = wt.path.join(pointed);
+    let common = git(&wt.repo, &["rev-parse", "--path-format=absolute", "--git-common-dir"])?;
+    let entries = std::fs::canonicalize(PathBuf::from(common.trim()).join("worktrees")).map_err(|_| tampered("no worktrees in the repository"))?;
+    let entry = std::fs::canonicalize(&pointed).map_err(|_| tampered("gitdir does not exist"))?;
+    if entry.parent() != Some(entries.as_path()) {
+        return Err(tampered("gitdir is not the repository's"));
+    }
+    let back = std::fs::read_to_string(entry.join("gitdir")).map_err(|_| tampered("no way back"))?;
+    let back = std::fs::canonicalize(back.trim()).map_err(|_| tampered("no way back"))?;
+    if back != std::fs::canonicalize(&dotgit)? {
+        return Err(tampered("the entry is another worktree's"));
+    }
+    Ok(())
+}
+
+/// Whether git still lists `path` as a worktree of `repo` (it does after the folder is deleted, until it is pruned)
+pub fn is_registered(repo: &Path, path: &Path) -> bool {
+    let Ok(list) = git(repo, &["worktree", "list", "--porcelain"]) else { return false };
+    // git prints forward slashes on Windows; the folder may be gone, so compare the text
+    let norm = |s: &str| {
+        let s = s.replace('\\', "/").trim_end_matches('/').to_string();
+        if cfg!(windows) { s.to_lowercase() } else { s }
+    };
+    let want = norm(&path.display().to_string());
+    list.lines().filter_map(|l| l.strip_prefix("worktree ")).any(|p| norm(p) == want)
+}
+
 /// Diff from the base commit to the current working tree (committed, uncommitted and untracked)
 pub fn diff(wt: &Worktree) -> Result<Diff, WorktreeError> {
+    verify(wt)?;
     let dir = &wt.path;
     let mut out = Diff::default();
 
-    for line in git(dir, &["diff", "--numstat", &wt.base])?.lines() {
+    for line in git(dir, &["diff", "--no-ext-diff", "--no-textconv", "--numstat", &wt.base, "--"])?.lines() {
         let mut parts = line.splitn(3, '\t');
         let (a, r, p) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""), parts.next().unwrap_or(""));
         out.files.push(FileStat { path: p.to_string(), added: a.parse().unwrap_or(0), removed: r.parse().unwrap_or(0), untracked: false, binary: a == "-" });
     }
-    out.patch = git(dir, &["diff", &wt.base])?;
+    out.patch = git(dir, &["diff", "--no-ext-diff", "--no-textconv", &wt.base, "--"])?;
 
     let untracked = git(dir, &["ls-files", "--others", "--exclude-standard", "-z"])?;
     for p in untracked.split('\0').filter(|s| !s.is_empty()) {
-        let patch = git_diff_ok(dir, &["diff", "--no-index", "--", "/dev/null", p])?;
-        let numstat = git_diff_ok(dir, &["diff", "--no-index", "--numstat", "--", "/dev/null", p])?;
+        let patch = git_diff_ok(dir, &["diff", "--no-ext-diff", "--no-textconv", "--no-index", "--", "/dev/null", p])?;
+        let numstat = git_diff_ok(dir, &["diff", "--no-ext-diff", "--no-textconv", "--no-index", "--numstat", "--", "/dev/null", p])?;
         let added = numstat.split('\t').next().unwrap_or("");
         out.files.push(FileStat { path: p.to_string(), added: added.parse().unwrap_or(0), removed: 0, untracked: true, binary: added == "-" });
         out.patch.push_str(&patch);
@@ -209,6 +271,50 @@ mod tests {
         std::fs::write(dir.join(".gitignore"), "/target\n").unwrap();
         g(&["add", "-A"]);
         g(&["commit", "-qm", "init"]);
+    }
+
+    /// What a repository's own config or a replaced .git could make Plyfold's git run
+    #[test]
+    fn repository_settings_do_not_run_programs_and_a_replaced_git_is_refused() {
+        let base = tmp("guard");
+        let repo = base.join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        init_repo(&repo);
+        let wts = Worktrees::new(base.join("wts"));
+        let wt = wts.create(&repo, "s1", None).unwrap();
+        verify(&wt).unwrap();
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            let marker = base.join("ran.txt");
+            let script = base.join("monitor.sh");
+            std::fs::write(&script, format!("#!/bin/sh\necho ran >> '{}'\n", marker.display())).unwrap();
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+            let ok = Command::new("git").args(["config", "core.fsmonitor", &script.display().to_string()]).current_dir(&repo).status().unwrap();
+            assert!(ok.success());
+            std::fs::write(wt.path.join("new.txt"), "x\n").unwrap();
+            diff(&wt).unwrap();
+            ops::status(&wt).unwrap();
+            assert!(!marker.exists(), "the repository's fsmonitor ran");
+        }
+
+        // The agent replaces the worktree's .git with one pointing at a directory of its own
+        let evil = base.join("evil-gitdir");
+        std::fs::create_dir_all(&evil).unwrap();
+        let original = std::fs::read_to_string(wt.path.join(".git")).unwrap();
+        std::fs::write(wt.path.join(".git"), format!("gitdir: {}\n", evil.display())).unwrap();
+        assert!(diff(&wt).is_err());
+        assert!(ops::status(&wt).is_err());
+        assert!(ops::commit(&wt, "x").is_err());
+        std::fs::write(wt.path.join(".git"), original).unwrap();
+        verify(&wt).unwrap();
+
+        // Deleted from inside: git still lists it until pruned
+        std::fs::remove_dir_all(&wt.path).unwrap();
+        assert!(is_registered(&repo, &wt.path));
+        git(&repo, &["worktree", "prune"]).unwrap();
+        assert!(!is_registered(&repo, &wt.path));
     }
 
     #[test]

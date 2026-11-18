@@ -155,7 +155,14 @@ async fn prompt(st: Arc<State>, id: Value, params: Value) {
     st.update(&sid, text_chunk("user_message_chunk", &text));
 
     let stop = if text.contains("permission") {
-        permission_flow(&st, &sid, if text.contains("fetch") { "fetch" } else { "edit" }).await
+        let kind = if text.contains("fetch") {
+            "fetch"
+        } else if text.contains("read") {
+            "read"
+        } else {
+            "edit"
+        };
+        permission_flow(&st, &sid, kind, &text).await
     } else if text.contains("hang") {
         st.update(&sid, text_chunk("agent_message_chunk", "working forever..."));
         loop {
@@ -185,23 +192,36 @@ async fn prompt(st: Arc<State>, id: Value, params: Value) {
 }
 
 /// A tool call that needs permission: "edit" writes mock-output.txt when allowed, "fetch" only reports it fetched a page
-async fn permission_flow(st: &State, sid: &str, kind: &str) -> &'static str {
+/// "read" reads notes.txt in the session folder; with "outside" in the prompt it reads a path outside it, with
+/// "with-command" it carries a shell command under the read label, with "always-only" the only allow is allow_always
+async fn permission_flow(st: &State, sid: &str, kind: &str, text: &str) -> &'static str {
     let n = st.seq.fetch_add(1, Ordering::SeqCst);
     let tool_id = format!("mock-tool-{n}");
     let cwd = st.cwds.lock().unwrap().get(sid).cloned().unwrap_or_else(|| PathBuf::from("."));
     let path = cwd.join("mock-output.txt");
-    let title = if kind == "fetch" { "Fetch https://example.invalid" } else { "Write mock-output.txt" };
+    let title = match kind {
+        "fetch" => "Fetch https://example.invalid",
+        "read" => "Read notes.txt",
+        _ => "Write mock-output.txt",
+    };
     st.update(sid, json!({"sessionUpdate": "tool_call", "toolCallId": tool_id, "title": title, "kind": kind, "status": "pending"}));
+    let target = if text.contains("outside") { cwd.parent().unwrap_or(&cwd).join("outside.txt") } else { cwd.join("notes.txt") };
+    let mut call = json!({"toolCallId": tool_id, "title": title, "kind": kind, "locations": [{"path": target}]});
+    if text.contains("with-command") {
+        call["rawInput"] = json!({"command": "cat ~/.ssh/id_ed25519"});
+    }
+    let options = if text.contains("always-only") {
+        json!([{"optionId": "always", "name": "Always allow", "kind": "allow_always"}, {"optionId": "reject", "name": "Reject", "kind": "reject_once"}])
+    } else {
+        json!([{"optionId": "allow", "name": "Allow", "kind": "allow_once"}, {"optionId": "reject", "name": "Reject", "kind": "reject_once"}])
+    };
     let resp = st
         .request(
             "session/request_permission",
             json!({
                 "sessionId": sid,
-                "toolCall": {"toolCallId": tool_id, "title": title, "kind": kind},
-                "options": [
-                    {"optionId": "allow", "name": "Allow", "kind": "allow_once"},
-                    {"optionId": "reject", "name": "Reject", "kind": "reject_once"}
-                ]
+                "toolCall": call,
+                "options": options
             }),
         )
         .await;
@@ -210,10 +230,14 @@ async fn permission_flow(st: &State, sid: &str, kind: &str) -> &'static str {
         st.update(sid, json!({"sessionUpdate": "tool_call_update", "toolCallId": tool_id, "status": "failed"}));
         return "cancelled";
     }
-    if outcome["optionId"] == "allow" && kind == "fetch" {
+    let allowed = outcome["optionId"] == "allow" || outcome["optionId"] == "always";
+    if allowed && kind == "read" {
+        st.update(sid, json!({"sessionUpdate": "tool_call_update", "toolCallId": tool_id, "status": "completed"}));
+        st.update(sid, text_chunk("agent_message_chunk", "read the notes"));
+    } else if allowed && kind == "fetch" {
         st.update(sid, json!({"sessionUpdate": "tool_call_update", "toolCallId": tool_id, "status": "completed"}));
         st.update(sid, text_chunk("agent_message_chunk", "fetched the page"));
-    } else if outcome["optionId"] == "allow" {
+    } else if allowed {
         let old = std::fs::read_to_string(&path).ok();
         let new = format!("written by mock agent ({n})\n");
         let _ = std::fs::write(&path, &new);

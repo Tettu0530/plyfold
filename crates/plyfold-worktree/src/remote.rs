@@ -57,7 +57,7 @@ pub struct GitInfo {
 }
 
 fn git(dir: &Path, args: &[&str]) -> Result<String, WorktreeError> {
-    let out = crate::command("git").args(args).current_dir(dir).stdin(Stdio::null()).output()?;
+    let out = crate::git_command().args(args).current_dir(dir).stdin(Stdio::null()).output()?;
     if !out.status.success() {
         return Err(WorktreeError::Git { args: args.join(" "), stderr: String::from_utf8_lossy(&out.stderr).trim().to_string() });
     }
@@ -66,7 +66,8 @@ fn git(dir: &Path, args: &[&str]) -> Result<String, WorktreeError> {
 
 /// Run a command that may talk to the network: no prompts, and killed after the time limit
 fn run_network(program: &str, dir: &Path, args: &[&str]) -> Result<String, WorktreeError> {
-    let mut child = crate::command(program)
+    let mut cmd = if program == "git" { crate::git_command() } else { crate::command(program) };
+    let mut child = cmd
         .args(args)
         .current_dir(dir)
         .env("GIT_TERMINAL_PROMPT", "0")
@@ -245,6 +246,14 @@ pub fn push(dir: &Path) -> Result<String, WorktreeError> {
     let branch = git(dir, &["symbolic-ref", "--quiet", "--short", "HEAD"]).map(|s| s.trim().to_string()).map_err(|_| {
         WorktreeError::Op(plyfold_i18n::tr!("ブランチにいないので push できません", "Not on a branch, so there is nothing to push", "不在分支上，无法推送"))
     })?;
+    // A branch named like an option ("-f") would change what push does
+    if branch.starts_with('-') {
+        return Err(WorktreeError::Op(plyfold_i18n::tr!(
+            "ブランチ名 {branch} は - で始まるので push しません",
+            "The branch {branch} starts with -, so it is not pushed",
+            "分支 {branch} 以 - 开头，因此不推送"
+        )));
+    }
     run_network("git", dir, &["push", "--quiet", "--set-upstream", "origin", &branch])?;
     Ok(format!("origin/{branch}"))
 }

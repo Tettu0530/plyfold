@@ -28,7 +28,7 @@ impl RepoSettings {
     /// Whether a permission request for this tool kind is allowed without asking
     pub fn allows(&self, kind: Option<&str>) -> bool {
         let group = match kind {
-            Some("read" | "search" | "think") => "read",
+            Some("read" | "search") => "read",
             Some("edit" | "delete" | "move") => "edit",
             Some("execute") => "execute",
             Some("fetch") => "fetch",
@@ -226,7 +226,7 @@ mod tests {
     fn allow_groups_tool_kinds() {
         let s = RepoSettings { allow: vec!["read".into(), "execute".into()], ..Default::default() };
         assert!(s.allows(Some("read")) && s.allows(Some("search")) && s.allows(Some("execute")));
-        assert!(!s.allows(Some("edit")) && !s.allows(Some("fetch")) && !s.allows(None) && !s.allows(Some("other")));
+        assert!(!s.allows(Some("edit")) && !s.allows(Some("fetch")) && !s.allows(None) && !s.allows(Some("other")) && !s.allows(Some("think")));
     }
 
     #[test]
