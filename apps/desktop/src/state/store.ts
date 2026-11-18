@@ -816,7 +816,7 @@ export const useStore = create<State>((set, get) => ({
     if (!d?.profile || d.busy) return;
     get().updateDraft(draftId, { busy: true, error: null });
     try {
-      const rec = await api.adoptCliSession(d.profile, d.repo, acpSessionId, title);
+      const rec = await api.adoptCliSession(d.profile, d.repo, acpSessionId, title, d.worktree);
       // The conversation is the history the agent resent, copied into the log after SessionCreated
       set((s) => {
         const cur = s.sessions[rec.id] ?? newView(rec);

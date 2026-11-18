@@ -717,7 +717,9 @@ impl Engine {
     }
 
     /// Open a conversation the CLI already has, in a new worktree. Uncommitted files stay in `repo`.
-    pub async fn adopt_session(&self, profile: &str, repo: &Path, acp_session_id: &str, title: &str) -> Result<SessionRecord, CoreError> {
+    /// With `worktree`, the conversation continues in a worktree of its own; without it, or when `repo` is not a git
+    /// repository, in the folder itself
+    pub async fn adopt_session(&self, profile: &str, repo: &Path, acp_session_id: &str, title: &str, worktree: bool) -> Result<SessionRecord, CoreError> {
         let inner = &self.inner;
         if acp_session_id.is_empty() {
             return Err(CoreError::NoConversation(String::new()));
@@ -729,7 +731,15 @@ impl Engine {
         let title = if title.trim().is_empty() { plyfold_i18n::tr!("（無題）", "(untitled)", "（无标题）") } else { title.to_string() };
         let rec = inner.store.create_session(NewSession { title, profile: profile.to_string(), agent, ..Default::default() })?;
         inner.emit(EngineEvent::SessionCreated { session: rec.clone() });
-        let cwd = match inner.worktrees.create(repo, &rec.id, None) {
+        let in_git = plyfold_worktree::repo_root(repo).is_ok();
+        let prepared = if worktree && in_git {
+            inner.worktrees.create(repo, &rec.id, None).map_err(CoreError::from)
+        } else {
+            inner.store.set_workspace(&rec.id, Some(&repo.display().to_string()), None, None, None)?;
+            self.launch(&rec.id, profile, repo, Resume::Load { session_id: acp_session_id.to_string(), adopted: true }).await?;
+            return Ok(inner.store.get_session(&rec.id)?);
+        };
+        let cwd = match prepared {
             Ok(wt) => {
                 inner.store.set_workspace(
                     &rec.id,
@@ -743,7 +753,7 @@ impl Engine {
             Err(e) => {
                 inner.notice(&rec.id, plyfold_i18n::tr!("作業場所を用意できません: {e}", "Cannot prepare the workspace: {e}", "无法准备工作区：{e}"));
                 inner.set_status(&rec.id, SessionStatus::Error);
-                return Err(e.into());
+                return Err(e);
             }
         };
         self.launch(&rec.id, profile, &cwd, Resume::Load { session_id: acp_session_id.to_string(), adopted: true }).await?;
@@ -845,13 +855,22 @@ impl Engine {
                                 if *adopted {
                                     // Plyfold has no earlier copy, so lift the resend out of the load request where the transcript skips it
                                     inner.store.keep_resent_history(id, REPLAY_BEGIN, REPLAY_END)?;
+                                    let in_worktree = inner.store.get_session(id).ok().is_some_and(|r| r.worktree_path.is_some());
                                     inner.notice(
                                         id,
-                                        plyfold_i18n::tr!(
-                                            "この CLI にあった会話を、新しい worktree で開きました（未コミットの変更は含みません）",
-                                            "Opened a conversation this CLI already had, in a new worktree (uncommitted changes are not included)",
-                                            "已在新 worktree 中打开此 CLI 已有的对话（不含未提交的更改）"
-                                        ),
+                                        if in_worktree {
+                                            plyfold_i18n::tr!(
+                                                "この CLI にあった会話を、新しい worktree で開きました（未コミットの変更は含みません）",
+                                                "Opened a conversation this CLI already had, in a new worktree (uncommitted changes are not included)",
+                                                "已在新 worktree 中打开此 CLI 已有的对话（不含未提交的更改）"
+                                            )
+                                        } else {
+                                            plyfold_i18n::tr!(
+                                                "この CLI にあった会話を、このフォルダのまま開きました",
+                                                "Opened a conversation this CLI already had, in this folder",
+                                                "已在此文件夹中打开此 CLI 已有的对话"
+                                            )
+                                        },
                                     );
                                 } else {
                                     inner.notice(id, plyfold_i18n::tr!("session/load で開き直しました（履歴はエージェントから再送されます）", "Reopened with session/load (the agent resends the history)", "已通过 session/load 重新打开（历史记录由代理重新发送）"));

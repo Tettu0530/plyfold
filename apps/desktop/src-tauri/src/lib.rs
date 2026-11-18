@@ -377,9 +377,16 @@ async fn list_cli_sessions(state: State<'_, AppState>, profile: String, repo: St
 }
 
 #[tauri::command]
-async fn adopt_cli_session(state: State<'_, AppState>, profile: String, repo: String, acp_session_id: String, title: String) -> CmdResult<SessionRecord> {
+async fn adopt_cli_session(
+    state: State<'_, AppState>,
+    profile: String,
+    repo: String,
+    acp_session_id: String,
+    title: String,
+    worktree: bool,
+) -> CmdResult<SessionRecord> {
     let repo = PathBuf::from(expand_home(&repo));
-    state.engine.adopt_session(&profile, &repo, &acp_session_id, &title).await.map_err(err)
+    state.engine.adopt_session(&profile, &repo, &acp_session_id, &title, worktree).await.map_err(err)
 }
 
 #[tauri::command]
