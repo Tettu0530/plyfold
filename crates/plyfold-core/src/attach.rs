@@ -99,14 +99,14 @@ pub fn prompt_blocks(text: &str, attachments: &[Attachment], images: bool, save_
             }
             Attachment::File { path } => {
                 let path = PathBuf::from(path);
-                let image_mime = mime_of(&path).filter(|m| m.starts_with("image/"));
-                let small = std::fs::metadata(&path).map(|m| m.len() <= MAX_IMAGE_BYTES).unwrap_or(false);
-                match (images && small, image_mime) {
-                    (true, Some(mime)) => {
-                        let bytes = std::fs::read(&path)?;
-                        blocks.push(ContentBlock::Image(ImageContent::new(B64.encode(bytes), mime).uri(file_uri(&path))));
+                let named_image = mime_of(&path).is_some_and(|m| m.starts_with("image/"));
+                // Inlined only when its bytes are an image too; anything else goes as a link the agent may open
+                let image = if images && named_image { read_image_file(&path, MAX_IMAGE_BYTES).ok().flatten() } else { None };
+                match image {
+                    Some((bytes, mime)) => {
+                        blocks.push(ContentBlock::Image(ImageContent::new(B64.encode(bytes), mime.to_string()).uri(file_uri(&path))));
                     }
-                    _ => blocks.push(link(&path)),
+                    None => blocks.push(link(&path)),
                 }
             }
         }
@@ -127,6 +127,32 @@ fn save_image(dir: &Path, name: Option<&str>, mime: &str, bytes: &[u8]) -> std::
     let path = dir.join(format!("{stamp}-{base}.{}", ext_of(mime)));
     std::fs::write(&path, bytes)?;
     Ok(path)
+}
+
+/// An image's type from its first bytes (PNG, JPEG, GIF, WebP), whatever its name says
+pub fn sniff_image(bytes: &[u8]) -> Option<&'static str> {
+    match bytes {
+        [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, ..] => Some("image/png"),
+        [0xFF, 0xD8, 0xFF, ..] => Some("image/jpeg"),
+        [b'G', b'I', b'F', b'8', ..] => Some("image/gif"),
+        [b'R', b'I', b'F', b'F', _, _, _, _, b'W', b'E', b'B', b'P', ..] => Some("image/webp"),
+        _ => None,
+    }
+}
+
+/// Read an image file of at most `max` bytes: a regular file (not a pipe or a device, which a link named .png could
+/// point at) whose bytes are an image. A secret behind a link named like an image is refused, not read out
+pub fn read_image_file(path: &Path, max: u64) -> std::io::Result<Option<(Vec<u8>, &'static str)>> {
+    use std::io::Read as _;
+    if !std::fs::metadata(path)?.is_file() {
+        return Ok(None);
+    }
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)?.take(max + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > max {
+        return Ok(None);
+    }
+    Ok(sniff_image(&bytes).map(|mime| (bytes, mime)))
 }
 
 #[cfg(test)]
@@ -194,10 +220,43 @@ mod tests {
     fn image_files_are_sent_as_images_when_supported() {
         let d = tmp();
         let f = d.join("a.PNG");
-        std::fs::write(&f, b"img").unwrap();
+        std::fs::write(&f, PNG).unwrap();
         let blocks = prompt_blocks("", &[Attachment::File { path: f.to_string_lossy().into() }], true, &d).unwrap();
         let ContentBlock::Image(i) = &blocks[0] else { panic!("image expected") };
-        assert_eq!(i.data, B64.encode(b"img"));
+        assert_eq!(i.data, B64.encode(PNG));
+        assert_eq!(i.mime_type, "image/png");
         assert!(i.uri.as_deref().unwrap().starts_with("file://"));
+    }
+
+    const PNG: &[u8] = &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0x0D];
+
+    #[test]
+    fn a_file_named_like_an_image_is_read_only_when_it_is_one() {
+        let d = tmp();
+        let secret = d.join("secret.txt");
+        std::fs::write(&secret, "PLYFOLD-CANARY").unwrap();
+        // Not an image inside: refused, and an attachment goes as a link instead of its bytes
+        let fake = d.join("fake.png");
+        std::fs::write(&fake, "PLYFOLD-CANARY").unwrap();
+        assert!(read_image_file(&fake, 1 << 20).unwrap().is_none());
+        let blocks = prompt_blocks("", &[Attachment::File { path: fake.to_string_lossy().into() }], true, &d).unwrap();
+        assert!(matches!(&blocks[0], ContentBlock::ResourceLink(_)));
+        #[cfg(unix)]
+        {
+            let link = d.join("link.png");
+            let _ = std::fs::remove_file(&link);
+            std::os::unix::fs::symlink(&secret, &link).unwrap();
+            assert!(read_image_file(&link, 1 << 20).unwrap().is_none());
+            // A device or pipe behind the name is not read at all
+            let dev = d.join("zero.png");
+            let _ = std::fs::remove_file(&dev);
+            std::os::unix::fs::symlink("/dev/zero", &dev).unwrap();
+            assert!(read_image_file(&dev, 1 << 20).unwrap().is_none());
+        }
+        // An image over the limit is refused
+        let big = d.join("big.png");
+        std::fs::write(&big, [PNG, &[0u8; 64]].concat()).unwrap();
+        assert!(read_image_file(&big, 32).unwrap().is_none());
+        assert_eq!(read_image_file(&big, 1 << 20).unwrap().map(|(_, m)| m), Some("image/png"));
     }
 }

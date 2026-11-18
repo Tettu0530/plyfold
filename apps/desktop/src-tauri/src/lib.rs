@@ -452,18 +452,19 @@ async fn read_image(path: String) -> CmdResult<String> {
     use base64::Engine as _;
     let p = std::path::PathBuf::from(expand_home(&path));
     let ext = p.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
-    let mime = match ext.as_str() {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "gif" => "image/gif",
-        "webp" => "image/webp",
-        _ => return Err(plyfold_i18n::tr!("画像ではありません", "Not an image", "不是图片")),
-    };
-    let size = std::fs::metadata(&p).map_err(err)?.len();
-    if size > 20 * 1024 * 1024 {
-        return Err(plyfold_i18n::tr!("画像が大きすぎます（20 MB まで）", "The image is too large (20 MB max)", "图片太大（最多 20 MB）"));
+    if !matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp") {
+        return Err(plyfold_i18n::tr!("画像ではありません", "Not an image", "不是图片"));
     }
-    let bytes = std::fs::read(&p).map_err(err)?;
+    // The name alone says nothing (a link named .png may point at any file): the bytes must be an image, and the
+    // type shown is theirs
+    let read = tauri::async_runtime::spawn_blocking(move || plyfold_core::attach::read_image_file(&p, 20 * 1024 * 1024)).await.map_err(err)?;
+    let Some((bytes, mime)) = read.map_err(err)? else {
+        return Err(plyfold_i18n::tr!(
+            "画像として読めません（画像でないか、20 MB を超えています）",
+            "Cannot be read as an image (not an image, or over 20 MB)",
+            "无法作为图片读取（不是图片，或超过 20 MB）"
+        ));
+    };
     Ok(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
 }
 
