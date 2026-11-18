@@ -235,6 +235,16 @@ export interface Diff {
 
 export type AuthKind = "login" | "api" | "custom";
 
+export type McpTransport = "stdio" | "http" | "sse";
+
+export interface McpServerForm {
+  transport: McpTransport;
+  name: string;
+  command: string;
+  args: string[];
+  url: string;
+}
+
 export interface ProfileForm {
   name: string;
   agent: string;
@@ -242,6 +252,7 @@ export interface ProfileForm {
   auth: AuthKind;
   base_url: string | null;
   isolate: boolean;
+  mcp: McpServerForm[];
 }
 
 export interface ProfileDetail {

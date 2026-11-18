@@ -72,4 +72,13 @@ export const profiles: Record<keyof typeof source, string> = {
   registryBuiltIn: "已内置",
   registryBinary: "暂不支持",
   registryBinaryHint: "暂不支持以二进制发布的代理",
+  mcp: "MCP 服务器",
+  mcpHint: "stdio 是本机上的命令。命令名会在启动时解析为绝对路径。仅当代理支持时才传递 HTTP 和 SSE。参数以空格分隔。",
+  mcpAdd: "添加服务器",
+  mcpRemove: "删除此服务器",
+  mcpName: "名称",
+  mcpCommand: "命令",
+  mcpArgs: "参数",
+  mcpUrl: "URL",
+  mcpKind: "类型",
 };

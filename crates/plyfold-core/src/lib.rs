@@ -825,6 +825,11 @@ impl Engine {
             // Start receiving first so the history resent by session/load is captured
             tokio::spawn(pump(inner.clone(), id.to_string(), live.clone(), rx));
 
+            let (mcp_servers, skipped) = plyfold_profile::prepare_mcp(&resolved.mcp, live.client.supports_mcp_http(), live.client.supports_mcp_sse());
+            for message in skipped {
+                inner.notice(id, message);
+            }
+
             let opened: Result<String, CoreError> = async {
                 if let Resume::Fork(old) = &resume {
                     if !live.client.supports_fork() {
@@ -834,7 +839,7 @@ impl Engine {
                     // has the conversation, copied from the source session's log
                     let _ = inner.store.append_event(id, EventKind::Note, REPLAY_BEGIN);
                     live.replaying.store(true, Ordering::SeqCst);
-                    let forked = live.client.fork_session(old, cwd).await;
+                    let forked = live.client.fork_session(old, cwd, mcp_servers.clone()).await;
                     if let Ok((_, barrier)) = &forked {
                         live.wait_processed(*barrier).await;
                     }
@@ -866,7 +871,7 @@ impl Engine {
                         // Mark the resent history in the event log so it is not rebuilt as a second copy of the conversation
                         let _ = inner.store.append_event(id, EventKind::Note, REPLAY_BEGIN);
                         live.replaying.store(true, Ordering::SeqCst);
-                        let loaded = live.client.load_session(old, cwd).await;
+                        let loaded = live.client.load_session(old, cwd, mcp_servers.clone()).await;
                         if let Ok((_, barrier)) = &loaded {
                             live.wait_processed(*barrier).await;
                         }
@@ -926,7 +931,7 @@ impl Engine {
                 }
                 {
                     {
-                        let r = live.client.new_session(cwd).await?;
+                        let r = live.client.new_session(cwd, mcp_servers).await?;
                         let sid = r.session_id.0.to_string();
                         live.info.lock().unwrap().apply_session_response(&serde_json::to_value(&r).unwrap_or_default());
                         if let Some(msg) = fallback {

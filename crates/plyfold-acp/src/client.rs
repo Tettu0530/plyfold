@@ -7,9 +7,9 @@ use std::time::Duration;
 use agent_client_protocol_schema::ProtocolVersion;
 use agent_client_protocol_schema::v1::{
     CancelNotification, ClientCapabilities, ContentBlock, FileSystemCapabilities, ForkSessionRequest, ForkSessionResponse, Implementation, InitializeRequest,
-    InitializeResponse, ListSessionsRequest, ListSessionsResponse, LoadSessionRequest, NewSessionRequest, NewSessionResponse, PromptRequest, PromptResponse,
-    RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse, SelectedPermissionOutcome, SessionId, SessionInfo, SessionNotification,
-    SessionUpdate, SetSessionModeRequest, TextContent,
+    InitializeResponse, ListSessionsRequest, ListSessionsResponse, LoadSessionRequest, McpServer, NewSessionRequest, NewSessionResponse, PromptRequest,
+    PromptResponse, RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse, SelectedPermissionOutcome, SessionId, SessionInfo,
+    SessionNotification, SessionUpdate, SetSessionModeRequest, TextContent,
 };
 use serde_json::Value;
 use tokio::sync::mpsc;
@@ -96,18 +96,36 @@ impl AcpClient {
         self.init.agent_capabilities.prompt_capabilities.image
     }
 
+    /// The agent accepts HTTP MCP servers (`mcpCapabilities.http`)
+    pub fn supports_mcp_http(&self) -> bool {
+        self.init.agent_capabilities.mcp_capabilities.http
+    }
+
+    /// The agent accepts SSE MCP servers (`mcpCapabilities.sse`)
+    pub fn supports_mcp_sse(&self) -> bool {
+        self.init.agent_capabilities.mcp_capabilities.sse
+    }
+
     pub async fn authenticate(&self, method_id: &str) -> Result<(), AcpError> {
         self.conn.request_raw("authenticate", serde_json::json!({ "methodId": method_id }), Some(SESSION_TIMEOUT)).await.map(|_| ())
     }
 
-    pub async fn new_session(&self, cwd: &Path) -> Result<NewSessionResponse, AcpError> {
-        self.conn.request("session/new", &NewSessionRequest::new(cwd), Some(SESSION_TIMEOUT)).await
+    pub async fn new_session(&self, cwd: &Path, mcp_servers: Vec<McpServer>) -> Result<NewSessionResponse, AcpError> {
+        let mut req = NewSessionRequest::new(cwd);
+        if !mcp_servers.is_empty() {
+            req = req.mcp_servers(mcp_servers);
+        }
+        self.conn.request("session/new", &req, Some(SESSION_TIMEOUT)).await
     }
 
     /// Forks an existing session into a new one with the same conversation context.
     /// Returns (response JSON, barrier). The agent does not resend the history.
-    pub async fn fork_session(&self, session_id: &str, cwd: &Path) -> Result<(Value, u64), AcpError> {
-        let req = ForkSessionRequest::new(session_id.to_string(), cwd);
+    /// `mcp_servers` replaces the forked session's list, the same way session/new does.
+    pub async fn fork_session(&self, session_id: &str, cwd: &Path, mcp_servers: Vec<McpServer>) -> Result<(Value, u64), AcpError> {
+        let mut req = ForkSessionRequest::new(session_id.to_string(), cwd);
+        if !mcp_servers.is_empty() {
+            req = req.mcp_servers(mcp_servers);
+        }
         let (v, barrier) = self.conn.request_with_barrier("session/fork", serde_json::to_value(&req).expect("serialize"), Some(SESSION_TIMEOUT)).await?;
         let _: ForkSessionResponse = serde_json::from_value(v.clone()).map_err(|source| AcpError::Decode { method: "session/fork".into(), source })?;
         Ok((v, barrier))
@@ -136,14 +154,12 @@ impl AcpClient {
 
     /// Reopens an existing session. The history is replayed as session/update notifications.
     /// Returns (response JSON, barrier). The response may contain configOptions and modes
-    pub async fn load_session(&self, session_id: &str, cwd: &Path) -> Result<(Value, u64), AcpError> {
-        self.conn
-            .request_with_barrier(
-                "session/load",
-                serde_json::to_value(LoadSessionRequest::new(SessionId::new(session_id), cwd)).expect("serialize"),
-                Some(SESSION_TIMEOUT),
-            )
-            .await
+    pub async fn load_session(&self, session_id: &str, cwd: &Path, mcp_servers: Vec<McpServer>) -> Result<(Value, u64), AcpError> {
+        let mut req = LoadSessionRequest::new(SessionId::new(session_id), cwd);
+        if !mcp_servers.is_empty() {
+            req = req.mcp_servers(mcp_servers);
+        }
+        self.conn.request_with_barrier("session/load", serde_json::to_value(req).expect("serialize"), Some(SESSION_TIMEOUT)).await
     }
 
     /// Changes a config option (model, effort, mode, ...). Returns the updated configOptions as raw JSON

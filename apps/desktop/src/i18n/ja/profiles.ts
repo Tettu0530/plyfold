@@ -71,4 +71,14 @@ export const profiles = {
   registryBuiltIn: "組み込み済み",
   registryBinary: "未対応",
   registryBinaryHint: "バイナリで配布されているエージェントには、まだ対応していません",
+  mcp: "MCP サーバー",
+  mcpHint:
+    "stdio は手元のコマンドです。コマンド名は起動時に絶対パスへ直します。HTTP と SSE は、エージェントが対応しているときだけ渡します。引数は空白で区切ります。",
+  mcpAdd: "サーバーを追加",
+  mcpRemove: "このサーバーを削除",
+  mcpName: "名前",
+  mcpCommand: "コマンド",
+  mcpArgs: "引数",
+  mcpUrl: "URL",
+  mcpKind: "種類",
 } satisfies Record<string, string>;

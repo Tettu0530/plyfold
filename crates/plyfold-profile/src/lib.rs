@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
 
 use plyfold_acp::SpawnSpec;
+use plyfold_acp::schema::{McpServer, McpServerHttp, McpServerSse, McpServerStdio};
 use serde::{Deserialize, Serialize};
 
 pub mod edit;
@@ -86,6 +87,30 @@ pub struct ProfileDef {
     pub links: BTreeMap<String, String>,
     /// Mode to switch to right after session/new
     pub default_mode: Option<String>,
+    /// MCP servers for this profile. Passed on session/new, session/load and session/fork.
+    /// Headers and environment values are not stored: both would be secrets, and the agent starts the server itself
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mcp: Vec<McpServerDef>,
+}
+
+/// One MCP server, as written in config.toml. `transport` is `stdio`, `http` or `sse`
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "transport", rename_all = "lowercase")]
+pub enum McpServerDef {
+    Stdio {
+        name: String,
+        command: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        args: Vec<String>,
+    },
+    Http {
+        name: String,
+        url: String,
+    },
+    Sse {
+        name: String,
+        url: String,
+    },
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -104,6 +129,8 @@ pub struct Resolved {
     pub label: String,
     pub spawn: SpawnSpec,
     pub default_mode: Option<String>,
+    /// MCP servers from the profile, before capability and path checks
+    pub mcp: Vec<McpServerDef>,
     /// Summary of env vars for display (values masked)
     pub env_summary: Vec<String>,
 }
@@ -231,9 +258,119 @@ impl Config {
             label: profile.label.clone().unwrap_or_else(|| target.to_string()),
             spawn: SpawnSpec { command: agent.command.clone(), args: agent.args.clone(), cwd: cwd.to_path_buf(), env_set, env_remove, secrets: secret_values },
             default_mode: profile.default_mode.clone(),
+            mcp: profile.mcp.clone(),
             env_summary,
         })
     }
+}
+
+/// Servers to send, and one notice per server that was left out.
+/// stdio is always allowed. HTTP and SSE are sent only when the agent advertised them.
+/// A relative command with no path separator is looked up on PATH, because the protocol asks for an absolute path.
+/// A server that cannot be sent is skipped; the session still starts.
+pub fn prepare_mcp(servers: &[McpServerDef], http: bool, sse: bool) -> (Vec<McpServer>, Vec<String>) {
+    let mut out = Vec::new();
+    let mut skipped = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for server in servers {
+        let name = server.name().trim();
+        if name.is_empty() {
+            skipped.push(plyfold_i18n::tr!("名前のない MCP サーバーは渡しません", "An MCP server with no name was not passed", "未传递没有名称的 MCP 服务器"));
+            continue;
+        }
+        if seen.contains(name) {
+            skipped.push(plyfold_i18n::tr!(
+                "MCP サーバー「{name}」は渡しません。同じ名前がすでにあります",
+                "MCP server “{name}” was not passed. That name is already used",
+                "未传递 MCP 服务器“{name}”。已有同名服务器"
+            ));
+            continue;
+        }
+        let built = match server {
+            McpServerDef::Stdio { command, args, .. } => match resolve_stdio(name, command) {
+                Ok(path) => Ok(McpServer::Stdio(McpServerStdio::new(name, path).args(args.clone()))),
+                Err(reason) => Err(reason),
+            },
+            McpServerDef::Http { url, .. } => remote(name, url, http, "HTTP").map(|()| McpServer::Http(McpServerHttp::new(name, url.trim()))),
+            McpServerDef::Sse { url, .. } => remote(name, url, sse, "SSE").map(|()| McpServer::Sse(McpServerSse::new(name, url.trim()))),
+        };
+        match built {
+            Ok(built) => {
+                seen.insert(name.to_string());
+                out.push(built);
+            }
+            Err(reason) => skipped.push(reason),
+        }
+    }
+    (out, skipped)
+}
+
+impl McpServerDef {
+    fn name(&self) -> &str {
+        match self {
+            Self::Stdio { name, .. } | Self::Http { name, .. } | Self::Sse { name, .. } => name,
+        }
+    }
+}
+
+fn resolve_stdio(name: &str, command: &str) -> Result<PathBuf, String> {
+    let command = command.trim();
+    if command.is_empty() {
+        return Err(plyfold_i18n::tr!(
+            "MCP サーバー「{name}」は渡しません。コマンドが空です",
+            "MCP server “{name}” was not passed. The command is empty",
+            "未传递 MCP 服务器“{name}”。命令为空"
+        ));
+    }
+    let path = Path::new(command);
+    if path.is_absolute() {
+        if path.is_file() {
+            return Ok(path.to_path_buf());
+        }
+        return Err(plyfold_i18n::tr!(
+            "MCP サーバー「{name}」は渡しません。コマンド {command} が見つかりません",
+            "MCP server “{name}” was not passed. The command {command} was not found",
+            "未传递 MCP 服务器“{name}”。找不到命令 {command}"
+        ));
+    }
+    if command.contains('/') || command.contains('\\') {
+        return Err(plyfold_i18n::tr!(
+            "MCP サーバー「{name}」は渡しません。コマンドは絶対パスか、PATH にあるコマンド名にしてください",
+            "MCP server “{name}” was not passed. Use an absolute path, or the name of a command on PATH",
+            "未传递 MCP 服务器“{name}”。请使用绝对路径，或 PATH 中的命令名"
+        ));
+    }
+    match which::which(command) {
+        Ok(found) => Ok(found),
+        Err(_) => Err(plyfold_i18n::tr!(
+            "MCP サーバー「{name}」は渡しません。コマンド {command} が見つかりません",
+            "MCP server “{name}” was not passed. The command {command} was not found",
+            "未传递 MCP 服务器“{name}”。找不到命令 {command}"
+        )),
+    }
+}
+
+fn remote(name: &str, url: &str, advertised: bool, kind: &str) -> Result<(), String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(plyfold_i18n::tr!("名前のない MCP サーバーは渡しません", "An MCP server with no name was not passed", "未传递没有名称的 MCP 服务器"));
+    }
+    if !advertised {
+        return Err(plyfold_i18n::tr!(
+            "MCP サーバー「{name}」は渡しません。このエージェントは {kind} に対応していません",
+            "MCP server “{name}” was not passed. This agent does not support {kind}",
+            "未传递 MCP 服务器“{name}”。此代理不支持 {kind}"
+        ));
+    }
+    let url = url.trim();
+    if url.starts_with("https://") || url.starts_with("http://") {
+        return Ok(());
+    }
+    Err(plyfold_i18n::tr!(
+        "MCP サーバー「{name}」は渡しません。URL は http:// か https:// で始めてください",
+        "MCP server “{name}” was not passed. The URL must start with http:// or https://",
+        "未传递 MCP 服务器“{name}”。URL 必须以 http:// 或 https:// 开头"
+    ))
 }
 
 /// Whether the folder itself, or any part of `rel` under it, is a symbolic link
@@ -413,5 +550,86 @@ files = { "../evil" = "x" }
     fn unknown_target() {
         let cfg = Config::from_toml("").unwrap();
         assert!(matches!(cfg.resolve("nope", &tmp("u"), Path::new("/w"), &MemoryStore::default()), Err(ProfileError::UnknownTarget(_))));
+    }
+
+    #[test]
+    fn mcp_round_trips_and_is_filtered_at_launch() {
+        let bin = tmp("mcp-bin").join("server");
+        std::fs::write(&bin, "").unwrap();
+        let toml = format!(
+            r#"
+[profiles.p]
+agent = "claude"
+[[profiles.p.mcp]]
+transport = "stdio"
+name = "files"
+command = '{}'
+args = ["--flag"]
+[[profiles.p.mcp]]
+transport = "stdio"
+name = "tools"
+command = "git"
+[[profiles.p.mcp]]
+transport = "stdio"
+name = "missing"
+command = "plyfold-no-such-mcp"
+[[profiles.p.mcp]]
+transport = "stdio"
+name = "relative"
+command = "./server"
+[[profiles.p.mcp]]
+transport = "http"
+name = "docs"
+url = "https://example.invalid/mcp"
+[[profiles.p.mcp]]
+transport = "sse"
+name = "legacy"
+url = "https://example.invalid/sse"
+[[profiles.p.mcp]]
+transport = "http"
+name = "docs"
+url = "https://example.invalid/again"
+[[profiles.p.mcp]]
+transport = "stdio"
+name = " "
+command = "git"
+"#,
+            bin.display()
+        );
+        let cfg = Config::from_toml(&toml).unwrap();
+        assert_eq!(cfg.profiles["p"].mcp.len(), 8);
+        let again = Config::from_toml(&toml::to_string(&cfg).unwrap()).unwrap();
+        assert_eq!(again.profiles["p"].mcp, cfg.profiles["p"].mcp);
+
+        let (sent, skipped) = prepare_mcp(&cfg.profiles["p"].mcp, true, false);
+        assert_eq!(sent.len(), 3, "{skipped:?}");
+        match &sent[0] {
+            McpServer::Stdio(s) => {
+                assert_eq!(s.command, bin);
+                assert_eq!(s.args, ["--flag"]);
+                assert!(s.env.is_empty());
+            }
+            other => panic!("stdio first, got {other:?}"),
+        }
+        match &sent[1] {
+            McpServer::Stdio(s) => assert!(s.command.is_absolute()),
+            other => panic!("git resolved, got {other:?}"),
+        }
+        match &sent[2] {
+            McpServer::Http(s) => {
+                assert_eq!(s.url, "https://example.invalid/mcp");
+                assert!(s.headers.is_empty());
+            }
+            other => panic!("http sent, got {other:?}"),
+        }
+        let notes = skipped.join("\n");
+        for name in ["missing", "relative", "legacy", "docs"] {
+            assert!(notes.contains(name), "{notes}");
+        }
+        assert!(notes.contains("名前のない") || notes.contains("no name") || notes.contains("没有名称"), "{notes}");
+
+        let (no_http, skipped) = prepare_mcp(&cfg.profiles["p"].mcp, false, false);
+        assert!(no_http.iter().all(|s| !matches!(s, McpServer::Http(_))));
+        assert!(skipped.iter().any(|s| s.contains("docs") && s.contains("HTTP")));
     }
 }

@@ -4,6 +4,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Sessions
+
+- A profile can list MCP servers: a local command (stdio), or an HTTP or SSE address. They are passed when a session starts, is reopened, or is forked. HTTP and SSE go out only when the agent says it supports them, and a command that cannot be found is left out; the conversation names each server that was not passed. Headers and environment values for those servers are not stored
+
 ## [0.4.0] - 2026-11-18
 
 Updates from inside the app, a trash for sessions, per-repository worktree setup and permission rules, finding messages, a touched-files pane, and security fixes from a dynamic review.

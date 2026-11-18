@@ -72,4 +72,14 @@ export const profiles: Record<keyof typeof source, string> = {
   registryBuiltIn: "Built in",
   registryBinary: "Not supported",
   registryBinaryHint: "Agents distributed as binaries are not supported yet",
+  mcp: "MCP servers",
+  mcpHint:
+    "stdio is a command on this machine. A command name becomes an absolute path at launch. HTTP and SSE are passed only when the agent supports them. Separate arguments with spaces.",
+  mcpAdd: "Add a server",
+  mcpRemove: "Remove this server",
+  mcpName: "Name",
+  mcpCommand: "Command",
+  mcpArgs: "Arguments",
+  mcpUrl: "URL",
+  mcpKind: "Kind",
 };

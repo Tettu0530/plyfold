@@ -1,4 +1,4 @@
-import { ChevronLeft, CircleAlert, CircleCheck, Plus, TriangleAlert } from "lucide-react";
+import { ChevronLeft, CircleAlert, CircleCheck, Plus, TriangleAlert, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Input } from "@/components/ui/input";
@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { type MessageKey, useT, currentLang } from "@/i18n";
 import { api } from "@/lib/api";
 import { seconds } from "@/lib/format";
-import type { AuthKind, CheckResult, ProfileDetail, ProfileForm, ProfileSummary } from "@/lib/types";
+import type { AuthKind, CheckResult, McpServerForm, McpTransport, ProfileDetail, ProfileForm, ProfileSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useStore, isListed } from "@/state/store";
 import { agentName, ProviderLogo } from "./icons";
@@ -229,6 +229,104 @@ function DefaultProfile({ agent }: { agent: string }) {
   );
 }
 
+function ArgsField({ args, onChange, label }: { args: string[]; onChange: (args: string[]) => void; label: string }) {
+  const [text, setText] = useState(args.join(" "));
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (!focused) setText(args.join(" "));
+  }, [args, focused]);
+  return (
+    <Input
+      value={focused ? text : args.join(" ")}
+      aria-label={label}
+      placeholder={label}
+      onFocus={() => {
+        setText(args.join(" "));
+        setFocused(true);
+      }}
+      onBlur={() => setFocused(false)}
+      onChange={(e) => {
+        setText(e.target.value);
+        onChange(e.target.value.split(/\s+/).filter(Boolean));
+      }}
+      className="h-8 font-mono text-xs"
+    />
+  );
+}
+
+function McpEditor({ servers, onChange }: { servers: McpServerForm[]; onChange: (next: McpServerForm[]) => void }) {
+  const t = useT();
+  const patch = (i: number, next: Partial<McpServerForm>) => onChange(servers.map((s, j) => (j === i ? { ...s, ...next } : s)));
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <span className="font-medium">{t("profiles.mcp")}</span>
+        <span className="grow" />
+        <button
+          type="button"
+          onClick={() => onChange([...servers, { transport: "stdio", name: "", command: "", args: [], url: "" }])}
+          className="h-7 rounded-lg border border-input px-3 hover:bg-accent"
+        >
+          {t("profiles.mcpAdd")}
+        </button>
+      </div>
+      <p className="text-xs leading-relaxed text-muted-foreground">{t("profiles.mcpHint")}</p>
+      {servers.map((s, i) => (
+        <div key={i} className="flex flex-col gap-2 border-t border-border pt-3">
+          <div className="flex items-center gap-2">
+            <Input
+              value={s.name}
+              aria-label={t("profiles.mcpName")}
+              placeholder={t("profiles.mcpName")}
+              onChange={(e) => patch(i, { name: e.target.value })}
+              className="h-8 font-mono text-xs"
+            />
+            <button
+              type="button"
+              aria-label={t("profiles.mcpRemove")}
+              onClick={() => onChange(servers.filter((_, j) => j !== i))}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg hover:bg-accent"
+            >
+              <X className="size-4" strokeWidth={2} />
+            </button>
+          </div>
+          <Segmented<McpTransport>
+            label={t("profiles.mcpKind")}
+            className="self-start"
+            value={s.transport}
+            onChange={(transport) => patch(i, { transport })}
+            options={[
+              { value: "stdio", label: <span className="px-2">stdio</span> },
+              { value: "http", label: <span className="px-2">HTTP</span> },
+              { value: "sse", label: <span className="px-2">SSE</span> },
+            ]}
+          />
+          {s.transport === "stdio" ? (
+            <>
+              <Input
+                value={s.command}
+                aria-label={t("profiles.mcpCommand")}
+                placeholder={t("profiles.mcpCommand")}
+                onChange={(e) => patch(i, { command: e.target.value })}
+                className="h-8 font-mono text-xs"
+              />
+              <ArgsField args={s.args} label={t("profiles.mcpArgs")} onChange={(args) => patch(i, { args })} />
+            </>
+          ) : (
+            <Input
+              value={s.url}
+              aria-label={t("profiles.mcpUrl")}
+              placeholder="https://"
+              onChange={(e) => patch(i, { url: e.target.value })}
+              className="h-8 font-mono text-xs"
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Field({ label, htmlFor, hint, children }: { label: string; htmlFor?: string; hint?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -256,7 +354,15 @@ function Editor({ agent, name, sessions, check, onCheck, onSaved, onDeleted }: E
   const t = useT();
   const refreshProfiles = useStore((s) => s.refreshProfiles);
   const [detail, setDetail] = useState<ProfileDetail | null>(null);
-  const [form, setForm] = useState<ProfileForm>({ name: "", agent, label: null, auth: KEY_VAR[agent] ? "api" : "login", base_url: null, isolate: true });
+  const [form, setForm] = useState<ProfileForm>({
+    name: "",
+    agent,
+    label: null,
+    auth: KEY_VAR[agent] ? "api" : "login",
+    base_url: null,
+    isolate: true,
+    mcp: [],
+  });
   const [key, setKey] = useState<string | null>(name ? null : "");
   const [busy, setBusy] = useState<"save" | "check" | "delete" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -423,6 +529,8 @@ function Editor({ agent, name, sessions, check, onCheck, onSaved, onDeleted }: E
         </div>
         <Switch id="pf-iso" checked={codexCustom || form.isolate} disabled={codexCustom} onCheckedChange={(isolate) => set({ isolate })} />
       </div>
+
+      <McpEditor servers={form.mcp} onChange={(mcp) => set({ mcp })} />
 
       {name && (
         <section aria-labelledby="pf-check" className="flex flex-col gap-3 rounded-[10px] border p-4">

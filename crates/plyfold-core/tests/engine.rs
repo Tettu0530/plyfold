@@ -416,3 +416,81 @@ async fn reopen_falls_back_to_new_session_when_agent_lost_the_transcript() {
     assert!(events.iter().any(|e| e.payload.contains("記録が見つからない")));
     eng.close_session(&s.id).await.unwrap();
 }
+
+fn sent(eng: &Engine, id: &str, method: &str) -> String {
+    eng.store()
+        .events(id, None, 1000)
+        .unwrap()
+        .into_iter()
+        .find(|e| e.payload.contains("\"method\"") && e.payload.contains(&format!("\"{method}\"")))
+        .unwrap_or_else(|| panic!("{method} was not sent"))
+        .payload
+}
+
+#[tokio::test]
+async fn mcp_servers_go_out_on_new_load_and_fork() {
+    let base = tmp("mcp");
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    git_repo(&repo);
+    let marker = base.join("mcp-bin");
+    std::fs::write(&marker, "").unwrap();
+    let toml = format!(
+        r#"
+[agents.mock]
+command = '{}'
+
+[profiles.mock]
+agent = "mock"
+
+[[profiles.mock.mcp]]
+transport = "stdio"
+name = "files"
+command = '{}'
+args = ["--flag"]
+
+[[profiles.mock.mcp]]
+transport = "http"
+name = "docs"
+url = "https://mcp.example.invalid/docs"
+
+[[profiles.mock.mcp]]
+transport = "sse"
+name = "legacy-sse"
+url = "https://mcp.example.invalid/sse"
+"#,
+        mock_agent().display(),
+        marker.display()
+    );
+    let eng = Engine::open(EngineOptions {
+        state_dir: base.join("state"),
+        data_dir: None,
+        config: Config::from_toml(&toml).unwrap(),
+        secrets: Arc::new(MemoryStore::default()),
+        stall_after: Duration::from_secs(60),
+    })
+    .unwrap();
+    let mut rx = eng.subscribe();
+    let s = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: repo.clone(), worktree: true }).await.unwrap();
+    let events = eng.store().events(&s.id, None, 1000).unwrap();
+    let opened = sent(&eng, &s.id, "session/new");
+    assert!(opened.contains("files") && opened.contains("--flag"), "{opened}");
+    assert!(opened.contains("https://mcp.example.invalid/docs"), "{opened}");
+    assert!(!opened.contains("legacy-sse"), "{opened}");
+    assert!(events.iter().any(|e| e.payload.contains("legacy-sse")));
+
+    eng.prompt(&s.id, "hello").unwrap();
+    wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { .. })).await;
+    eng.close_session(&s.id).await.unwrap();
+    eng.reopen_session(&s.id).await.unwrap();
+    let loaded = sent(&eng, &s.id, "session/load");
+    assert!(loaded.contains("https://mcp.example.invalid/docs"), "{loaded}");
+    assert!(!loaded.contains("legacy-sse"), "{loaded}");
+    eng.close_session(&s.id).await.unwrap();
+
+    let forked = eng.fork_session(&s.id, true).await.unwrap();
+    let fork = sent(&eng, &forked.id, "session/fork");
+    assert!(fork.contains("https://mcp.example.invalid/docs"), "{fork}");
+    assert!(!fork.contains("legacy-sse"), "{fork}");
+    eng.close_session(&forked.id).await.unwrap();
+}
