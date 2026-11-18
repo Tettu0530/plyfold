@@ -165,7 +165,9 @@ impl SessionInfo {
     pub(crate) fn apply_update(&mut self, u: &Value) -> bool {
         match u["sessionUpdate"].as_str() {
             Some("usage_update") => {
-                self.context_used = u["used"].as_u64().or(self.context_used);
+                // Some agents report 0 at the start of each message, before the count is in: the context never really
+                // empties (the system prompt alone takes some), so a 0 keeps the last real figure
+                self.context_used = u["used"].as_u64().filter(|&n| n > 0 || self.context_used.is_none()).or(self.context_used);
                 self.context_size = u["size"].as_u64().or(self.context_size);
                 if let Some(amount) = u["cost"]["amount"].as_f64() {
                     self.cost = Some(Cost { amount, currency: u["cost"]["currency"].as_str().unwrap_or("USD").into() });
@@ -325,6 +327,11 @@ mod tests {
         assert!(info.apply_update(&json!({"sessionUpdate": "usage_update", "used": 9256, "size": 200000,
             "cost": {"amount": 0.12, "currency": "USD"}, "_meta": {"_claude/model": "real-model"}})));
         assert_eq!((info.context_used, info.context_size), (Some(9256), Some(200000)));
+        // A 0 between real figures does not empty the meter
+        info.apply_update(&json!({"sessionUpdate": "usage_update", "used": 0, "size": 200000}));
+        assert_eq!(info.context_used, Some(9256));
+        info.apply_update(&json!({"sessionUpdate": "usage_update", "used": 12000, "size": 200000}));
+        assert_eq!(info.context_used, Some(12000));
         assert_eq!(info.cost.as_ref().unwrap().amount, 0.12);
         assert_eq!(info.reported_model.as_deref(), Some("real-model"));
         assert!(!info.apply_update(&json!({"sessionUpdate": "agent_message_chunk"})));
