@@ -59,6 +59,7 @@ keys = {{ MOCK_KEY = "keychain:mock/KEY" }}
     );
     Engine::open(EngineOptions {
         state_dir: state.to_path_buf(),
+        data_dir: None,
         config: Config::from_toml(&toml).unwrap(),
         secrets: Arc::new(MemoryStore::from([("mock/KEY", "sk-mock-secret-123456")])),
         stall_after: Duration::from_millis(stall_ms),

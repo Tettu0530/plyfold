@@ -109,6 +109,7 @@ async fn main() -> Result<()> {
 
     let engine = Engine::open(EngineOptions {
         state_dir: state_dir.clone(),
+        data_dir: None,
         config,
         secrets: Arc::new(KeychainStore::new(KEYCHAIN_SERVICE)),
         stall_after: Duration::from_secs(cli.stall_secs),

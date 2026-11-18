@@ -52,6 +52,7 @@ command = '{}'
     );
     Engine::open(EngineOptions {
         state_dir: state.to_path_buf(),
+        data_dir: None,
         config: Config::from_toml(&toml).unwrap(),
         secrets: Arc::new(MemoryStore::default()),
         stall_after: Duration::from_secs(60),

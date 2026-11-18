@@ -164,7 +164,11 @@ pub enum EngineEvent {
 }
 
 pub struct EngineOptions {
+    /// Config and profiles (each profile's own config directory lives under it)
     pub state_dir: PathBuf,
+    /// Sessions: the database, worktrees, conversation folders and attachments. None: the same as state_dir.
+    /// A development build keeps these apart so it never mixes its sessions with the installed app's
+    pub data_dir: Option<PathBuf>,
     pub config: Config,
     pub secrets: Arc<dyn SecretStore>,
     /// Mark the session Stalled if nothing arrives for this long during a turn
@@ -284,6 +288,8 @@ struct Inner {
     config: RwLock<Config>,
     secrets: Arc<dyn SecretStore>,
     state_dir: PathBuf,
+    /// Where sessions are kept (see EngineOptions::data_dir)
+    data_dir: PathBuf,
     worktrees: Worktrees,
     live: Mutex<HashMap<String, Arc<Live>>>,
     tx: broadcast::Sender<EngineEvent>,
@@ -326,7 +332,8 @@ pub struct Engine {
 
 impl Engine {
     pub fn open(opts: EngineOptions) -> Result<Self, CoreError> {
-        let store = Store::open(&opts.state_dir.join("plyfold.db"))?;
+        let data_dir = opts.data_dir.clone().unwrap_or_else(|| opts.state_dir.clone());
+        let store = Store::open(&data_dir.join("plyfold.db"))?;
         // Sessions that were running in the previous launch no longer have a process, so mark them Closed
         for s in store.list_sessions()? {
             // Side chats do not outlive the app
@@ -346,8 +353,9 @@ impl Engine {
                 store,
                 config: RwLock::new(opts.config),
                 secrets: opts.secrets,
-                worktrees: Worktrees::new(opts.state_dir.join("worktrees")),
+                worktrees: Worktrees::new(data_dir.join("worktrees")),
                 state_dir: opts.state_dir,
+                data_dir,
                 live: Mutex::new(HashMap::new()),
                 tx: broadcast::channel(4096).0,
                 stall_after_ms: AtomicU64::new(opts.stall_after.as_millis() as u64),
@@ -437,7 +445,7 @@ impl Engine {
     }
 
     fn chat_dir(&self, id: &str) -> PathBuf {
-        self.inner.state_dir.join("chats").join(id)
+        self.inner.data_dir.join("chats").join(id)
     }
 
     /// Restart the agent for a stopped session. If supported, session/load restores the full context
@@ -856,7 +864,7 @@ impl Engine {
         let inner = self.inner.clone();
         let live = inner.live(id)?;
         // For agents without image support, write images to the state dir and pass them as links
-        let blocks = attach::prompt_blocks(text, attachments, live.client.supports_images(), &inner.state_dir.join("attachments"))
+        let blocks = attach::prompt_blocks(text, attachments, live.client.supports_images(), &inner.data_dir.join("attachments"))
             .map_err(|e| CoreError::Attachment(e.to_string()))?;
         if live.in_turn.swap(true, Ordering::SeqCst) {
             return Err(CoreError::Busy(id.into()));

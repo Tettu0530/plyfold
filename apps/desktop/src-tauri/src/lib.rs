@@ -772,6 +772,16 @@ async fn check_profile(state: State<'_, AppState>, name: String) -> CmdResult<pl
     Ok(state.engine.check_profile(&name).await)
 }
 
+/// Where sessions are kept. A development build (npm run tauri dev) uses its own folder inside the state directory,
+/// so running it beside the installed app never mixes their sessions; profiles and settings stay shared.
+/// PLYFOLD_DATA_DIR overrides both
+fn data_dir(state_dir: &std::path::Path) -> PathBuf {
+    if let Some(d) = std::env::var_os("PLYFOLD_DATA_DIR").filter(|d| !d.is_empty()) {
+        return PathBuf::from(d);
+    }
+    if cfg!(debug_assertions) { state_dir.join("dev") } else { state_dir.to_path_buf() }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
@@ -785,6 +795,7 @@ pub fn run() {
             let settings = load_settings(&state_dir.join("settings.json"));
             let engine = Engine::open(EngineOptions {
                 state_dir: state_dir.clone(),
+                data_dir: Some(data_dir(&state_dir)),
                 config: config.clone(),
                 secrets: secrets.clone(),
                 stall_after: Duration::from_secs(settings.stall_seconds),
