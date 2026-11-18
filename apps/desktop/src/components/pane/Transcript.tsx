@@ -48,12 +48,15 @@ export function TurnStatsRow({
   error,
   stopReason,
   endedAt,
+  actions,
 }: {
   stats: TurnStats | null;
   cost?: string;
   error?: string | null;
   stopReason?: string | null;
   endedAt?: number | null;
+  /** The answer's buttons (copy…), right after the numbers */
+  actions?: React.ReactNode;
 }) {
   const t = useT();
   if (error) return <p className="text-xs text-error">{error}</p>;
@@ -87,6 +90,7 @@ export function TurnStatsRow({
       )}
       {stopReason === "cancelled" && <span>{t("transcript.stopped")}</span>}
       {stopReason === INTERRUPTED && <span>{t("transcript.interrupted")}</span>}
+      {actions}
       {endedAt != null && (
         <time dateTime={new Date(endedAt).toISOString()} title={t("transcript.endedAt")} className="ml-auto">
           {clock(endedAt)}
@@ -198,6 +202,24 @@ export function Transcript({
       else blocks.push({ kind: "tools", tools: [it] });
     } else blocks.push(it);
   }
+  // A turn's numbers go beside the buttons under its last answer (an error, or a turn with no answer, keeps its own row)
+  const statsOf = new Map<number, Extract<TranscriptItem, { kind: "stats" }>>();
+  const attached = new Set<number>();
+  blocks.forEach((b, j) => {
+    if (b.kind !== "stats" || b.error) return;
+    for (let k = j - 1; k >= 0; k--) {
+      const prev = blocks[k];
+      if (prev.kind === "user" || prev.kind === "stats") break;
+      if (prev.kind === "agent") {
+        statsOf.set(k, b);
+        attached.add(j);
+        break;
+      }
+    }
+  });
+  // A local command (no tokens either way) has nothing to report; a stop or an error still shows
+  const showStats = (b: Extract<TranscriptItem, { kind: "stats" }>) =>
+    !!b.error || b.stopReason === "cancelled" || b.stopReason === INTERRUPTED || !usedNoTokens(b.stats);
 
   return (
     <div className="relative flex min-h-0 grow flex-col">
@@ -243,18 +265,26 @@ export function Transcript({
                   )}
                 </div>
               );
-            case "agent":
+            case "agent": {
+              const actions = (
+                <ActionRow align="start">
+                  <CopyButton text={b.text} />
+                  {onQuote && <QuoteButton text={b.text} label={onQuote.label} onQuote={onQuote.run} />}
+                </ActionRow>
+              );
+              const st = statsOf.get(i);
               return (
                 <div key={i} className="group flex flex-col gap-0.5">
                   <Markdown text={b.text} streaming={streaming && i === blocks.length - 1} />
-                  {!(streaming && i === blocks.length - 1) && (
-                    <ActionRow align="start">
-                      <CopyButton text={b.text} />
-                      {onQuote && <QuoteButton text={b.text} label={onQuote.label} onQuote={onQuote.run} />}
-                    </ActionRow>
-                  )}
+                  {!(streaming && i === blocks.length - 1) &&
+                    (st && showStats(st) ? (
+                      <TurnStatsRow stats={st.stats} stopReason={st.stopReason} cost={undefined} endedAt={st.endedAt} actions={actions} />
+                    ) : (
+                      actions
+                    ))}
                 </div>
               );
+            }
             case "thought":
               return <Thought key={i} text={b.text} />;
             case "tools":
@@ -281,8 +311,8 @@ export function Transcript({
             case "stats":
               return (
                 <div key={i} className="flex flex-col gap-3">
-                  {/* A local command (no tokens either way) has nothing to report; a stop or an error still shows */}
-                  {(b.error || b.stopReason === "cancelled" || b.stopReason === INTERRUPTED || !usedNoTokens(b.stats)) && (
+                  {/* Shown under the answer when there is one (see statsOf) */}
+                  {!attached.has(i) && showStats(b) && (
                     <TurnStatsRow stats={b.stats} error={b.error} stopReason={b.stopReason} cost={undefined} endedAt={b.endedAt} />
                   )}
                   {i < blocks.length - 1 && <div className="h-px bg-border" />}

@@ -11,6 +11,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ### Conversation
 
+- A turn's numbers (speed, tokens, time) sit beside the copy button under its last answer instead of on a row of their own; a turn with no answer text keeps the row
 - A turn that used no tokens at all (a command the agent answers itself, such as `/usage` or `/context`) shows no stats row under it; a stop or an error still does
 
 ### Fixed
