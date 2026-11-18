@@ -859,12 +859,15 @@ impl Engine {
         let id = id.to_string();
         tokio::spawn(async move {
             let r = live.client.prompt_blocks(&live.sid(), blocks).await;
+            // The turn is still on while its last notifications are handled (a stalled turn that gets its answer
+            // shows as working again, and the end is reported only after everything it sent)
+            if let Ok(turn) = &r {
+                live.wait_processed(turn.barrier).await;
+            }
             live.in_turn.store(false, Ordering::SeqCst);
             live.permissions.lock().unwrap().clear();
             match r {
                 Ok(turn) => {
-                    // Report the end of the turn only after this turn's notifications have been delivered
-                    live.wait_processed(turn.barrier).await;
                     finish_turn(&inner, &id, &live, &turn.raw["usage"]);
                     let stop = serde_json::to_value(turn.response.stop_reason).ok().and_then(|v| v.as_str().map(str::to_string));
                     inner.emit(EngineEvent::TurnEnded { session_id: id.clone(), stop_reason: stop, error: None });
