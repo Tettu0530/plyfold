@@ -6,6 +6,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ### Fixed
 
+- On macOS the window buttons sit centred in the header, level with the sidebar button, and a little further from the edge
 - On Windows the app no longer opens a Command Prompt window beside itself
 - Windows and Linux draw thin, rounded scrollbars on a transparent track instead of the system's grey bars
 - A button the liquid pulls on stretches by a few pixels at most, and rows inside menus no longer move, so a wide row (the effort row) does not stick out past its menu; the effort submenu grows out of its chevron

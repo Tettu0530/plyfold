@@ -11,11 +11,18 @@
         "minHeight": 600,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "backgroundColor": "#0a0a0a"
+        "backgroundColor": "#0a0a0a",
+        "trafficLightPosition": {
+          "x": 16,
+          "y": 23.75
+        }
       }
     ]
   },
   "bundle": {
-    "targets": ["app", "dmg"]
+    "targets": [
+      "app",
+      "dmg"
+    ]
   }
 }
