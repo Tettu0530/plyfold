@@ -102,7 +102,7 @@ async fn adopt_opens_a_cli_conversation_in_a_new_worktree() {
     assert_eq!(listed[0].acp_session_id, acp);
     assert_eq!(listed[0].title.as_deref(), Some("remember this"));
 
-    let opened = eng.adopt_session("mock", &repo, &acp, listed[0].title.as_deref().unwrap()).await.unwrap();
+    let opened = eng.adopt_session("mock", &repo, &acp, listed[0].title.as_deref().unwrap(), true).await.unwrap();
     assert_ne!(opened.id, src.id);
     assert_eq!(opened.acp_session_id.as_deref(), Some(acp.as_str()));
     assert_eq!(opened.status, Status::Idle);
@@ -115,5 +115,30 @@ async fn adopt_opens_a_cli_conversation_in_a_new_worktree() {
     assert!(copied.iter().any(|e| e.payload.contains("新しい worktree で開きました")));
     assert!(eng.store().usage_events(0).unwrap().is_empty(), "the resent history is not new usage");
     assert!(eng.list_cli_sessions("mock", &repo).await.unwrap().is_empty());
-    assert!(matches!(eng.adopt_session("mock", &repo, &acp, "again").await, Err(CoreError::AlreadyInPlyfold)));
+    assert!(matches!(eng.adopt_session("mock", &repo, &acp, "again", true).await, Err(CoreError::AlreadyInPlyfold)));
+}
+
+#[tokio::test]
+async fn a_conversation_in_a_folder_without_git_opens_in_place() {
+    let base = tmp("adopt-plain");
+    let dir = base.join("notes");
+    std::fs::create_dir_all(&dir).unwrap();
+    let eng = engine(&base.join("state"));
+    let mut rx = eng.subscribe();
+    let src = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: dir.clone(), worktree: false }).await.unwrap();
+    eng.prompt(&src.id, "keep this").unwrap();
+    wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { .. })).await;
+    wait_for(&mut rx, |e| matches!(e, EngineEvent::Status { status: Status::Idle, .. })).await;
+    eng.close_session(&src.id).await.unwrap();
+    let acp = src.acp_session_id.clone().unwrap();
+    eng.delete_session(&src.id, false).await.unwrap();
+
+    // Asked for a worktree, but there is no repository to make one from
+    let opened = eng.adopt_session("mock", &dir, &acp, "keep this", true).await.unwrap();
+    assert_eq!(opened.status, Status::Idle);
+    assert!(opened.worktree_path.is_none());
+    assert_eq!(opened.repo_path.as_deref(), Some(dir.display().to_string().as_str()));
+    let notes = eng.store().events(&opened.id, None, 10_000).unwrap();
+    assert!(notes.iter().any(|e| e.payload.contains("このフォルダのまま開きました")));
+    eng.close_session(&opened.id).await.unwrap();
 }

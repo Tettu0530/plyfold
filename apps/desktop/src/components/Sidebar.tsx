@@ -1,4 +1,4 @@
-import { ChevronRight, CircleArrowUp, KeyRound, Plus, Search, Settings } from "lucide-react";
+import { ChevronRight, CircleArrowUp, KeyRound, Plus, RotateCcw, Search, Settings, Trash2 } from "lucide-react";
 import { Spinner } from "./icons";
 import { motion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
@@ -6,8 +6,9 @@ import { useMemo, useRef, useState } from "react";
 import { age, repoName } from "@/lib/format";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
-import { SIDEBAR_DEFAULT, SIDEBAR_MIN, useStore, visibleSessions, isListed } from "@/state/store";
+import { SIDEBAR_DEFAULT, SIDEBAR_MIN, useStore, visibleSessions, isListed, isTrashed } from "@/state/store";
 import { ProviderLogo, STATUS, StatusIcon } from "./icons";
+import type { SessionRecord } from "@/lib/types";
 import { Keys } from "./Keys";
 import { SessionMenu } from "./SessionMenu";
 import { liquidAnchor } from "./liquid/liquid";
@@ -66,6 +67,14 @@ export function Sidebar() {
   }, [sessions]);
 
   const open = new Set(visibleSessions({ panes, layout }).filter(Boolean));
+  const trashed = useMemo(
+    () =>
+      Object.values(sessions)
+        .filter(isTrashed)
+        .map((v) => v.record)
+        .sort((a, b) => (b.trashed_at ?? 0) - (a.trashed_at ?? 0)),
+    [sessions],
+  );
 
   return (
     <nav aria-label={t("sidebar.label")} style={{ width: sidebarWidth }} className="relative flex shrink-0 flex-col border-r bg-sidebar">
@@ -215,6 +224,7 @@ export function Sidebar() {
             </div>
           );
         })}
+        {trashed.length > 0 && <TrashGroup items={trashed} />}
       </div>
 
       <div className="flex flex-col border-t p-2">
@@ -348,5 +358,112 @@ function UpdateRow() {
       </span>
       {percent !== null && <span className="font-mono text-xs text-muted-foreground tabular">{percent}%</span>}
     </button>
+  );
+}
+
+/**
+ * Sessions moved to the trash, at the end of the list (closed until opened). Each can be restored as it was or
+ * deleted for good; deleting asks whether its worktree and branch go too. Records left for 30 days are deleted at the
+ * next start, without their worktrees
+ */
+function TrashGroup({ items }: { items: SessionRecord[] }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  // What is being deleted for good: one session, or everything ("all")
+  const [confirm, setConfirm] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const { restoreSession, removeSession, emptyTrash } = useStore.getState();
+  const run = (p: Promise<void>) => {
+    setError(null);
+    void p.then(() => setConfirm(null)).catch((e) => setError(String(e)));
+  };
+  const anyWorktree = confirm === "all" ? items.some((r) => r.worktree_path) : !!items.find((r) => r.id === confirm)?.worktree_path;
+  const choices = confirm && (
+    <div className="flex flex-col gap-0.5 rounded-lg border p-1">
+      {anyWorktree && (
+        <button
+          type="button"
+          onClick={() => run(confirm === "all" ? emptyTrash(true) : removeSession(confirm, true))}
+          className="flex h-7 items-center gap-2 rounded-md px-2 text-left text-xs text-error hover:bg-error/10"
+        >
+          <Trash2 className="size-3.5" aria-hidden />
+          {t("sessionMenu.deleteWithWorktree")}
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => run(confirm === "all" ? emptyTrash(false) : removeSession(confirm, false))}
+        className="flex h-7 items-center gap-2 rounded-md px-2 text-left text-xs text-error hover:bg-error/10"
+      >
+        <Trash2 className="size-3.5" aria-hidden />
+        {anyWorktree ? t("sessionMenu.deleteRecordOnly") : t("sessionMenu.deleteRecord")}
+      </button>
+      <button type="button" onClick={() => setConfirm(null)} className="flex h-7 items-center rounded-md px-2 text-left text-xs hover:bg-accent">
+        {t("sessionMenu.cancel")}
+      </button>
+    </div>
+  );
+  return (
+    <div className="mt-2 mb-2">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="flex h-7 w-full items-center gap-1 rounded-md pr-2 pl-1 text-xs text-muted-foreground hover:text-foreground"
+      >
+        <motion.span animate={{ rotate: open ? 90 : 0 }} transition={snappy} className="flex">
+          <ChevronRight className="size-3.5" aria-hidden />
+        </motion.span>
+        <Trash2 className="size-3.5" aria-hidden />
+        <span className="grow text-left">{t("sidebar.trash")}</span>
+        <span className="font-mono tabular">{items.length}</span>
+      </button>
+      {open && (
+        <div className="flex flex-col gap-0.5">
+          {items.map((r) => (
+            <div key={r.id} className="flex flex-col gap-1">
+              <div className="group flex h-8 items-center gap-2 rounded-lg pr-1 pl-2 hover:bg-accent">
+                <ProviderLogo agent={r.agent} className="text-muted-foreground" />
+                <span className="min-w-0 grow truncate text-muted-foreground" title={r.title}>
+                  {r.title}
+                </span>
+                <button
+                  type="button"
+                  aria-label={t("sidebar.restore", { title: r.title })}
+                  title={t("sidebar.restore", { title: r.title })}
+                  onClick={() => run(restoreSession(r.id))}
+                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-background hover:text-foreground focus-visible:opacity-100"
+                >
+                  <RotateCcw className="size-3.5" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  aria-label={t("sidebar.deleteForGood", { title: r.title })}
+                  title={t("sidebar.deleteForGood", { title: r.title })}
+                  onClick={() => setConfirm(r.id)}
+                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-background hover:text-error focus-visible:opacity-100"
+                >
+                  <Trash2 className="size-3.5" aria-hidden />
+                </button>
+              </div>
+              {confirm === r.id && choices}
+            </div>
+          ))}
+          {confirm === "all" ? (
+            choices
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirm("all")}
+              className="flex h-7 items-center gap-2 rounded-lg px-2 text-left text-xs text-muted-foreground hover:bg-accent hover:text-error"
+            >
+              {t("sidebar.emptyTrash")}
+            </button>
+          )}
+          <p className="px-2 pt-0.5 text-xs leading-relaxed text-muted-foreground">{t("sidebar.trashNote")}</p>
+          {error && <p className="px-2 text-xs whitespace-pre-wrap text-error">{error}</p>}
+        </div>
+      )}
+    </div>
   );
 }

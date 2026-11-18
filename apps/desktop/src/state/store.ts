@@ -24,7 +24,9 @@ export interface SideChat {
 }
 
 /** Sessions listed in the UI (side chats live only inside their pane) */
-export const isListed = (v: SessionView) => !v.record.side_of;
+export const isListed = (v: SessionView) => !v.record.side_of && !v.record.trashed_at;
+/** In the trash (restorable; shown in the sidebar's trash group) */
+export const isTrashed = (v: SessionView) => !v.record.side_of && !!v.record.trashed_at;
 
 export interface SessionView {
   record: SessionRecord;
@@ -301,7 +303,12 @@ interface State {
   /** Stop the agent (the log and worktree remain) */
   stopSession: (id: string) => Promise<void>;
   /** Delete along with the log. With removeWorktree, also delete the worktree and branch */
+  /** Delete for good (from the trash) */
   removeSession: (id: string, removeWorktree: boolean) => Promise<void>;
+  /** Move to the trash: stops the agent and closes its panes; the record and worktree stay */
+  trashSession: (id: string) => Promise<void>;
+  restoreSession: (id: string) => Promise<void>;
+  emptyTrash: (removeWorktree: boolean) => Promise<void>;
 }
 
 const newView = (record: SessionRecord): SessionView => ({
@@ -816,7 +823,7 @@ export const useStore = create<State>((set, get) => ({
     if (!d?.profile || d.busy) return;
     get().updateDraft(draftId, { busy: true, error: null });
     try {
-      const rec = await api.adoptCliSession(d.profile, d.repo, acpSessionId, title);
+      const rec = await api.adoptCliSession(d.profile, d.repo, acpSessionId, title, d.worktree);
       // The conversation is the history the agent resent, copied into the log after SessionCreated
       set((s) => {
         const cur = s.sessions[rec.id] ?? newView(rec);
@@ -895,6 +902,33 @@ export const useStore = create<State>((set, get) => ({
 
   stopSession: async (id) => {
     await api.closeSession(id);
+  },
+
+  trashSession: async (id) => {
+    for (const pane of [id, gitPaneOf(id), filesPaneOf(id)]) {
+      const slot = leaves(get().layout).find((i) => get().panes[i] === pane);
+      if (slot !== undefined) get().closePane(slot);
+    }
+    const rec = await api.trashSession(id);
+    set((s) => (s.sessions[id] ? { sessions: { ...s.sessions, [id]: { ...s.sessions[id], record: rec } } } : s));
+  },
+
+  restoreSession: async (id) => {
+    const rec = await api.restoreSession(id);
+    set((s) => (s.sessions[id] ? { sessions: { ...s.sessions, [id]: { ...s.sessions[id], record: rec } } } : s));
+  },
+
+  emptyTrash: async (removeWorktree) => {
+    const gone = await api.emptyTrash(removeWorktree);
+    set((s) => {
+      const sessions = { ...s.sessions };
+      const unread = { ...s.unread };
+      for (const id of gone) {
+        delete sessions[id];
+        delete unread[id];
+      }
+      return { sessions, unread };
+    });
   },
 
   removeSession: async (id, removeWorktree) => {

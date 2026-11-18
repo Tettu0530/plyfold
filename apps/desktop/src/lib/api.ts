@@ -44,11 +44,14 @@ export const api = {
   openSideChat: (id: string) => invoke<SessionRecord>("open_side_chat", { id }),
   closeSideChat: (id: string) => invoke<void>("close_side_chat", { id }),
   listCliSessions: (profile: string, repo: string) => invoke<CliSession[]>("list_cli_sessions", { profile, repo }),
-  adoptCliSession: (profile: string, repo: string, acpSessionId: string, title: string) =>
-    invoke<SessionRecord>("adopt_cli_session", { profile, repo, acpSessionId, title }),
+  adoptCliSession: (profile: string, repo: string, acpSessionId: string, title: string, worktree: boolean) =>
+    invoke<SessionRecord>("adopt_cli_session", { profile, repo, acpSessionId, title, worktree }),
   renameSession: (id: string, title: string) => invoke<void>("rename_session", { id, title }),
   closeSession: (id: string) => invoke<void>("close_session", { id }),
   deleteSession: (id: string, removeWorktree: boolean) => invoke<void>("delete_session", { id, removeWorktree }),
+  trashSession: (id: string) => invoke<SessionRecord>("trash_session", { id }),
+  restoreSession: (id: string) => invoke<SessionRecord>("restore_session", { id }),
+  emptyTrash: (removeWorktree: boolean) => invoke<string[]>("empty_trash", { removeWorktree }),
   setUiLang: (lang: string) => invoke<void>("set_ui_lang", { lang }),
   revealFile: (path: string) => invoke<void>("reveal_file", { path }),
   readTextFile: (path: string) => invoke<TextFile>("read_text_file", { path }),

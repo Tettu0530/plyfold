@@ -8,8 +8,13 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 - The touched-files pane steps to the previous or next file with ← and →, or the buttons beside the file name, which also show where it is (2 / 5)
 
+### Fixed
+
+- Opening a conversation the CLI already has no longer fails in a folder that is not a git repository: it opens in the folder itself, as it also does when the new session screen is set to work in place
+
 ### Sessions
 
+- Deleting a session moves it to the trash at the end of the sidebar: the agent stops and its panes close, but the record, the conversation and the worktree stay, so Restore puts it back as it was. Deleting for good (one session, or Empty trash) asks whether the worktree and branch go too. Records left in the trash for 30 days are deleted at the next start; their worktrees are kept
 - The repository picker on the new session screen has a button beside the path that opens the system's folder chooser (Finder, File Explorer), starting from the folder typed in
 - Settings → Repositories: per repository, files to copy into every new worktree (untracked ones such as `.env`), a setup script run in it before the agent starts (in your login shell; its outcome and, on failure, its last output appear in the conversation), and the kinds of tool calls always allowed without asking (reading and searching, editing files, running commands, fetching from the web), whichever agent asks
 - Switching a session to a mode that does not ask also answers the permission requests it is waiting on: bypass permissions (Claude Code), full access (Codex) and YOLO (Gemini CLI) allow all of them, accept-edits modes allow file edits. A note in the conversation says how many were allowed

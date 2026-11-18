@@ -16,4 +16,9 @@ export const sidebar: Record<keyof typeof source, string> = {
   conversations: "对话",
   updateAvailable: "更新到 {version}",
   updating: "正在安装 {version}",
+  trash: "废纸篓",
+  restore: "恢复「{title}」",
+  deleteForGood: "永久删除「{title}」",
+  emptyTrash: "清空废纸篓",
+  trashNote: "记录 30 天后自动删除，worktree 会保留",
 };

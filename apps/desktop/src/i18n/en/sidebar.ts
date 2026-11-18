@@ -16,4 +16,9 @@ export const sidebar: Record<keyof typeof source, string> = {
   conversations: "Conversations",
   updateAvailable: "Update to {version}",
   updating: "Installing {version}",
+  trash: "Trash",
+  restore: "Restore “{title}”",
+  deleteForGood: "Delete “{title}” for good",
+  emptyTrash: "Empty trash",
+  trashNote: "Records are deleted after 30 days. Worktrees are kept",
 };

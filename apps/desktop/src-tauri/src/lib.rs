@@ -377,14 +377,36 @@ async fn list_cli_sessions(state: State<'_, AppState>, profile: String, repo: St
 }
 
 #[tauri::command]
-async fn adopt_cli_session(state: State<'_, AppState>, profile: String, repo: String, acp_session_id: String, title: String) -> CmdResult<SessionRecord> {
+async fn adopt_cli_session(
+    state: State<'_, AppState>,
+    profile: String,
+    repo: String,
+    acp_session_id: String,
+    title: String,
+    worktree: bool,
+) -> CmdResult<SessionRecord> {
     let repo = PathBuf::from(expand_home(&repo));
-    state.engine.adopt_session(&profile, &repo, &acp_session_id, &title).await.map_err(err)
+    state.engine.adopt_session(&profile, &repo, &acp_session_id, &title, worktree).await.map_err(err)
 }
 
 #[tauri::command]
 async fn close_session(state: State<'_, AppState>, id: String) -> CmdResult<()> {
     state.engine.close_session(&id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn trash_session(state: State<'_, AppState>, id: String) -> CmdResult<SessionRecord> {
+    state.engine.trash_session(&id).await.map_err(err)
+}
+
+#[tauri::command]
+fn restore_session(state: State<'_, AppState>, id: String) -> CmdResult<SessionRecord> {
+    state.engine.restore_session(&id).map_err(err)
+}
+
+#[tauri::command]
+async fn empty_trash(state: State<'_, AppState>, remove_worktree: bool) -> CmdResult<Vec<String>> {
+    state.engine.empty_trash(remove_worktree).await.map_err(err)
 }
 
 #[tauri::command]
@@ -848,6 +870,9 @@ pub fn run() {
             search_files,
             read_image,
             read_text_file,
+            trash_session,
+            restore_session,
+            empty_trash,
             list_repos,
             save_repo_settings,
             open_file_in_editor,

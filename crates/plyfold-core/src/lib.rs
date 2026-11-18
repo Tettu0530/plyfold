@@ -164,6 +164,9 @@ pub enum EngineEvent {
     },
 }
 
+/// How long a session stays in the trash before it is deleted at the next start
+const TRASH_KEEP_MS: i64 = 30 * 24 * 60 * 60 * 1000;
+
 pub struct EngineOptions {
     /// Config and profiles (each profile's own config directory lives under it)
     pub state_dir: PathBuf,
@@ -344,6 +347,11 @@ impl Engine {
                 if let Some(acp) = &s.acp_session_id {
                     store.dismiss_conversation(acp)?;
                 }
+                store.delete_session(&s.id)?;
+                continue;
+            }
+            // Sessions in the trash for 30 days go for good; their worktrees stay, so no work is lost
+            if s.trashed_at.is_some_and(|at| plyfold_store::now_ms() - at > TRASH_KEEP_MS) {
                 store.delete_session(&s.id)?;
                 continue;
             }
@@ -717,7 +725,9 @@ impl Engine {
     }
 
     /// Open a conversation the CLI already has, in a new worktree. Uncommitted files stay in `repo`.
-    pub async fn adopt_session(&self, profile: &str, repo: &Path, acp_session_id: &str, title: &str) -> Result<SessionRecord, CoreError> {
+    /// With `worktree`, the conversation continues in a worktree of its own; without it, or when `repo` is not a git
+    /// repository, in the folder itself
+    pub async fn adopt_session(&self, profile: &str, repo: &Path, acp_session_id: &str, title: &str, worktree: bool) -> Result<SessionRecord, CoreError> {
         let inner = &self.inner;
         if acp_session_id.is_empty() {
             return Err(CoreError::NoConversation(String::new()));
@@ -729,7 +739,15 @@ impl Engine {
         let title = if title.trim().is_empty() { plyfold_i18n::tr!("（無題）", "(untitled)", "（无标题）") } else { title.to_string() };
         let rec = inner.store.create_session(NewSession { title, profile: profile.to_string(), agent, ..Default::default() })?;
         inner.emit(EngineEvent::SessionCreated { session: rec.clone() });
-        let cwd = match inner.worktrees.create(repo, &rec.id, None) {
+        let in_git = plyfold_worktree::repo_root(repo).is_ok();
+        let prepared = if worktree && in_git {
+            inner.worktrees.create(repo, &rec.id, None).map_err(CoreError::from)
+        } else {
+            inner.store.set_workspace(&rec.id, Some(&repo.display().to_string()), None, None, None)?;
+            self.launch(&rec.id, profile, repo, Resume::Load { session_id: acp_session_id.to_string(), adopted: true }).await?;
+            return Ok(inner.store.get_session(&rec.id)?);
+        };
+        let cwd = match prepared {
             Ok(wt) => {
                 inner.store.set_workspace(
                     &rec.id,
@@ -743,7 +761,7 @@ impl Engine {
             Err(e) => {
                 inner.notice(&rec.id, plyfold_i18n::tr!("作業場所を用意できません: {e}", "Cannot prepare the workspace: {e}", "无法准备工作区：{e}"));
                 inner.set_status(&rec.id, SessionStatus::Error);
-                return Err(e.into());
+                return Err(e);
             }
         };
         self.launch(&rec.id, profile, &cwd, Resume::Load { session_id: acp_session_id.to_string(), adopted: true }).await?;
@@ -845,13 +863,22 @@ impl Engine {
                                 if *adopted {
                                     // Plyfold has no earlier copy, so lift the resend out of the load request where the transcript skips it
                                     inner.store.keep_resent_history(id, REPLAY_BEGIN, REPLAY_END)?;
+                                    let in_worktree = inner.store.get_session(id).ok().is_some_and(|r| r.worktree_path.is_some());
                                     inner.notice(
                                         id,
-                                        plyfold_i18n::tr!(
-                                            "この CLI にあった会話を、新しい worktree で開きました（未コミットの変更は含みません）",
-                                            "Opened a conversation this CLI already had, in a new worktree (uncommitted changes are not included)",
-                                            "已在新 worktree 中打开此 CLI 已有的对话（不含未提交的更改）"
-                                        ),
+                                        if in_worktree {
+                                            plyfold_i18n::tr!(
+                                                "この CLI にあった会話を、新しい worktree で開きました（未コミットの変更は含みません）",
+                                                "Opened a conversation this CLI already had, in a new worktree (uncommitted changes are not included)",
+                                                "已在新 worktree 中打开此 CLI 已有的对话（不含未提交的更改）"
+                                            )
+                                        } else {
+                                            plyfold_i18n::tr!(
+                                                "この CLI にあった会話を、このフォルダのまま開きました",
+                                                "Opened a conversation this CLI already had, in this folder",
+                                                "已在此文件夹中打开此 CLI 已有的对话"
+                                            )
+                                        },
                                     );
                                 } else {
                                     inner.notice(id, plyfold_i18n::tr!("session/load で開き直しました（履歴はエージェントから再送されます）", "Reopened with session/load (the agent resends the history)", "已通过 session/load 重新打开（历史记录由代理重新发送）"));
@@ -1097,6 +1124,37 @@ impl Engine {
         }
         self.inner.set_status(id, SessionStatus::Closed);
         Ok(())
+    }
+
+    /// Move to the trash: the agent stops and the session leaves the list, but its record, conversation and worktree
+    /// stay, so restore_session puts it back as it was
+    pub async fn trash_session(&self, id: &str) -> Result<SessionRecord, CoreError> {
+        for side in self.inner.store.list_sessions()?.into_iter().filter(|s| s.side_of.as_deref() == Some(id)) {
+            self.close_side_chat(&side.id).await?;
+        }
+        self.close_session(id).await?;
+        self.inner.store.set_trashed(id, Some(plyfold_store::now_ms()))?;
+        let rec = self.inner.store.get_session(id)?;
+        self.inner.emit(EngineEvent::WorkspaceChanged { session: rec.clone() });
+        Ok(rec)
+    }
+
+    /// Take a session out of the trash (it stays stopped until it is opened)
+    pub fn restore_session(&self, id: &str) -> Result<SessionRecord, CoreError> {
+        self.inner.store.set_trashed(id, None)?;
+        let rec = self.inner.store.get_session(id)?;
+        self.inner.emit(EngineEvent::WorkspaceChanged { session: rec.clone() });
+        Ok(rec)
+    }
+
+    /// Delete every session in the trash for good (with `remove_worktree`, their worktrees and branches too).
+    /// Returns the ids deleted
+    pub async fn empty_trash(&self, remove_worktree: bool) -> Result<Vec<String>, CoreError> {
+        let trashed: Vec<String> = self.inner.store.list_sessions()?.into_iter().filter(|s| s.trashed_at.is_some()).map(|s| s.id).collect();
+        for id in &trashed {
+            self.delete_session(id, remove_worktree).await?;
+        }
+        Ok(trashed)
     }
 
     /// Delete the session and its record. With `remove_worktree`, also delete the worktree and branch (work is lost),

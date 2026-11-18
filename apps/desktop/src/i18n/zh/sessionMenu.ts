@@ -11,7 +11,7 @@ export const sessionMenu: Record<keyof typeof source, string> = {
   forkNeedsConversation: "还没有可分叉的对话",
   forkBusy: "轮次进行中",
   forkStopFirst: "请先停止代理",
-  delete: "删除…",
+  delete: "移到废纸篓",
   confirmDelete: "删除「{title}」",
   deleteWithWorktree: "同时删除 worktree 和分支",
   deleteRecordOnly: "仅删除记录（保留 worktree）",

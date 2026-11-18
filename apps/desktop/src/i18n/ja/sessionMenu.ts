@@ -9,7 +9,7 @@ export const sessionMenu = {
   forkNeedsConversation: "まだ会話がありません",
   forkBusy: "ターンの途中です",
   forkStopFirst: "先に停止してください",
-  delete: "削除…",
+  delete: "ゴミ箱に移す",
   confirmDelete: "「{title}」を消します",
   deleteWithWorktree: "worktree と枝も消す",
   deleteRecordOnly: "記録だけ消す（worktree は残す）",
