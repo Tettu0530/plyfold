@@ -172,7 +172,7 @@ async fn a_new_worktree_is_prepared_and_the_repository_rules_answer_for_it() {
     git_repo(&repo);
     std::fs::write(repo.join(".env"), "SECRET=1").unwrap();
     let eng = engine(&base.join("state"), 60_000);
-    let settings = RepoSettings { setup: "echo ready > setup-ran.txt".into(), copy: vec![".env".into()], allow: vec!["edit".into()] };
+    let settings = RepoSettings { setup: "echo ready > setup-ran.txt".into(), copy: vec![".env".into()], allow: vec!["edit".into()], ..Default::default() };
     eng.set_repo_settings(&repo.display().to_string(), settings).unwrap();
     assert_eq!(eng.known_repos().unwrap(), [repo.display().to_string()]);
     let mut rx = eng.subscribe();

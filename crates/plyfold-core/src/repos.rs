@@ -203,7 +203,7 @@ mod tests {
     fn settings_round_trip_and_empty_ones_are_dropped() {
         let d = tmp("store");
         let repos = Repos::new(&d);
-        let s = RepoSettings { setup: "npm install".into(), copy: vec![".env".into()], allow: vec!["read".into()] };
+        let s = RepoSettings { setup: "npm install".into(), copy: vec![".env".into()], allow: vec!["read".into()], ..Default::default() };
         repos.set("/r", s.clone()).unwrap();
         assert_eq!(repos.get("/r"), s);
         repos.set("/r", RepoSettings::default()).unwrap();
