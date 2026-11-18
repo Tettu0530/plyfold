@@ -33,6 +33,15 @@ function clock(ms: number): string {
   return d.toDateString() === new Date().toDateString() ? hm : `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
 }
 
+/**
+ * A turn that used no tokens at all: a command the agent answers by itself, without the model (/usage, /context…).
+ * Only when the agent reports usage; without it nothing is known
+ */
+export function usedNoTokens(stats: TurnStats | null): boolean {
+  const u = stats?.usage;
+  return !!u && u.input + u.cached_read + u.cached_write + u.output === 0;
+}
+
 export function TurnStatsRow({
   stats,
   cost,
@@ -272,7 +281,10 @@ export function Transcript({
             case "stats":
               return (
                 <div key={i} className="flex flex-col gap-3">
-                  <TurnStatsRow stats={b.stats} error={b.error} stopReason={b.stopReason} cost={undefined} endedAt={b.endedAt} />
+                  {/* A local command (no tokens either way) has nothing to report; a stop or an error still shows */}
+                  {(b.error || b.stopReason === "cancelled" || b.stopReason === INTERRUPTED || !usedNoTokens(b.stats)) && (
+                    <TurnStatsRow stats={b.stats} error={b.error} stopReason={b.stopReason} cost={undefined} endedAt={b.endedAt} />
+                  )}
                   {i < blocks.length - 1 && <div className="h-px bg-border" />}
                 </div>
               );
