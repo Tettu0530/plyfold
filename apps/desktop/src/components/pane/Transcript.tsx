@@ -1,12 +1,15 @@
-import { ArrowDown, ArrowUp, ChevronRight, Clock, Coins, Gauge, Info, ListChecks } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ChevronUp, Clock, Coins, Gauge, Info, ListChecks, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useT, contentLang } from "@/i18n";
 import { money, seconds, tokens } from "@/lib/format";
+import { isImeKey } from "@/lib/keys";
 import type { SessionInfo, SlashCommand, TurnStats } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { findMatches, MIN_QUERY } from "@/state/find";
 import { INTERRUPTED, type ToolCall, type TranscriptItem } from "@/state/transcript";
+import { Marked } from "./Marked";
 import { resendable, type Attached } from "@/lib/attachments";
 import { SentAttachments } from "./Attachments";
 import { Markdown } from "./Markdown";
@@ -188,6 +191,7 @@ export function Transcript({
   compact = false,
   commands = [],
   base,
+  sessionId,
 }: {
   items: TranscriptItem[];
   info: SessionInfo | null;
@@ -204,6 +208,8 @@ export function Transcript({
   commands?: SlashCommand[];
   /** The session's folder: relative image paths in answers start here */
   base?: string;
+  /** When set, ⌘F for this session shows the find bar and scrolls to its match. The side chat leaves it unset */
+  sessionId?: string;
 }) {
   const tr = useT();
   // The user message being edited (index in blocks)
@@ -225,27 +231,55 @@ export function Transcript({
     setAwayFromBottom(!bottom);
     if (bottom) setUnseen(false);
   };
-  // Follow new output (a new item, or the last one growing while it streams)
-  const last = items[items.length - 1];
+  const find = useStore((s) => (sessionId && s.find?.sessionId === sessionId ? s.find : null));
+  const setFindQuery = useStore((s) => s.setFindQuery);
+  const stepFind = useStore((s) => s.stepFind);
+  const closeFind = useStore((s) => s.closeFind);
+  const matches = useMemo(() => (find ? findMatches(items, find.query) : []), [find, items]);
+  const activeIndex = find && matches.length ? Math.min(find.active, matches.length - 1) : 0;
+  const current = matches[activeIndex];
+  const findInput = useRef<HTMLInputElement>(null);
+  // Focus the field when the bar opens, not again on each step
   useEffect(() => {
+    if (find) findInput.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [find?.sessionId]);
+  const currentRef = useRef(current);
+  currentRef.current = current;
+  useEffect(() => {
+    const m = currentRef.current;
+    if (!m) return;
+    const root = scroller.current;
+    const item = root?.querySelector<HTMLElement>(`[data-find-item="${m.itemIndex}"]`);
+    const hit = item?.querySelector<HTMLElement>(`[data-find-hit="${m.occurrence}"]`);
+    (hit ?? item)?.scrollIntoView({ block: "center" });
+    atBottom.current = false;
+    setAwayFromBottom(true);
+  }, [find?.token]);
+
+  // Follow new output (a new item, or the last one growing while it streams). Not while a find result is being shown
+  const last = items[items.length - 1];
+  const finding = !!find && find.query.trim().length >= MIN_QUERY;
+  useEffect(() => {
+    if (finding) return;
     if (atBottom.current) end.current?.scrollIntoView({ block: "end" });
     else setUnseen(true);
-  }, [items.length, last]);
+  }, [items.length, last, finding]);
   const jumpToBottom = () => {
     const el = scroller.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: reduced ? "auto" : "smooth" });
   };
 
-  // Group consecutive tool calls into one frame
-  const blocks: (TranscriptItem | { kind: "tools"; tools: ToolCall[] })[] = [];
-  for (const it of items) {
-    const last = blocks[blocks.length - 1];
+  // Group consecutive tool calls into one frame. itemIndex is the index in `items`, which is what find matches use
+  const blocks: ((TranscriptItem & { itemIndex: number }) | { kind: "tools"; itemIndex: number; tools: { tool: ToolCall; itemIndex: number }[] })[] = [];
+  items.forEach((it, itemIndex) => {
+    const prev = blocks[blocks.length - 1];
     if (it.kind === "tool") {
-      if (last && last.kind === "tools") last.tools.push(it);
-      else blocks.push({ kind: "tools", tools: [it] });
-    } else blocks.push(it);
-  }
+      if (prev && prev.kind === "tools") prev.tools.push({ tool: it, itemIndex });
+      else blocks.push({ kind: "tools", itemIndex, tools: [{ tool: it, itemIndex }] });
+    } else blocks.push({ ...it, itemIndex });
+  });
   // A turn's numbers go beside the buttons under its last answer (an error, or a turn with no answer, keeps its own row)
   const statsOf = new Map<number, Extract<TranscriptItem, { kind: "stats" }>>();
   const attached = new Set<number>();
@@ -265,8 +299,60 @@ export function Transcript({
   const showStats = (b: Extract<TranscriptItem, { kind: "stats" }>) =>
     !!b.error || b.stopReason === "cancelled" || b.stopReason === INTERRUPTED || !usedNoTokens(b.stats);
 
+  const occurrenceIn = (itemIndex: number) => (current?.itemIndex === itemIndex ? current.occurrence : null);
+
   return (
     <div className="relative flex min-h-0 grow flex-col">
+      {find && (
+        <div className="flex h-9 shrink-0 items-center gap-1.5 border-b px-3">
+          <input
+            ref={findInput}
+            aria-label={tr("transcript.findPlaceholder")}
+            placeholder={tr("transcript.findPlaceholder")}
+            value={find.query}
+            onChange={(e) => setFindQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.stopPropagation();
+                closeFind();
+              } else if (e.key === "Enter" && !isImeKey(e)) {
+                e.preventDefault();
+                stepFind(e.shiftKey ? -1 : 1, matches.length);
+              }
+            }}
+            className="min-w-0 grow bg-transparent outline-none placeholder:text-muted-foreground"
+          />
+          <span className="font-mono text-xs text-muted-foreground tabular" aria-live="polite">
+            {find.query.trim().length < MIN_QUERY ? "" : matches.length === 0 ? tr("transcript.findNone") : `${activeIndex + 1} / ${matches.length}`}
+          </span>
+          <button
+            type="button"
+            aria-label={tr("transcript.findPrevious")}
+            disabled={matches.length === 0}
+            onClick={() => stepFind(-1, matches.length)}
+            className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+          >
+            <ChevronUp className="size-3.5" aria-hidden />
+          </button>
+          <button
+            type="button"
+            aria-label={tr("transcript.findNext")}
+            disabled={matches.length === 0}
+            onClick={() => stepFind(1, matches.length)}
+            className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+          >
+            <ChevronDown className="size-3.5" aria-hidden />
+          </button>
+          <button
+            type="button"
+            aria-label={tr("search.close")}
+            onClick={() => closeFind()}
+            className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <X className="size-3.5" aria-hidden />
+          </button>
+        </div>
+      )}
       {/* In a wide pane the conversation keeps a readable width (52rem) in the middle; the padding grows instead, so the
         scrollbar stays at the pane's edge */}
       <div
@@ -279,7 +365,11 @@ export function Transcript({
           switch (b.kind) {
             case "user":
               return (
-                <div key={i} className={cn("group flex flex-col items-end gap-1.5 self-end", editing === i ? "w-[78%]" : "max-w-[78%]")}>
+                <div
+                  key={i}
+                  data-find-item={b.itemIndex}
+                  className={cn("group flex flex-col items-end gap-1.5 self-end", editing === i ? "w-[78%]" : "max-w-[78%]")}
+                >
                   {b.attachments && <SentAttachments items={b.attachments} />}
                   {editing === i ? (
                     <EditBox
@@ -294,7 +384,11 @@ export function Transcript({
                     <>
                       {b.text && (
                         <div lang={contentLang(b.text)} className="rounded-[10px] bg-muted px-3 py-1.5 leading-relaxed whitespace-pre-wrap select-text">
-                          <CommandText text={b.text} commands={commands} />
+                          {finding ? (
+                            <Marked text={b.text} query={find.query} active={occurrenceIn(b.itemIndex)} />
+                          ) : (
+                            <CommandText text={b.text} commands={commands} />
+                          )}
                         </div>
                       )}
                       {onResend && (
@@ -318,8 +412,14 @@ export function Transcript({
               );
               const st = statsOf.get(i);
               return (
-                <div key={i} className="group flex flex-col gap-0.5">
-                  <Markdown text={b.text} streaming={streaming && i === blocks.length - 1} base={base} />
+                <div key={i} data-find-item={b.itemIndex} className="group flex flex-col gap-0.5">
+                  <Markdown
+                    text={b.text}
+                    streaming={streaming && i === blocks.length - 1}
+                    base={base}
+                    needle={finding ? find.query : undefined}
+                    activeOccurrence={occurrenceIn(b.itemIndex)}
+                  />
                   {!(streaming && i === blocks.length - 1) &&
                     (st && showStats(st) ? (
                       <TurnStatsRow stats={st.stats} stopReason={st.stopReason} cost={undefined} endedAt={st.endedAt} actions={actions} />
@@ -334,8 +434,11 @@ export function Transcript({
             case "tools":
               return (
                 <div key={i} className="flex flex-col gap-3">
-                  <ToolCalls tools={b.tools} />
-                  {b.tools.flatMap((t) => t.diffs.map((d, k) => <DiffBlock key={`${t.id}-${k}`} d={d} />))}
+                  <ToolCalls
+                    tools={b.tools}
+                    find={finding ? { query: find.query, activeItem: current?.itemIndex ?? null, activeOccurrence: current?.occurrence ?? null } : undefined}
+                  />
+                  {b.tools.flatMap((t) => t.tool.diffs.map((d, k) => <DiffBlock key={`${t.tool.id}-${k}`} d={d} />))}
                 </div>
               );
             case "plan":

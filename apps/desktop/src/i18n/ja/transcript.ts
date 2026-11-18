@@ -26,4 +26,8 @@ export const transcript = {
   image: "画像: {alt}",
   scrollToBottom: "一番下へ",
   newBelow: "新しい出力があります",
+  findPlaceholder: "この会話を検索",
+  findNone: "一致なし",
+  findPrevious: "前の一致",
+  findNext: "次の一致",
 } satisfies Record<string, string>;

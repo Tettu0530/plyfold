@@ -28,4 +28,8 @@ export const transcript: Record<keyof typeof source, string> = {
   image: "图片：{alt}",
   scrollToBottom: "跳到最新",
   newBelow: "下方有新输出",
+  findPlaceholder: "在此会话中搜索",
+  findNone: "无匹配",
+  findPrevious: "上一个匹配",
+  findNext: "下一个匹配",
 };

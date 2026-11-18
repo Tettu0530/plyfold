@@ -13,6 +13,7 @@ import { Keys } from "./Keys";
 const LABEL: Record<Action, MessageKey> = {
   newSession: "settings.kbNewSession",
   search: "settings.kbSearch",
+  find: "settings.kbFind",
   settings: "settings.kbSettings",
   toggleSidebar: "settings.kbToggleSidebar",
   stop: "settings.kbStop",

@@ -75,6 +75,7 @@ export const settings: Record<keyof typeof source, string> = {
   kbFixed: "Can't be changed",
   kbNewSession: "New session",
   kbSearch: "Search",
+  kbFind: "Find in the conversation",
   kbSettings: "Open settings",
   kbToggleSidebar: "Show or hide the sidebar",
   kbStop: "Stop",

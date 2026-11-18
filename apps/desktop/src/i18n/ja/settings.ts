@@ -72,6 +72,7 @@ export const settings = {
   kbFixed: "変更できません",
   kbNewSession: "新しいセッション",
   kbSearch: "検索",
+  kbFind: "会話を検索",
   kbSettings: "設定を開く",
   kbToggleSidebar: "サイドバーの表示",
   kbStop: "停止",

@@ -1,11 +1,14 @@
-import { Equal, GitCompare, KeyRound, ListChecks, PanelBottom, PanelRight, Plus, Search, Settings, Square } from "lucide-react";
+import { Equal, GitCompare, KeyRound, ListChecks, MessageSquare, PanelBottom, PanelRight, Plus, Search, Settings, Square } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useT } from "@/i18n";
+import { api } from "@/lib/api";
 import { repoName } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { useStore, isListed } from "@/state/store";
+import { MIN_QUERY, searchSessions, type SessionHit } from "@/state/find";
+import { useStore, isListed, type SessionView } from "@/state/store";
+import { fromHistory, type TranscriptItem } from "@/state/transcript";
 import { ProviderLogo } from "./icons";
 import { Keys } from "./Keys";
 import { useLiquidMorph } from "./liquid/liquid";
@@ -23,6 +26,24 @@ interface Entry {
   run: () => void;
 }
 
+/** Saved logs, keyed by session and its updated time, so typing again does not re-read them */
+const historyCache = new Map<string, TranscriptItem[]>();
+
+function loadHistory(v: SessionView): Promise<TranscriptItem[]> {
+  const key = `${v.record.id}:${v.record.updated_at}`;
+  const cached = historyCache.get(key);
+  if (cached) return Promise.resolve(cached);
+  return api.sessionHistory(v.record.id).then((events) => {
+    const items = fromHistory(events).items;
+    if (historyCache.size > 80) {
+      const first = historyCache.keys().next().value;
+      if (first) historyCache.delete(first);
+    }
+    historyCache.set(key, items);
+    return items;
+  });
+}
+
 /** The ⌘K search card. A blob splits off the sidebar's Search item like a droplet, travels over and expands */
 export function SearchCard() {
   const t = useT();
@@ -33,6 +54,9 @@ export function SearchCard() {
   const focusedId = useStore((s) => s.panes[s.focusedPane]);
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
+  const [messageHits, setMessageHits] = useState<SessionHit[]>([]);
+  const [searching, setSearching] = useState(false);
+  const req = useRef(0);
   const input = useRef<HTMLInputElement>(null);
   const card = useRef<HTMLDivElement>(null);
   const liquidStyle = useStore((s) => s.liquidStyle);
@@ -60,13 +84,46 @@ export function SearchCard() {
     if (revealed) input.current?.focus();
   }, [revealed]);
 
+  const listed = useMemo(
+    () =>
+      Object.values(sessions)
+        .filter(isListed)
+        .sort((a, b) => b.record.updated_at - a.record.updated_at),
+    [sessions],
+  );
+  // Message hits start at two characters. A newer keystroke drops the previous search
+  useEffect(() => {
+    const needle = q.trim();
+    if (!open || needle.length < MIN_QUERY) {
+      setMessageHits([]);
+      setSearching(false);
+      return;
+    }
+    const mine = ++req.current;
+    const timer = setTimeout(() => {
+      setSearching(true);
+      void searchSessions(
+        listed.map((v) => ({ id: v.record.id, title: v.record.title, items: v.historyLoaded ? v.transcript.items : null })),
+        needle,
+        (id) => {
+          const v = listed.find((s) => s.record.id === id);
+          return v ? loadHistory(v) : Promise.resolve([]);
+        },
+        () => req.current === mine,
+      ).then((hits) => {
+        if (req.current !== mine) return;
+        setMessageHits(hits);
+        setSearching(false);
+      });
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [q, open, listed]);
+
   const close = () => setSearchOpen(false);
   const entries = useMemo<{ title: string; items: Entry[] }[]>(() => {
     const needle = q.trim().toLowerCase();
     const match = (s: string) => !needle || s.toLowerCase().includes(needle);
-    const recent = Object.values(sessions)
-      .filter(isListed)
-      .sort((a, b) => b.record.updated_at - a.record.updated_at)
+    const recent = listed
       .filter((v) => match(v.record.title) || match(v.record.profile))
       .slice(0, needle ? 8 : 4)
       .map<Entry>((v) => ({
@@ -76,6 +133,21 @@ export function SearchCard() {
         icon: <ProviderLogo agent={v.record.agent} className="text-muted-foreground" />,
         run: () => void openInPane(v.record.id),
       }));
+    const messages: Entry[] =
+      needle.length < MIN_QUERY
+        ? []
+        : messageHits.map((h) => ({
+            key: `msg:${h.sessionId}:${h.itemIndex}`,
+            label: h.excerpt,
+            hint: h.title,
+            icon: <MessageSquare className="size-3.5" />,
+            run: () => {
+              const query = q.trim();
+              void openInPane(h.sessionId)
+                .catch(() => {})
+                .then(() => useStore.getState().showFind(h.sessionId, query, h.matchIndex));
+            },
+          }));
     const commands: Entry[] = [
       { key: "new", label: t("search.newSession"), keys: keysOf(bindings.newSession), icon: <Plus className="size-3.5" />, run: () => newDraft() },
       { key: "mode", label: t("search.switchMode"), keys: ["shift", "tab"], icon: <ListChecks className="size-3.5" />, run: () => {} },
@@ -124,9 +196,10 @@ export function SearchCard() {
     ].filter((c) => match(c.label));
     return [
       { title: t("search.recent"), items: recent },
+      { title: t("search.messages"), items: messages },
       { title: t("search.commands"), items: commands },
     ].filter((g) => g.items.length > 0);
-  }, [q, sessions, focusedId, openInPane, newDraft, cancel, openSettings, openProfiles, t, bindings]);
+  }, [q, listed, messageHits, focusedId, sessions, openInPane, newDraft, cancel, openSettings, openProfiles, t, bindings]);
 
   const flat = entries.flatMap((g) => g.items);
   const choose = (e: Entry | undefined) => {
@@ -189,7 +262,10 @@ export function SearchCard() {
             <Keys keys={["esc"]} />
           </div>
           <div className="flex max-h-[420px] flex-col gap-0.5 overflow-y-auto p-2">
-            {flat.length === 0 && <p className="px-2 py-3 text-xs text-muted-foreground">{t("search.noResults")}</p>}
+            {searching && messageHits.length === 0 && q.trim().length >= MIN_QUERY && (
+              <p className="px-2 py-1.5 text-xs text-muted-foreground">{t("search.searching")}</p>
+            )}
+            {flat.length === 0 && !searching && <p className="px-2 py-3 text-xs text-muted-foreground">{t("search.noResults")}</p>}
             {entries.map((g) => (
               <div key={g.title} className="flex flex-col gap-0.5">
                 <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">{g.title}</div>
@@ -205,7 +281,7 @@ export function SearchCard() {
                     >
                       <span className="flex text-muted-foreground">{e.icon}</span>
                       <span className="grow truncate text-left">{e.label}</span>
-                      {e.keys ? <Keys keys={e.keys} /> : <span className="text-xs text-muted-foreground">{e.hint}</span>}
+                      {e.keys ? <Keys keys={e.keys} /> : <span className="max-w-[40%] truncate text-xs text-muted-foreground">{e.hint}</span>}
                     </button>
                   );
                 })}

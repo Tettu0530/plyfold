@@ -28,6 +28,14 @@ export const isListed = (v: SessionView) => !v.record.side_of && !v.record.trash
 /** In the trash (restorable; shown in the sidebar's trash group) */
 export const isTrashed = (v: SessionView) => !v.record.side_of && !!v.record.trashed_at;
 
+/** The find bar of one session. `active` indexes findMatches; `token` changes when the view should scroll to it */
+export interface ConversationFind {
+  sessionId: string;
+  query: string;
+  active: number;
+  token: number;
+}
+
 export interface SessionView {
   record: SessionRecord;
   info: SessionInfo | null;
@@ -199,6 +207,8 @@ interface State {
   paneCount: number;
   focusedPane: number;
   searchOpen: boolean;
+  /** In-pane find (⌘F) for one session, or null when the bar is closed */
+  find: ConversationFind | null;
   labOpen: boolean;
   /** Separation animation style (chosen in the motion lab) */
   liquidStyle: LiquidStyle;
@@ -264,6 +274,14 @@ interface State {
   refreshProfiles: () => Promise<void>;
   focusPane: (pane: number) => void;
   setSearchOpen: (open: boolean) => void;
+  /** Open the find bar, or close it if it is already open for this session */
+  toggleFind: (sessionId: string) => void;
+  /** Open the bar on a match (from ⌘K). `active` is an index into findMatches for this session */
+  showFind: (sessionId: string, query: string, active: number) => void;
+  setFindQuery: (query: string) => void;
+  /** Move to another match. `count` is how many matches the open session has */
+  stepFind: (delta: number, count: number) => void;
+  closeFind: () => void;
   setLabOpen: (open: boolean) => void;
   setLiquidStyle: (s: LiquidStyle) => void;
   setSearchLayerActive: (v: boolean) => void;
@@ -409,6 +427,7 @@ export const useStore = create<State>((set, get) => ({
   sidebarResizing: false,
   focusedPane: 0,
   searchOpen: false,
+  find: null,
   labOpen: false,
   diffVersion: 0,
   bumpDiff: () => set((s) => ({ diffVersion: s.diffVersion + 1 })),
@@ -797,6 +816,18 @@ export const useStore = create<State>((set, get) => ({
 
   focusPane: (focusedPane) => set({ focusedPane }),
   setSearchOpen: (searchOpen) => set({ searchOpen }),
+  toggleFind: (sessionId) =>
+    set((s) => ({
+      find: s.find?.sessionId === sessionId ? null : { sessionId, query: "", active: 0, token: (s.find?.token ?? 0) + 1 },
+    })),
+  showFind: (sessionId, query, active) => set((s) => ({ find: { sessionId, query, active, token: (s.find?.token ?? 0) + 1 } })),
+  setFindQuery: (query) => set((s) => (s.find ? { find: { ...s.find, query, active: 0, token: s.find.token + 1 } } : s)),
+  stepFind: (delta, count) =>
+    set((s) => {
+      if (!s.find || count <= 0) return s;
+      return { find: { ...s.find, active: (s.find.active + delta + count) % count, token: s.find.token + 1 } };
+    }),
+  closeFind: () => set({ find: null }),
   setLabOpen: (labOpen) => set({ labOpen }),
   setLiquidStyle: (liquidStyle) => set({ liquidStyle }),
   setSearchLayerActive: (searchLayerActive) => set({ searchLayerActive }),
