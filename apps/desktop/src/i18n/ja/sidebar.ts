@@ -12,4 +12,6 @@ export const sidebar = {
   resize: "サイドバーの幅",
   resizeHint: "ドラッグで幅を変える。ダブルクリックで元の幅に戻す",
   conversations: "会話",
+  updateAvailable: "{version} に更新",
+  updating: "{version} を入れています",
 } satisfies Record<string, string>;

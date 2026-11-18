@@ -4,6 +4,26 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Sessions
+
+- Settings → Repositories: per repository, files to copy into every new worktree (untracked ones such as `.env`), a setup script run in it before the agent starts (in your login shell; its outcome and, on failure, its last output appear in the conversation), and the kinds of tool calls always allowed without asking (reading and searching, editing files, running commands, fetching from the web), whichever agent asks
+- Switching a session to a mode that does not ask also answers the permission requests it is waiting on: bypass permissions (Claude Code), full access (Codex) and YOLO (Gemini CLI) allow all of them, accept-edits modes allow file edits. A note in the conversation says how many were allowed
+
+### Platforms
+
+- Updates from inside the app: the installed app looks for a newer version a little after it starts and every six hours, and the sidebar offers to update; Settings → Info checks on demand. Updates are verified against the release's signature before they are installed, then Plyfold restarts. A development build never updates
+- A development build (`npm run tauri dev`) keeps its sessions in a `dev` folder of its own (the database, worktrees, conversation folders and attachments), so running it beside the installed app no longer mixes their sessions. Profiles and settings stay shared. `PLYFOLD_DATA_DIR` sets the folder
+
+### Panes
+
+- Touched files open as a pane beside the session instead of a menu: the files it read or edited in a list, and the picked one's contents beside it (text with line numbers, or the image). Show in Finder (File Explorer on Windows), open in the editor and copy the path are buttons above the contents. ↑ and ↓ move through the list
+
+### Conversation
+
+- Images in an answer that are files on this machine (a path relative to the session's folder, an absolute path or a `file:` URL) or embedded in it are shown as square thumbnails; images one after another line up as a gallery. Images on the web are still not fetched and stay links
+- The image preview steps through the other images of the same answer or message (← and →, or the buttons at the sides), with a counter
+- Numbers of a numbered list in an answer sit inside the text column instead of sticking out past its left edge
+
 ## [0.3.0] - 2026-11-18
 
 Agents from the ACP Registry, a one-line install, and builds for Intel Macs and Linux (preview), for macOS, Windows 10/11 (x64) and Linux (x64).

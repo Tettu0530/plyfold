@@ -8,4 +8,6 @@ export const attach = {
   attachFiles: "ファイルや画像を添える",
   preview: "{name} を大きく見る",
   closePreview: "閉じる",
+  previousImage: "前の画像",
+  nextImage: "次の画像",
 } satisfies Record<string, string>;

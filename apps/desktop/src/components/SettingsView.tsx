@@ -1,4 +1,19 @@
-import { Bell, ChevronLeft, ExternalLink, FolderOpen, GitCompare, HardDrive, Info, Keyboard, MessagesSquare, SlidersHorizontal, Sparkles } from "lucide-react";
+import {
+  Bell,
+  ChevronLeft,
+  CircleArrowUp,
+  RefreshCw,
+  ExternalLink,
+  FolderGit2,
+  FolderOpen,
+  GitCompare,
+  HardDrive,
+  Info,
+  Keyboard,
+  MessagesSquare,
+  SlidersHorizontal,
+  Sparkles,
+} from "lucide-react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 import { Switch } from "@/components/ui/switch";
@@ -11,6 +26,8 @@ import { Keys } from "./Keys";
 import { useLiquidClip, useLiquidRevealed } from "./liquid/stage";
 import { Segmented } from "./Segmented";
 import { ShortcutSettings } from "./ShortcutSettings";
+import { RepoSettings } from "./RepoSettings";
+import { checkForUpdate, installUpdate, useUpdate } from "@/state/update";
 import { agentName, ProviderLogo } from "./icons";
 import { useLiquidMenu } from "./liquid/stage";
 import { liquidAnchor } from "./liquid/liquid";
@@ -37,6 +54,7 @@ const SECTIONS: { id: string; label: MessageKey; Icon: typeof Info }[] = [
   { id: "keyboard", label: "settings.sectionKeyboard", Icon: Keyboard },
   { id: "notifications", label: "settings.sectionNotifications", Icon: Bell },
   { id: "diff", label: "settings.sectionDiff", Icon: GitCompare },
+  { id: "repos", label: "settings.sectionRepos", Icon: FolderGit2 },
   { id: "storage", label: "settings.sectionStorage", Icon: HardDrive },
   { id: "motion", label: "settings.sectionMotion", Icon: Sparkles },
 ];
@@ -315,6 +333,10 @@ export function SettingsView() {
                 </Row>
               </Section>
 
+              <Section id="repos" title={t("settings.sectionRepos")}>
+                <RepoSettings onError={setError} />
+              </Section>
+
               <Section id="storage" title={t("settings.sectionStorage")}>
                 <PathRow label={t("settings.profileConfig")} path={paths?.config_path} onReveal={() => void api.revealPath("config")} />
                 <PathRow label={t("settings.stateDir")} path={paths?.state_dir} onReveal={() => void api.revealPath("data")} />
@@ -473,6 +495,7 @@ function InfoSection() {
           </div>
         ))}
       </dl>
+      <UpdateCheck />
       {repo && (
         <div className="flex flex-wrap gap-2">
           <button
@@ -510,5 +533,49 @@ function InfoSection() {
         {!info && <span className="text-xs text-muted-foreground">—</span>}
       </div>
     </>
+  );
+}
+
+/** Settings → Info: look for a newer version now, and install it from here */
+function UpdateCheck() {
+  const t = useT();
+  const state = useUpdate((s) => s.state);
+  if (!inTauri) return null;
+  const detail = import.meta.env.DEV
+    ? t("settings.updateDev")
+    : state.kind === "checking"
+      ? t("settings.updateChecking")
+      : state.kind === "current"
+        ? t("settings.updateCurrent")
+        : state.kind === "available"
+          ? t("settings.updateFound", { version: state.version })
+          : state.kind === "downloading"
+            ? t("settings.updateDownloading", { version: state.version })
+            : state.kind === "error"
+              ? t("settings.updateError", { error: state.message })
+              : t("settings.updateDetail");
+  return (
+    <Row label={t("settings.update")} detail={detail}>
+      {state.kind === "available" ? (
+        <button
+          type="button"
+          onClick={() => void installUpdate()}
+          className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-primary-foreground hover:bg-primary/90"
+        >
+          <CircleArrowUp className="size-3.5" aria-hidden />
+          {t("settings.updateInstall")}
+        </button>
+      ) : (
+        <button
+          type="button"
+          disabled={import.meta.env.DEV || state.kind === "checking" || state.kind === "downloading"}
+          onClick={() => void checkForUpdate()}
+          className="flex h-8 items-center gap-1.5 rounded-lg border border-input px-3 hover:bg-accent disabled:opacity-50 disabled:hover:bg-transparent"
+        >
+          <RefreshCw className={cn("size-3.5", state.kind === "checking" && "animate-spin")} aria-hidden />
+          {t("settings.updateCheck")}
+        </button>
+      )}
+    </Row>
   );
 }

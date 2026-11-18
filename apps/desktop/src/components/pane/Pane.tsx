@@ -6,7 +6,8 @@ import { useT } from "@/i18n";
 import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/keys";
 import { cn } from "@/lib/utils";
-import { gitPaneOf, isDraft, isGit, isPreview, leavesShowing, useStore } from "@/state/store";
+import { gitPaneOf, isDraft, isFiles, isGit, isPreview, leavesShowing, useStore } from "@/state/store";
+import { FilesPane } from "./FilesPane";
 import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidRevealed } from "../liquid/stage";
 import { DraftPane } from "./DraftPane";
@@ -83,6 +84,8 @@ export function Pane({ index }: { index: number }) {
         <PreviewPane index={index} id={id} />
       ) : isGit(id) ? (
         <GitPane index={index} id={id} />
+      ) : isFiles(id) ? (
+        <FilesPane index={index} id={id} />
       ) : (
         <SessionPane index={index} />
       )}
@@ -174,12 +177,7 @@ function SessionPane({ index }: { index: number }) {
           )}
           <span className="grow" />
           <span className="hidden items-center gap-2 @[30rem]:flex">
-            <PaneTools
-              scope={id}
-              items={view.transcript.items}
-              worktree={r.worktree_path ?? r.repo_path}
-              alive={r.status !== "closed" && r.status !== "error"}
-            />
+            <PaneTools scope={id} items={view.transcript.items} alive={r.status !== "closed" && r.status !== "error"} />
           </span>
           {/* Git and the changes, one view: here for any session in a git repository. The Git mark, then +added −removed
               once there are changes, and the commits not pushed yet */}
@@ -242,6 +240,7 @@ function SessionPane({ index }: { index: number }) {
             streaming={r.status === "working"}
             busy={view.transcript.inTurn}
             onResend={(t, a) => void sendPrompt(id, t, a)}
+            base={r.worktree_path ?? r.repo_path ?? undefined}
             commands={view.info?.commands?.length ? view.info.commands : view.commands?.length ? view.commands : (cached?.commands ?? [])}
           />
 

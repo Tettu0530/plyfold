@@ -164,7 +164,7 @@ The UI is available in Japanese, English and Simplified Chinese. By default it f
 
 ## Status
 
-Plyfold is early. The builds are not signed or notarized yet. Expect rough edges and breaking changes to `config.toml` and the database.
+Plyfold is early. The builds are not signed or notarized yet. Expect rough edges and breaking changes to `config.toml` and the database. [ROADMAP.md](ROADMAP.md) lists what is planned on the way to 1.0.
 
 ## Contributing
 

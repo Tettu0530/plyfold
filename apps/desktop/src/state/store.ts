@@ -62,6 +62,11 @@ export const isGit = (id: string | null | undefined): id is string => !!id && id
 export const gitSessionOf = (id: string) => id.slice("git:".length);
 export const gitPaneOf = (sessionId: string) => `git:${sessionId}`;
 
+/** A pane listing the files a session read or edited, with the picked one's contents ("files:<session id>") */
+export const isFiles = (id: string | null | undefined): id is string => !!id && id.startsWith("files:");
+export const filesSessionOf = (id: string) => id.slice("files:".length);
+export const filesPaneOf = (sessionId: string) => `files:${sessionId}`;
+
 export interface PreviewPage {
   url: string;
   /** liquidAnchor of the button it was opened from (the pane grows out of it and shrinks back into it) */
@@ -80,7 +85,9 @@ const anchorOf = (id: string) =>
       ? (useStore.getState().previews[id]?.anchor ?? "new-session")
       : isGit(id)
         ? `diff:${gitSessionOf(id)}`
-        : `session:${id}`;
+        : isFiles(id)
+          ? `${filesSessionOf(id)}:files`
+          : `session:${id}`;
 const LAST_REPO_KEY = "plyfold.lastRepo";
 function lastRepo(): string {
   try {
@@ -160,7 +167,7 @@ export function restoreLayout(saved: unknown, exists: (id: string) => boolean): 
   const size = Math.max(4, ...leaves(layout).map((i) => i + 1));
   const panes = Array.from({ length: size }, (_, i) => {
     const id = o.panes![i];
-    return typeof id === "string" && !isDraft(id) && !isPreview(id) && !isGit(id) && exists(id) ? id : null;
+    return typeof id === "string" && !isDraft(id) && !isPreview(id) && !isGit(id) && !isFiles(id) && exists(id) ? id : null;
   });
   const visible = leaves(layout);
   const focusedPane = typeof o.focusedPane === "number" && visible.includes(o.focusedPane) ? o.focusedPane : visible[0];
@@ -233,6 +240,8 @@ interface State {
   closePane: (pane: number) => void;
   /** Diff screen. Kept mounted while closing so it can shrink away */
   openDiff: (id: string) => void;
+  /** The files the session read or edited, as a pane beside it */
+  openFiles: (id: string) => void;
   /** Bumped after worktree operations (so panes refetch their diff counts) */
   diffVersion: number;
   bumpDiff: () => void;
@@ -537,7 +546,7 @@ export const useStore = create<State>((set, get) => ({
       if (isPreview(displaced)) delete previews[displaced!];
       set({ panes, focusedPane: target, drafts, previews });
     }
-    if (isDraft(id) || isPreview(id) || isGit(id)) return;
+    if (isDraft(id) || isPreview(id) || isGit(id) || isFiles(id)) return;
     await loadSession(id);
   },
 
@@ -553,6 +562,20 @@ export const useStore = create<State>((set, get) => ({
     const beside = leaves(s.layout).find((i) => s.panes[i] === id) ?? s.focusedPane;
     const slot = get().splitPane(beside, "right", null);
     void get().openInPane(git, slot, `diff:${id}`);
+  },
+
+  openFiles: (id) => {
+    const s = get();
+    const pane = filesPaneOf(id);
+    const shown = leaves(s.layout).find((i) => s.panes[i] === pane);
+    if (shown !== undefined) {
+      set({ focusedPane: shown });
+      return;
+    }
+    // Next to the session's pane, growing out of its touched-files button
+    const beside = leaves(s.layout).find((i) => s.panes[i] === id) ?? s.focusedPane;
+    const slot = get().splitPane(beside, "right", null);
+    void get().openInPane(pane, slot, `${id}:files`);
   },
 
   openProfiles: () => {
@@ -880,6 +903,8 @@ export const useStore = create<State>((set, get) => ({
     if (pane !== undefined) get().closePane(pane);
     const git = leaves(get().layout).find((i) => get().panes[i] === gitPaneOf(id));
     if (git !== undefined) get().closePane(git);
+    const files = leaves(get().layout).find((i) => get().panes[i] === filesPaneOf(id));
+    if (files !== undefined) get().closePane(files);
     await api.deleteSession(id, removeWorktree);
     set((s) => {
       const sessions = { ...s.sessions };
@@ -933,8 +958,8 @@ useStore.subscribe((st, prev) => {
   )
     return;
   const layout: Layout = {
-    // Drafts, previews and Git panes are not restored on the next launch
-    panes: st.panes.map((p) => (isDraft(p) || isPreview(p) || isGit(p) ? null : p)),
+    // Drafts, previews, Git and file panes are not restored on the next launch
+    panes: st.panes.map((p) => (isDraft(p) || isPreview(p) || isGit(p) || isFiles(p) ? null : p)),
     layout: st.layout,
     focusedPane: st.focusedPane,
     sidebarOpen: st.sidebarOpen,

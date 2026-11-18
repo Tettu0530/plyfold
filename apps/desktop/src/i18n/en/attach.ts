@@ -10,4 +10,6 @@ export const attach: Record<keyof typeof source, string> = {
   attachFiles: "Attach files or images",
   preview: "View {name}",
   closePreview: "Close",
+  previousImage: "Previous image",
+  nextImage: "Next image",
 };

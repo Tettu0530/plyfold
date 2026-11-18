@@ -5,8 +5,8 @@
 // - External images are not loaded (no network requests from the transcript). Their alt text is shown as a link instead
 // - HTML is not rendered (react-markdown's default; HTML mixed into agent output never runs)
 // - Math ($…$, $$…$$, \(…\), \[…\]) is typeset with KaTeX
-import { memo } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import { createContext, memo, useContext, useId } from "react";
+import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -17,6 +17,9 @@ import { api, inTauri } from "@/lib/api";
 import { normalizeMath } from "@/lib/math";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "./MessageActions";
+import { imageSource } from "@/lib/imageSrc";
+import { PreviewGroup, useFileImage } from "../ImagePreview";
+import { Thumb } from "./Attachments";
 
 /** Open a link in the default browser (inside the WebView it would replace the app) */
 export function openLink(href: string | undefined) {
@@ -41,7 +44,25 @@ function CodeBlock({ lang, code }: { lang: string | null; code: string }) {
   );
 }
 
-/** Don't load external images; show the alt text as a link */
+/** The folder relative image paths in an answer start from (the session's worktree or repository) */
+const ImageBase = createContext<string | undefined>(undefined);
+
+/**
+ * An image in an answer: a file on this machine (or a data URL) is shown as a thumbnail that opens large; an image on
+ * the web is not fetched and stays a link, as does a file that cannot be read
+ */
+function AnswerImage({ src, alt }: { src: string | undefined; alt: string | undefined }) {
+  const source = imageSource(src, useContext(ImageBase));
+  const read = useFileImage(source?.kind === "file" ? source.path : null);
+  const shown = source?.kind === "data" ? source.src : read;
+  const anchor = `md-img:${useId()}`;
+  if (shown) return <Thumb src={shown} name={alt || src || ""} anchor={anchor} className="size-28 object-cover" />;
+  // Keeps its place while the file is read, so the answer does not jump
+  if (source?.kind === "file" && shown === undefined) return <span className="block size-28 rounded-md border bg-muted" aria-hidden />;
+  return <ImageLink src={src} alt={alt} />;
+}
+
+/** Show the alt text as a link (opens in the browser or the system's viewer) */
 function ImageLink({ src, alt }: { src: string | undefined; alt: string | undefined }) {
   const t = useT();
   return (
@@ -71,8 +92,10 @@ const components: Components = {
       {children}
     </ul>
   ),
+  // Numbered by a counter drawn inside the column (index.css .md-ol): browser markers hang outside it, and the wide
+  // mono digits stuck out past the left edge of the text
   ol: ({ children, start }) => (
-    <ol start={start} className="my-2 flex list-decimal flex-col gap-1 pl-5 marker:font-mono marker:text-muted-foreground">
+    <ol start={start} style={{ counterReset: `md-ol ${(start ?? 1) - 1}` }} className="md-ol my-2 flex flex-col gap-1">
       {children}
     </ol>
   ),
@@ -80,6 +103,8 @@ const components: Components = {
   input: ({ checked }) => <input type="checkbox" checked={!!checked} disabled readOnly className="mr-1.5 translate-y-px accent-foreground" />,
   blockquote: ({ children }) => <blockquote className="my-2 border-l-2 pl-3 text-muted-foreground">{children}</blockquote>,
   hr: () => <hr className="my-4 border-border" />,
+  div: ({ node: _node, className, ...props }) =>
+    className === "md-gallery" ? <div className="my-2 flex flex-wrap gap-2" {...props} /> : <div className={className} {...props} />,
   a: ({ href, children }) => (
     <a
       href={href}
@@ -93,7 +118,7 @@ const components: Components = {
       {children}
     </a>
   ),
-  img: ({ src, alt }) => <ImageLink src={typeof src === "string" ? src : undefined} alt={alt} />,
+  img: ({ src, alt }) => <AnswerImage src={typeof src === "string" ? src : undefined} alt={alt} />,
   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
   table: ({ children }) => (
     <div className="my-2 overflow-x-auto rounded-[10px] border">
@@ -124,15 +149,59 @@ const components: Components = {
 // Math: $…$ inline and $$…$$ blocks (\(…\) and \[…\] are turned into those first). KaTeX runs with its defaults that
 // matter here: untrusted (no \href, \url or \includegraphics actions), and a formula it cannot read is shown as typed
 // instead of breaking the message
-const rehypePlugins: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [[rehypeKatex, { throwOnError: false, strict: "ignore", trust: false }]];
+const rehypePlugins: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [
+  [rehypeKatex, { throwOnError: false, strict: "ignore", trust: false }],
+  rehypeGallery,
+];
 
 /** Markdown body. While streaming, shows a typing indicator after the last element */
-export const Markdown = memo(function Markdown({ text, streaming }: { text: string; streaming?: boolean }) {
+// Images on this machine (file:) and embedded images (data:image/) are kept; everything else is filtered as
+// react-markdown does by default
+type HastNode = { type: string; tagName?: string; value?: string; children?: HastNode[]; properties?: Record<string, unknown> };
+
+const isImage = (n: HastNode) => n.type === "element" && n.tagName === "img";
+const isBlank = (n: HastNode) => n.type === "text" && !n.value?.trim();
+const isImageParagraph = (n: HastNode) =>
+  n.type === "element" && n.tagName === "p" && !!n.children?.some(isImage) && n.children.every((c) => isImage(c) || isBlank(c));
+
+/** Paragraphs that hold only images, one after another, become one gallery: square thumbnails side by side */
+function rehypeGallery() {
+  const walk = (node: HastNode) => {
+    if (!node.children) return;
+    const out: HastNode[] = [];
+    let run: HastNode[] | null = null;
+    for (const child of node.children) {
+      if (isImageParagraph(child)) {
+        if (!run) {
+          run = [];
+          out.push({ type: "element", tagName: "div", properties: { className: ["md-gallery"] }, children: run });
+        }
+        run.push(...child.children!.filter(isImage));
+      } else if (run && isBlank(child)) {
+        // the line breaks between the paragraphs
+      } else {
+        run = null;
+        walk(child);
+        out.push(child);
+      }
+    }
+    node.children = out;
+  };
+  return (tree: HastNode) => walk(tree);
+}
+
+const urlTransform = (url: string, key: string) => (/^file:/i.test(url) || (key === "src" && /^data:image\//i.test(url)) ? url : defaultUrlTransform(url));
+
+export const Markdown = memo(function Markdown({ text, streaming, base }: { text: string; streaming?: boolean; base?: string }) {
   return (
     <div lang={contentLang(text)} className={cn("min-w-0 break-words select-text", streaming && "md-streaming")}>
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={rehypePlugins} components={components}>
-        {normalizeMath(text)}
-      </ReactMarkdown>
+      <ImageBase.Provider value={base}>
+        <PreviewGroup>
+          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={rehypePlugins} components={components} urlTransform={urlTransform}>
+            {normalizeMath(text)}
+          </ReactMarkdown>
+        </PreviewGroup>
+      </ImageBase.Provider>
     </div>
   );
 });

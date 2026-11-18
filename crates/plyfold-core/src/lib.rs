@@ -25,6 +25,7 @@ pub mod attach;
 pub mod check;
 pub use attach::Attachment;
 pub mod info;
+pub mod repos;
 pub mod usage;
 use info::TurnClock;
 pub use info::{Category, Choice, ConfigOption, Cost, LiveTurn, SessionInfo, TokenUsage, TurnStats};
@@ -164,7 +165,11 @@ pub enum EngineEvent {
 }
 
 pub struct EngineOptions {
+    /// Config and profiles (each profile's own config directory lives under it)
     pub state_dir: PathBuf,
+    /// Sessions: the database, worktrees, conversation folders and attachments. None: the same as state_dir.
+    /// A development build keeps these apart so it never mixes its sessions with the installed app's
+    pub data_dir: Option<PathBuf>,
     pub config: Config,
     pub secrets: Arc<dyn SecretStore>,
     /// Mark the session Stalled if nothing arrives for this long during a turn
@@ -202,11 +207,21 @@ pub struct StartSession {
     pub worktree: bool,
 }
 
+/// A permission request the user has not answered yet
+struct Pending {
+    /// JSON-RPC request ID
+    request_id: Value,
+    /// The option that allows it once (or the first that allows), if the agent offered one
+    allow: Option<String>,
+    /// The tool call's kind (edit, execute, fetch…)
+    kind: Option<String>,
+}
+
 struct Live {
     client: AcpClient,
     acp_sid: Mutex<String>,
-    /// permission_id → JSON-RPC request ID
-    permissions: Mutex<HashMap<String, Value>>,
+    /// permission_id → the request waiting for an answer
+    permissions: Mutex<HashMap<String, Pending>>,
     last_activity: Mutex<Instant>,
     in_turn: AtomicBool,
     stalled: AtomicBool,
@@ -274,6 +289,10 @@ struct Inner {
     config: RwLock<Config>,
     secrets: Arc<dyn SecretStore>,
     state_dir: PathBuf,
+    /// Where sessions are kept (see EngineOptions::data_dir)
+    data_dir: PathBuf,
+    /// Settings per repository (worktree setup, permission rules)
+    repos: repos::Repos,
     worktrees: Worktrees,
     live: Mutex<HashMap<String, Arc<Live>>>,
     tx: broadcast::Sender<EngineEvent>,
@@ -316,7 +335,8 @@ pub struct Engine {
 
 impl Engine {
     pub fn open(opts: EngineOptions) -> Result<Self, CoreError> {
-        let store = Store::open(&opts.state_dir.join("plyfold.db"))?;
+        let data_dir = opts.data_dir.clone().unwrap_or_else(|| opts.state_dir.clone());
+        let store = Store::open(&data_dir.join("plyfold.db"))?;
         // Sessions that were running in the previous launch no longer have a process, so mark them Closed
         for s in store.list_sessions()? {
             // Side chats do not outlive the app
@@ -336,8 +356,10 @@ impl Engine {
                 store,
                 config: RwLock::new(opts.config),
                 secrets: opts.secrets,
-                worktrees: Worktrees::new(opts.state_dir.join("worktrees")),
+                worktrees: Worktrees::new(data_dir.join("worktrees")),
+                repos: repos::Repos::new(&opts.state_dir),
                 state_dir: opts.state_dir,
+                data_dir,
                 live: Mutex::new(HashMap::new()),
                 tx: broadcast::channel(4096).0,
                 stall_after_ms: AtomicU64::new(opts.stall_after.as_millis() as u64),
@@ -399,8 +421,80 @@ impl Engine {
                 return Err(e);
             }
         };
+        if req.worktree
+            && let Some(repo) = inner.store.get_session(&rec.id)?.repo_path
+        {
+            self.prepare_worktree(&rec.id, Path::new(&repo), &cwd).await;
+        }
         self.launch(&rec.id, &req.profile, &cwd, Resume::New).await?;
         Ok(inner.store.get_session(&rec.id)?)
+    }
+
+    /// A new worktree gets the repository's untracked files it needs and runs its setup script, before the agent
+    /// starts. Problems are reported in the conversation; the session starts anyway
+    async fn prepare_worktree(&self, id: &str, repo: &Path, worktree: &Path) {
+        let inner = &self.inner;
+        let settings = inner.repos.get(&repo.display().to_string());
+        if !settings.copy.is_empty() {
+            let (done, problems) = repos::copy_files(repo, worktree, &settings.copy);
+            if !done.is_empty() {
+                inner.notice(id, plyfold_i18n::tr!("worktree にコピーしました: {}", "Copied into the worktree: {}", "已复制到 worktree：{}", done.join(", ")));
+            }
+            for p in problems {
+                inner.notice(id, plyfold_i18n::tr!("コピーできませんでした: {p}", "Could not copy: {p}", "无法复制：{p}"));
+            }
+        }
+        let script = settings.setup.trim().to_string();
+        if script.is_empty() {
+            return;
+        }
+        inner.notice(id, plyfold_i18n::tr!("準備スクリプトを実行しています", "Running the setup script", "正在运行准备脚本"));
+        let log = inner.data_dir.join("setup-logs").join(format!("{id}.log"));
+        let (wt, repo) = (worktree.to_path_buf(), repo.to_path_buf());
+        let run = tokio::task::spawn_blocking(move || repos::run_setup(&script, &wt, &repo, &log)).await;
+        let note = match run {
+            Ok(Ok(r)) if r.ok => {
+                plyfold_i18n::tr!("準備スクリプトが終わりました（{} 秒）", "The setup script finished ({} s)", "准备脚本已完成（{} 秒）", r.elapsed.as_secs())
+            }
+            Ok(Ok(r)) if r.timed_out => plyfold_i18n::tr!(
+                "準備スクリプトが 15 分で終わらなかったので止めました。最後の出力:\n{}",
+                "Stopped the setup script after 15 minutes. Last output:\n{}",
+                "准备脚本 15 分钟内未完成，已停止。最后的输出：\n{}",
+                r.tail
+            ),
+            Ok(Ok(r)) => plyfold_i18n::tr!(
+                "準備スクリプトが失敗しました。最後の出力:\n{}",
+                "The setup script failed. Last output:\n{}",
+                "准备脚本失败。最后的输出：\n{}",
+                r.tail
+            ),
+            Ok(Err(e)) => plyfold_i18n::tr!("準備スクリプトを実行できません: {e}", "Cannot run the setup script: {e}", "无法运行准备脚本：{e}"),
+            Err(e) => plyfold_i18n::tr!("準備スクリプトを実行できません: {e}", "Cannot run the setup script: {e}", "无法运行准备脚本：{e}"),
+        };
+        inner.notice(id, note);
+    }
+
+    /// Settings of a repository (empty ones when it has none)
+    pub fn repo_settings(&self, repo: &str) -> repos::RepoSettings {
+        self.inner.repos.get(repo)
+    }
+
+    pub fn set_repo_settings(&self, repo: &str, settings: repos::RepoSettings) -> Result<(), CoreError> {
+        Ok(self.inner.repos.set(repo, settings)?)
+    }
+
+    /// Repositories Plyfold knows: the ones sessions worked in, and the ones with settings
+    pub fn known_repos(&self) -> Result<Vec<String>, CoreError> {
+        let mut all: std::collections::BTreeSet<String> = self.inner.repos.all().into_keys().collect();
+        for s in self.inner.store.list_sessions()? {
+            if !s.chat
+                && s.side_of.is_none()
+                && let Some(r) = s.repo_path
+            {
+                all.insert(r);
+            }
+        }
+        Ok(all.into_iter().collect())
     }
 
     /// An everyday conversation: no repository, but a folder of its own (agents need one to work in), under the state
@@ -427,7 +521,7 @@ impl Engine {
     }
 
     fn chat_dir(&self, id: &str) -> PathBuf {
-        self.inner.state_dir.join("chats").join(id)
+        self.inner.data_dir.join("chats").join(id)
     }
 
     /// Restart the agent for a stopped session. If supported, session/load restores the full context
@@ -846,7 +940,7 @@ impl Engine {
         let inner = self.inner.clone();
         let live = inner.live(id)?;
         // For agents without image support, write images to the state dir and pass them as links
-        let blocks = attach::prompt_blocks(text, attachments, live.client.supports_images(), &inner.state_dir.join("attachments"))
+        let blocks = attach::prompt_blocks(text, attachments, live.client.supports_images(), &inner.data_dir.join("attachments"))
             .map_err(|e| CoreError::Attachment(e.to_string()))?;
         if live.in_turn.swap(true, Ordering::SeqCst) {
             return Err(CoreError::Busy(id.into()));
@@ -888,9 +982,9 @@ impl Engine {
     /// Cancel. Pending permission requests are answered with "cancelled" (per the ACP spec)
     pub async fn cancel(&self, id: &str) -> Result<(), CoreError> {
         let live = self.inner.live(id)?;
-        let pending: Vec<(String, Value)> = live.permissions.lock().unwrap().drain().collect();
-        for (pid, request_id) in pending {
-            live.client.respond_permission(request_id, None).await?;
+        let pending: Vec<(String, Pending)> = live.permissions.lock().unwrap().drain().collect();
+        for (pid, p) in pending {
+            live.client.respond_permission(p.request_id, None).await?;
             self.inner.emit(EngineEvent::PermissionResolved { session_id: id.into(), permission_id: pid, option_id: None });
         }
         live.client.cancel(&live.sid()).await?;
@@ -900,7 +994,7 @@ impl Engine {
     /// An option_id of None is treated as a cancel
     pub async fn respond_permission(&self, id: &str, permission_id: &str, option_id: Option<&str>) -> Result<(), CoreError> {
         let live = self.inner.live(id)?;
-        let request_id = live.permissions.lock().unwrap().remove(permission_id).ok_or_else(|| CoreError::UnknownPermission(permission_id.into()))?;
+        let request_id = live.permissions.lock().unwrap().remove(permission_id).ok_or_else(|| CoreError::UnknownPermission(permission_id.into()))?.request_id;
         live.client.respond_permission(request_id, option_id).await?;
         live.touch();
         self.inner.emit(EngineEvent::PermissionResolved {
@@ -936,7 +1030,44 @@ impl Engine {
         if category == Category::Mode && Policy::of(&self.inner.store.get_session(id)?) != Policy::Ask {
             return Err(CoreError::ModeLocked);
         }
-        self.set_category(id, category, value).await
+        self.set_category(id, category, value).await?;
+        if category == Category::Mode {
+            self.allow_pending_for_mode(id, value).await?;
+        }
+        Ok(())
+    }
+
+    /// After switching to a mode that would not have asked, answer the requests still waiting as that mode would:
+    /// everything for bypass, file edits for accept-edits. The agent keeps asking for the request it already sent
+    async fn allow_pending_for_mode(&self, id: &str, mode: &str) -> Result<(), CoreError> {
+        let Some(covers) = mode_allows(mode) else { return Ok(()) };
+        let live = self.inner.live(id)?;
+        let allowed: Vec<(String, Pending)> = {
+            let mut pending = live.permissions.lock().unwrap();
+            let ids: Vec<String> = pending.iter().filter(|(_, p)| p.allow.is_some() && covers(p.kind.as_deref())).map(|(k, _)| k.clone()).collect();
+            ids.into_iter().filter_map(|k| pending.remove(&k).map(|p| (k, p))).collect()
+        };
+        if allowed.is_empty() {
+            return Ok(());
+        }
+        for (pid, p) in &allowed {
+            live.client.respond_permission(p.request_id.clone(), p.allow.as_deref()).await?;
+            self.inner.emit(EngineEvent::PermissionResolved { session_id: id.into(), permission_id: pid.clone(), option_id: p.allow.clone() });
+        }
+        live.touch();
+        self.inner.notice(
+            id,
+            plyfold_i18n::tr!(
+                "モードを切り替えたので、確認待ちだった {} 件を許可しました",
+                "Allowed {} waiting permission request(s), since the new mode does not ask",
+                "已切换模式，因此允许了 {} 个等待中的权限请求",
+                allowed.len()
+            ),
+        );
+        if live.in_turn.load(Ordering::SeqCst) && live.permissions.lock().unwrap().is_empty() {
+            self.inner.set_status(id, SessionStatus::Working);
+        }
+        Ok(())
     }
 
     async fn set_category(&self, id: &str, category: Category, value: &str) -> Result<(), CoreError> {
@@ -1185,6 +1316,16 @@ impl Engine {
 }
 
 /// True when a running session already uses this directory
+/// Which waiting requests a mode would not have asked about: all of them for the modes that never ask
+/// (Claude Code's bypassPermissions, Codex's full-access, Gemini CLI's yolo), file edits for accept-edits modes
+fn mode_allows(mode: &str) -> Option<fn(Option<&str>) -> bool> {
+    match mode {
+        "bypassPermissions" | "full-access" | "yolo" => Some(|_| true),
+        "acceptEdits" | "autoEdit" | "auto_edit" => Some(|kind| matches!(kind, Some("edit" | "delete" | "move"))),
+        _ => None,
+    }
+}
+
 /// The mode for an everyday conversation: read-only where the agent has one (Codex), else one that asks before acting
 /// (Claude Code's default), else planning (OpenCode)
 fn chat_mode(info: &SessionInfo) -> Option<String> {
@@ -1325,8 +1466,22 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
             AgentMessage::PermissionRequest { request_id, request } => {
                 live.touch();
                 let pid = format!("perm-{}", inner.perm_seq.fetch_add(1, Ordering::SeqCst));
-                live.permissions.lock().unwrap().insert(pid.clone(), request_id);
                 let v = serde_json::to_value(&*request).unwrap_or(Value::Null);
+                let allow = v["options"].as_array().and_then(|a| {
+                    let kind = |k: &str| a.iter().find(|o| o["kind"] == k);
+                    kind("allow_once")
+                        .or_else(|| a.iter().find(|o| o["kind"].as_str().is_some_and(|k| k.starts_with("allow"))))
+                        .and_then(|o| o["optionId"].as_str())
+                        .map(str::to_string)
+                });
+                let kind = v["toolCall"]["kind"].as_str().map(str::to_string);
+                // A kind the repository always allows is answered here, without showing the request
+                let repo = inner.store.get_session(&id).ok().and_then(|r| r.repo_path);
+                if allow.is_some() && repo.is_some_and(|r| inner.repos.get(&r).allows(kind.as_deref())) {
+                    let _ = live.client.respond_permission(request_id, allow.as_deref()).await;
+                    return;
+                }
+                live.permissions.lock().unwrap().insert(pid.clone(), Pending { request_id, allow, kind });
                 let options = v["options"]
                     .as_array()
                     .map(|a| {

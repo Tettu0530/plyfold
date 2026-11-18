@@ -3,13 +3,13 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { FileText, ImageIcon, Paperclip, Plus, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { inTauri } from "@/lib/api";
 import { fromPath, readImage, type Attached, type AttachmentPreview } from "@/lib/attachments";
 import { addDropTarget } from "@/lib/drop";
 import { hasMention } from "./Mention";
-import { openImagePreview, useImageSrc } from "../ImagePreview";
+import { openImagePreview, PreviewGroup, useImageSrc, usePreviewGroup } from "../ImagePreview";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { bouncy, smooth } from "../motion";
@@ -97,15 +97,21 @@ export function useAttachments({ onMentionRemoved, scope }: { onMentionRemoved?:
 export type AttachmentsState = ReturnType<typeof useAttachments>;
 
 /** A clickable image thumbnail that opens the large preview (growing out of the thumbnail) */
-function Thumb({ src, name, anchor, className }: { src: string; name: string; anchor: string; className?: string }) {
+export function Thumb({ src, name, anchor, className }: { src: string; name: string; anchor: string; className?: string }) {
   const t = useT();
+  const el = useRef<HTMLButtonElement | null>(null);
+  const getEl = useCallback(() => el.current, []);
+  const group = usePreviewGroup(anchor, { src, name, anchor }, getEl);
   return (
     <button
-      ref={liquidAnchor(anchor)}
+      ref={(node) => {
+        el.current = node;
+        liquidAnchor(anchor)(node);
+      }}
       type="button"
       aria-label={t("attach.preview", { name })}
       title={name}
-      onClick={() => openImagePreview({ src, name, anchor })}
+      onClick={() => openImagePreview({ src, name, anchor }, group())}
       className="flex cursor-zoom-in rounded-md focus-visible:ring-2 focus-visible:ring-ring"
     >
       <img src={src} alt={name} className={cn("rounded-md border", className)} />
@@ -219,23 +225,25 @@ export function AttachBox({ att, children }: { att: AttachmentsState; children: 
             transition={smooth}
             className="overflow-hidden"
           >
-            <div className="flex flex-wrap items-center gap-2 px-2 pt-2.5">
-              <AnimatePresence initial={false}>
-                {att.items.map((a) => (
-                  <motion.span
-                    key={a.key}
-                    layout="position"
-                    initial={{ scale: 0.6, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.6, opacity: 0 }}
-                    transition={bouncy}
-                    className="flex"
-                  >
-                    <Chip a={a} onRemove={() => att.remove(a.key)} />
-                  </motion.span>
-                ))}
-              </AnimatePresence>
-            </div>
+            <PreviewGroup>
+              <div className="flex flex-wrap items-center gap-2 px-2 pt-2.5">
+                <AnimatePresence initial={false}>
+                  {att.items.map((a) => (
+                    <motion.span
+                      key={a.key}
+                      layout="position"
+                      initial={{ scale: 0.6, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.6, opacity: 0 }}
+                      transition={bouncy}
+                      className="flex"
+                    >
+                      <Chip a={a} onRemove={() => att.remove(a.key)} />
+                    </motion.span>
+                  ))}
+                </AnimatePresence>
+              </div>
+            </PreviewGroup>
           </motion.div>
         )}
       </AnimatePresence>
@@ -252,11 +260,13 @@ export function SentAttachments({ items }: { items: AttachmentPreview[] }) {
   // Each list gets its own anchor prefix so thumbnails in different messages don't share an animation origin
   const prefix = useId();
   return (
-    <div className="flex flex-wrap justify-end gap-2">
-      {items.map((a, i) => (
-        <SentItem key={i} a={a} anchor={`img:${prefix}:${i}`} />
-      ))}
-    </div>
+    <PreviewGroup>
+      <div className="flex flex-wrap justify-end gap-2">
+        {items.map((a, i) => (
+          <SentItem key={i} a={a} anchor={`img:${prefix}:${i}`} />
+        ))}
+      </div>
+    </PreviewGroup>
   );
 }
 

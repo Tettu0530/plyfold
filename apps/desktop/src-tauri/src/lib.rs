@@ -445,6 +445,72 @@ async fn read_image(path: String) -> CmdResult<String> {
     Ok(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
 }
 
+/// A text file's contents for the touched-files pane: the first MiB, or nothing for a binary file
+#[derive(serde::Serialize)]
+struct TextFile {
+    /// None for a binary file (a NUL byte, or not UTF-8)
+    text: Option<String>,
+    size: u64,
+    /// Only the first MiB was read
+    truncated: bool,
+}
+
+#[tauri::command]
+async fn read_text_file(path: String) -> CmdResult<TextFile> {
+    use std::io::Read as _;
+    const LIMIT: u64 = 1024 * 1024;
+    let p = std::path::PathBuf::from(expand_home(&path));
+    let size = std::fs::metadata(&p).map_err(err)?.len();
+    let mut bytes = Vec::new();
+    std::fs::File::open(&p).map_err(err)?.take(LIMIT).read_to_end(&mut bytes).map_err(err)?;
+    let truncated = size > LIMIT;
+    // A cut may split a multi-byte character at the end
+    let text = if bytes.contains(&0) {
+        None
+    } else {
+        match String::from_utf8(bytes) {
+            Ok(t) => Some(t),
+            Err(e) if truncated && e.utf8_error().error_len().is_none() => {
+                let valid = e.utf8_error().valid_up_to();
+                let mut b = e.into_bytes();
+                b.truncate(valid);
+                String::from_utf8(b).ok()
+            }
+            Err(_) => None,
+        }
+    };
+    Ok(TextFile { text, size, truncated })
+}
+
+/// A repository Plyfold knows, with its settings (Settings → Repositories)
+#[derive(serde::Serialize)]
+struct RepoEntry {
+    path: String,
+    settings: plyfold_core::repos::RepoSettings,
+}
+
+#[tauri::command]
+fn list_repos(state: State<'_, AppState>) -> CmdResult<Vec<RepoEntry>> {
+    let repos = state.engine.known_repos().map_err(err)?;
+    Ok(repos.into_iter().map(|path| RepoEntry { settings: state.engine.repo_settings(&path), path }).collect())
+}
+
+#[tauri::command]
+fn save_repo_settings(state: State<'_, AppState>, path: String, settings: plyfold_core::repos::RepoSettings) -> CmdResult<()> {
+    state.engine.set_repo_settings(&path, settings).map_err(err)
+}
+
+/// Open one file in the editor chosen in Settings (or the system's app for it)
+#[tauri::command]
+fn open_file_in_editor(state: State<'_, AppState>, path: String) -> CmdResult<String> {
+    let editor = state.settings.read().unwrap().editor.clone();
+    let p = std::path::PathBuf::from(expand_home(&path));
+    if !p.exists() {
+        return Err(plyfold_i18n::tr!("ファイルが見つかりません", "File not found", "找不到文件"));
+    }
+    plyfold_worktree::ops::open_path_in_editor(&p, &editor).map_err(err)
+}
+
 /// Files for @-mentions in the composer (files.rs). `root` is the session's worktree or repository
 #[tauri::command]
 async fn search_files(root: String, query: String) -> Vec<files::FileHit> {
@@ -724,10 +790,22 @@ async fn check_profile(state: State<'_, AppState>, name: String) -> CmdResult<pl
     Ok(state.engine.check_profile(&name).await)
 }
 
+/// Where sessions are kept. A development build (npm run tauri dev) uses its own folder inside the state directory,
+/// so running it beside the installed app never mixes their sessions; profiles and settings stay shared.
+/// PLYFOLD_DATA_DIR overrides both
+fn data_dir(state_dir: &std::path::Path) -> PathBuf {
+    if let Some(d) = std::env::var_os("PLYFOLD_DATA_DIR").filter(|d| !d.is_empty()) {
+        return PathBuf::from(d);
+    }
+    if cfg!(debug_assertions) { state_dir.join("dev") } else { state_dir.to_path_buf() }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let state_dir = default_state_dir();
             let config_path = state_dir.join("config.toml");
@@ -737,6 +815,7 @@ pub fn run() {
             let settings = load_settings(&state_dir.join("settings.json"));
             let engine = Engine::open(EngineOptions {
                 state_dir: state_dir.clone(),
+                data_dir: Some(data_dir(&state_dir)),
                 config: config.clone(),
                 secrets: secrets.clone(),
                 stall_after: Duration::from_secs(settings.stall_seconds),
@@ -768,6 +847,10 @@ pub fn run() {
             complete_dirs,
             search_files,
             read_image,
+            read_text_file,
+            list_repos,
+            save_repo_settings,
+            open_file_in_editor,
             open_url,
             reveal_file,
             start_session,

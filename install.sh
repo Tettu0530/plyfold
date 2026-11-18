@@ -30,7 +30,7 @@ trap 'rm -rf "$TMP"' EXIT
 if [ -n "${PLYFOLD_VERSION:-}" ]; then
 	TAG="v${PLYFOLD_VERSION#v}"
 else
-	TAG=$(curl -fsSL "https://github.com/$REPO/releases.atom" | sed -n 's|.*/releases/tag/\([^"<]*\)".*|\1|p' | head -n 1) ||
+	TAG=$(curl -fsSL "https://github.com/$REPO/releases.atom" | sed -n 's|.*/releases/tag/\(v[0-9][^"<]*\)".*|\1|p' | head -n 1) ||
 		fail "cannot reach GitHub"
 	[ -n "$TAG" ] || fail "no release found"
 fi

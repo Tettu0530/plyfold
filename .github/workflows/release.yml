@@ -69,13 +69,17 @@ jobs:
             # One .dmg for Apple silicon and Intel
             targets: aarch64-apple-darwin,x86_64-apple-darwin
             args: --target universal-apple-darwin
-            files: target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            files: |
+              target/universal-apple-darwin/release/bundle/dmg/*.dmg
+              target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
+              target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
           - name: Windows
             os: windows-latest
             targets: ""
             args: ""
             files: |
               target/release/bundle/nsis/*.exe
+              target/release/bundle/nsis/*.exe.sig
               target/release/bundle/msi/*.msi
           - name: Linux
             # The oldest supported Ubuntu with WebKitGTK 4.1, so the AppImage runs on more distributions
@@ -84,6 +88,7 @@ jobs:
             args: ""
             files: |
               target/release/bundle/appimage/*.AppImage
+              target/release/bundle/appimage/*.AppImage.sig
               target/release/bundle/deb/*.deb
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
@@ -123,7 +128,15 @@ jobs:
       - name: Build
         working-directory: apps/desktop
         shell: bash
-        run: npm run tauri build -- ${{ matrix.args }}
+        env:
+          # Signs the files the app updates itself from (the public key is in tauri.conf.json)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          # Without the key (a pull request from a fork) the installers are built without update files
+          updater=()
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then updater=(--config '{"bundle":{"createUpdaterArtifacts":true}}'); fi
+          npm run tauri build -- ${{ matrix.args }} "${updater[@]}"
 
       - name: Upload
         uses: actions/upload-artifact@v7
@@ -159,6 +172,10 @@ jobs:
           # The Windows and Linux builds come in subfolders (nsis/, msi/, appimage/, deb/): attach the files side by side
           mkdir out
           find dist -type f -exec mv -t out {} +
+          # The macOS update file has no version in its name
+          for f in out/*.app.tar.gz out/*.app.tar.gz.sig; do
+            [ -e "$f" ] && mv "$f" "out/Plyfold_${VERSION}_universal.${f#out/*.app.}"
+          done
           (cd out && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt)
           # This version's section of the changelog, without its heading
           awk -v v="$VERSION" '
@@ -183,3 +200,32 @@ jobs:
             if [[ "$VERSION" == 0.* || "$VERSION" == *-* ]]; then flags+=(--prerelease); fi
             gh release create "$TAG" out/* --verify-tag --title "Plyfold $VERSION" --notes-file notes.md "${flags[@]}"
           fi
+
+      - name: Publish the update feed
+        # latest.json in the release tagged "updater", which the app checks (GitHub's "latest" skips pre-releases)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.check.outputs.tag }}
+          VERSION: ${{ needs.check.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          mac="Plyfold_${VERSION}_universal.app.tar.gz"
+          win="Plyfold_${VERSION}_x64-setup.exe"
+          linux="Plyfold_${VERSION}_amd64.AppImage"
+          for f in "$mac" "$win" "$linux"; do
+            if [ ! -f "out/$f.sig" ]; then
+              echo "::warning::No signature for $f (TAURI_SIGNING_PRIVATE_KEY not set?): the update feed is left as it was"
+              exit 0
+            fi
+          done
+          base="https://github.com/$REPO/releases/download/$TAG"
+          entry() { jq -n --arg url "$base/$1" --rawfile sig "out/$1.sig" '{url: $url, signature: $sig}'; }
+          jq -n --arg version "$VERSION" --arg notes "https://github.com/$REPO/releases/tag/$TAG" --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --argjson mac "$(entry "$mac")" --argjson win "$(entry "$win")" --argjson linux "$(entry "$linux")" \
+            '{version: $version, notes: $notes, pub_date: $date, platforms: {"darwin-aarch64": $mac, "darwin-x86_64": $mac, "windows-x86_64": $win, "linux-x86_64": $linux}}' \
+            > latest.json
+          cat latest.json
+          if ! gh release view updater >/dev/null 2>&1; then
+            gh release create updater --title "Update feed" --notes "Where installed copies of Plyfold look for a newer version. Not a release: download Plyfold from the version releases." --prerelease --target main
+          fi
+          gh release upload updater latest.json --clobber

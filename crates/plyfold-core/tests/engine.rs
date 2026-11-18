@@ -59,6 +59,7 @@ keys = {{ MOCK_KEY = "keychain:mock/KEY" }}
     );
     Engine::open(EngineOptions {
         state_dir: state.to_path_buf(),
+        data_dir: None,
         config: Config::from_toml(&toml).unwrap(),
         secrets: Arc::new(MemoryStore::from([("mock/KEY", "sk-mock-secret-123456")])),
         stall_after: Duration::from_millis(stall_ms),
@@ -129,6 +130,64 @@ async fn worktree_session_with_permission_and_diff() {
 
     eng.delete_session(&s.id, true).await.unwrap();
     assert!(!wt.exists());
+}
+
+#[tokio::test]
+async fn switching_to_a_mode_that_does_not_ask_allows_what_is_waiting() {
+    use plyfold_core::Category;
+    let base = tmp("bypass");
+    let eng = engine(&base.join("state"), 60_000);
+    let mut rx = eng.subscribe();
+    let s = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: base.clone(), worktree: false }).await.unwrap();
+
+    // A fetch is not a file edit: accept-edits leaves it waiting, bypass allows it
+    eng.prompt(&s.id, "permission fetch").unwrap();
+    wait_for(&mut rx, |e| matches!(e, EngineEvent::PermissionRequested { .. })).await;
+    eng.set_by_category(&s.id, Category::Mode, "acceptEdits").await.unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    while let Ok(e) = rx.try_recv() {
+        assert!(!matches!(e, EngineEvent::PermissionResolved { .. }), "accept-edits allowed a fetch");
+    }
+    eng.set_by_category(&s.id, Category::Mode, "bypassPermissions").await.unwrap();
+    wait_for(&mut rx, |e| matches!(e, EngineEvent::PermissionResolved { option_id: Some(o), .. } if o == "allow")).await;
+    wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { .. })).await;
+
+    // An edit is allowed by accept-edits
+    eng.set_by_category(&s.id, Category::Mode, "default").await.unwrap();
+    eng.prompt(&s.id, "write with permission").unwrap();
+    wait_for(&mut rx, |e| matches!(e, EngineEvent::PermissionRequested { .. })).await;
+    eng.set_by_category(&s.id, Category::Mode, "acceptEdits").await.unwrap();
+    wait_for(&mut rx, |e| matches!(e, EngineEvent::PermissionResolved { option_id: Some(o), .. } if o == "allow")).await;
+    wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { .. })).await;
+    assert!(base.join("mock-output.txt").exists());
+    eng.close_session(&s.id).await.unwrap();
+}
+
+#[tokio::test]
+async fn a_new_worktree_is_prepared_and_the_repository_rules_answer_for_it() {
+    use plyfold_core::repos::RepoSettings;
+    let base = tmp("prepare");
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    git_repo(&repo);
+    std::fs::write(repo.join(".env"), "SECRET=1").unwrap();
+    let eng = engine(&base.join("state"), 60_000);
+    let settings = RepoSettings { setup: "echo ready > setup-ran.txt".into(), copy: vec![".env".into()], allow: vec!["edit".into()] };
+    eng.set_repo_settings(&repo.display().to_string(), settings).unwrap();
+    assert_eq!(eng.known_repos().unwrap(), [repo.display().to_string()]);
+    let mut rx = eng.subscribe();
+
+    let s = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: repo.clone(), worktree: true }).await.unwrap();
+    let wt = PathBuf::from(s.worktree_path.clone().unwrap());
+    assert_eq!(std::fs::read_to_string(wt.join(".env")).unwrap(), "SECRET=1");
+    assert_eq!(std::fs::read_to_string(wt.join("setup-ran.txt")).unwrap().trim(), "ready");
+
+    // Edits are always allowed in this repository: no request reaches the UI
+    eng.prompt(&s.id, "write with permission").unwrap();
+    let ended = wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { .. } | EngineEvent::PermissionRequested { .. })).await;
+    assert!(matches!(ended, EngineEvent::TurnEnded { .. }), "asked anyway: {ended:?}");
+    assert!(wt.join("mock-output.txt").exists());
+    eng.delete_session(&s.id, true).await.unwrap();
 }
 
 #[tokio::test]

@@ -30,6 +30,8 @@ allow = [
   "Unlicense",
   "Unicode-3.0",
   "MPL-2.0",
+  # ring, rustls-webpki and untrusted (TLS for the updater's downloads); a permissive licence like MIT
+  "ISC",
 ]
 confidence-threshold = 0.8
 

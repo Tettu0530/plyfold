@@ -10,6 +10,17 @@ Pushing a version tag builds the installers on GitHub Actions and publishes them
 
 Every release also gets `SHA256SUMS.txt`, which `install.sh` and `install.ps1` (at the repository root, fetched from `main`) check before installing. The notes are that version's section of `CHANGELOG.md`, followed by the install steps in `.github/release-install.md`. Versions below 1.0 are marked as pre-releases.
 
+## Updates from inside the app
+
+Installed copies check `https://github.com/Tettu0530/plyfold/releases/download/updater/latest.json` a little after they start and every six hours (Settings → Info checks on demand). The Release workflow signs the update files (`.app.tar.gz` for macOS, the NSIS `-setup.exe` for Windows, the AppImage for Linux) and replaces `latest.json` in the release tagged `updater` once a version is published. The app installs an update only when its signature matches the public key in `tauri.conf.json`.
+
+The signing key is kept out of the repository:
+
+- `TAURI_SIGNING_PRIVATE_KEY` (and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, empty if the key has none) are repository secrets. Without them the installers are still built, but no update files, and the feed stays as it was
+- Keep a copy of the private key somewhere safe. If it is lost, installed copies can no longer update themselves: a new key means a new public key, which only a manually installed version carries
+
+The `.deb` is not updated from inside the app; `install.sh` updates it.
+
 ## Steps
 
 1. On a branch from `main`, set the new version everywhere and move the Unreleased notes under it:
