@@ -82,10 +82,33 @@ const tf = (x: number, y: number, sx: number, sy: number) => `translate(${x.toFi
  *   springs back (harder arrivals, bigger reaction)
  * Additive Web Animations, so the anchor's own transforms (press feedback, layout) keep working underneath
  */
+/** Rows inside a menu or list do not move: one row tugging out of a column of rows reads as a glitch, and a full-width
+ *  row would stick out past the menu's edge */
+const STILL_INSIDE = '[role="menu"], [role="listbox"], [data-radix-popper-content-wrapper]';
+/** The most an anchor grows or shrinks along an axis, in px: a 10% stretch suits a small round button, but on a wide
+ *  chip it would run into its neighbours */
+const STRETCH_PX = 4;
+
 class AnchorBody {
   private holding: Animation | null = null;
   private last = { x: 0, y: 0, sx: 1, sy: 1 };
-  constructor(private el: HTMLElement | null | undefined) {}
+  private el: HTMLElement | null;
+  private w = 0;
+  private h = 0;
+  constructor(el: HTMLElement | null | undefined) {
+    this.el = el && !el.closest(STILL_INSIDE) ? el : null;
+    if (this.el) {
+      const r = this.el.getBoundingClientRect();
+      this.w = r.width;
+      this.h = r.height;
+    }
+  }
+
+  /** A scale that changes the anchor's size by at most STRETCH_PX on each axis */
+  private capped(sx: number, sy: number) {
+    const cap = (s: number, size: number) => (size > 0 ? 1 + Math.sign(s - 1) * Math.min(Math.abs(s - 1), STRETCH_PX / size) : s);
+    return { sx: cap(sx, this.w), sy: cap(sy, this.h) };
+  }
 
   /** While joined: `dir` points from the anchor to the blob, `amount` (0..1) is how hard the neck pulls */
   pull(dir: Dir, amount: number) {
@@ -94,7 +117,7 @@ class AnchorBody {
     const ax = Math.abs(dir.x);
     const ay = Math.abs(dir.y);
     // Up to 4px toward the blob, 10% longer along the pull and slightly thinner across it
-    this.last = { x: dir.x * 4 * a, y: dir.y * 4 * a, sx: 1 + a * (0.1 * ax - 0.04 * ay), sy: 1 + a * (0.1 * ay - 0.04 * ax) };
+    this.last = { x: dir.x * 4 * a, y: dir.y * 4 * a, ...this.capped(1 + a * (0.1 * ax - 0.04 * ay), 1 + a * (0.1 * ay - 0.04 * ax)) };
     const t = tf(this.last.x, this.last.y, this.last.sx, this.last.sy);
     const frames = [{ transform: t }, { transform: t }];
     if (!this.holding) {
@@ -110,7 +133,7 @@ class AnchorBody {
     // would leave the anchor barely moving
     const ax = Math.abs(dir.x);
     const ay = Math.abs(dir.y);
-    const base = { x: dir.x * 3.5, y: dir.y * 3.5, sx: 1 + 0.08 * ax - 0.03 * ay, sy: 1 + 0.08 * ay - 0.03 * ax };
+    const base = { x: dir.x * 3.5, y: dir.y * 3.5, ...this.capped(1 + 0.08 * ax - 0.03 * ay, 1 + 0.08 * ay - 0.03 * ax) };
     const from = this.holding && Math.hypot(this.last.x, this.last.y) > 3.5 ? this.last : base;
     this.stop();
     const { easing, ms } = springToCss({ duration: 0.45, bounce: 0.45 });
@@ -127,8 +150,7 @@ class AnchorBody {
     // Pushed away from the blob and squashed along the hit, bulging across it
     const x = -dir.x * 5 * m;
     const y = -dir.y * 5 * m;
-    const sx = 1 + m * (0.08 * ay - 0.12 * ax);
-    const sy = 1 + m * (0.08 * ax - 0.12 * ay);
+    const { sx, sy } = this.capped(1 + m * (0.08 * ay - 0.12 * ax), 1 + m * (0.08 * ax - 0.12 * ay));
     const { easing, ms } = springToCss({ duration: 0.5, bounce: 0.5 });
     this.el.animate([{ transform: tf(x, y, sx, sy) }, { transform: tf(0, 0, 1, 1) }], { duration: ms, easing, composite: "add" });
   }
