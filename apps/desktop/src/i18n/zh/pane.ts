@@ -58,6 +58,7 @@ export const pane: Record<keyof typeof source, string> = {
   preview: "预览",
   previewPlaceholder: "localhost:3000",
   previewFound: "输出中的 URL",
+  previewPorts: "会话端口（PORT）",
   removePane: "关闭窗格",
   dropOpen: "在此打开",
   dropSwap: "交换窗格",

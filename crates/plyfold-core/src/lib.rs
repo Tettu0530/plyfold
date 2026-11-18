@@ -459,7 +459,8 @@ impl Engine {
         inner.notice(id, plyfold_i18n::tr!("準備スクリプトを実行しています", "Running the setup script", "正在运行准备脚本"));
         let log = inner.data_dir.join("setup-logs").join(format!("{id}.log"));
         let (wt, repo) = (worktree.to_path_buf(), repo.to_path_buf());
-        let run = tokio::task::spawn_blocking(move || repos::run_setup(&script, &wt, &repo, &log)).await;
+        let port = session_port(inner, id).ok().flatten();
+        let run = tokio::task::spawn_blocking(move || repos::run_setup(&script, &wt, &repo, port, &log)).await;
         let note = match run {
             Ok(Ok(r)) if r.ok => {
                 plyfold_i18n::tr!("準備スクリプトが終わりました（{} 秒）", "The setup script finished ({} s)", "准备脚本已完成（{} 秒）", r.elapsed.as_secs())
@@ -788,7 +789,13 @@ impl Engine {
         let inner = self.inner.clone();
         inner.set_status(id, SessionStatus::Starting);
         let result: Result<(), CoreError> = async {
-            let resolved = inner.config.read().unwrap().resolve(profile, &inner.state_dir, cwd, inner.secrets.as_ref())?;
+            let mut resolved = inner.config.read().unwrap().resolve(profile, &inner.state_dir, cwd, inner.secrets.as_ref())?;
+            // A port of its own for dev servers, so sessions side by side do not fight over 3000 (most dev servers
+            // read PORT; PLYFOLD_PORT is there for scripts that want to know it)
+            if let Some(port) = session_port(&inner, id)? {
+                resolved.spawn.env_set.push(("PORT".into(), port.to_string()));
+                resolved.spawn.env_set.push(("PLYFOLD_PORT".into(), port.to_string()));
+            }
             let mut msg = format!("起動: {} {}", resolved.spawn.command, resolved.spawn.args.join(" "));
             if !resolved.env_summary.is_empty() {
                 msg += &format!("（{}）", resolved.env_summary.join(", "));
@@ -1421,6 +1428,31 @@ impl Engine {
 }
 
 /// True when a running session already uses this directory
+/// Ports handed to sessions, clear of the usual defaults (3000, 5173, 8000, 8080)
+const PORTS: std::ops::RangeInclusive<u16> = 3101..=3999;
+
+/// The session's port: the one it was given, or a new one no other session has and nothing listens on. None for
+/// conversations and side chats, which run no dev servers
+fn session_port(inner: &Inner, id: &str) -> Result<Option<u16>, CoreError> {
+    let rec = inner.store.get_session(id)?;
+    if rec.chat || rec.side_of.is_some() {
+        return Ok(None);
+    }
+    if let Some(p) = rec.port {
+        return Ok(Some(p));
+    }
+    let taken: HashSet<u16> = inner.store.list_sessions()?.into_iter().filter_map(|s| s.port).collect();
+    let span = (*PORTS.end() - *PORTS.start() + 1) as usize;
+    // Start from a spot the id picks, so sessions made together do not all probe the same ports
+    let start = id.bytes().fold(0usize, |h, b| h.wrapping_mul(31).wrapping_add(b as usize)) % span;
+    let free =
+        (0..span).map(|i| *PORTS.start() + ((start + i) % span) as u16).find(|p| !taken.contains(p) && std::net::TcpListener::bind(("127.0.0.1", *p)).is_ok());
+    if let Some(p) = free {
+        inner.store.set_port(id, p)?;
+    }
+    Ok(free)
+}
+
 /// The option that allows a request this once. Never the one that allows it from now on: an answer Plyfold gives on
 /// the user's behalf must not outlast the request
 fn allow_once(v: &Value) -> Option<String> {

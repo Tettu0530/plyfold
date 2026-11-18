@@ -19,6 +19,8 @@ export interface SessionRecord {
   side_of?: string | null;
   /** When it was moved to the trash (ms); trashed sessions stay out of the list until restored */
   trashed_at?: number | null;
+  /** The port its dev servers get (PORT in the agent's environment) */
+  port?: number | null;
   /** An everyday conversation (no repository; it may look things up but not edit or run commands) */
   chat?: boolean;
 }

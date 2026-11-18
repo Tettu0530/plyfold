@@ -93,6 +93,9 @@ pub struct SessionRecord {
     /// good, so it can be restored as it was
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trashed_at: Option<i64>,
+    /// The port given to this session's dev servers (PORT in the agent's environment); kept for its lifetime
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -200,7 +203,7 @@ CREATE TABLE IF NOT EXISTS dismissed_conversations (
 ";
 
 const SESSION_COLS: &str =
-    "id, title, profile, agent, repo_path, worktree_path, branch, base_ref, acp_session_id, status, created_at, updated_at, side_of, chat, trashed_at";
+    "id, title, profile, agent, repo_path, worktree_path, branch, base_ref, acp_session_id, status, created_at, updated_at, side_of, chat, trashed_at, port";
 
 fn row_to_session(r: &rusqlite::Row) -> rusqlite::Result<SessionRecord> {
     Ok(SessionRecord {
@@ -219,6 +222,7 @@ fn row_to_session(r: &rusqlite::Row) -> rusqlite::Result<SessionRecord> {
         side_of: r.get(12)?,
         chat: r.get::<_, i64>(13)? != 0,
         trashed_at: r.get(14)?,
+        port: r.get(15)?,
     })
 }
 
@@ -268,6 +272,10 @@ impl Store {
         if !has_trash {
             conn.execute_batch("ALTER TABLE sessions ADD COLUMN trashed_at INTEGER")?;
         }
+        let has_port: bool = conn.prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'port'")?.exists([])?;
+        if !has_port {
+            conn.execute_batch("ALTER TABLE sessions ADD COLUMN port INTEGER")?;
+        }
         Ok(Self { conn: Mutex::new(conn) })
     }
 
@@ -289,9 +297,10 @@ impl Store {
             side_of: s.side_of,
             chat: s.chat,
             trashed_at: None,
+            port: None,
         };
         self.conn.lock().unwrap().execute(
-            &format!("INSERT INTO sessions ({SESSION_COLS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)"),
+            &format!("INSERT INTO sessions ({SESSION_COLS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)"),
             params![
                 rec.id,
                 rec.title,
@@ -307,7 +316,8 @@ impl Store {
                 rec.updated_at,
                 rec.side_of,
                 rec.chat as i64,
-                rec.trashed_at
+                rec.trashed_at,
+                rec.port
             ],
         )?;
         Ok(rec)
@@ -343,6 +353,10 @@ impl Store {
         self.update(id, "status", &status.as_str())?;
         self.append_event(id, EventKind::Status, status.as_str())?;
         Ok(())
+    }
+
+    pub fn set_port(&self, id: &str, port: u16) -> Result<(), StoreError> {
+        self.update(id, "port", &port)
     }
 
     /// Move to the trash (Some(now)) or back out of it (None)

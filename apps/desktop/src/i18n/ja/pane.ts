@@ -56,6 +56,7 @@ export const pane = {
   preview: "プレビュー",
   previewPlaceholder: "localhost:3000",
   previewFound: "出力に出た URL",
+  previewPorts: "セッションのポート（PORT）",
   removePane: "ペインを閉じる",
   dropOpen: "ここで開く",
   dropSwap: "入れ替える",
