@@ -227,6 +227,18 @@ impl Store {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
+        // The log holds conversations and the agents' output: readable by this user only (SQLite gives the -wal and
+        // -shm files the database file's mode)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
+            std::fs::OpenOptions::new().create(true).append(true).mode(0o600).open(path)?;
+            for p in [path.to_path_buf(), path.with_extension("db-wal"), path.with_extension("db-shm")] {
+                if p.exists() {
+                    std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600))?;
+                }
+            }
+        }
         let conn = Connection::open(path)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         Self::init(conn)
@@ -625,6 +637,22 @@ mod tests {
         let list = store.list_sessions().unwrap();
         assert_eq!(list[0].id, a.id);
         assert_eq!(list[0].title, "a2");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_database_is_readable_by_its_user_only() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = std::env::temp_dir().join(format!("plyfold-store-mode-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let db = dir.join("plyfold.db");
+        let store = Store::open(&db).unwrap();
+        store.create_session(NewSession::default()).unwrap();
+        for p in [db.clone(), db.with_extension("db-wal")] {
+            if p.exists() {
+                assert_eq!(std::fs::metadata(&p).unwrap().permissions().mode() & 0o777, 0o600, "{}", p.display());
+            }
+        }
     }
 
     #[test]
