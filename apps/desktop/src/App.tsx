@@ -24,7 +24,7 @@ import { currentBindings } from "./state/keys";
 import { nextScale } from "./lib/scale";
 import { BrowserButton } from "./components/BrowserButton";
 import { PlyfoldMark } from "./components/Logo";
-import { isMac, primaryKey } from "./lib/platform";
+import { isMac, primaryKey, useFullscreen } from "./lib/platform";
 import { cn } from "./lib/utils";
 
 // The Motion lab (tuning springs and the liquid motion) is a development tool: only in `npm run tauri dev` builds,
@@ -112,6 +112,7 @@ export default function App() {
     const id = s.panes[s.focusedPane];
     return id ? (s.sessions[id]?.record.repo_path ?? null) : null;
   });
+  const fullscreen = useFullscreen();
   useShortcuts();
   useEffect(() => {
     void init();
@@ -121,8 +122,12 @@ export default function App() {
     <MotionConfig reducedMotion={reduceMotion === "reduce" ? "always" : "user"}>
       <TooltipProvider>
         <div className="flex h-full flex-col">
-          {/* On macOS the window's traffic lights sit over the header's left end; Windows has a regular title bar */}
-          <header data-tauri-drag-region className={cn("relative flex h-10 shrink-0 items-center gap-2 border-b pr-2", isMac ? "pl-[84px]" : "pl-2")}>
+          {/* On macOS the window's traffic lights sit over the header's left end (not in full screen, where they are
+              hidden); Windows has a regular title bar */}
+          <header
+            data-tauri-drag-region
+            className={cn("relative flex h-10 shrink-0 items-center gap-2 border-b pr-2", isMac && !fullscreen ? "pl-[84px]" : "pl-2")}
+          >
             <button
               type="button"
               aria-label={sidebarOpen ? t("app.hideSidebar") : t("app.showSidebar")}

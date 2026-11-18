@@ -4,6 +4,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Fixed
+
+- On macOS in full screen, where the window buttons are hidden, the sidebar button moves to the left edge of the header instead of keeping their space
+
 ## [0.4.0] - 2026-11-18
 
 Updates from inside the app, a trash for sessions, per-repository worktree setup and permission rules, finding messages, a touched-files pane, and security fixes from a dynamic review.
