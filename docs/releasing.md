@@ -8,7 +8,7 @@ Pushing a version tag builds the installers on GitHub Actions and publishes them
 | Windows 10/11 (x64) | `-setup.exe` (NSIS) and `.msi` |
 | Linux (x64, built on Ubuntu 22.04) | `.AppImage` and `.deb` |
 
-Every release also gets `SHA256SUMS.txt`. The notes are that version's section of `CHANGELOG.md`, followed by the install steps in `.github/release-install.md`. Versions below 1.0 are marked as pre-releases.
+Every release also gets `SHA256SUMS.txt`, which `install.sh` and `install.ps1` (at the repository root, fetched from `main`) check before installing. The notes are that version's section of `CHANGELOG.md`, followed by the install steps in `.github/release-install.md`. Versions below 1.0 are marked as pre-releases.
 
 ## Steps
 
@@ -38,4 +38,4 @@ A pull request that changes the workflow builds all three systems without publis
 
 ## Not done yet
 
-The builds are not signed. macOS needs an Apple Developer ID and notarization; Windows needs a code signing certificate. Until then the install steps in the notes explain how to get past the warnings.
+The builds are not signed (the macOS bundle is signed ad hoc, which avoids the "damaged" message but not the Gatekeeper warning). macOS needs an Apple Developer ID and notarization; Windows needs a code signing certificate. Until then the install steps in the notes explain how to get past the warnings.

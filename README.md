@@ -67,7 +67,21 @@ You can override these definitions or add other ACP agents in `config.toml` unde
 
 ## Install
 
-Download the installer for your system from the [latest release](https://github.com/Tettu0530/plyfold/releases): a `.dmg` for macOS (Apple silicon and Intel), a `.exe` or `.msi` for Windows 10/11, and an AppImage or `.deb` for Linux. The release notes say how to get past the warning the system shows for an unsigned app.
+macOS and Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Tettu0530/plyfold/main/install.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/Tettu0530/plyfold/main/install.ps1 | iex
+```
+
+The scripts fetch the newest release, check it against its checksums and install it: `Plyfold.app` in Applications on macOS, the `.deb` (or an AppImage where there is no apt) on Linux, and a per-user install on Windows. Run them again to update. The builds are not signed yet; a file fetched this way is not flagged as downloaded from the internet, so the system does not stop it.
+
+You can also download the files from the [releases](https://github.com/Tettu0530/plyfold/releases) yourself: a `.dmg` for macOS (Apple silicon and Intel), a `.exe` or `.msi` for Windows 10/11, and an AppImage or `.deb` for Linux. The release notes say how to get past the warning the system then shows.
 
 You also need the agent CLIs you want to use, with their logins or API keys. `npx` (bundled with [Node.js](https://nodejs.org)) is enough for Claude Code, Codex and Gemini CLI; OpenCode needs `opencode` installed. For creating pull requests from the Git pane, install the [GitHub CLI](https://cli.github.com) and log in.
 
