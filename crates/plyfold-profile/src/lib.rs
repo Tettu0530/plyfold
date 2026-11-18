@@ -123,7 +123,6 @@ pub fn builtin_agents() -> BTreeMap<String, AgentDef> {
         ("codex".into(), a("npx", &["-y", "@agentclientprotocol/codex-acp@2.6.0"], Some("CODEX_HOME"), &["OPENAI_API_KEY", "CODEX_API_KEY"])),
         ("opencode".into(), a("opencode", &["acp"], Some("XDG_DATA_HOME"), &["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"])),
         ("gemini".into(), a("npx", &["-y", "@google/gemini-cli@0.68.0", "--experimental-acp"], None, &["GEMINI_API_KEY", "GOOGLE_API_KEY"])),
-        ("mock".into(), a("plyfold-mock-agent", &[], None, &[])),
     ])
 }
 
