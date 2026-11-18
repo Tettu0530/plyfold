@@ -11,6 +11,7 @@ export const diff: Record<keyof typeof source, string> = {
   sessionGone: "此会话已不存在",
   resizeColumn: "左栏宽度",
   resizeColumnHint: "拖动以调整宽度。双击恢复默认宽度",
+  resizeSection: "Git 与已更改文件之间的分隔线",
   changedFilesLabel: "已更改的文件",
   changedFilesCount: "{count, plural, other {已更改 # 个文件}}",
   loading: "加载中",

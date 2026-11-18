@@ -26,6 +26,99 @@ const BADGE: Record<FilePatch["status"], { letter: string; className: string; la
 /** Below this pane width the Git pane shows one column: the list, or one file's diff */
 const NARROW_PX = 720;
 
+const SECTION_DEFAULT = 260;
+const SECTION_MIN = 72;
+const SECTION_KEY = "plyfold.gitSectionHeight";
+
+/** A size remembered on this machine (a viewer convenience, so local storage is enough) */
+function useStoredSize(key: string, fallback: number): [number, (v: number) => void] {
+  const [v, setV] = useState(() => {
+    try {
+      const n = Number(localStorage.getItem(key));
+      return n > 0 ? n : fallback;
+    } catch {
+      return fallback;
+    }
+  });
+  const set = (n: number) => {
+    const r = Math.round(Math.max(SECTION_MIN, n));
+    setV(r);
+    try {
+      localStorage.setItem(key, String(r));
+    } catch {
+      // Not remembered, still applied
+    }
+  };
+  return [v, set];
+}
+
+/** The element's height, watched again whenever `key` changes (the list is a different element in each layout) */
+function useHeight(ref: React.RefObject<HTMLElement | null>, key: string) {
+  const [h, setH] = useState(600);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setH(el.clientHeight));
+    setH(el.clientHeight);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref, key]);
+  return h;
+}
+
+/** The divider between the Git section and the file list: drag, arrow keys to nudge, double-click or Enter to reset */
+function RowResizer({ height, onChange }: { height: number; onChange: (h: number) => void }) {
+  const t = useT();
+  const drag = useRef<{ top: number } | null>(null);
+  const [active, setActive] = useState(false);
+  const end = () => {
+    drag.current = null;
+    document.body.classList.remove("resizing");
+    setActive(false);
+  };
+  return (
+    <div
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label={t("diff.resizeSection")}
+      aria-valuenow={height}
+      title={t("diff.resizeColumnHint")}
+      tabIndex={0}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          // Synthetic events have no capturable pointer
+        }
+        drag.current = { top: e.currentTarget.parentElement?.getBoundingClientRect().top ?? 0 };
+        document.body.classList.add("resizing");
+        setActive(true);
+      }}
+      onPointerMove={(e) => drag.current && onChange(e.clientY - drag.current.top)}
+      onPointerUp={end}
+      onPointerCancel={end}
+      onDoubleClick={() => onChange(SECTION_DEFAULT)}
+      onKeyDown={(e) => {
+        const step = e.shiftKey ? 40 : 8;
+        if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+          e.preventDefault();
+          onChange(height + (e.key === "ArrowUp" ? -step : step));
+        } else if (e.key === "Enter") onChange(SECTION_DEFAULT);
+      }}
+      className="group relative z-10 -my-1 flex h-2 shrink-0 cursor-row-resize items-center outline-none"
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "h-px w-full bg-border transition-colors duration-150 group-hover:bg-foreground/25 group-focus-visible:bg-foreground/25",
+          active && "bg-foreground/25",
+        )}
+      />
+    </div>
+  );
+}
+
 function useWidth(ref: React.RefObject<HTMLElement | null>) {
   const [w, setW] = useState(1000);
   useLayoutEffect(() => {
@@ -68,6 +161,11 @@ export function GitPane({ index, id }: { index: number; id: string }) {
   const busy = status === "working" || status === "awaiting_permission" || status === "starting" || status === "stalled";
   const git = useGitInfo(sid, busy);
   const [columnWidth, setColumnWidth] = useColumnWidth();
+  const [gitHeight, setGitHeight] = useStoredSize(SECTION_KEY, SECTION_DEFAULT);
+  const listBox = useRef<HTMLDivElement>(null);
+  const listHeight = useHeight(listBox, `${narrow}:${reading}`);
+  // Keep room for a few files below, however the pane is sized
+  const sectionHeight = Math.round(Math.max(SECTION_MIN, Math.min(gitHeight, listHeight - 120)));
 
   // The worktree status exists only for worktree sessions (one in the repository itself has no actions here)
   const reload = () =>
@@ -120,31 +218,35 @@ export function GitPane({ index, id }: { index: number; id: string }) {
       <p className="p-4 text-xs text-muted-foreground">{r.base_ref ? t("diff.noChangesSince", { base: r.base_ref.slice(0, 7) }) : t("diff.noChanges")}</p>
     ) : null;
 
+  // The Git section above, the changed files below, each scrolling on its own; the divider between them moves
   const list = (
-    <>
-      <section aria-label={t("pane.git")} className="border-b px-2 pt-3 pb-3">
+    <div ref={listBox} className="flex min-h-0 grow flex-col">
+      <section aria-label={t("pane.git")} style={{ height: sectionHeight }} className="shrink-0 overflow-y-auto px-2 pt-3 pb-3">
         <GitPanel key={sid} id={sid} git={git} busy={busy} title={r.title} />
       </section>
-      <div className="flex h-10 shrink-0 items-center gap-2 px-4 text-xs">
-        <span className="font-medium text-muted-foreground">{data ? t("diff.changedFilesCount", { count: files.length }) : t("diff.loading")}</span>
-        <span className="grow" />
-        {data && (
-          <span className="font-mono tabular">
-            <span className="text-working">+{total.add}</span> <span className="text-error">−{total.del}</span>
-          </span>
-        )}
+      <RowResizer height={sectionHeight} onChange={setGitHeight} />
+      <div className="flex min-h-0 grow flex-col overflow-y-auto">
+        <div className="flex h-10 shrink-0 items-center gap-2 px-4 text-xs">
+          <span className="font-medium text-muted-foreground">{data ? t("diff.changedFilesCount", { count: files.length }) : t("diff.loading")}</span>
+          <span className="grow" />
+          {data && (
+            <span className="font-mono tabular">
+              <span className="text-working">+{total.add}</span> <span className="text-error">−{total.del}</span>
+            </span>
+          )}
+        </div>
+        <FileList
+          files={files}
+          sel={narrow ? -1 : sel}
+          onPick={(i) => {
+            setSel(i);
+            if (narrow) setReading(true);
+          }}
+        />
+        {narrow && error && <p className="p-4 text-xs whitespace-pre-wrap text-error">{t("diff.loadFailed", { error })}</p>}
+        {narrow && empty}
       </div>
-      <FileList
-        files={files}
-        sel={narrow ? -1 : sel}
-        onPick={(i) => {
-          setSel(i);
-          if (narrow) setReading(true);
-        }}
-      />
-      {narrow && error && <p className="p-4 text-xs whitespace-pre-wrap text-error">{t("diff.loadFailed", { error })}</p>}
-      {narrow && empty}
-    </>
+    </div>
   );
 
   return (
@@ -185,13 +287,12 @@ export function GitPane({ index, id }: { index: number; id: string }) {
         reading && current ? (
           <FileDiff file={current} mode="unified" onBack={() => setReading(false)} />
         ) : (
-          <div className="flex min-h-0 grow flex-col overflow-y-auto">{list}</div>
+          list
         )
       ) : (
         <div className="flex min-h-0 grow">
-          {/* One scroll for the Git section and the file list */}
           <div className="relative flex shrink-0" style={{ width: Math.min(columnWidth, Math.round(width * 0.6)) }}>
-            <aside aria-label={t("diff.changedFilesLabel")} className="flex min-w-0 grow flex-col overflow-y-auto border-r">
+            <aside aria-label={t("diff.changedFilesLabel")} className="flex min-w-0 grow flex-col border-r">
               {list}
             </aside>
             <ColumnResizer width={columnWidth} onChange={setColumnWidth} />

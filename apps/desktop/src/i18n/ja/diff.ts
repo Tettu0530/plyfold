@@ -9,6 +9,7 @@ export const diff = {
   sessionGone: "このセッションはもうありません",
   resizeColumn: "左の列の幅",
   resizeColumnHint: "ドラッグで幅を変える。ダブルクリックで元の幅に戻す",
+  resizeSection: "Git と変更したファイルの境目",
   changedFilesLabel: "変更したファイル",
   changedFilesCount: "変更 {count} ファイル",
   loading: "読み込み中",

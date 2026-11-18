@@ -11,6 +11,7 @@ export const diff: Record<keyof typeof source, string> = {
   sessionGone: "This session no longer exists",
   resizeColumn: "Width of the left column",
   resizeColumnHint: "Drag to resize. Double-click for the default width",
+  resizeSection: "Divider between Git and the changed files",
   changedFilesLabel: "Changed files",
   changedFilesCount: "{count, plural, one {# file changed} other {# files changed}}",
   loading: "Loading",
