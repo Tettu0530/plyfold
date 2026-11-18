@@ -429,6 +429,8 @@ impl Engine {
                 return Err(e);
             }
         };
+        // SessionCreated went out before the workspace was set: send the record again with its repository and worktree
+        inner.emit(EngineEvent::WorkspaceChanged { session: inner.store.get_session(&rec.id)? });
         if req.worktree
             && let Some(repo) = inner.store.get_session(&rec.id)?.repo_path
         {
@@ -761,6 +763,7 @@ impl Engine {
             inner.worktrees.create(repo, &rec.id, None).map_err(CoreError::from)
         } else {
             inner.store.set_workspace(&rec.id, Some(&repo.display().to_string()), None, None, None)?;
+            inner.emit(EngineEvent::WorkspaceChanged { session: inner.store.get_session(&rec.id)? });
             self.launch(&rec.id, profile, repo, Resume::Load { session_id: acp_session_id.to_string(), adopted: true }).await?;
             return Ok(inner.store.get_session(&rec.id)?);
         };
@@ -781,6 +784,7 @@ impl Engine {
                 return Err(e);
             }
         };
+        inner.emit(EngineEvent::WorkspaceChanged { session: inner.store.get_session(&rec.id)? });
         self.launch(&rec.id, profile, &cwd, Resume::Load { session_id: acp_session_id.to_string(), adopted: true }).await?;
         Ok(inner.store.get_session(&rec.id)?)
     }

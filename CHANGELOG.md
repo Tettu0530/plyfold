@@ -10,6 +10,11 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ### Fixed
 
+- The context meter no longer drops to 0% and back while an answer streams: an agent that reports 0 at the start of each message keeps the last real figure
+- A new worktree session (and a conversation opened from the CLI) no longer shows under "No repository" in the sidebar until the next start: the screen kept the record it was first told about, made before the repository and worktree were set
+
+### Fixed
+
 - On macOS in full screen, where the window buttons are hidden, the sidebar button moves to the left edge of the header instead of keeping their space
 - On macOS in full screen, Esc closes what it closes (menus, the find bar, previews) without also leaving full screen; ⌃⌘F or the window button leaves it
 

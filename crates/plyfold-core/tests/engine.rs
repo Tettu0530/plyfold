@@ -95,6 +95,11 @@ async fn worktree_session_with_permission_and_diff() {
 
     let s = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: repo.clone(), worktree: true }).await.unwrap();
     assert_eq!(s.status, Status::Idle);
+    // The UI is told the repository and worktree (SessionCreated went out before they were set)
+    let told = wait_for(&mut rx, |e| matches!(e, EngineEvent::WorkspaceChanged { session } if session.id == s.id)).await;
+    let EngineEvent::WorkspaceChanged { session } = told else { unreachable!() };
+    assert_eq!(session.worktree_path, s.worktree_path);
+    assert!(session.repo_path.is_some());
     let wt = PathBuf::from(s.worktree_path.clone().unwrap());
     assert!(wt.exists() && wt != repo);
 
