@@ -4,6 +4,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-18
+
+Agents from the ACP Registry, a one-line install, and builds for Intel Macs and Linux (preview), for macOS, Windows 10/11 (x64) and Linux (x64).
+
 ### Agents
 
 - Agents from the ACP Registry: Profiles → Add agents lists the agents that speak ACP; the ones started through npx or uvx (Qwen Code, Kimi Code, GitHub Copilot, Cline, Auggie and more) can be added, updated to the registry's version and removed. They run with their default profile, with the name and icon they come with. Agents shipped only as binaries are listed but cannot be added yet
@@ -24,6 +28,8 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ### Platforms
 
+- One-line install and update: `install.sh` for macOS and Linux, `install.ps1` for Windows. They fetch the newest release, check its checksum and install it without the warnings an unsigned download gets
+- The macOS app bundle is signed ad hoc as a whole, so a downloaded copy is no longer reported as damaged; macOS offers Open Anyway instead
 - Releases are built and published by GitHub Actions when a version tag is pushed: a universal `.dmg` for Apple silicon and Intel Macs, the Windows `.exe` and `.msi`, and the Linux AppImage and `.deb`, with checksums and install steps in the notes (see `docs/releasing.md`)
 - Linux (preview): AppImage and `.deb` packages, API keys in the Secret Service (GNOME Keyring, KWallet), the distribution's name in Settings → Info, and WebKitGTK's DMA-BUF renderer turned off by default (it draws a blank window on some GPUs)
 
@@ -100,5 +106,6 @@ The first release, for macOS (Apple Silicon) and Windows 10/11 (x64; new, please
 - Settings for display size, reduced motion, notifications, defaults for new sessions and more
 - Spring-based motion modelled on SwiftUI, with a fade-only mode for Reduce motion
 
+[0.3.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.1.0

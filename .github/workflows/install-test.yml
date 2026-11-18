@@ -1,0 +1,64 @@
+name: Install test
+
+# Runs install.sh and install.ps1 on fresh runners against the newest release, after each release is published
+# (and by hand from the Actions tab), and checks that Plyfold ends up installed.
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: Install (${{ matrix.name }})
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: macOS, os: macos-latest }
+          - { name: Linux deb, os: ubuntu-24.04, format: deb }
+          - { name: Linux AppImage, os: ubuntu-24.04, format: appimage }
+          - { name: Windows, os: windows-latest }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Install (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          sh install.sh
+          app=/Applications/Plyfold.app
+          codesign --verify --deep --strict "$app"
+          if xattr -p com.apple.quarantine "$app" 2>/dev/null; then echo "::error::the app is quarantined"; exit 1; fi
+          lipo -archs "$app/Contents/MacOS/plyfold-desktop"
+          defaults read "$app/Contents/Info.plist" CFBundleShortVersionString
+
+      - name: Install (Linux)
+        if: runner.os == 'Linux'
+        env:
+          PLYFOLD_LINUX_FORMAT: ${{ matrix.format }}
+        run: |
+          sh install.sh
+          if [ "$PLYFOLD_LINUX_FORMAT" = deb ]; then
+            command -v plyfold-desktop
+          else
+            test -x "$HOME/.local/share/plyfold/Plyfold.AppImage"
+            test -x "$HOME/.local/bin/plyfold"
+            test -f "$HOME/.local/share/applications/plyfold.desktop"
+          fi
+
+      - name: Install (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./install.ps1
+          $exe = Get-ChildItem $env:LOCALAPPDATA -Filter plyfold-desktop.exe -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw 'plyfold-desktop.exe was not installed' }
+          $exe.FullName
+          (Get-Item $exe.FullName).VersionInfo.ProductVersion
