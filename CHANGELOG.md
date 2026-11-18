@@ -4,6 +4,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-18
+
+Updates from inside the app, a trash for sessions, per-repository worktree setup and permission rules, finding messages, a touched-files pane, and security fixes from a dynamic review.
+
 ### Fixed
 
 - Opening a conversation the CLI already has no longer fails in a folder that is not a git repository: it opens in the folder itself, as it also does when the new session screen is set to work in place
@@ -39,6 +43,7 @@ Fixes from a dynamic review that reproduced each finding of a static review:
 
 ### Conversation
 
+- ⌘K also finds messages: with two or more characters it lists the user messages, answers and commands that match, and opens the session on the match. ⌘F (Ctrl+F on Windows and Linux) finds in the open conversation, with a count, previous and next, and the match highlighted (#28, by tikipiya)
 - Images in an answer that are files on this machine (a path relative to the session's folder, an absolute path or a `file:` URL) or embedded in it are shown as square thumbnails; images one after another line up as a gallery. Images on the web are still not fetched and stay links
 - The image preview steps through the other images of the same answer or message (← and →, or the buttons at the sides), with a counter
 - Numbers of a numbered list in an answer sit inside the text column instead of sticking out past its left edge
@@ -145,6 +150,7 @@ The first release, for macOS (Apple Silicon) and Windows 10/11 (x64; new, please
 - Settings for display size, reduced motion, notifications, defaults for new sessions and more
 - Spring-based motion modelled on SwiftUI, with a fade-only mode for Reduce motion
 
+[0.4.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.1.0

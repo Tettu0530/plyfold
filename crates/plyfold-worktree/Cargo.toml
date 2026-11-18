@@ -1,13 +1,13 @@
 [package]
 name = "plyfold-worktree"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 license.workspace = true
 repository.workspace = true
 publish = false
 
 [dependencies]
-plyfold-i18n = { version = "0.3.0", path = "../plyfold-i18n" }
+plyfold-i18n = { version = "0.4.0", path = "../plyfold-i18n" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 thiserror = "2.0.21"
