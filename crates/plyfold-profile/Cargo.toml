@@ -17,3 +17,7 @@ toml_edit = { version = "0.25.19", features = ["serde"] }
 
 [target."cfg(windows)".dependencies]
 keyring = { version = "3", features = ["windows-native"] }
+
+# The Secret Service (GNOME Keyring, KWallet) over D-Bus; the encryption runs in Rust, so only libdbus is needed
+[target."cfg(target_os = \"linux\")".dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }

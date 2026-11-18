@@ -1,9 +1,18 @@
-# cargo-deny (CI: Dependencies job). Plyfold ships for macOS only, so only those targets are checked
+# cargo-deny (CI: Dependencies job). The targets Plyfold ships for: macOS, Windows and Linux
 [graph]
-targets = ["aarch64-apple-darwin", "x86_64-apple-darwin"]
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
 
 [advisories]
 version = 2
+# Unmaintained (not vulnerable) crates that only Linux builds pull in, through Tauri's GTK stack and the zbus used by
+# opener and the notification plugin. None has a release to move to from here; revisit when Tauri moves to GTK 4 /
+# zbus 6
+ignore = [
+  { id = "RUSTSEC-2024-0370", reason = "proc-macro-error, a build-time macro of glib 0.18 (Tauri's GTK 3 stack)" },
+  { id = "RUSTSEC-2026-0370", reason = "zvariant, merged into zbus 6; zbus 5 comes from opener and tauri-plugin-notification" },
+  { id = "RUSTSEC-2026-0371", reason = "zbus_names, merged into zbus 6; as above" },
+  { id = "RUSTSEC-2026-0372", reason = "zvariant_derive, merged into zbus 6; as above" },
+]
 
 [licenses]
 version = 2
@@ -13,6 +22,7 @@ allow = [
   "MIT",
   "MIT-0",
   "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
   "BSD-3-Clause",
   "Zlib",
   "0BSD",
