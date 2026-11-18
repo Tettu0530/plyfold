@@ -7,6 +7,27 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 ### Sessions
 
 - Open a conversation the CLI already has, from the new-session screen, in its own worktree. Gemini CLI has no conversation list
+- Side chat (⌘J, or the button in the pane header): ask about a session without adding to its conversation, even while it works. It is a read-only fork in the same workspace; edits and commands are declined, answers can be added to the main input, and closing it clears it. Gemini CLI cannot fork
+
+### Git
+
+- Git and the changes are one pane, opened next to the session from its header (⌘⇧D): the branch, its base and upstream, fetch, push and pull, the pull request and the commits sit above the changed files, with the diff beside them (in a narrow pane, a file's diff takes the list's place). The column is resizable. The separate Git menu and the full-window changes screen are gone
+- A worktree removed outside Plyfold no longer breaks the Git pane: the session continues in the original repository
+- A session working in the repository itself also shows its uncommitted changes (against HEAD). Commit, merge and discard stay with worktree sessions
+
+### Composer
+
+- Slash commands: a whole command at the start of the message turns blue, its input hint shows faintly after it, and values its argument can take (from the hint's `[a|b]` choices, or the session's models for `/model`) are offered as you type; ⇥ takes one
+- Queued messages can be edited in place (the pencil, or double-click). While one is being edited it is not sent, nor anything after it; saving sends it if the agent is idle. The side chat queues messages typed mid-turn too
+
+### App
+
+- The working indicator is a twelve-bar spinner
+
+### Fixed
+
+- A turn cut off by quitting the app (or the agent exiting) no longer looks like it is still generating after the next start; it ends as interrupted
+- After a pull request is merged on the host and its branch deleted there, the branch's commits are no longer shown as unpushed
 
 ## [0.1.0] - 2026-11-17
 

@@ -16,6 +16,8 @@ export const composer: Record<keyof typeof source, string> = {
   sendFirst: "发送第一条",
   attachmentsCount: "{count} 个附件",
   removeFromQueue: "移出队列",
+  queueHeldWhileEditing: "编辑完成前不会发送",
+  editQueued: "编辑",
   message: "消息",
   stopEsc: "停止 (esc)",
   addToQueue: "加入队列",
@@ -25,5 +27,6 @@ export const composer: Record<keyof typeof source, string> = {
   mentionEmpty: "没有匹配的文件",
   mentionLoading: "正在搜索文件",
   slashLabel: "命令",
+  slashArgLabel: "{command} 的参数",
   slashEmpty: "没有匹配的命令",
 };

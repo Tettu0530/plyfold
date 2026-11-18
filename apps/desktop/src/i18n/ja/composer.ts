@@ -14,6 +14,8 @@ export const composer = {
   sendFirst: "先頭を送る",
   attachmentsCount: "添えたもの {count}",
   removeFromQueue: "キューから外す",
+  queueHeldWhileEditing: "編集が終わるまで送りません",
+  editQueued: "編集",
   message: "指示",
   stopEsc: "停止（esc）",
   addToQueue: "キューに積む",
@@ -23,5 +25,6 @@ export const composer = {
   mentionEmpty: "一致するファイルがありません",
   mentionLoading: "ファイルを探しています",
   slashLabel: "コマンド",
+  slashArgLabel: "{command} の引数",
   slashEmpty: "一致するコマンドはありません",
 } satisfies Record<string, string>;

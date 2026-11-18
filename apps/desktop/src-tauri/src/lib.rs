@@ -304,6 +304,16 @@ async fn fork_session(state: State<'_, AppState>, id: String, new_worktree: bool
 }
 
 #[tauri::command]
+async fn open_side_chat(state: State<'_, AppState>, id: String) -> CmdResult<SessionRecord> {
+    state.engine.open_side_chat(&id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn close_side_chat(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    state.engine.close_side_chat(&id).await.map_err(err)
+}
+
+#[tauri::command]
 async fn list_cli_sessions(state: State<'_, AppState>, profile: String, repo: String) -> CmdResult<Vec<CliSession>> {
     let repo = PathBuf::from(expand_home(&repo));
     state.engine.list_cli_sessions(&profile, &repo).await.map_err(err)
@@ -706,6 +716,8 @@ pub fn run() {
             start_session,
             reopen_session,
             fork_session,
+            open_side_chat,
+            close_side_chat,
             list_cli_sessions,
             adopt_cli_session,
             close_session,

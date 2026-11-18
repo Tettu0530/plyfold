@@ -15,6 +15,8 @@ export interface SessionRecord {
   status: SessionStatus;
   created_at: number;
   updated_at: number;
+  /** A side chat: the session it was forked from (read-only, not listed, deleted when closed) */
+  side_of?: string | null;
 }
 
 export type Category = "model" | "thought_level" | "mode" | "other";
@@ -102,7 +104,9 @@ export type EngineEvent =
   | { type: "turn_ended"; session_id: string; stop_reason: string | null; error: string | null }
   | { type: "notice"; session_id: string; message: string }
   | { type: "info"; session_id: string; info: SessionInfo }
-  | { type: "renamed"; session_id: string; title: string };
+  | { type: "renamed"; session_id: string; title: string }
+  /** Where the session works changed (its worktree folder was removed, so it continues in the repository) */
+  | { type: "workspace_changed"; session: SessionRecord };
 
 /** A conversation the CLI already has, which Plyfold has not recorded */
 export interface CliSession {
@@ -199,6 +203,8 @@ export interface GitInfo {
   ahead_base: number;
   behind_base: number;
   upstream: string | null;
+  /** The upstream it was pushed to, since deleted on the remote (typically after its PR was merged) */
+  upstream_gone: string | null;
   ahead: number;
   behind: number;
   changed: number;

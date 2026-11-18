@@ -6,11 +6,11 @@ import { useT, contentLang } from "@/i18n";
 import { money, seconds, tokens } from "@/lib/format";
 import type { SessionInfo, TurnStats } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import type { ToolCall, TranscriptItem } from "@/state/transcript";
+import { INTERRUPTED, type ToolCall, type TranscriptItem } from "@/state/transcript";
 import { resendable, type Attached } from "@/lib/attachments";
 import { SentAttachments } from "./Attachments";
 import { Markdown } from "./Markdown";
-import { ActionRow, CopyButton, EditBox, UserActions, Working, workingLabel } from "./MessageActions";
+import { ActionRow, CopyButton, EditBox, QuoteButton, UserActions, Working, workingLabel } from "./MessageActions";
 import { DiffBlock, ToolCalls } from "./ToolCall";
 import { snappy } from "../motion";
 import { useStore } from "@/state/store";
@@ -76,6 +76,7 @@ export function TurnStatsRow({
         </Stat>
       )}
       {stopReason === "cancelled" && <span>{t("transcript.stopped")}</span>}
+      {stopReason === INTERRUPTED && <span>{t("transcript.interrupted")}</span>}
       {endedAt != null && (
         <time dateTime={new Date(endedAt).toISOString()} title={t("transcript.endedAt")} className="ml-auto">
           {clock(endedAt)}
@@ -115,6 +116,8 @@ export function Transcript({
   streaming,
   busy = streaming,
   onResend,
+  onQuote,
+  compact = false,
 }: {
   items: TranscriptItem[];
   info: SessionInfo | null;
@@ -123,6 +126,10 @@ export function Transcript({
   busy?: boolean;
   /** Send the user's own message (possibly edited) as a new turn */
   onResend?: (text: string, attachments: Attached[]) => void;
+  /** Put an answer into another input; shown as a button under each answer, with this label */
+  onQuote?: { label: string; run: (text: string) => void };
+  /** A narrow column (the side chat): no centred reading width, tighter padding */
+  compact?: boolean;
 }) {
   const tr = useT();
   // The user message being edited (index in blocks)
@@ -170,7 +177,11 @@ export function Transcript({
     <div className="relative flex min-h-0 grow flex-col">
       {/* In a wide pane the conversation keeps a readable width (52rem) in the middle; the padding grows instead, so the
         scrollbar stays at the pane's edge */}
-      <div ref={scroller} onScroll={onScroll} className="flex min-h-0 grow flex-col gap-3 overflow-y-auto px-[max(1.25rem,calc((100%_-_52rem)/2))] pt-4 pb-2">
+      <div
+        ref={scroller}
+        onScroll={onScroll}
+        className={cn("flex min-h-0 grow flex-col gap-3 overflow-y-auto pt-4 pb-2", compact ? "px-3" : "px-[max(1.25rem,calc((100%_-_52rem)/2))]")}
+      >
         {items.length === 0 && <p className="m-auto text-xs text-muted-foreground">{tr("transcript.empty")}</p>}
         {blocks.map((b, i) => {
           switch (b.kind) {
@@ -213,6 +224,7 @@ export function Transcript({
                   {!(streaming && i === blocks.length - 1) && (
                     <ActionRow align="start">
                       <CopyButton text={b.text} />
+                      {onQuote && <QuoteButton text={b.text} label={onQuote.label} onQuote={onQuote.run} />}
                     </ActionRow>
                   )}
                 </div>

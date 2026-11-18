@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { SessionInfo, SessionRecord } from "@/lib/types";
 import { preset } from "./layout";
-import { defaultProfile, reduceEvent, restoreLayout, type SessionView } from "./store";
+import { defaultProfile, reduceEvent, restoreLayout, useStore, type SessionView } from "./store";
 
 const record: SessionRecord = {
   id: "s1",
@@ -110,5 +110,25 @@ describe("defaultProfile", () => {
     // Profiles that no longer exist are skipped
     expect(defaultProfile(profiles, "gone", "gone-too")).toBe("work");
     expect(defaultProfile([], "", null)).toBeNull();
+  });
+});
+
+describe("queue", () => {
+  it("holds back a message being edited, and sends it once saved", () => {
+    const view = reduceEvent({}, { type: "session_created", session: { ...record, status: "idle" } }).s1;
+    useStore.setState({ sessions: { s1: view }, queues: { s1: [] } });
+    const st = useStore.getState();
+    st.enqueue("s1", "first", []);
+    st.enqueue("s1", "second", []);
+    const [a] = useStore.getState().queues.s1;
+    st.editQueued("s1", a.key, true);
+    // Idle, but the first message is being edited: nothing goes, in order
+    useStore.getState().sendQueued("s1");
+    expect(useStore.getState().queues.s1.map((q) => q.text)).toEqual(["first", "second"]);
+    // Saving sends the edited text first
+    useStore.getState().saveQueued("s1", a.key, "first, edited");
+    expect(useStore.getState().queues.s1.map((q) => q.text)).toEqual(["second"]);
+    const items = useStore.getState().sessions.s1.transcript.items;
+    expect(items.some((i) => i.kind === "user" && i.text === "first, edited")).toBe(true);
   });
 });

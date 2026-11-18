@@ -9,6 +9,7 @@ export const transcript: Record<keyof typeof source, string> = {
   turnCost: "本轮费用",
   elapsed: "耗时",
   stopped: "已停止",
+  interrupted: "已中断",
   endedAt: "完成时间",
   thought: "思考内容",
   empty: "还没有消息",

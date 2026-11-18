@@ -145,6 +145,11 @@ pub enum EngineEvent {
         session_id: String,
         title: String,
     },
+    /// Where the session works changed outside the usual actions (its worktree folder was removed, so it continues in
+    /// the original repository)
+    WorkspaceChanged {
+        session: SessionRecord,
+    },
 }
 
 pub struct EngineOptions {
@@ -205,6 +210,8 @@ struct Live {
     /// SessionInfo, but are not sent to the UI: it already has the conversation from the event log, and showing the
     /// resend would duplicate it and push the message being sent above the earlier output
     replaying: AtomicBool,
+    /// A side chat: every permission request (edits, commands) is declined without asking
+    read_only: bool,
 }
 
 impl Live {
@@ -281,6 +288,14 @@ impl Engine {
         let store = Store::open(&opts.state_dir.join("plyfold.db"))?;
         // Sessions that were running in the previous launch no longer have a process, so mark them Closed
         for s in store.list_sessions()? {
+            // Side chats do not outlive the app
+            if s.side_of.is_some() {
+                if let Some(acp) = &s.acp_session_id {
+                    store.dismiss_conversation(acp)?;
+                }
+                store.delete_session(&s.id)?;
+                continue;
+            }
             if !matches!(s.status, SessionStatus::Closed | SessionStatus::Error) {
                 store.set_status(&s.id, SessionStatus::Closed)?;
             }
@@ -362,7 +377,7 @@ impl Engine {
         if self.is_running(id) {
             return Err(CoreError::AlreadyRunning(id.into()));
         }
-        let rec = self.inner.store.get_session(id)?;
+        let rec = self.reconcile_workspace(id)?;
         let cwd = rec.worktree_path.clone().or(rec.repo_path.clone()).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
         let resume = match rec.acp_session_id {
             Some(session_id) => Resume::Load { session_id, adopted: false },
@@ -440,6 +455,59 @@ impl Engine {
         Ok(inner.store.get_session(&rec.id)?)
     }
 
+    /// Open a side chat on a session: a read-only fork in the same workspace, for questions that should not enter the
+    /// main conversation. Allowed while the main session is working (the fork starts from what the agent has saved so
+    /// far). Its permission requests are declined, and a read-only mode is chosen when the agent has one
+    pub async fn open_side_chat(&self, id: &str) -> Result<SessionRecord, CoreError> {
+        let inner = &self.inner;
+        let src = inner.store.get_session(id)?;
+        if src.side_of.is_some() {
+            return Err(CoreError::NoConversation(id.into()));
+        }
+        let acp = src.acp_session_id.clone().ok_or_else(|| CoreError::NoConversation(id.into()))?;
+        if src.status == SessionStatus::Starting {
+            return Err(CoreError::Busy(id.into()));
+        }
+        let repo = src.repo_path.clone().ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
+        let cwd = src.worktree_path.clone().unwrap_or_else(|| repo.clone());
+        let title = plyfold_i18n::tr!("サイドチャット", "Side chat", "侧边对话");
+        let rec = inner.store.create_session(NewSession {
+            title,
+            profile: src.profile.clone(),
+            agent: src.agent.clone(),
+            repo_path: Some(repo),
+            worktree_path: src.worktree_path.clone(),
+            branch: src.branch.clone(),
+            base_ref: src.base_ref.clone(),
+            side_of: Some(id.to_string()),
+        })?;
+        inner.emit(EngineEvent::SessionCreated { session: rec.clone() });
+        if let Err(e) = self.launch(&rec.id, &src.profile, Path::new(&cwd), Resume::Fork(acp)).await {
+            let _ = self.close_side_chat(&rec.id).await;
+            return Err(e);
+        }
+        // Ask the agent itself not to edit too, where it has such a mode (Claude Code: plan, Codex: read-only, OpenCode: plan)
+        if let Some(mode) = self.session_info(&rec.id).and_then(|info| read_only_mode(&info)) {
+            let _ = self.set_by_category(&rec.id, Category::Mode, &mode).await;
+        }
+        Ok(inner.store.get_session(&rec.id)?)
+    }
+
+    /// Close a side chat: stop its agent and delete it. Its agent-side conversation is remembered so it is not offered
+    /// as a CLI conversation to open
+    pub async fn close_side_chat(&self, id: &str) -> Result<(), CoreError> {
+        let rec = self.inner.store.get_session(id)?;
+        if rec.side_of.is_none() {
+            return Err(CoreError::NoConversation(id.into()));
+        }
+        self.close_session(id).await?;
+        if let Some(acp) = &rec.acp_session_id {
+            self.inner.store.dismiss_conversation(acp)?;
+        }
+        self.inner.store.delete_session(id)?;
+        Ok(())
+    }
+
     /// Conversations this CLI already has in `repo`, excluding ones Plyfold already recorded.
     /// The agent process used for the list is stopped before this returns.
     pub async fn list_cli_sessions(&self, profile: &str, repo: &Path) -> Result<Vec<CliSession>, CoreError> {
@@ -469,7 +537,8 @@ impl Engine {
             if !client.supports_list() {
                 return Err(CoreError::ListUnsupported);
             }
-            let known: HashSet<String> = inner.store.list_sessions()?.into_iter().filter_map(|s| s.acp_session_id).collect();
+            let mut known: HashSet<String> = inner.store.list_sessions()?.into_iter().filter_map(|s| s.acp_session_id).collect();
+            known.extend(inner.store.dismissed_conversations()?);
             let mut sessions = Vec::new();
             for info in client.list_sessions(&dir).await? {
                 let acp_session_id = info.session_id.0.to_string();
@@ -561,6 +630,7 @@ impl Engine {
                 clock: Mutex::new(None),
                 last_live_emit: Mutex::new(Instant::now()),
                 replaying: AtomicBool::new(false),
+                read_only: inner.store.get_session(id).map(|r| r.side_of.is_some()).unwrap_or(false),
             });
             // Start receiving first so the history resent by session/load is captured
             tokio::spawn(pump(inner.clone(), id.to_string(), live.clone(), rx));
@@ -828,6 +898,9 @@ impl Engine {
     /// unless another session still uses that worktree: then only the record goes, and the others are told it was kept
     pub async fn delete_session(&self, id: &str, remove_worktree: bool) -> Result<(), CoreError> {
         let rec = self.inner.store.get_session(id)?;
+        for side in self.inner.store.list_sessions()?.into_iter().filter(|s| s.side_of.as_deref() == Some(id)) {
+            self.close_side_chat(&side.id).await?;
+        }
         self.close_session(id).await?;
         if remove_worktree && let Some(wt) = worktree_of(&rec) {
             let others = rec.worktree_path.as_deref().map(|path| sessions_sharing_worktree(&self.inner, id, path)).transpose()?.unwrap_or_default();
@@ -849,10 +922,42 @@ impl Engine {
     }
 
     /// Worktree diff (from the commit it was created at to the current working tree)
+    /// The changes since the base commit for a worktree session. A session working in the repository itself shows its
+    /// uncommitted changes (against HEAD); committing, merging and discarding stay with worktree sessions
     pub fn diff(&self, id: &str) -> Result<Diff, CoreError> {
-        let rec = self.inner.store.get_session(id)?;
-        let wt = worktree_of(&rec).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
+        let rec = self.reconcile_workspace(id)?;
+        let wt = match worktree_of(&rec) {
+            Some(wt) => wt,
+            None => {
+                let dir = PathBuf::from(rec.repo_path.as_deref().ok_or_else(|| CoreError::NoWorkspace(id.into()))?);
+                let head = plyfold_worktree::head(&dir).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
+                Worktree { repo: dir.clone(), path: dir, branch: String::new(), base: head }
+            }
+        };
         Ok(plyfold_worktree::diff(&wt)?)
+    }
+
+    /// The session's record, after checking that its worktree still exists. One removed outside Plyfold (by hand, or by
+    /// an agent running `git worktree remove`) would leave every Git action failing on a missing folder; the session
+    /// then continues in the original repository, as after a cleanup, and the UI is told
+    fn reconcile_workspace(&self, id: &str) -> Result<SessionRecord, CoreError> {
+        let rec = self.inner.store.get_session(id)?;
+        let Some(wt) = rec.worktree_path.as_deref() else { return Ok(rec) };
+        if Path::new(wt).exists() {
+            return Ok(rec);
+        }
+        self.inner.store.set_workspace(id, rec.repo_path.as_deref(), None, None, None)?;
+        self.inner.notice(
+            id,
+            plyfold_i18n::tr!(
+                "worktree {wt} が見つからないので、元のリポジトリで続けます",
+                "The worktree {wt} is gone, so this session continues in the original repository",
+                "找不到 worktree {wt}，此会话将在原仓库中继续"
+            ),
+        );
+        let rec = self.inner.store.get_session(id)?;
+        self.inner.emit(EngineEvent::WorkspaceChanged { session: rec.clone() });
+        Ok(rec)
     }
 
     fn idle_worktree(&self, id: &str) -> Result<Worktree, CoreError> {
@@ -866,7 +971,7 @@ impl Engine {
     /// The directory a session works in (its worktree, or the repository itself) and the branch to compare it with:
     /// the branch it will be merged into for a worktree, the remote's default branch otherwise
     fn git_dir(&self, id: &str) -> Result<(PathBuf, Option<String>), CoreError> {
-        let rec = self.inner.store.get_session(id)?;
+        let rec = self.reconcile_workspace(id)?;
         if let Some(wt) = worktree_of(&rec) {
             let base = plyfold_worktree::ops::status(&wt).ok().and_then(|s| s.target);
             return Ok((wt.path, base));
@@ -911,7 +1016,7 @@ impl Engine {
     }
 
     pub fn worktree_status(&self, id: &str) -> Result<plyfold_worktree::WtStatus, CoreError> {
-        let rec = self.inner.store.get_session(id)?;
+        let rec = self.reconcile_workspace(id)?;
         let wt = worktree_of(&rec).ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
         Ok(plyfold_worktree::ops::status(&wt)?)
     }
@@ -1002,15 +1107,34 @@ impl Engine {
 }
 
 /// True when a running session already uses this directory
+/// The mode in which the agent does not edit, if it has one
+fn read_only_mode(info: &SessionInfo) -> Option<String> {
+    const READ_ONLY: [&str; 3] = ["plan", "read-only", "read_only"];
+    let ids: Vec<&str> = match info.option(Category::Mode) {
+        Some(o) => o.choices.iter().map(|c| c.value.as_str()).collect(),
+        None => info.modes.iter().map(|c| c.value.as_str()).collect(),
+    };
+    READ_ONLY.iter().find(|m| ids.contains(m)).map(|m| m.to_string())
+}
+
 fn workspace_in_use(inner: &Inner, dir: &str) -> bool {
     let running: Vec<String> = inner.live.lock().unwrap().keys().cloned().collect();
-    running.into_iter().any(|other| inner.store.get_session(&other).ok().and_then(|r| r.worktree_path.or(r.repo_path)).is_some_and(|path| path == dir))
+    // Side chats are read-only, so they never count as another agent editing the directory
+    running.into_iter().any(|other| {
+        inner.store.get_session(&other).ok().filter(|r| r.side_of.is_none()).and_then(|r| r.worktree_path.or(r.repo_path)).is_some_and(|path| path == dir)
+    })
 }
 
 /// Other sessions whose worktree is this directory. A store error is returned rather than treated as "nobody",
 /// which would otherwise delete a worktree that is still in use
 fn sessions_sharing_worktree(inner: &Inner, id: &str, worktree_path: &str) -> Result<Vec<String>, CoreError> {
-    Ok(inner.store.list_sessions()?.into_iter().filter(|s| s.id != id && s.worktree_path.as_deref() == Some(worktree_path)).map(|s| s.id).collect())
+    Ok(inner
+        .store
+        .list_sessions()?
+        .into_iter()
+        .filter(|s| s.id != id && s.side_of.is_none() && s.worktree_path.as_deref() == Some(worktree_path))
+        .map(|s| s.id)
+        .collect())
 }
 
 fn worktree_of(rec: &SessionRecord) -> Option<Worktree> {
@@ -1074,6 +1198,26 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
                 if changed || live_due {
                     emit_info(inner, &id, live);
                 }
+            }
+            AgentMessage::PermissionRequest { request_id, request } if live.read_only => {
+                live.touch();
+                let v = serde_json::to_value(&*request).unwrap_or(Value::Null);
+                // Decline once rather than cancel, so the agent carries on and answers without the change
+                let reject = v["options"]
+                    .as_array()
+                    .and_then(|a| a.iter().find(|o| o["kind"].as_str().is_some_and(|k| k.starts_with("reject"))))
+                    .and_then(|o| o["optionId"].as_str())
+                    .map(str::to_string);
+                let _ = live.client.respond_permission(request_id, reject.as_deref()).await;
+                let title = v["toolCall"]["title"].as_str().unwrap_or_default().to_string();
+                inner.notice(
+                    &id,
+                    plyfold_i18n::tr!(
+                        "サイドチャットは読み取りだけなので、断りました: {title}",
+                        "Declined, because a side chat only reads: {title}",
+                        "侧边对话只能读取，因此已拒绝：{title}"
+                    ),
+                );
             }
             AgentMessage::PermissionRequest { request_id, request } => {
                 live.touch();

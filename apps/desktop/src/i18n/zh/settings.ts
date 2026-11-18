@@ -106,5 +106,6 @@ export const settings: Record<keyof typeof source, string> = {
   infoIssues: "报告问题",
   infoAgents: "智能体",
   infoAgentsDetail: "每个智能体都作为 ACP 服务器，通过下面的命令启动。可在配置文件中更改",
-  kbOpenDiff: "查看更改",
+  kbOpenDiff: "Git 与更改",
+  kbSideChat: "侧边对话",
 };

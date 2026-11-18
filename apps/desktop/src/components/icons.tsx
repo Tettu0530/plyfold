@@ -5,7 +5,6 @@ import {
   Hand,
   Hourglass,
   ListChecks,
-  LoaderCircle,
   PencilLine,
   Repeat,
   Shield,
@@ -13,7 +12,9 @@ import {
   Square,
   SquareTerminal,
   type LucideIcon,
+  type LucideProps,
 } from "lucide-react";
+import { forwardRef } from "react";
 
 import { t, useT, type MessageKey } from "@/i18n";
 import type { SessionStatus } from "@/lib/types";
@@ -49,6 +50,30 @@ export function ProviderLogo({ agent, className }: { agent: string; className?: 
   );
 }
 
+/**
+ * The working spinner: twelve short bars around a circle that fade one after another. Takes the same props as a
+ * lucide icon (size and color from className, currentColor), so it fits where those go
+ */
+export const Spinner = forwardRef<SVGSVGElement, LucideProps>(function Spinner({ className, strokeWidth: _w, ...rest }, ref) {
+  return (
+    <svg ref={ref} viewBox="0 0 24 24" fill="currentColor" className={cn("size-3.5", className)} {...rest}>
+      {Array.from({ length: 12 }, (_, i) => (
+        <rect
+          key={i}
+          x="11"
+          y="1.5"
+          width="2"
+          height="6"
+          rx="1"
+          transform={`rotate(${i * 30} 12 12)`}
+          className="spinner-bar"
+          style={{ animationDelay: `${(i - 12) * 0.1}s` }}
+        />
+      ))}
+    </svg>
+  );
+}) as unknown as LucideIcon;
+
 interface StatusMeta {
   /** Dictionary key for the display name */
   labelKey: MessageKey;
@@ -69,8 +94,8 @@ const statusMeta = (labelKey: MessageKey, rest: Omit<StatusMeta, "labelKey" | "l
 });
 
 export const STATUS: Record<SessionStatus, StatusMeta> = {
-  starting: statusMeta("status.starting", { Icon: LoaderCircle, color: "text-muted-foreground", spin: true }),
-  working: statusMeta("status.working", { Icon: LoaderCircle, color: "text-working", spin: true }),
+  starting: statusMeta("status.starting", { Icon: Spinner, color: "text-muted-foreground" }),
+  working: statusMeta("status.working", { Icon: Spinner, color: "text-working" }),
   awaiting_permission: statusMeta("status.awaitingPermission", { Icon: Shield, color: "text-permission" }),
   stalled: statusMeta("status.stalled", { Icon: Hourglass, color: "text-stalled" }),
   error: statusMeta("status.error", { Icon: CircleX, color: "text-error" }),

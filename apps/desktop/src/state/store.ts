@@ -15,6 +15,17 @@ import type { SlashCommand } from "@/lib/types";
 import type { AppSettings, Category, SessionStatus, EngineEvent, ProfileSummary, ProfileUsage, SessionInfo, SessionRecord } from "@/lib/types";
 import { addNotice, applyUpdate, beginTurn, emptyTranscript, endTurn, fromHistory, type PendingPermission, type Transcript } from "./transcript";
 
+export interface SideChat {
+  /** The fork's session id, once it has started */
+  id: string | null;
+  /** When the main conversation was copied (shown as the age of its context) */
+  openedAt: number;
+  error: string | null;
+}
+
+/** Sessions listed in the UI (side chats live only inside their pane) */
+export const isListed = (v: SessionView) => !v.record.side_of;
+
 export interface SessionView {
   record: SessionRecord;
   info: SessionInfo | null;
@@ -44,6 +55,11 @@ export const isDraft = (id: string | null | undefined): id is string => !!id && 
 /** A pane showing a web page (a dev server the agent started, or any URL) */
 export const isPreview = (id: string | null | undefined): id is string => !!id && id.startsWith("preview:");
 
+/** A pane showing a session's Git and changes ("git:<session id>") */
+export const isGit = (id: string | null | undefined): id is string => !!id && id.startsWith("git:");
+export const gitSessionOf = (id: string) => id.slice("git:".length);
+export const gitPaneOf = (sessionId: string) => `git:${sessionId}`;
+
 export interface PreviewPage {
   url: string;
   /** liquidAnchor of the button it was opened from (the pane grows out of it and shrinks back into it) */
@@ -54,9 +70,15 @@ export interface PreviewPage {
 const PANE_LOOK: Look = { background: "rgba(10, 10, 10, 1)", border: "rgba(255, 255, 255, 0.1)", shadow: "0px 0px 0px rgba(0, 0, 0, 0)", blur: 0 };
 const settingsEl = () => document.querySelector<HTMLElement>("[data-settings-view]");
 const profilesEl = () => document.querySelector<HTMLElement>("[data-profiles-view]");
-const diffEl = () => document.querySelector<HTMLElement>("[data-diff-view]");
 const paneEl = (i: number) => document.querySelector<HTMLElement>(`[data-pane-index="${i}"]`);
-const anchorOf = (id: string) => (isDraft(id) ? "new-session" : isPreview(id) ? (useStore.getState().previews[id]?.anchor ?? "new-session") : `session:${id}`);
+const anchorOf = (id: string) =>
+  isDraft(id)
+    ? "new-session"
+    : isPreview(id)
+      ? (useStore.getState().previews[id]?.anchor ?? "new-session")
+      : isGit(id)
+        ? `diff:${gitSessionOf(id)}`
+        : `session:${id}`;
 const LAST_REPO_KEY = "plyfold.lastRepo";
 function lastRepo(): string {
   try {
@@ -95,6 +117,8 @@ export interface Queued {
   key: string;
   text: string;
   attachments: Attached[];
+  /** Being edited: it is not sent (nor anything after it) until the edit is saved or cancelled */
+  editing?: boolean;
 }
 let queueSeq = 0;
 
@@ -134,7 +158,7 @@ export function restoreLayout(saved: unknown, exists: (id: string) => boolean): 
   const size = Math.max(4, ...leaves(layout).map((i) => i + 1));
   const panes = Array.from({ length: size }, (_, i) => {
     const id = o.panes![i];
-    return typeof id === "string" && !isDraft(id) && !isPreview(id) && exists(id) ? id : null;
+    return typeof id === "string" && !isDraft(id) && !isPreview(id) && !isGit(id) && exists(id) ? id : null;
   });
   const visible = leaves(layout);
   const focusedPane = typeof o.focusedPane === "number" && visible.includes(o.focusedPane) ? o.focusedPane : visible[0];
@@ -206,12 +230,10 @@ interface State {
   startDraft: (id: string, prompt: string, attachments?: Attached[]) => Promise<void>;
   closePane: (pane: number) => void;
   /** Diff screen. Kept mounted while closing so it can shrink away */
-  diff: { id: string; closing: boolean } | null;
   openDiff: (id: string) => void;
   /** Bumped after worktree operations (so panes refetch their diff counts) */
   diffVersion: number;
   bumpDiff: () => void;
-  closeDiff: () => void;
   /** Profiles screen (kept mounted during the close animation, like the diff screen) */
   profilesView: { closing: boolean } | null;
   settingsView: { closing: boolean } | null;
@@ -236,6 +258,17 @@ interface State {
   startSession: (args: { profile: string; repo: string; title: string; worktree: boolean; prompt?: string }) => Promise<void>;
   /** Fork into a new session. newWorktree is false only when the source agent is stopped */
   forkSession: (id: string, newWorktree: boolean) => Promise<void>;
+  /** Side chats, by the session they belong to. `id` is null while the fork starts */
+  sideChats: Record<string, SideChat>;
+  /** Open (or show again) the side chat of a session */
+  openSideChat: (mainId: string) => Promise<void>;
+  /** Close it: the fork is stopped and deleted */
+  closeSideChat: (mainId: string) => Promise<void>;
+  /** Start it again from the main conversation as it is now (the side conversation is dropped) */
+  refreshSideChat: (mainId: string) => Promise<void>;
+  /** Text to add to a session's input (an answer from its side chat); `n` makes each request distinct */
+  composerInsert: { scope: string; text: string; n: number } | null;
+  insertIntoComposer: (scope: string, text: string) => void;
   /** Open a conversation the CLI already has. The draft pane is replaced by the new session */
   adoptCliSession: (draftId: string, acpSessionId: string, title: string) => Promise<void>;
   sendPrompt: (id: string, text: string, attachments?: Attached[]) => Promise<void>;
@@ -243,6 +276,10 @@ interface State {
   queues: Record<string, Queued[]>;
   enqueue: (id: string, text: string, attachments: Attached[]) => void;
   unqueue: (id: string, key: string) => void;
+  /** Start or stop editing a queued message (cancelling keeps the text it had) */
+  editQueued: (id: string, key: string, editing: boolean) => void;
+  /** Save an edited queued message. If the agent is idle and it is first, it goes now */
+  saveQueued: (id: string, key: string, text: string) => void;
   /** Send the head of the queue now (no-op mid-turn) */
   sendQueued: (id: string) => void;
   cancel: (id: string) => Promise<void>;
@@ -285,6 +322,10 @@ const RUNNING: SessionStatus[] = ["idle", "working", "awaiting_permission", "sta
 
 /** Apply an engine event to the state (pure) */
 export function reduceEvent(sessions: Record<string, SessionView>, e: EngineEvent): Record<string, SessionView> {
+  if (e.type === "workspace_changed") {
+    const v = sessions[e.session.id];
+    return v ? { ...sessions, [e.session.id]: { ...v, record: e.session } } : sessions;
+  }
   if (e.type === "session_created") {
     return { ...sessions, [e.session.id]: { ...newView(e.session), historyLoaded: true } };
   }
@@ -351,7 +392,6 @@ export const useStore = create<State>((set, get) => ({
   focusedPane: 0,
   searchOpen: false,
   labOpen: false,
-  diff: null,
   diffVersion: 0,
   bumpDiff: () => set((s) => ({ diffVersion: s.diffVersion + 1 })),
   profilesView: null,
@@ -393,7 +433,10 @@ export const useStore = create<State>((set, get) => ({
       set((s) => {
         const sessions = reduceEvent(s.sessions, e);
         // Also post a macOS notification when the app isn't in focus
-        const title = s.sessions[(e as { session_id?: string }).session_id ?? ""]?.record.title ?? t("store.fallbackTitle");
+        const subject = s.sessions[(e as { session_id?: string }).session_id ?? ""];
+        // A side chat is answered in front of the user, and never asks for permission
+        if (subject?.record.side_of) return { sessions };
+        const title = subject?.record.title ?? t("store.fallbackTitle");
         const { notify_permission, notify_turn_end } = get().settings;
         if (e.type === "permission_requested" && notify_permission !== false) notify(title, t("store.notifyPermission"));
         if (e.type === "turn_ended" && notify_turn_end !== false)
@@ -492,21 +535,22 @@ export const useStore = create<State>((set, get) => ({
       if (isPreview(displaced)) delete previews[displaced!];
       set({ panes, focusedPane: target, drafts, previews });
     }
-    if (isDraft(id) || isPreview(id)) return;
+    if (isDraft(id) || isPreview(id) || isGit(id)) return;
     await loadSession(id);
   },
 
   openDiff: (id) => {
-    // The diff screen expands out of the pane's diff count (+12 −3)
-    liquidOpen("diff", { cover: true, anchor: `diff:${id}`, target: diffEl, toLook: PANE_LOOK });
-    set({ diff: { id, closing: false } });
-  },
-
-  closeDiff: () => {
-    const d = get().diff;
-    if (!d || d.closing) return;
-    set({ diff: { ...d, closing: true } });
-    liquidCloseFrom("diff", { cover: true, anchor: `diff:${d.id}`, target: diffEl, toLook: PANE_LOOK, onDone: () => set({ diff: null }) });
+    const s = get();
+    const git = gitPaneOf(id);
+    const shown = leaves(s.layout).find((i) => s.panes[i] === git);
+    if (shown !== undefined) {
+      set({ focusedPane: shown });
+      return;
+    }
+    // Next to the session's pane (or the focused one), growing out of the session's Git button
+    const beside = leaves(s.layout).find((i) => s.panes[i] === id) ?? s.focusedPane;
+    const slot = get().splitPane(beside, "right", null);
+    void get().openInPane(git, slot, `diff:${id}`);
   },
 
   openProfiles: () => {
@@ -568,6 +612,8 @@ export const useStore = create<State>((set, get) => ({
 
   closePane: (pane) => {
     const id = get().panes[pane];
+    // A side chat lives only beside its pane
+    if (id && get().sideChats[id]) void get().closeSideChat(id);
     // On close, shrink out of the pane back behind the anchor (the sidebar row). The pane itself goes away at once
     // (its neighbours grow into the space), so the blob starts from where the pane was
     const was = paneEl(pane)?.getBoundingClientRect();
@@ -587,13 +633,71 @@ export const useStore = create<State>((set, get) => ({
     });
   },
 
+  sideChats: {},
+  composerInsert: null,
+  insertIntoComposer: (scope, text) => set((s) => ({ composerInsert: { scope, text, n: (s.composerInsert?.n ?? 0) + 1 } })),
+
+  openSideChat: async (mainId) => {
+    if (get().sideChats[mainId]) return;
+    set((s) => ({ sideChats: { ...s.sideChats, [mainId]: { id: null, openedAt: Date.now(), error: null } } }));
+    try {
+      const rec = await api.openSideChat(mainId);
+      set((s) => {
+        // Closed while it was starting
+        if (!s.sideChats[mainId]) {
+          void api.closeSideChat(rec.id);
+          return s;
+        }
+        const cur = s.sessions[rec.id] ?? { ...newView(rec), historyLoaded: true };
+        return {
+          sessions: { ...s.sessions, [rec.id]: { ...cur, record: rec } },
+          sideChats: { ...s.sideChats, [mainId]: { id: rec.id, openedAt: Date.now(), error: null } },
+        };
+      });
+    } catch (e) {
+      set((s) => (s.sideChats[mainId] ? { sideChats: { ...s.sideChats, [mainId]: { ...s.sideChats[mainId], error: String(e) } } } : s));
+    }
+  },
+
+  closeSideChat: async (mainId) => {
+    const side = get().sideChats[mainId];
+    if (!side) return;
+    set((s) => {
+      const sideChats = { ...s.sideChats };
+      delete sideChats[mainId];
+      const sessions = { ...s.sessions };
+      const queues = { ...s.queues };
+      if (side.id) {
+        delete sessions[side.id];
+        delete queues[side.id];
+      }
+      return { sideChats, sessions, queues };
+    });
+    if (side.id) await api.closeSideChat(side.id).catch(() => {});
+  },
+
+  refreshSideChat: async (mainId) => {
+    await get().closeSideChat(mainId);
+    await get().openSideChat(mainId);
+  },
+
   queues: {},
   enqueue: (id, text, attachments) => set((s) => ({ queues: { ...s.queues, [id]: [...(s.queues[id] ?? []), { key: `q${++queueSeq}`, text, attachments }] } })),
   unqueue: (id, key) => set((s) => ({ queues: { ...s.queues, [id]: (s.queues[id] ?? []).filter((q) => q.key !== key) } })),
+  editQueued: (id, key, editing) => {
+    set((s) => ({ queues: { ...s.queues, [id]: (s.queues[id] ?? []).map((q) => (q.key === key ? { ...q, editing } : q)) } }));
+    // Cancelling an edit of the first message while idle: it was held back, so send it now
+    if (!editing) get().sendQueued(id);
+  },
+  saveQueued: (id, key, text) => {
+    set((s) => ({ queues: { ...s.queues, [id]: (s.queues[id] ?? []).map((q) => (q.key === key ? { ...q, text, editing: false } : q)) } }));
+    get().sendQueued(id);
+  },
   sendQueued: (id) => {
     const s = get();
     const [next, ...rest] = s.queues[id] ?? [];
-    if (!next || s.sessions[id]?.transcript.inTurn) return;
+    // Messages go in order, so one being edited holds back the ones after it too
+    if (!next || next.editing || s.sessions[id]?.transcript.inTurn) return;
     set({ queues: { ...s.queues, [id]: rest } });
     void get().sendPrompt(id, next.text, next.attachments);
   },
@@ -770,13 +874,20 @@ export const useStore = create<State>((set, get) => ({
     // Remove it from any open pane with a close animation
     const pane = leaves(get().layout).find((i) => get().panes[i] === id);
     if (pane !== undefined) get().closePane(pane);
+    const git = leaves(get().layout).find((i) => get().panes[i] === gitPaneOf(id));
+    if (git !== undefined) get().closePane(git);
     await api.deleteSession(id, removeWorktree);
     set((s) => {
       const sessions = { ...s.sessions };
       delete sessions[id];
+      // The engine deletes its side chat with it
+      const sideChats = { ...s.sideChats };
+      const side = sideChats[id]?.id;
+      if (side) delete sessions[side];
+      delete sideChats[id];
       const unread = { ...s.unread };
       delete unread[id];
-      return { sessions, unread, panes: s.panes.map((p) => (p === id ? null : p)) };
+      return { sessions, unread, sideChats, panes: s.panes.map((p) => (p === id ? null : p)) };
     });
   },
 }));
@@ -818,8 +929,8 @@ useStore.subscribe((st, prev) => {
   )
     return;
   const layout: Layout = {
-    // Drafts and previews are not restored on the next launch
-    panes: st.panes.map((p) => (isDraft(p) || isPreview(p) ? null : p)),
+    // Drafts, previews and Git panes are not restored on the next launch
+    panes: st.panes.map((p) => (isDraft(p) || isPreview(p) || isGit(p) ? null : p)),
     layout: st.layout,
     focusedPane: st.focusedPane,
     sidebarOpen: st.sidebarOpen,
@@ -857,6 +968,8 @@ function firstFreePane(panes: (string | null)[], shown: number[], focused: numbe
 }
 
 /** Session ids shown in panes right now */
+/** Whether a pane in the layout shows this id */
+export const leavesShowing = (s: { panes: (string | null)[]; layout: LayoutNode }, id: string) => leaves(s.layout).some((i) => s.panes[i] === id);
 export const visibleSessions = (s: { panes: (string | null)[]; layout: LayoutNode }) => leaves(s.layout).map((i) => s.panes[i]);
 
 // When a session's config options change, remember them per profile

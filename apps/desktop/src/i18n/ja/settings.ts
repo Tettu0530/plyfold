@@ -104,5 +104,6 @@ export const settings = {
   infoIssues: "問題を報告",
   infoAgents: "エージェント",
   infoAgentsDetail: "各エージェントは ACP のサーバーとして、次のコマンドで起動します。プロファイルの設定ファイルで変更できます",
-  kbOpenDiff: "変更を見る",
+  kbOpenDiff: "Git と変更",
+  kbSideChat: "サイドチャット",
 } satisfies Record<string, string>;

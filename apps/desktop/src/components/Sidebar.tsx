@@ -5,7 +5,7 @@ import { useMemo, useRef, useState } from "react";
 import { age, repoName } from "@/lib/format";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
-import { SIDEBAR_DEFAULT, SIDEBAR_MIN, useStore, visibleSessions } from "@/state/store";
+import { SIDEBAR_DEFAULT, SIDEBAR_MIN, useStore, visibleSessions, isListed } from "@/state/store";
 import { ProviderLogo, STATUS, StatusIcon } from "./icons";
 import { Keys } from "./Keys";
 import { SessionMenu } from "./SessionMenu";
@@ -49,7 +49,9 @@ export function Sidebar() {
   // Grouped by repository, most recently updated first
   const groups = useMemo(() => {
     const byRepo = new Map<string, typeof list>();
-    const list = Object.values(sessions).sort((a, b) => b.record.updated_at - a.record.updated_at);
+    const list = Object.values(sessions)
+      .filter(isListed)
+      .sort((a, b) => b.record.updated_at - a.record.updated_at);
     for (const v of list) {
       const repo = repoName(v.record.repo_path);
       byRepo.set(repo, [...(byRepo.get(repo) ?? []), v]);

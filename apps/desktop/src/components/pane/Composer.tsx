@@ -1,6 +1,6 @@
-import { ArrowUp, ChevronsUpDown, CornerDownRight, ListOrdered, ListPlus, Paperclip, Square, X } from "lucide-react";
+import { ArrowUp, ChevronsUpDown, CornerDownRight, ListOrdered, ListPlus, Paperclip, Pencil, Square, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
@@ -17,7 +17,7 @@ import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
 import type { Attached } from "@/lib/attachments";
 import { AttachBox, useAttachments } from "./Attachments";
 import { MentionMenu, removeMention, useMention } from "./Mention";
-import { SlashMenu, useSlash } from "./Slash";
+import { commandAt, ghostHint, SlashMenu, useSlash } from "./Slash";
 import { useAutoGrow } from "./autoGrow";
 import { isImeKey, isSendKey } from "@/lib/keys";
 import { useStore, type Queued } from "@/state/store";
@@ -116,6 +116,7 @@ export function ControlRow({
   onSet,
   empty,
   scope,
+  noPickers = false,
 }: {
   agent: string;
   info: SessionInfo | null;
@@ -124,16 +125,19 @@ export function ControlRow({
   empty?: string;
   /** Per-pane name for the separation animation's origin (session or draft id) */
   scope: string;
+  /** No model, effort or mode pickers (the side chat), only the context meter */
+  noPickers?: boolean;
 }) {
   const t = useT();
   const raised = useLiquidActiveAnchors();
   const modelMenu = useLiquidMenu(`menu:${scope}:model`, `${scope}:model`);
   const effortMenu = useLiquidMenu(`menu:${scope}:effort`, `${scope}:effort`);
   const modeMenu = useLiquidMenu(`menu:${scope}:mode`, `${scope}:mode`);
-  const model = option(info, "model");
-  const effort = option(info, "thought_level");
+  // The side chat keeps the main session's model and effort: changing them would drop the prompt cache it shares
+  const model = noPickers ? null : option(info, "model");
+  const effort = noPickers ? null : option(info, "thought_level");
   const mode = currentMode(info);
-  const modes = modeChoices(info);
+  const modes = noPickers ? [] : modeChoices(info);
   const ctxPct = info?.context_used != null && info.context_size ? Math.round((info.context_used / info.context_size) * 100) : null;
 
   return (
@@ -253,8 +257,22 @@ export function ControlRow({
 }
 
 /** Messages sent mid-turn. Sent in order from the front once the turn ends */
-function QueueList({ items, busy, onRemove, onSendNow }: { items: Queued[]; busy: boolean; onRemove: (key: string) => void; onSendNow: () => void }) {
+function QueueList({
+  scope,
+  items,
+  busy,
+  onRemove,
+  onSendNow,
+}: {
+  scope: string;
+  items: Queued[];
+  busy: boolean;
+  onRemove: (key: string) => void;
+  onSendNow: () => void;
+}) {
   const t = useT();
+  const { editQueued, saveQueued } = useStore.getState();
+  const held = items[0]?.editing;
   return (
     <AnimatePresence initial={false}>
       {items.length > 0 && (
@@ -269,9 +287,9 @@ function QueueList({ items, busy, onRemove, onSendNow }: { items: Queued[]; busy
           <div className="flex flex-col gap-0.5 pb-1">
             <div className="flex items-center gap-1.5 px-1.5 text-xs text-muted-foreground">
               <ListOrdered className="size-3.5" aria-hidden />
-              {busy ? t("composer.queueSendAfterTurn") : t("composer.queueUnsent")}
+              {held ? t("composer.queueHeldWhileEditing") : busy ? t("composer.queueSendAfterTurn") : t("composer.queueUnsent")}
               <span className="font-mono tabular">{items.length}</span>
-              {!busy && (
+              {!busy && !held && (
                 <button type="button" onClick={onSendNow} className="ml-auto flex h-6 items-center gap-1 rounded-md px-1.5 text-foreground hover:bg-accent">
                   <ArrowUp className="size-3" aria-hidden />
                   {t("composer.sendFirst")}
@@ -287,12 +305,29 @@ function QueueList({ items, busy, onRemove, onSendNow }: { items: Queued[]; busy
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, height: 0 }}
                   transition={smooth}
-                  className="flex h-7 items-center gap-2 rounded-md bg-card pr-0.5 pl-2.5"
+                  className={cn("flex min-h-7 items-center gap-2 rounded-md bg-card pr-0.5 pl-2.5", q.editing && "outline outline-ring")}
                 >
                   <CornerDownRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                  <span className="min-w-0 grow truncate">{q.text || q.attachments.map((a) => a.preview.name).join(" ")}</span>
+                  {q.editing ? (
+                    <QueueEdit initial={q.text} onSave={(text) => saveQueued(scope, q.key, text)} onCancel={() => editQueued(scope, q.key, false)} />
+                  ) : (
+                    <span className="min-w-0 grow cursor-text truncate" title={t("composer.editQueued")} onDoubleClick={() => editQueued(scope, q.key, true)}>
+                      {q.text || q.attachments.map((a) => a.preview.name).join(" ")}
+                    </span>
+                  )}
                   {q.attachments.length > 0 && (
                     <Paperclip className="size-3 shrink-0 text-muted-foreground" aria-label={t("composer.attachmentsCount", { count: q.attachments.length })} />
+                  )}
+                  {!q.editing && (
+                    <button
+                      type="button"
+                      aria-label={t("composer.editQueued")}
+                      title={t("composer.editQueued")}
+                      onClick={() => editQueued(scope, q.key, true)}
+                      className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                    >
+                      <Pencil className="size-3" aria-hidden />
+                    </button>
                   )}
                   <button
                     type="button"
@@ -312,6 +347,74 @@ function QueueList({ items, busy, onRemove, onSendNow }: { items: Queued[]; busy
   );
 }
 
+/** Editing a queued message in place: ⏎ saves (⇧⏎ for a new line), esc cancels, leaving the field saves */
+function QueueEdit({ initial, onSave, onCancel }: { initial: string; onSave: (text: string) => void; onCancel: () => void }) {
+  const t = useT();
+  const [text, setText] = useState(initial);
+  const done = useRef(false);
+  const ref = useAutoGrow(text);
+  const save = () => {
+    if (done.current) return;
+    done.current = true;
+    if (text.trim()) onSave(text.trim());
+    else onCancel();
+  };
+  return (
+    <textarea
+      ref={ref}
+      aria-label={t("composer.editQueued")}
+      value={text}
+      autoFocus
+      rows={1}
+      onChange={(e) => setText(e.target.value)}
+      onFocus={(e) => e.currentTarget.setSelectionRange(e.currentTarget.value.length, e.currentTarget.value.length)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && !e.shiftKey && !isImeKey(e)) {
+          e.preventDefault();
+          save();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          done.current = true;
+          onCancel();
+        }
+      }}
+      onBlur={save}
+      className="min-w-0 grow resize-none bg-transparent py-1 leading-relaxed outline-none"
+    />
+  );
+}
+
+/**
+ * Drawn behind the composer's textarea while its text starts with a whole slash command: the same text, laid out the
+ * same way, with the command in blue and the command's input hint after "/name ". The textarea's own text is
+ * transparent then, so typing, the caret, selection and IME input are untouched
+ */
+function CommandLayer({
+  text,
+  name,
+  ghost,
+  textRef,
+}: {
+  text: string;
+  name: string;
+  ghost: string | null;
+  textRef: React.RefObject<HTMLTextAreaElement | null>;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  // Follow the textarea's scroll when it is taller than its box
+  useEffect(() => {
+    if (ref.current && textRef.current) ref.current.scrollTop = textRef.current.scrollTop;
+  });
+  const head = name.length + 1;
+  return (
+    <div ref={ref} aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden py-1 text-sm leading-relaxed break-words whitespace-pre-wrap">
+      <span className="text-command">{text.slice(0, head)}</span>
+      {text.slice(head)}
+      {ghost && <span className="text-muted-foreground">{ghost}</span>}
+    </div>
+  );
+}
+
 export function Composer({
   scope,
   agent,
@@ -327,6 +430,7 @@ export function Composer({
   onSendQueued,
   root = null,
   commands,
+  noPickers = false,
 }: {
   scope: string;
   agent: string;
@@ -345,6 +449,8 @@ export function Composer({
   root?: string | null;
   /** Slash commands to complete after "/" */
   commands?: SlashCommand[];
+  /** Hide the model, effort and mode pickers, and ⇧⇥ (the side chat) */
+  noPickers?: boolean;
 }) {
   const t = useT();
   const [text, setText] = useState("");
@@ -354,11 +460,24 @@ export function Composer({
   const textRef = useAutoGrow(text);
   const mention = useMention({ root, text, setText, textRef, boxRef: att.boxRef, scope, onPick: (h) => att.addMention(h.abs, h.path) });
   // "/" at the start lists the agent's slash commands
-  const slash = useSlash({ commands: commands ?? info?.commands ?? [], text, setText, textRef, boxRef: att.boxRef, scope });
+  const cmds = commands ?? info?.commands ?? [];
+  const models = option(info, "model")?.choices.map((c) => c.value) ?? [];
+  const slash = useSlash({ commands: cmds, models, text, setText, textRef, boxRef: att.boxRef, scope });
+  // A whole command at the start is shown in blue, and its input hint faintly after "/name " (see CommandLayer)
+  const command = commandAt(text, cmds);
+  const ghost = ghostHint(text, slash.caret, cmds);
   useEffect(() => {
     att.syncMentions(text);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
+  // Text sent here from elsewhere (an answer from the side chat), or just a request for focus (empty text)
+  const insert = useStore((s) => (s.composerInsert?.scope === scope ? s.composerInsert : null));
+  useEffect(() => {
+    if (!insert) return;
+    if (insert.text) setText((cur) => (cur.trim() ? `${cur.trimEnd()}\n\n${insert.text}` : insert.text));
+    textRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [insert?.n]);
   const canSend = !disabled && (!!text.trim() || att.items.length > 0);
   // Mid-turn with empty text, the send button becomes stop
   const stopMode = busy && !text.trim() && att.items.length === 0 && !!onStop;
@@ -368,50 +487,61 @@ export function Composer({
     setText("");
     att.clear();
   };
-  const modes = modeChoices(info);
+  const modes = noPickers ? [] : modeChoices(info);
   const mode = currentMode(info);
 
   return (
     // Same width as the conversation above in a wide pane (its edges line up with the messages, as in a narrow one)
     <div className="flex shrink-0 flex-col gap-1 px-[max(0.75rem,calc((100%_-_53rem)/2))] pb-3">
-      <QueueList items={queue} busy={busy} onRemove={(k) => onUnqueue?.(k)} onSendNow={() => onSendQueued?.()} />
-      <ControlRow scope={scope} agent={agent} info={info} onSet={onSet} />
+      <QueueList scope={scope} items={queue} busy={busy} onRemove={(k) => onUnqueue?.(k)} onSendNow={() => onSendQueued?.()} />
+      <ControlRow scope={scope} agent={agent} info={info} onSet={onSet} noPickers={noPickers} />
       <MentionMenu m={mention} boxRef={att.boxRef} />
       <SlashMenu m={slash} boxRef={att.boxRef} />
       <AttachBox att={att}>
-        <textarea
-          ref={textRef}
-          aria-label={t("composer.message")}
-          rows={1}
-          value={text}
-          placeholder={placeholder}
-          onChange={(e) => {
-            setText(e.target.value);
-            mention.syncCaret();
-            slash.syncCaret();
-          }}
-          onSelect={() => {
-            mention.syncCaret();
-            slash.syncCaret();
-          }}
-          onKeyDown={(e) => {
-            // The @-mention list takes ↑↓, ⏎, ⇥ and esc while it is open
-            if (mention.onKeyDown(e) || slash.onKeyDown(e)) return;
-            if (isSendKey(e, sendKey)) {
-              e.preventDefault();
-              send();
-            } else if (e.key === "Escape" && busy && onStop && !isImeKey(e)) {
-              // While working, esc interrupts (same as Claude Code)
-              e.preventDefault();
-              onStop();
-            } else if (e.key === "Tab" && e.shiftKey && modes.length > 0) {
-              e.preventDefault();
-              const i = mode ? modes.indexOf(mode) : -1;
-              onSet("mode", modes[(i + 1) % modes.length]);
-            }
-          }}
-          className="min-h-0 grow resize-none bg-transparent py-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
-        />
+        <div className="relative flex min-h-0 grow">
+          {command && <CommandLayer text={text} name={command.name} ghost={ghost} textRef={textRef} />}
+          <textarea
+            ref={textRef}
+            aria-label={t("composer.message")}
+            rows={1}
+            value={text}
+            placeholder={placeholder}
+            onChange={(e) => {
+              setText(e.target.value);
+              mention.syncCaret();
+              slash.syncCaret();
+            }}
+            onSelect={() => {
+              mention.syncCaret();
+              slash.syncCaret();
+            }}
+            onKeyDown={(e) => {
+              // The @-mention list takes ↑↓, ⏎, ⇥ and esc while it is open
+              if (mention.onKeyDown(e) || slash.onKeyDown(e)) return;
+              if (isSendKey(e, sendKey)) {
+                e.preventDefault();
+                send();
+              } else if (e.key === "Escape" && busy && onStop && !isImeKey(e)) {
+                // While working, esc interrupts (same as Claude Code)
+                e.preventDefault();
+                onStop();
+              } else if (e.key === "Tab" && e.shiftKey && modes.length > 0) {
+                e.preventDefault();
+                const i = mode ? modes.indexOf(mode) : -1;
+                onSet("mode", modes[(i + 1) % modes.length]);
+              }
+            }}
+            onScroll={(e) => {
+              const layer = e.currentTarget.previousElementSibling as HTMLElement | null;
+              if (layer) layer.scrollTop = e.currentTarget.scrollTop;
+            }}
+            className={cn(
+              "relative min-h-0 w-full grow resize-none bg-transparent py-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground",
+              // The layer behind draws the text while a command is recognised; the caret and selection stay here
+              command && "text-transparent caret-foreground",
+            )}
+          />
+        </div>
         {stopMode ? (
           <button
             type="button"

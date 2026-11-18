@@ -5,7 +5,6 @@ import { Suspense, lazy, useEffect } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { GooDefs } from "./components/liquid/liquid";
 import { LiquidStage } from "./components/liquid/stage";
-import { DiffView } from "./components/DiffView";
 import { ImagePreview } from "./components/ImagePreview";
 import { ProfilesView } from "./components/ProfilesView";
 import { Notifications } from "./components/Notifications";
@@ -74,10 +73,19 @@ function useShortcuts() {
         zoomIn: () => zoom(1),
         zoomOut: () => zoom(-1),
         zoomReset: () => void s.saveSettings({ ui_scale: 100 }).catch(() => {}),
-        // The focused session's changes (worktree sessions only)
+        // The focused session's Git and changes view
         openDiff: () => {
           const id = s.panes[s.focusedPane];
-          if (id && s.sessions[id]?.record.worktree_path) s.openDiff(id);
+          if (id && s.sessions[id]?.record.repo_path) s.openDiff(id);
+        },
+        // The focused session's side chat: open it, or put the cursor in it when it is open (closing clears it, so only the × button does)
+        sideChat: () => {
+          const id = s.panes[s.focusedPane];
+          const v = id ? s.sessions[id] : undefined;
+          if (!id || !v || !v.record.acp_session_id || v.record.agent === "gemini") return;
+          const side = s.sideChats[id];
+          if (!side) void s.openSideChat(id);
+          else if (side.id) s.insertIntoComposer(side.id, "");
         },
       };
       run[action]();
@@ -152,7 +160,6 @@ export default function App() {
           {!inTauri && <p className="fixed right-3 bottom-3 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">{t("app.browserOnly")}</p>}
         </div>
         <GooDefs />
-        <DiffView />
         <ProfilesView />
         <SettingsView />
         <LiquidStage />

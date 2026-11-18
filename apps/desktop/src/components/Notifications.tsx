@@ -6,7 +6,7 @@ import { useT, type MessageKey } from "@/i18n";
 import { age } from "@/lib/format";
 import type { SessionStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useStore, visibleSessions } from "@/state/store";
+import { useStore, visibleSessions, isListed } from "@/state/store";
 import { StatusIcon } from "./icons";
 import { liquidAnchor } from "./liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidMenu } from "./liquid/stage";
@@ -59,7 +59,7 @@ export function Notifications() {
   }, []);
 
   const items: Item[] = [];
-  for (const v of Object.values(sessions)) {
+  for (const v of Object.values(sessions).filter(isListed)) {
     const u = URGENT[v.record.status];
     if (u)
       items.push({

@@ -26,8 +26,9 @@ Do not ship anything that breaks the rules below unless you can explain why.
 - **Color must carry meaning**. Color is allowed only for "state" and "diff"
   - Working = emerald `#34d399`, waiting for permission = amber `#fbbf24`, stalled = orange `#fb923c`, error = red `#f87171`, idle / stopped = neutral
   - Added = emerald tones, removed = red tones
+  - One exception: a slash command recognised in the composer is blue (`text-command`, `--command: #60a5fa`), so a line that runs a command reads differently from a message. Nothing else uses it
 - Never convey state by color alone. Always add a **per-state icon** and text
-  - Working = spinning ring (loader-circle), waiting for permission = shield, stalled = hourglass, error = circle with ×, idle = circle, stopped = square
+  - Working = the twelve-bar spinner (`Spinner` in `components/icons.tsx`: short bars around a circle that fade in turn), waiting for permission = shield, stalled = hourglass, error = circle with ×, idle = circle, stopped = square
 - Don't invent new brand colors. At most one accent color
 
 ## 2. Banned (typical AI slop)
@@ -72,7 +73,7 @@ Prioritize **moving the way Apple's UI moves** over the glass look. The implemen
   - Put `ref={liquidAnchor("name")}` on the origin and open with `liquidOpen(id, { anchor, target })`. Close with `liquidClose(id)` (the id that was opened) or `liquidCloseFrom(id, { anchor, target })` (the surface currently shown). Hide the surface's contents until `useLiquidRevealed(id)` is true
   - Motion: it emerges from **behind the origin only** (the origin is the button or row; the body is drawn at z-index 55, above the sidebar background, and only the origin is raised to 57; don't hide it behind the whole sidebar) → position uses snappy, size expands 0.12 s later with 0.42 s / bounce 0.3 (between a one-stage and a two-stage expansion) → color, border, shadow and blur fade from the origin's look to the destination's look as it expands → the corner radius jumps to the in-flight radius (16px) at the start, holds it, and changes to the destination's radius **only in the last 25%** (never fly as a sharp rectangle) → while slipping past an edge it stretches sideways with speed (up to 1.18×) → once fully expanded, show the real surface. Closing is the reverse: it shrinks back behind the origin
   - The origin pops slightly when pressed and keeps its selected color while the surface is open (so you can see where it came from)
-  - Full-window screens (settings, profiles, diff) use `cover: true`: the origin is raised only for the first 150ms of opening and after 300ms of closing (don't leave the button on top of the expanded body)
+  - Full-window screens (settings, profiles) use `cover: true`: the origin is raised only for the first 150ms of opening and after 300ms of closing (don't leave the button on top of the expanded body)
   - Contents of full-window screens don't wait for full expansion: clip them to the body's shape with `useLiquidClip(id, ref)` and fade them in while the area grows from 30% to 80% (reverse on close), so they don't pop in
   - **Liquid fusion** (built the same way as Liquid Glass; `components/liquid/sdf.ts` and the GPU renderer `liquid-gl.ts`): draw the origin and the body as one shape using a smooth minimum of their distance fields (iq's quadratic smin)
     - When the gap is at most k/2 they join (a neck); at most k, their edges lean toward each other. k is origin thickness × 1.2 + 16 (40 to 72px). The bulge is at most k/4
@@ -94,7 +95,7 @@ Prioritize **moving the way Apple's UI moves** over the glass look. The implemen
   - Swapping (replacing a pane's session with another session): the original session starts returning to its row first, and the new session bursts out 140ms later
   - Where it is used: search (⌘K), opening and closing sessions (sidebar row ↔ pane), new session (button → empty pane)
   - When creating a new surface, first consider whether it can open inside an existing screen rather than as a modal (a new session is an empty pane, not a modal)
-- Animate only meaningful changes. Decorative looping animations are banned (except the spinning ring for "working")
+- Animate only meaningful changes. Decorative looping animations are banned (except the spinner for "working")
 - Don't animate when macOS "Reduce motion" is on (Motion's `reducedMotion="user"`; in CSS, a 150ms fade)
 - Animate only transform and opacity. Don't animate width / height / top / left directly
   - **Exception: when a region containing text changes size** (e.g. splitting panes), don't use Motion's `layout` (it scales, so the contents stretch). Spring the actual width and height and re-lay out the contents every frame (like Apple's Split View). For rows that only change position when reordered, use `layout="position"`

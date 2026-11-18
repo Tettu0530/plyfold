@@ -38,6 +38,9 @@ pub struct GitInfo {
     pub behind_base: u32,
     /// Upstream branch ("origin/plyfold/…"); None until the branch is pushed
     pub upstream: Option<String>,
+    /// The upstream the branch was pushed to, when it has since been deleted on the remote (typically after its pull
+    /// request was merged). Its commits are then not counted as unpushed
+    pub upstream_gone: Option<String>,
     /// Against the upstream, as of the last fetch
     pub ahead: u32,
     pub behind: u32,
@@ -156,6 +159,14 @@ pub fn info(dir: &Path, base: Option<&str>) -> Result<GitInfo, WorktreeError> {
     git(dir, &["rev-parse", "--git-dir"]).map_err(|_| WorktreeError::NotARepo(dir.to_path_buf()))?;
     let branch = git(dir, &["symbolic-ref", "--quiet", "--short", "HEAD"]).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
     let upstream = git(dir, &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    // A configured upstream whose remote branch is gone ("[gone]"): it was pushed, then deleted on the remote
+    let upstream_gone = match (&upstream, &branch) {
+        (None, Some(b)) => git(dir, &["for-each-ref", "--format=%(upstream:short)%00%(upstream:track)", &format!("refs/heads/{b}")]).ok().and_then(|s| {
+            let (name, track) = s.trim().split_once('\0')?;
+            (track.contains("gone") && !name.is_empty()).then(|| name.to_string())
+        }),
+        _ => None,
+    };
     // A base that is the branch itself or its own upstream says nothing new
     let base = base.filter(|b| Some(*b) != branch.as_deref() && Some(*b) != upstream.as_deref() && git(dir, &["rev-parse", "--verify", "--quiet", b]).is_ok());
     let (behind_base, ahead_base) = base.map_or((0, 0), |b| counts(dir, &format!("{b}...HEAD")));
@@ -181,7 +192,8 @@ pub fn info(dir: &Path, base: Option<&str>) -> Result<GitInfo, WorktreeError> {
             let mut f = l.split('\x1f');
             let sha = f.next()?.to_string();
             Some(Commit {
-                pushed: upstream.is_some() && !unpushed.contains(&sha),
+                // With the upstream gone, which commits it had is unknown; they are not marked
+                pushed: upstream_gone.is_some() || (upstream.is_some() && !unpushed.contains(&sha)),
                 sha,
                 subject: f.next().unwrap_or_default().to_string(),
                 author: f.next().unwrap_or_default().to_string(),
@@ -204,6 +216,7 @@ pub fn info(dir: &Path, base: Option<&str>) -> Result<GitInfo, WorktreeError> {
         ahead_base,
         behind_base,
         upstream,
+        upstream_gone,
         ahead,
         behind,
         changed,
@@ -402,6 +415,14 @@ mod tests {
         assert_eq!(info(&work, Some("main")).unwrap().behind, 1);
         pull(&work).unwrap();
         assert_eq!(info(&work, Some("main")).unwrap().behind, 0);
+
+        // Merged on the host and the remote branch deleted: the upstream is gone, and nothing counts as unpushed
+        sh(&work, "git push -q origin --delete topic && git fetch -q --prune");
+        let i = info(&work, Some("main")).unwrap();
+        assert_eq!(i.upstream, None);
+        assert_eq!(i.upstream_gone.as_deref(), Some("origin/topic"));
+        assert!(i.ahead_base > 0);
+        assert!(i.commits.iter().all(|c| c.pushed));
     }
 
     #[test]
