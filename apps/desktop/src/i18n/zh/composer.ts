@@ -29,4 +29,6 @@ export const composer: Record<keyof typeof source, string> = {
   slashLabel: "命令",
   slashArgLabel: "{command} 的参数",
   slashEmpty: "没有匹配的命令",
+  modelLabel: "模型",
+  effortLabel: "推理强度",
 };

@@ -29,4 +29,6 @@ export const composer: Record<keyof typeof source, string> = {
   slashLabel: "Commands",
   slashArgLabel: "Arguments of {command}",
   slashEmpty: "No matching commands",
+  modelLabel: "Model",
+  effortLabel: "Effort",
 };

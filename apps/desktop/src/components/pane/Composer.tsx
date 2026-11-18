@@ -1,4 +1,4 @@
-import { ArrowUp, ChevronsUpDown, CornerDownRight, ListOrdered, ListPlus, Paperclip, Pencil, Square, X } from "lucide-react";
+import { ArrowUp, CornerDownRight, ListOrdered, ListPlus, Paperclip, Pencil, Square, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/u
 import { money, tokens } from "@/lib/format";
 import type { Category, ConfigOption, SessionInfo, SlashCommand } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { isDangerMode, ModeIcon, modeLabel, ProviderLogo } from "../icons";
+import { isDangerMode, ModeIcon, modeLabel } from "../icons";
 import { Keys } from "../Keys";
 import { SplitFlap } from "../SplitFlap";
 import { CHIP_TRIGGER } from "./chip";
@@ -22,6 +22,7 @@ import { useAutoGrow } from "./autoGrow";
 import { isImeKey, isSendKey } from "@/lib/keys";
 import { useStore, type Queued } from "@/state/store";
 import { useT } from "@/i18n";
+import { ModelMenu } from "./ModelMenu";
 
 function option(info: SessionInfo | null, c: Category): ConfigOption | undefined {
   return info?.config.find((o) => o.category === c);
@@ -130,8 +131,6 @@ export function ControlRow({
 }) {
   const t = useT();
   const raised = useLiquidActiveAnchors();
-  const modelMenu = useLiquidMenu(`menu:${scope}:model`, `${scope}:model`);
-  const effortMenu = useLiquidMenu(`menu:${scope}:effort`, `${scope}:effort`);
   const modeMenu = useLiquidMenu(`menu:${scope}:mode`, `${scope}:mode`);
   // The side chat keeps the main session's model and effort: changing them would drop the prompt cache it shares
   const model = noPickers ? null : option(info, "model");
@@ -142,69 +141,8 @@ export function ControlRow({
 
   return (
     <div className="flex items-center gap-0.5 text-xs">
-      {model && (
-        <Select value={model.current ?? undefined} onValueChange={(v) => onSet("model", v)} onOpenChange={modelMenu.onOpenChange}>
-          <SelectTrigger
-            ref={liquidAnchor(`${scope}:model`)}
-            aria-label="model"
-            className={cn(CHIP_TRIGGER, "relative", raised.has(`${scope}:model`) && "z-[57]")}
-          >
-            <ProviderLogo agent={agent} className="size-3 text-muted-foreground" />
-            <span>{model.choices.find((c) => c.value === model.current)?.name ?? model.current}</span>
-            <ChevronsUpDown className="size-3 text-muted-foreground" aria-hidden />
-          </SelectTrigger>
-          <SelectContent
-            ref={modelMenu.ref as React.Ref<HTMLDivElement>}
-            style={modelMenu.style}
-            position="popper"
-            side="top"
-            align="start"
-            sideOffset={6}
-            className={cn("z-[58]", modelMenu.moving && "opacity-0")}
-          >
-            {model.choices.map((c) => (
-              <SelectItem key={c.value} value={c.value}>
-                {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
-      {effort && (
-        <Select value={effort.current ?? undefined} onValueChange={(v) => onSet("thought_level", v)} onOpenChange={effortMenu.onOpenChange}>
-          <SelectTrigger
-            ref={liquidAnchor(`${scope}:effort`)}
-            aria-label="effort"
-            className={cn(CHIP_TRIGGER, "relative gap-1.5", raised.has(`${scope}:effort`) && "z-[57]")}
-          >
-            <span className="flex h-2.5 items-end gap-0.5" aria-hidden>
-              {effort.choices.map((c, i) => (
-                <span
-                  key={c.value}
-                  className={cn("block w-[3px] rounded-[1px]", i <= effort.choices.findIndex((x) => x.value === effort.current) ? "bg-foreground" : "bg-input")}
-                  style={{ height: 2 + i * 2 }}
-                />
-              ))}
-            </span>
-            <span className="text-muted-foreground">{effort.current}</span>
-          </SelectTrigger>
-          <SelectContent
-            ref={effortMenu.ref as React.Ref<HTMLDivElement>}
-            style={effortMenu.style}
-            position="popper"
-            side="top"
-            align="start"
-            sideOffset={6}
-            className={cn("z-[58]", effortMenu.moving && "opacity-0")}
-          >
-            {effort.choices.map((c) => (
-              <SelectItem key={c.value} value={c.value}>
-                {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
+      {/* Model and effort: one chip, one menu (effort in a submenu) */}
+      <ModelMenu scope={scope} agent={agent} model={model} effort={effort} onSet={onSet} />
       {/* Mode: a picker like model and effort; ⇧⇥ in the input still cycles through the modes (the label flips) */}
       {modes.length > 0 && (
         <Select value={mode ?? undefined} onValueChange={(v) => onSet("mode", v)} onOpenChange={modeMenu.onOpenChange}>
