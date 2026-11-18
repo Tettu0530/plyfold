@@ -1,4 +1,4 @@
-import { ChevronRight, CircleArrowUp, KeyRound, Plus, RotateCcw, Search, Settings, Trash2 } from "lucide-react";
+import { ChevronRight, CircleArrowUp, KeyRound, Pencil, Plus, RotateCcw, Search, Settings, Trash2 } from "lucide-react";
 import { Spinner } from "./icons";
 import { motion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
@@ -50,6 +50,8 @@ export function Sidebar() {
   const [closed, setClosed] = useState<Record<string, boolean>>({});
   // Row being renamed
   const [renaming, setRenaming] = useState<string | null>(null);
+  const repoNames = useStore((s) => s.repoNames);
+  const chatGroupName = useStore((s) => s.settings.chat_group_name);
   const renameSession = useStore((s) => s.renameSession);
 
   // Grouped by repository, most recently updated first
@@ -60,7 +62,8 @@ export function Sidebar() {
       .sort((a, b) => b.record.updated_at - a.record.updated_at);
     // Everyday conversations are a group of their own, apart from the repositories
     for (const v of list) {
-      const repo = v.record.chat ? CHAT_GROUP : repoName(v.record.repo_path);
+      // By the repository's path (two repositories with the same folder name are two groups); named below
+      const repo = v.record.chat ? CHAT_GROUP : (v.record.repo_path ?? "");
       byRepo.set(repo, [...(byRepo.get(repo) ?? []), v]);
     }
     return [...byRepo.entries()];
@@ -120,20 +123,19 @@ export function Sidebar() {
         {groups.length === 0 && <p className="px-2 py-4 text-xs text-muted-foreground">{t("sidebar.empty")}</p>}
         {groups.map(([repo, items]) => {
           const isClosed = !!closed[repo];
+          const label = repo === CHAT_GROUP ? chatGroupName || t("sidebar.conversations") : repoNames[repo] || repoName(repo || null);
           return (
             <div key={repo}>
-              <button
-                type="button"
-                aria-expanded={!isClosed}
-                onClick={() => setClosed((c) => ({ ...c, [repo]: !c[repo] }))}
-                className="mt-1 flex h-7 w-full items-center gap-1 rounded-md pr-2 pl-1 text-xs text-muted-foreground hover:text-foreground"
-              >
-                <motion.span animate={{ rotate: isClosed ? 0 : 90 }} transition={snappy} className="flex">
-                  <ChevronRight className="size-3.5" aria-hidden />
-                </motion.span>
-                <span className="grow text-left">{repo === CHAT_GROUP ? t("sidebar.conversations") : repo}</span>
-                <span className="font-mono tabular">{items.length}</span>
-              </button>
+              <GroupHeader
+                label={label}
+                count={items.length}
+                closed={isClosed}
+                path={repo === CHAT_GROUP ? null : repo}
+                onToggle={() => setClosed((c) => ({ ...c, [repo]: !c[repo] }))}
+                onRename={(name) =>
+                  repo === CHAT_GROUP ? useStore.getState().saveSettings({ chat_group_name: name.trim() }) : useStore.getState().renameRepoGroup(repo, name)
+                }
+              />
               {!isClosed &&
                 items.map(({ record: r }) => {
                   const st = STATUS[r.status];
@@ -465,5 +467,86 @@ function TrashGroup({ items }: { items: SessionRecord[] }) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * A group's header: opens and closes the group. Double-click it, or the pencil that shows on hover, to rename the
+ * group in place (Enter keeps, Esc cancels, an empty name goes back to the default)
+ */
+function GroupHeader({
+  label,
+  count,
+  closed,
+  path,
+  onToggle,
+  onRename,
+}: {
+  label: string;
+  count: number;
+  closed: boolean;
+  /** The repository's path (shown as the tooltip); null for conversations */
+  path: string | null;
+  onToggle: () => void;
+  onRename: (name: string) => Promise<void>;
+}) {
+  const t = useT();
+  const [editing, setEditing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const done = (name: string | null) => {
+    setEditing(false);
+    if (name === null || name.trim() === label) return;
+    setError(null);
+    void onRename(name).catch((e) => setError(String(e)));
+  };
+  if (editing) {
+    return (
+      <div className="mt-1 flex h-7 items-center pr-2 pl-1">
+        <input
+          aria-label={t("sidebar.groupName")}
+          defaultValue={label}
+          autoFocus
+          maxLength={80}
+          onFocus={(e) => e.currentTarget.select()}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Enter" && !isImeKey(e)) done(e.currentTarget.value);
+            else if (e.key === "Escape") done(null);
+          }}
+          onBlur={(e) => done(e.currentTarget.value)}
+          className="h-6 min-w-0 grow rounded-sm bg-background px-1 text-xs outline outline-ring"
+        />
+      </div>
+    );
+  }
+  return (
+    <>
+      <div className="group/head mt-1 flex h-7 items-center rounded-md text-xs text-muted-foreground hover:text-foreground">
+        <button
+          type="button"
+          aria-expanded={!closed}
+          title={path ?? undefined}
+          onClick={onToggle}
+          onDoubleClick={() => setEditing(true)}
+          className="flex h-7 min-w-0 grow items-center gap-1 rounded-md pl-1"
+        >
+          <motion.span animate={{ rotate: closed ? 0 : 90 }} transition={snappy} className="flex shrink-0">
+            <ChevronRight className="size-3.5" aria-hidden />
+          </motion.span>
+          <span className="min-w-0 grow truncate text-left">{label}</span>
+        </button>
+        <button
+          type="button"
+          aria-label={t("sidebar.renameGroup", { name: label })}
+          title={t("sidebar.renameGroup", { name: label })}
+          onClick={() => setEditing(true)}
+          className="flex size-6 shrink-0 items-center justify-center rounded-md opacity-0 group-hover/head:opacity-100 hover:bg-accent focus-visible:opacity-100"
+        >
+          <Pencil className="size-3" aria-hidden />
+        </button>
+        <span className="shrink-0 pr-2 pl-1 font-mono tabular">{count}</span>
+      </div>
+      {error && <p className="px-2 text-xs text-error">{error}</p>}
+    </>
   );
 }

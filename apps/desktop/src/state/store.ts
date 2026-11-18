@@ -321,6 +321,11 @@ interface State {
   /** Stop the agent (the log and worktree remain) */
   stopSession: (id: string) => Promise<void>;
   /** Delete along with the log. With removeWorktree, also delete the worktree and branch */
+  /** Names given to repositories' sidebar groups (path → name) */
+  repoNames: Record<string, string>;
+  loadRepoNames: () => Promise<void>;
+  /** Rename a repository's group ("" goes back to the folder's name) */
+  renameRepoGroup: (path: string, name: string) => Promise<void>;
   /** Delete for good (from the trash) */
   removeSession: (id: string, removeWorktree: boolean) => Promise<void>;
   /** Move to the trash: stops the agent and closes its panes; the record and worktree stay */
@@ -428,6 +433,7 @@ export const useStore = create<State>((set, get) => ({
   focusedPane: 0,
   searchOpen: false,
   find: null,
+  repoNames: {},
   labOpen: false,
   diffVersion: 0,
   bumpDiff: () => set((s) => ({ diffVersion: s.diffVersion + 1 })),
@@ -500,6 +506,7 @@ export const useStore = create<State>((set, get) => ({
     applyScale(sv.settings.ui_scale);
     applyMotion(sv.settings.reduce_motion);
     set({ profiles, sessions, settings: sv.settings, ready: true, ...(layout ? { ...layout, paneCount: leaves(layout.layout).length } : {}) });
+    void get().loadRepoNames();
     for (const id of layout?.panes ?? []) if (id) void loadSession(id);
   },
 
@@ -933,6 +940,21 @@ export const useStore = create<State>((set, get) => ({
 
   stopSession: async (id) => {
     await api.closeSession(id);
+  },
+
+  loadRepoNames: async () => {
+    const repos = await api.listRepos().catch(() => []);
+    set({ repoNames: Object.fromEntries(repos.filter((r) => r.settings.name).map((r) => [r.path, r.settings.name])) });
+  },
+
+  renameRepoGroup: async (path, name) => {
+    await api.renameRepo(path, name);
+    set((s) => {
+      const repoNames = { ...s.repoNames };
+      if (name.trim()) repoNames[path] = name.trim();
+      else delete repoNames[path];
+      return { repoNames };
+    });
   },
 
   trashSession: async (id) => {

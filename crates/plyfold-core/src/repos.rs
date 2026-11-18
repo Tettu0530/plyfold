@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RepoSettings {
+    /// The name shown for the repository's group in the sidebar ("" = the folder's name)
+    pub name: String,
     /// A shell script run in every new worktree before the agent starts (`npm install`, for example)
     pub setup: String,
     /// Files and folders copied from the repository into every new worktree, relative to its root (`.env`, for
@@ -22,7 +24,7 @@ pub struct RepoSettings {
 
 impl RepoSettings {
     pub fn is_empty(&self) -> bool {
-        self.setup.trim().is_empty() && self.copy.is_empty() && self.allow.is_empty()
+        self.name.trim().is_empty() && self.setup.trim().is_empty() && self.copy.is_empty() && self.allow.is_empty()
     }
 
     /// Whether a permission request for this tool kind is allowed without asking

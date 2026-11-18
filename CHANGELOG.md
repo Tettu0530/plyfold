@@ -9,6 +9,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 - On macOS in full screen, where the window buttons are hidden, the sidebar button moves to the left edge of the header instead of keeping their space
 - On macOS in full screen, Esc closes what it closes (menus, the find bar, previews) without also leaving full screen; ⌃⌘F or the window button leaves it
 
+### Sessions
+
+- Sidebar groups can be renamed: double-click a group's name, or the pencil that shows on hover (Enter keeps, Esc cancels, an empty name goes back to the default). A repository's name is kept with its other settings, and can also be set in Settings → Repositories; the conversations group's in the app settings. Groups now follow the repository's path, so two repositories with the same folder name are two groups (the path shows on hover)
+
 ## [0.4.0] - 2026-11-18
 
 Updates from inside the app, a trash for sessions, per-repository worktree setup and permission rules, finding messages, a touched-files pane, and security fixes from a dynamic review.
