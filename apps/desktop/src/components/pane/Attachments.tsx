@@ -97,7 +97,7 @@ export function useAttachments({ onMentionRemoved, scope }: { onMentionRemoved?:
 export type AttachmentsState = ReturnType<typeof useAttachments>;
 
 /** A clickable image thumbnail that opens the large preview (growing out of the thumbnail) */
-function Thumb({ src, name, anchor, className }: { src: string; name: string; anchor: string; className?: string }) {
+export function Thumb({ src, name, anchor, className }: { src: string; name: string; anchor: string; className?: string }) {
   const t = useT();
   return (
     <button

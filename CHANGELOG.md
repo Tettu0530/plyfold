@@ -4,6 +4,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Conversation
+
+- Images in an answer that are files on this machine (a path relative to the session's folder, an absolute path or a `file:` URL) or embedded in it are shown as thumbnails that open large. Images on the web are still not fetched and stay links
+
 ## [0.3.0] - 2026-11-18
 
 Agents from the ACP Registry, a one-line install, and builds for Intel Macs and Linux (preview), for macOS, Windows 10/11 (x64) and Linux (x64).

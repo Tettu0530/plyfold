@@ -146,6 +146,7 @@ function SideChatBody({ mainId }: { mainId: string }) {
             busy={view.transcript.inTurn}
             compact
             commands={view.info?.commands ?? []}
+            base={r.worktree_path ?? r.repo_path ?? undefined}
             onQuote={{ label: t("side.quote"), run: (text) => insertIntoComposer(mainId, text) }}
           />
           <Composer
