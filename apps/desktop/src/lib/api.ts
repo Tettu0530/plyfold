@@ -7,6 +7,7 @@ import type {
   AppSettings,
   Category,
   CheckResult,
+  CliSession,
   Diff,
   DirCandidate,
   EngineEvent,
@@ -18,7 +19,7 @@ import type {
   ProfileSummary,
   ProfileUsage,
   PullRequest,
-  CliSession,
+  RegistryAgent,
   SessionInfo,
   SessionRecord,
   SettingsView,
@@ -28,6 +29,9 @@ import type {
 // Thin wrappers around the Tauri commands (src-tauri/src/lib.rs). Argument names follow the Rust side's camelCase conversion
 export const api = {
   listProfiles: () => invoke<ProfileSummary[]>("list_profiles"),
+  registryAgents: () => invoke<RegistryAgent[]>("registry_agents"),
+  addRegistryAgent: (id: string) => invoke<void>("add_registry_agent", { id }),
+  removeRegistryAgent: (id: string) => invoke<void>("remove_registry_agent", { id }),
   listSessions: () => invoke<SessionRecord[]>("list_sessions"),
   sessionHistory: (id: string) => invoke<EventRecord[]>("session_history", { id }),
   startSession: (args: { profile: string; repo: string; title: string; worktree: boolean }) => invoke<SessionRecord>("start_session", args),

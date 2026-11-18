@@ -19,6 +19,7 @@ import { forwardRef } from "react";
 import { t, useT, type MessageKey } from "@/i18n";
 import type { SessionStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useStore } from "@/state/store";
 
 // Official shapes from Simple Icons (CC0). OpenAI isn't included, so use a generic icon instead of drawing a fake one
 const LOGO_PATHS: Record<string, string> = {
@@ -40,8 +41,33 @@ export const AGENT_NAMES: Record<string, string> = {
   },
 };
 
+/** The agent's display name: built-in ones by name, ones added from the ACP Registry by the name they came with */
+export function agentName(agent: string): string {
+  return AGENT_NAMES[agent] ?? useStore.getState().profiles.find((p) => p.agent === agent && p.agent_name)?.agent_name ?? agent;
+}
+
 export function ProviderLogo({ agent, className }: { agent: string; className?: string }) {
   const d = LOGO_PATHS[agent];
+  const icon = useStore((s) => (d ? null : (s.profiles.find((p) => p.agent === agent && p.agent_icon)?.agent_icon ?? null)));
+  // An icon kept from the ACP Registry: drawn as a mask, so it takes the text color like the built-in logos
+  if (!d && icon) {
+    const url = `url("data:image/svg+xml;utf8,${encodeURIComponent(icon)}")`;
+    return (
+      <span
+        aria-hidden
+        className={cn("inline-block size-3.5 shrink-0 bg-current", className)}
+        style={{
+          maskImage: url,
+          WebkitMaskImage: url,
+          maskSize: "contain",
+          WebkitMaskSize: "contain",
+          maskRepeat: "no-repeat",
+          WebkitMaskRepeat: "no-repeat",
+          maskPosition: "center",
+        }}
+      />
+    );
+  }
   if (!d) return <SquareTerminal aria-hidden className={cn("size-3.5 shrink-0", className)} />;
   return (
     <svg viewBox="0 0 24 24" aria-hidden className={cn("size-3.5 shrink-0", className)}>

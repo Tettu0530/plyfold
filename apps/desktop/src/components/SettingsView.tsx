@@ -11,7 +11,7 @@ import { Keys } from "./Keys";
 import { useLiquidClip, useLiquidRevealed } from "./liquid/stage";
 import { Segmented } from "./Segmented";
 import { ShortcutSettings } from "./ShortcutSettings";
-import { ProviderLogo } from "./icons";
+import { agentName, ProviderLogo } from "./icons";
 import { useLiquidMenu } from "./liquid/stage";
 import { liquidAnchor } from "./liquid/liquid";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -438,8 +438,6 @@ function ProfilePicker({ value, onChange }: { value: string; onChange: (v: strin
   );
 }
 
-const AGENT_NAMES: Record<string, string> = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", gemini: "Gemini CLI" };
-
 /** Settings → Info: what this app is, its version and license, where the source is, and how the agents are started */
 function InfoSection() {
   const t = useT();
@@ -502,7 +500,7 @@ function InfoSection() {
           <div key={a.id} className="flex items-center gap-3">
             <span className="flex w-28 shrink-0 items-center gap-1.5">
               <ProviderLogo agent={a.id} className="size-3 text-muted-foreground" />
-              {AGENT_NAMES[a.id] ?? a.id}
+              {agentName(a.id)}
             </span>
             <code className="min-w-0 truncate font-mono text-xs text-muted-foreground select-text" title={a.command}>
               {a.command}

@@ -4,6 +4,11 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Agents
+
+- Agents from the ACP Registry: Profiles → Add agents lists the agents that speak ACP; the ones started through npx or uvx (Qwen Code, Kimi Code, GitHub Copilot, Cline, Auggie and more) can be added, updated to the registry's version and removed. They run with their default profile, with the name and icon they come with. Agents shipped only as binaries are listed but cannot be added yet
+- The mock agent used by the tests is no longer offered as a built-in agent
+
 ### Fixed
 
 - On macOS the window buttons sit centred in the header, level with the sidebar button, and a little further from the edge

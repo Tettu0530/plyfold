@@ -242,6 +242,36 @@ pub fn upsert_profile(path: &Path, name: &str, def: &ProfileDef) -> Result<(), P
     write_doc(path, &doc)
 }
 
+/// Writes [agents.<id>] (an agent added from the ACP Registry)
+pub fn upsert_agent(path: &Path, id: &str, def: &crate::AgentDef) -> Result<(), ProfileError> {
+    let mut doc = read_doc(path)?;
+    let value = toml_edit::ser::to_document(def).map_err(|e| ProfileError::Form(e.to_string()))?;
+    if !doc.contains_key("agents") {
+        let mut t = toml_edit::Table::new();
+        t.set_implicit(true);
+        doc["agents"] = toml_edit::Item::Table(t);
+    }
+    let agents = doc["agents"]
+        .as_table_mut()
+        .ok_or_else(|| ProfileError::Form(plyfold_i18n::tr!("agents が表ではありません", "agents is not a table", "agents 不是表")))?;
+    let mut table = value.as_table().clone();
+    for (_, item) in table.iter_mut() {
+        if let Some(t) = item.as_table_mut() {
+            t.set_implicit(false);
+        }
+    }
+    agents[id] = toml_edit::Item::Table(table);
+    write_doc(path, &doc)
+}
+
+pub fn remove_agent(path: &Path, id: &str) -> Result<(), ProfileError> {
+    let mut doc = read_doc(path)?;
+    if let Some(a) = doc.get_mut("agents").and_then(|a| a.as_table_mut()) {
+        a.remove(id);
+    }
+    write_doc(path, &doc)
+}
+
 pub fn remove_profile(path: &Path, name: &str) -> Result<(), ProfileError> {
     let mut doc = read_doc(path)?;
     if let Some(p) = doc.get_mut("profiles").and_then(|p| p.as_table_mut()) {
@@ -256,6 +286,30 @@ mod tests {
 
     fn form(agent: &str, auth: AuthKind, url: Option<&str>) -> ProfileForm {
         ProfileForm { name: "p".into(), agent: agent.into(), label: None, auth, base_url: url.map(str::to_string), isolate: true }
+    }
+
+    #[test]
+    fn writes_and_removes_an_agent() {
+        let dir = std::env::temp_dir().join(format!("plyfold-agent-edit-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        std::fs::write(&path, "# mine\n[profiles.work]\nagent = \"claude\"\n").unwrap();
+        let def = crate::AgentDef {
+            command: "npx".into(),
+            args: vec!["-y".into(), "@qwen-code/qwen-code@0.28.0".into(), "--acp".into()],
+            env: Default::default(),
+            config_dir_env: None,
+            key_envs: vec![],
+            name: Some("Qwen Code".into()),
+            registry_version: Some("0.28.0".into()),
+        };
+        upsert_agent(&path, "qwen-code", &def).unwrap();
+        let cfg = crate::Config::load(&path).unwrap();
+        assert_eq!(cfg.agents["qwen-code"], def);
+        assert!(cfg.profiles.contains_key("work"));
+        assert!(std::fs::read_to_string(&path).unwrap().starts_with("# mine"));
+        remove_agent(&path, "qwen-code").unwrap();
+        assert!(!crate::Config::load(&path).unwrap().agents.contains_key("qwen-code"));
     }
 
     #[test]

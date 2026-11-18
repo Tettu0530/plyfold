@@ -5,7 +5,7 @@ import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/compon
 import { money, repoName, tokens } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
-import { AGENT_NAMES, ProviderLogo } from "../icons";
+import { agentName, ProviderLogo } from "../icons";
 import { ControlRow } from "./Composer";
 import { AttachBox, useAttachments } from "./Attachments";
 import { MentionMenu, removeMention, useMention } from "./Mention";
@@ -57,7 +57,7 @@ function ProfileRow({ p, u, selected, onSelect }: { p: ProfileSummary; u: Profil
       <span className="flex min-w-0 grow flex-col">
         <span className="truncate">{profileName(p)}</span>
         <span className="flex gap-2 overflow-hidden text-xs whitespace-nowrap text-muted-foreground">
-          <span>{AGENT_NAMES[p.agent] ?? p.agent}</span>
+          <span>{agentName(p.agent)}</span>
           <span className="truncate">{t(authLabel(p))}</span>
         </span>
       </span>

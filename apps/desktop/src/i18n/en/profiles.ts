@@ -61,4 +61,16 @@ export const profiles: Record<keyof typeof source, string> = {
   delete: "Delete…",
   saving: "Saving",
   save: "Save",
+  addAgent: "Add agents",
+  registryTitle: "Agents in the ACP Registry",
+  registrySearch: "Search",
+  registryHint:
+    "Agents that speak ACP (agentclientprotocol.com). Adding one runs its author's program on this computer, so check where it comes from first. An added agent works with its default profile (the CLI's own login)",
+  registryLoading: "Loading the list",
+  registryAdd: "Add",
+  registryUpdate: "Update to {version}",
+  registryRemove: "Remove",
+  registryBuiltIn: "Built in",
+  registryBinary: "Not yet",
+  registryBinaryHint: "Agents shipped as per-platform binaries cannot be added yet",
 };

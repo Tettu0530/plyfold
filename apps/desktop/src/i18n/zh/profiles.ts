@@ -61,4 +61,16 @@ export const profiles: Record<keyof typeof source, string> = {
   delete: "删除…",
   saving: "保存中",
   save: "保存",
+  addAgent: "添加代理",
+  registryTitle: "ACP Registry 中的代理",
+  registrySearch: "搜索",
+  registryHint:
+    "支持 ACP 的代理列表（agentclientprotocol.com）。添加后会在这台电脑上运行其作者的程序，请先确认来源。添加的代理可通过默认配置文件（CLI 自身的登录）使用",
+  registryLoading: "正在加载列表",
+  registryAdd: "添加",
+  registryUpdate: "更新到 {version}",
+  registryRemove: "移除",
+  registryBuiltIn: "已内置",
+  registryBinary: "暂不支持",
+  registryBinaryHint: "以各平台二进制发布的代理暂时无法添加",
 };

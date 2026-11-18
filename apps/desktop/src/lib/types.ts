@@ -271,6 +271,28 @@ export interface ProfileSummary {
   isolate: boolean;
   keyed: boolean;
   custom_provider: boolean;
+  /** Name of an agent added from the ACP Registry (built-in agents are named by the UI) */
+  agent_name?: string | null;
+  /** Its icon (SVG text), kept when it was added */
+  agent_icon?: string | null;
+}
+
+/** An agent in the ACP Registry (src-tauri/src/registry.rs) */
+export interface RegistryAgent {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  repository: string | null;
+  website: string | null;
+  license: string | null;
+  kind: "npx" | "uvx" | "binary";
+  /** Can be added (npx or uvx, and not built in) */
+  addable: boolean;
+  /** The built-in agent it is, if any */
+  built_in: string | null;
+  /** The version added, if it was */
+  added: string | null;
 }
 
 /** Per-profile usage (crates/plyfold-core/src/usage.rs) */

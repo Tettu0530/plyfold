@@ -59,4 +59,16 @@ export const profiles = {
   delete: "削除…",
   saving: "保存中",
   save: "保存",
+  addAgent: "エージェントを追加",
+  registryTitle: "ACP Registry のエージェント",
+  registrySearch: "探す",
+  registryHint:
+    "ACP に対応したエージェントの一覧です（agentclientprotocol.com）。追加すると、その作者のプログラムをこの PC で動かします。出どころを確かめてから追加してください。追加したエージェントは、既定のプロファイル（CLI のログイン）で使えます",
+  registryLoading: "一覧を読み込んでいます",
+  registryAdd: "追加",
+  registryUpdate: "{version} に更新",
+  registryRemove: "外す",
+  registryBuiltIn: "最初から入っています",
+  registryBinary: "まだ追加できません",
+  registryBinaryHint: "OS ごとのバイナリで配布されているエージェントは、まだ追加できません",
 } satisfies Record<string, string>;
