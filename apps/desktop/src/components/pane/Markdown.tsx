@@ -18,7 +18,8 @@ import { normalizeMath } from "@/lib/math";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "./MessageActions";
 
-function openLink(href: string | undefined) {
+/** Open a link in the default browser (inside the WebView it would replace the app) */
+export function openLink(href: string | undefined) {
   if (!href) return;
   if (inTauri) void api.openUrl(href).catch(() => {});
   else window.open(href, "_blank", "noopener");

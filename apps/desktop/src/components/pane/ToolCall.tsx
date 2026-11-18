@@ -1,5 +1,5 @@
 // A tool call in the transcript. Click the row to reveal the command and its result (progressive disclosure)
-import { Check, ChevronRight, CircleX, FileText, Pencil, Search, SquareTerminal, Wrench } from "lucide-react";
+import { Check, ChevronRight, CircleX, FileText, Globe, Pencil, Search, SquareTerminal, Wrench } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -12,13 +12,40 @@ import type { DiffPreview, ToolCall } from "@/state/transcript";
 import { smooth, snappy } from "../motion";
 import { Unified } from "../PatchLines";
 import { Spinner } from "../icons";
+import { fetchedUrl, isWebSearch, parseSearchHits, type SearchHit } from "@/lib/web";
+import { Markdown, openLink } from "./Markdown";
 
 const TOOL_ICONS: Record<string, typeof FileText> = {
   read: FileText,
   search: Search,
   edit: Pencil,
   execute: SquareTerminal,
+  fetch: Globe,
 };
+
+/** A web search's hits as links (title and site); they open in the browser */
+function SearchHits({ hits }: { hits: SearchHit[] }) {
+  return (
+    <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+      {hits.map((h) => (
+        <li key={h.url}>
+          <a
+            href={h.url}
+            title={h.url}
+            onClick={(e) => {
+              e.preventDefault();
+              openLink(h.url);
+            }}
+            className="flex min-w-0 items-baseline gap-2 rounded-md px-1.5 py-1 hover:bg-accent"
+          >
+            <span className="min-w-0 truncate text-sm">{h.title}</span>
+            <span className="shrink-0 font-mono text-xs text-muted-foreground">{h.host}</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 /** Result lines shown at first. Click for the rest (no scrolling while collapsed) */
 const FIRST_LINES = 12;
@@ -132,6 +159,37 @@ function Command({ text }: { text: string }) {
 function Detail({ t }: { t: ToolCall }) {
   const tr = useT();
   const output = t.stream || t.result;
+  const web = t.toolKind === "fetch" || t.toolKind === "search";
+  const hits = web && output ? parseSearchHits(output) : null;
+  const page = t.toolKind === "fetch" ? fetchedUrl(t.title) : null;
+  if (hits || page) {
+    return (
+      <div className="flex flex-col gap-2 px-3 pt-0.5 pb-3">
+        {t.note && <p className="m-0 text-xs text-muted-foreground">{t.note}</p>}
+        {page && (
+          <a
+            href={page}
+            title={page}
+            onClick={(e) => {
+              e.preventDefault();
+              openLink(page);
+            }}
+            className="w-fit font-mono text-xs break-all text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          >
+            {page}
+          </a>
+        )}
+        {hits ? (
+          <SearchHits hits={hits} />
+        ) : output ? (
+          // What the agent took from the page
+          <div className="rounded-md bg-background px-3 py-2 text-sm">
+            <Markdown text={output} />
+          </div>
+        ) : null}
+      </div>
+    );
+  }
   // File contents read or written are clear from the diff or title, so show only the path
   // Short commands fully readable in the title are not shown again
   const showCommand = !!t.command && (t.command !== t.title || t.command.length > 60);
@@ -153,7 +211,8 @@ function Detail({ t }: { t: ToolCall }) {
 function ToolRow({ t, first }: { t: ToolCall; first: boolean }) {
   const tr = useT();
   const [open, setOpen] = useState(false);
-  const Icon = TOOL_ICONS[t.toolKind] ?? Wrench;
+  // Agents report web searches with the fetch kind too: tell them apart by the title
+  const Icon = isWebSearch(t.title, t.toolKind) ? Search : (TOOL_ICONS[t.toolKind] ?? Wrench);
   const hasDetail = !!(t.command || t.path || t.note || t.stream || t.result);
   const title = t.title || t.command || tr("transcript.tool");
   return (
