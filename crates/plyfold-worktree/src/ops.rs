@@ -129,7 +129,13 @@ pub fn create_pr(wt: &Worktree, title: &str) -> Result<String, WorktreeError> {
 /// Opens the worktree in an editor. `prefer` is "auto" / "zed" / "cursor" / "code" / "finder".
 /// Returns the name of the editor that was opened (Finder if auto finds nothing)
 pub fn open_in_editor(wt: &Worktree, prefer: &str) -> Result<String, WorktreeError> {
-    let path = wt.path.display().to_string();
+    open_path_in_editor(&wt.path, prefer)
+}
+
+/// Opens a folder or a file in an editor, as open_in_editor does. Without an editor, a file opens in the system's
+/// default app for it (Preview for an image, for example)
+pub fn open_path_in_editor(path: &std::path::Path, prefer: &str) -> Result<String, WorktreeError> {
+    let path = path.display().to_string();
     let editors = [("zed", "Zed"), ("cursor", "Cursor"), ("code", "VS Code")];
     if let Some((cmd, name)) = editors.iter().find(|(c, _)| *c == prefer) {
         if !has(cmd) {

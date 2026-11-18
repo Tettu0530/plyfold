@@ -445,6 +445,54 @@ async fn read_image(path: String) -> CmdResult<String> {
     Ok(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
 }
 
+/// A text file's contents for the touched-files pane: the first MiB, or nothing for a binary file
+#[derive(serde::Serialize)]
+struct TextFile {
+    /// None for a binary file (a NUL byte, or not UTF-8)
+    text: Option<String>,
+    size: u64,
+    /// Only the first MiB was read
+    truncated: bool,
+}
+
+#[tauri::command]
+async fn read_text_file(path: String) -> CmdResult<TextFile> {
+    use std::io::Read as _;
+    const LIMIT: u64 = 1024 * 1024;
+    let p = std::path::PathBuf::from(expand_home(&path));
+    let size = std::fs::metadata(&p).map_err(err)?.len();
+    let mut bytes = Vec::new();
+    std::fs::File::open(&p).map_err(err)?.take(LIMIT).read_to_end(&mut bytes).map_err(err)?;
+    let truncated = size > LIMIT;
+    // A cut may split a multi-byte character at the end
+    let text = if bytes.contains(&0) {
+        None
+    } else {
+        match String::from_utf8(bytes) {
+            Ok(t) => Some(t),
+            Err(e) if truncated && e.utf8_error().error_len().is_none() => {
+                let valid = e.utf8_error().valid_up_to();
+                let mut b = e.into_bytes();
+                b.truncate(valid);
+                String::from_utf8(b).ok()
+            }
+            Err(_) => None,
+        }
+    };
+    Ok(TextFile { text, size, truncated })
+}
+
+/// Open one file in the editor chosen in Settings (or the system's app for it)
+#[tauri::command]
+fn open_file_in_editor(state: State<'_, AppState>, path: String) -> CmdResult<String> {
+    let editor = state.settings.read().unwrap().editor.clone();
+    let p = std::path::PathBuf::from(expand_home(&path));
+    if !p.exists() {
+        return Err(plyfold_i18n::tr!("ファイルが見つかりません", "File not found", "找不到文件"));
+    }
+    plyfold_worktree::ops::open_path_in_editor(&p, &editor).map_err(err)
+}
+
 /// Files for @-mentions in the composer (files.rs). `root` is the session's worktree or repository
 #[tauri::command]
 async fn search_files(root: String, query: String) -> Vec<files::FileHit> {
@@ -768,6 +816,8 @@ pub fn run() {
             complete_dirs,
             search_files,
             read_image,
+            read_text_file,
+            open_file_in_editor,
             open_url,
             reveal_file,
             start_session,

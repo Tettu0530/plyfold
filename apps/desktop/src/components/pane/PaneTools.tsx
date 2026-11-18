@@ -1,16 +1,15 @@
 // Pane header buttons: plan, background shells, touched files (the preview is in the app header, BrowserButton; Git and
 // the changes are one view, opened from the button next to these). Click to show the contents in a liquid menu
 // Always shown (so you know where they are). With nothing inside, only the icon is shown, no count
-import { Check, Circle, CircleHelp, CircleX, FileText, Globe, ListChecks, Pencil, SquareStop, SquareTerminal } from "lucide-react";
+import { Check, Circle, CircleHelp, CircleX, FileText, Globe, ListChecks, SquareStop, SquareTerminal } from "lucide-react";
 import { createContext, useContext, useMemo, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useT, type MessageKey } from "@/i18n";
-import { api, inTauri } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { backgroundShells, currentPlan, touchedFiles, type BackgroundShell, type ShellState } from "@/state/paneData";
 import { localUrls } from "@/lib/urls";
-import { useStore } from "@/state/store";
+import { filesPaneOf, leavesShowing, useStore } from "@/state/store";
 import type { TranscriptItem } from "@/state/transcript";
 import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
@@ -77,7 +76,29 @@ function Empty({ children }: { children: React.ReactNode }) {
   return <p className="m-0 px-1.5 pb-1 text-xs text-muted-foreground">{children}</p>;
 }
 
-const relative = (path: string, base: string | null) => (base && path.startsWith(`${base}/`) ? path.slice(base.length + 1) : path);
+/** A path shown from the session's folder when it is inside it */
+export const relative = (path: string, base: string | null) => (base && path.startsWith(`${base}/`) ? path.slice(base.length + 1) : path);
+
+/** Opens the touched files as a pane beside the session (it grows out of this button) */
+function FilesButton({ scope, count }: { scope: string; count: number }) {
+  const t = useT();
+  const anchor = `${scope}:files`;
+  const raised = useLiquidActiveAnchors().has(anchor);
+  const open = useStore((s) => leavesShowing(s, filesPaneOf(scope)));
+  return (
+    <button
+      ref={liquidAnchor(anchor)}
+      type="button"
+      aria-label={t("pane.files")}
+      title={t("pane.files")}
+      onClick={() => useStore.getState().openFiles(scope)}
+      className={cn(TRIGGER, (raised || open) && "bg-accent text-foreground", raised && "z-[57]")}
+    >
+      <FileText className="size-3.5" aria-hidden />
+      {count > 0 && <span className="font-mono tabular">{count}</span>}
+    </button>
+  );
+}
 
 const SHELL: Record<ShellState, { label: MessageKey; Icon: typeof Check; className: string; spin?: boolean }> = {
   running: { label: "pane.shellRunning", Icon: Spinner, className: "text-working" },
@@ -136,7 +157,7 @@ const PLAN_ICON: Record<string, { Icon: typeof Check; className: string; spin?: 
 
 /** Open a typed URL, or one of the localhost URLs the commands printed */
 
-export function PaneTools({ scope, items, worktree, alive }: { scope: string; items: TranscriptItem[]; worktree: string | null; alive: boolean }) {
+export function PaneTools({ scope, items, alive }: { scope: string; items: TranscriptItem[]; alive: boolean }) {
   const t = useT();
   const files = useMemo(() => touchedFiles(items), [items]);
   const shells = useMemo(() => backgroundShells(items, alive), [items, alive]);
@@ -178,33 +199,7 @@ export function PaneTools({ scope, items, worktree, alive }: { scope: string; it
           <ShellRow key={s.id ?? i} s={s} anchor={`${scope}:shells`} />
         ))}
       </ToolButton>
-      <ToolButton
-        scope={scope}
-        name="files"
-        label={t("pane.files")}
-        icon={<FileText className="size-3.5" aria-hidden />}
-        badge={files.length || null}
-        width="w-96"
-      >
-        {files.length === 0 && <Empty>{t("pane.filesEmpty")}</Empty>}
-        {files.map((f) => (
-          <button
-            key={f.path}
-            type="button"
-            title={inTauri ? t("pane.revealInFinder", { path: f.path }) : f.path}
-            onClick={() => inTauri && void api.revealFile(f.path).catch(() => {})}
-            className="flex h-7 w-full items-center gap-2 rounded-md px-1.5 text-left hover:bg-accent"
-          >
-            {f.edited ? (
-              <Pencil className="size-3.5 shrink-0 text-muted-foreground" aria-label={t("pane.fileEdited")} />
-            ) : (
-              <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-label={t("pane.fileRead")} />
-            )}
-            <span className="min-w-0 grow truncate font-mono text-xs">{relative(f.path, worktree)}</span>
-            {f.count > 1 && <span className="shrink-0 font-mono text-xs text-muted-foreground tabular">{f.count}</span>}
-          </button>
-        ))}
-      </ToolButton>
+      <FilesButton scope={scope} count={files.length} />
     </>
   );
 }

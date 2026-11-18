@@ -24,7 +24,7 @@ const BADGE: Record<FilePatch["status"], { letter: string; className: string; la
 };
 
 /** Below this pane width the Git pane shows one column: the list, or one file's diff */
-const NARROW_PX = 720;
+export const NARROW_PX = 720;
 
 const SECTION_DEFAULT = 260;
 const SECTION_MIN = 72;
@@ -119,7 +119,7 @@ function RowResizer({ height, onChange }: { height: number; onChange: (h: number
   );
 }
 
-function useWidth(ref: React.RefObject<HTMLElement | null>) {
+export function useWidth(ref: React.RefObject<HTMLElement | null>) {
   const [w, setW] = useState(1000);
   useLayoutEffect(() => {
     const el = ref.current;
@@ -417,10 +417,10 @@ const COLUMN_KEY = "plyfold.gitColumnWidth";
 const clampColumn = (w: number) => Math.round(Math.min(Math.max(w, COLUMN_MIN), Math.max(COLUMN_MIN, window.innerWidth * 0.6)));
 
 /** The left column's width, remembered on this machine (a viewer convenience, so local storage is enough) */
-function useColumnWidth(): [number, (w: number) => void] {
+export function useColumnWidth(key = COLUMN_KEY): [number, (w: number) => void] {
   const [w, setW] = useState(() => {
     try {
-      const v = Number(localStorage.getItem(COLUMN_KEY));
+      const v = Number(localStorage.getItem(key));
       return v > 0 ? clampColumn(v) : COLUMN_DEFAULT;
     } catch {
       return COLUMN_DEFAULT;
@@ -430,7 +430,7 @@ function useColumnWidth(): [number, (w: number) => void] {
     const c = clampColumn(v);
     setW(c);
     try {
-      localStorage.setItem(COLUMN_KEY, String(c));
+      localStorage.setItem(key, String(c));
     } catch {
       // Not remembered, still applied
     }
@@ -439,7 +439,7 @@ function useColumnWidth(): [number, (w: number) => void] {
 }
 
 /** The left column's right edge: drag to resize, double-click or Enter for the default width, arrow keys to nudge */
-function ColumnResizer({ width, onChange }: { width: number; onChange: (w: number) => void }) {
+export function ColumnResizer({ width, onChange }: { width: number; onChange: (w: number) => void }) {
   const t = useT();
   const drag = useRef<{ left: number } | null>(null);
   const [active, setActive] = useState(false);

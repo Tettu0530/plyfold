@@ -4,3 +4,5 @@ export const isMac = typeof navigator === "undefined" || /Mac|iPhone|iPad/.test(
 
 /** The primary shortcut modifier: ⌘ on macOS, Ctrl on Windows and Linux */
 export const primaryKey = (e: { metaKey: boolean; ctrlKey: boolean }) => (isMac ? e.metaKey : e.ctrlKey);
+
+export const isWindows = typeof navigator !== "undefined" && /Win/.test(navigator.platform || navigator.userAgent);

@@ -24,6 +24,7 @@ import type {
   SessionRecord,
   SettingsView,
   WtStatus,
+  TextFile,
 } from "./types";
 
 // Thin wrappers around the Tauri commands (src-tauri/src/lib.rs). Argument names follow the Rust side's camelCase conversion
@@ -48,6 +49,8 @@ export const api = {
   deleteSession: (id: string, removeWorktree: boolean) => invoke<void>("delete_session", { id, removeWorktree }),
   setUiLang: (lang: string) => invoke<void>("set_ui_lang", { lang }),
   revealFile: (path: string) => invoke<void>("reveal_file", { path }),
+  readTextFile: (path: string) => invoke<TextFile>("read_text_file", { path }),
+  openFileInEditor: (path: string) => invoke<string>("open_file_in_editor", { path }),
   openUrl: (url: string) => invoke<void>("open_url", { url }),
   appInfo: () => invoke<AppInfo>("app_info"),
   readImage: (path: string) => invoke<string>("read_image", { path }),

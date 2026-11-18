@@ -8,6 +8,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 - Switching a session to a mode that does not ask also answers the permission requests it is waiting on: bypass permissions (Claude Code), full access (Codex) and YOLO (Gemini CLI) allow all of them, accept-edits modes allow file edits. A note in the conversation says how many were allowed
 
+### Panes
+
+- Touched files open as a pane beside the session instead of a menu: the files it read or edited in a list, and the picked one's contents beside it (text with line numbers, or the image). Show in Finder (File Explorer on Windows), open in the editor and copy the path are buttons above the contents. ↑ and ↓ move through the list
+
 ### Conversation
 
 - Images in an answer that are files on this machine (a path relative to the session's folder, an absolute path or a `file:` URL) or embedded in it are shown as square thumbnails; images one after another line up as a gallery. Images on the web are still not fetched and stay links

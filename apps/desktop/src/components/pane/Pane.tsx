@@ -6,7 +6,8 @@ import { useT } from "@/i18n";
 import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/keys";
 import { cn } from "@/lib/utils";
-import { gitPaneOf, isDraft, isGit, isPreview, leavesShowing, useStore } from "@/state/store";
+import { gitPaneOf, isDraft, isFiles, isGit, isPreview, leavesShowing, useStore } from "@/state/store";
+import { FilesPane } from "./FilesPane";
 import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidRevealed } from "../liquid/stage";
 import { DraftPane } from "./DraftPane";
@@ -83,6 +84,8 @@ export function Pane({ index }: { index: number }) {
         <PreviewPane index={index} id={id} />
       ) : isGit(id) ? (
         <GitPane index={index} id={id} />
+      ) : isFiles(id) ? (
+        <FilesPane index={index} id={id} />
       ) : (
         <SessionPane index={index} />
       )}
@@ -177,7 +180,6 @@ function SessionPane({ index }: { index: number }) {
             <PaneTools
               scope={id}
               items={view.transcript.items}
-              worktree={r.worktree_path ?? r.repo_path}
               alive={r.status !== "closed" && r.status !== "error"}
             />
           </span>
