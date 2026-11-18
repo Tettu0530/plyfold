@@ -12,7 +12,7 @@ import { SentAttachments } from "./Attachments";
 import { Markdown } from "./Markdown";
 import { ActionRow, CopyButton, EditBox, QuoteButton, UserActions, Working, workingLabel } from "./MessageActions";
 import { DiffBlock, ToolCalls } from "./ToolCall";
-import { snappy } from "../motion";
+import { bouncy, smooth } from "../motion";
 import { useStore } from "@/state/store";
 import { commandAt } from "./Slash";
 
@@ -136,6 +136,45 @@ function CommandText({ text, commands }: { text: string; commands: SlashCommand[
       <span className="text-command">{text.slice(0, head)}</span>
       {text.slice(head)}
     </>
+  );
+}
+
+/**
+ * Scroll to the bottom. When new output arrives below while it is shown, its dot pops in and the arrow dips once
+ * (no looping)
+ */
+function ToBottomButton({ unseen, label, title, onClick }: { unseen: boolean; label: string; title: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={title}
+      onClick={onClick}
+      className="relative flex size-8 items-center justify-center rounded-full border bg-card text-muted-foreground shadow-[0_4px_12px_rgba(0,0,0,.45)] hover:bg-accent hover:text-foreground"
+    >
+      <motion.span
+        key={unseen ? "new" : "idle"}
+        initial={unseen ? { y: 0 } : false}
+        animate={unseen ? { y: [0, 3, 0] } : { y: 0 }}
+        transition={{ duration: 0.45 }}
+        className="flex"
+      >
+        <ArrowDown className="size-4" aria-hidden />
+      </motion.span>
+      <AnimatePresence>
+        {unseen && (
+          <motion.span
+            key="dot"
+            aria-hidden
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            exit={{ scale: 0 }}
+            transition={bouncy}
+            className="absolute top-0.5 right-0.5 size-2 rounded-full border-2 border-card bg-foreground"
+          />
+        )}
+      </AnimatePresence>
+    </button>
   );
 }
 
@@ -349,23 +388,24 @@ export function Transcript({
         {info?.cost && <span className="sr-only">{tr("transcript.sessionCost", { cost: money(info.cost.amount, info.cost.currency) })}</span>}
       </div>
       {/* Shown only while scrolled up; a dot means new output arrived below */}
+      {/* Materializes in place (no travel): from nothing, slightly small and out of focus */}
       <AnimatePresence>
         {awayFromBottom && (
-          <motion.button
+          <motion.div
             key="to-bottom"
-            type="button"
-            aria-label={unseen ? `${tr("transcript.scrollToBottom")}. ${tr("transcript.newBelow")}` : tr("transcript.scrollToBottom")}
-            title={tr("transcript.scrollToBottom")}
-            initial={{ opacity: 0, y: 8, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.9 }}
-            transition={snappy}
-            onClick={jumpToBottom}
-            className="absolute bottom-3 left-1/2 -ml-4 flex size-8 items-center justify-center rounded-full border bg-card text-muted-foreground shadow-[0_4px_12px_rgba(0,0,0,.45)] hover:bg-accent hover:text-foreground"
+            initial={{ opacity: 0, scale: 0.6, filter: "blur(6px)" }}
+            animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+            exit={{ opacity: 0, scale: 0.6, filter: "blur(6px)" }}
+            transition={smooth}
+            className="absolute bottom-3 left-1/2 -ml-4"
           >
-            <ArrowDown className="size-4" aria-hidden />
-            {unseen && <span aria-hidden className="absolute top-0.5 right-0.5 size-2 rounded-full border-2 border-card bg-foreground" />}
-          </motion.button>
+            <ToBottomButton
+              unseen={unseen}
+              label={unseen ? `${tr("transcript.scrollToBottom")}. ${tr("transcript.newBelow")}` : tr("transcript.scrollToBottom")}
+              title={tr("transcript.scrollToBottom")}
+              onClick={jumpToBottom}
+            />
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
