@@ -362,15 +362,29 @@ fn remote(name: &str, url: &str, advertised: bool, kind: &str) -> Result<(), Str
             "未传递 MCP 服务器“{name}”。此代理不支持 {kind}"
         ));
     }
-    let url = url.trim();
-    if url.starts_with("https://") || url.starts_with("http://") {
+    if mcp_url_ok(url) {
         return Ok(());
     }
     Err(plyfold_i18n::tr!(
-        "MCP サーバー「{name}」は渡しません。URL は http:// か https:// で始めてください",
-        "MCP server “{name}” was not passed. The URL must start with http:// or https://",
-        "未传递 MCP 服务器“{name}”。URL 必须以 http:// 或 https:// 开头"
+        "MCP サーバー「{name}」は渡しません。URL は https:// で始めてください（http:// はこの機械のサーバーだけ）",
+        "MCP server “{name}” was not passed. The URL must start with https:// (http:// only for a server on this machine)",
+        "未传递 MCP 服务器“{name}”。URL 必须以 https:// 开头（http:// 仅限本机的服务器）"
     ))
+}
+
+/// An MCP server's address: https anywhere, plain http only on this machine (localhost, 127.x, ::1). The traffic
+/// carries the conversation, so it is not sent unencrypted across the network
+pub fn mcp_url_ok(url: &str) -> bool {
+    let url = url.trim();
+    if url.starts_with("https://") {
+        return true;
+    }
+    let Some(rest) = url.strip_prefix("http://") else { return false };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = authority.rsplit('@').next().unwrap_or("");
+    let host = if let Some(v6) = host.strip_prefix('[') { v6.split(']').next().unwrap_or("") } else { host.split(':').next().unwrap_or("") };
+    let host = host.to_ascii_lowercase();
+    host == "localhost" || host == "::1" || host.parse::<std::net::Ipv4Addr>().is_ok_and(|ip| ip.is_loopback())
 }
 
 /// Whether the folder itself, or any part of `rel` under it, is a symbolic link
@@ -550,6 +564,23 @@ files = { "../evil" = "x" }
     fn unknown_target() {
         let cfg = Config::from_toml("").unwrap();
         assert!(matches!(cfg.resolve("nope", &tmp("u"), Path::new("/w"), &MemoryStore::default()), Err(ProfileError::UnknownTarget(_))));
+    }
+
+    #[test]
+    fn plain_http_mcp_only_on_this_machine() {
+        for ok in ["https://mcp.example.com/x", "http://localhost:3333/mcp", "http://127.0.0.1/mcp", "http://[::1]:8080", "http://user@localhost/mcp"] {
+            assert!(mcp_url_ok(ok), "{ok}");
+        }
+        for bad in [
+            "http://mcp.example.com/x",
+            "http://192.168.1.5:3000",
+            "http://localhost.evil.com/x",
+            "http://127.0.0.1.nip.io",
+            "ftp://localhost",
+            "localhost:3000",
+        ] {
+            assert!(!mcp_url_ok(bad), "{bad}");
+        }
     }
 
     #[test]
