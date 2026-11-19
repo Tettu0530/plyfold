@@ -38,6 +38,6 @@ export const draft: Record<keyof typeof source, string> = {
   cliSessionsEmpty: "This repository has no conversation to open yet",
   cliSessionsUntitled: "(untitled)",
   chat: "Conversation",
-  chatOn: "Conversation: talk without a repository. It can search and read the web, but does not edit files or run commands",
+  chatOn: "Conversation: talk without a repository. It may search and fetch from the web, use skills and files in its own folder; it runs no commands",
   chatOff: "Work: work in a repository",
 };

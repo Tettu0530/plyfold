@@ -4,6 +4,7 @@ import type { status as source } from "../ja/status";
 export const status: Record<keyof typeof source, string> = {
   starting: "Starting",
   working: "Working",
+  answering: "Answering",
   awaitingPermission: "Waiting for permission",
   stalled: "Stalled",
   error: "Error",

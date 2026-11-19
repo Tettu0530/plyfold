@@ -36,6 +36,6 @@ export const draft = {
   cliSessionsEmpty: "このリポジトリには、まだ取り込める会話がありません",
   cliSessionsUntitled: "（無題）",
   chat: "会話",
-  chatOn: "会話: リポジトリなしで話す。Web の検索と取得はでき、ファイルの編集とコマンドは使わない",
+  chatOn: "会話: リポジトリなしで話す。Web の検索と取得、スキル、会話のフォルダの中のファイルは使え、コマンドは実行しない",
   chatOff: "作業: リポジトリで作業する",
 } satisfies Record<string, string>;

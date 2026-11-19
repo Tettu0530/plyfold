@@ -4,6 +4,7 @@ import type { status as source } from "../ja/status";
 export const status: Record<keyof typeof source, string> = {
   starting: "启动中",
   working: "运行中",
+  answering: "回答中",
   awaitingPermission: "等待授权",
   stalled: "无响应",
   error: "错误",

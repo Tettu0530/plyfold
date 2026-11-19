@@ -4,6 +4,11 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Conversation
+
+- Everyday conversations allow more, like a chat on the web: besides searching and fetching from the web, they may load skills, keep a task list, ask helper agents, think, and read, search and write files inside their own folder. They still run no commands and use no files outside their folder
+- A conversation that is answering says "Answering" rather than "Working"
+
 ### Sessions
 
 - An MCP server address must be https://; plain http:// is accepted only for a server on this machine (localhost, 127.0.0.1, ::1), since the traffic carries the conversation

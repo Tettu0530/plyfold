@@ -7,7 +7,7 @@ import { age, repoName } from "@/lib/format";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { SIDEBAR_DEFAULT, SIDEBAR_MIN, useStore, visibleSessions, isListed, isTrashed } from "@/state/store";
-import { ProviderLogo, STATUS, StatusIcon } from "./icons";
+import { ProviderLogo, STATUS, StatusIcon, statusLabelKey } from "./icons";
 import type { SessionRecord } from "@/lib/types";
 import { Keys } from "./Keys";
 import { SessionMenu } from "./SessionMenu";
@@ -208,9 +208,9 @@ export function Sidebar() {
                             />
                           )}
                           <span className={cn("flex shrink-0 items-center gap-1 text-xs", quiet ? "text-muted-foreground" : st.color)}>
-                            <StatusIcon status={r.status} className="size-3" />
+                            <StatusIcon status={r.status} chat={r.chat} className="size-3" />
                             {/* Compact rows keep the state icon (with its accessible label) but drop the word */}
-                            {!compact && st.label}
+                            {!compact && t(statusLabelKey(r.status, r.chat))}
                           </span>
                         </span>
                         {!compact && (
