@@ -13,6 +13,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 - Compare: on the new session screen, turn on Compare and pick 2 to 4 profiles. Each gets the same prompt in a worktree of its own (with the repository's setup and a port of its own) and they open side by side. Their headers get a compare button that opens a pane with each one's state, time, tokens, cost and changes; "Merge this one" commits what is left and merges it into the original branch, and the others can then go to the trash together
 
+### Profiles
+
+- Key fallback: a profile can name another profile of the same agent to continue with when its key hits a rate or usage limit (Profiles → "When the key hits a limit"). The session switches to it, carries the conversation over (an isolated profile's conversation files are copied to the other), and sends the prompt again. A chain stops at a profile the prompt already tried, and an answer that only talks about rate limits does not switch
+
 ## [0.4.1] - 2026-11-19
 
 MCP servers per profile, a port of its own for each session, renamable sidebar groups, the agent's thinking as Markdown, and fixes (a new session under its repository, a steady context meter, the sidebar button and Esc in full screen).

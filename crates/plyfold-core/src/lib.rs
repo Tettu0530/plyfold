@@ -239,6 +239,8 @@ struct Live {
     /// SessionInfo, but are not sent to the UI: it already has the conversation from the event log, and showing the
     /// resend would duplicate it and push the message being sent above the earlier output
     replaying: AtomicBool,
+    /// The start of this turn's answer, to tell a rate or usage limit reported as a message (see hit_limit)
+    turn_text: Mutex<String>,
     /// Permission requests answered without asking: a side chat declines them all, an everyday chat allows looking things
     /// up (search, fetch, read) and declines the rest
     policy: Policy,
@@ -831,6 +833,7 @@ impl Engine {
                 clock: Mutex::new(None),
                 last_live_emit: Mutex::new(Instant::now()),
                 replaying: AtomicBool::new(false),
+                turn_text: Mutex::new(String::new()),
                 policy: inner.store.get_session(id).map(|r| Policy::of(&r)).unwrap_or(Policy::Ask),
             });
             // Start receiving first so the history resent by session/load is captured
@@ -996,6 +999,11 @@ impl Engine {
 
     /// Start a turn with images or files attached
     pub fn prompt_with(&self, id: &str, text: &str, attachments: &[Attachment]) -> Result<(), CoreError> {
+        self.prompt_tried(id, text, attachments, Vec::new())
+    }
+
+    /// `tried`: profiles this prompt already hit a limit with (a fallback chain never goes round in a circle)
+    fn prompt_tried(&self, id: &str, text: &str, attachments: &[Attachment], tried: Vec<String>) -> Result<(), CoreError> {
         let inner = self.inner.clone();
         let live = inner.live(id)?;
         // For agents without image support, write images to the state dir and pass them as links
@@ -1008,8 +1016,10 @@ impl Engine {
         live.stalled.store(false, Ordering::SeqCst);
         *live.clock.lock().unwrap() = Some(TurnClock::new());
         live.info.lock().unwrap().live = Some(LiveTurn::default());
+        live.turn_text.lock().unwrap().clear();
         inner.set_status(id, SessionStatus::Working);
         let id = id.to_string();
+        let (text, attachments) = (text.to_string(), attachments.to_vec());
         tokio::spawn(async move {
             let r = live.client.prompt_blocks(&live.sid(), blocks).await;
             // The turn is still on while its last notifications are handled (a stalled turn that gets its answer
@@ -1019,6 +1029,10 @@ impl Engine {
             }
             live.in_turn.store(false, Ordering::SeqCst);
             live.permissions.lock().unwrap().clear();
+            let limited = match &r {
+                Ok(_) => hit_limit(&live.turn_text.lock().unwrap(), true),
+                Err(e) => hit_limit(&e.to_string(), false),
+            };
             match r {
                 Ok(turn) => {
                     finish_turn(&inner, &id, &live, &turn.raw["usage"]);
@@ -1031,11 +1045,67 @@ impl Engine {
                     inner.emit(EngineEvent::TurnEnded { session_id: id.clone(), stop_reason: None, error: Some(e.to_string()) });
                 }
             }
-            if !live.closing.load(Ordering::SeqCst) {
-                inner.set_status(&id, SessionStatus::Idle);
+            if live.closing.load(Ordering::SeqCst) {
+                return;
+            }
+            inner.set_status(&id, SessionStatus::Idle);
+            if limited {
+                Engine { inner }.continue_with_fallback(&id, &text, &attachments, tried).await;
             }
         });
         Ok(())
+    }
+
+    /// After a turn hit a rate or usage limit: when the session's profile names a fallback (another key of the same
+    /// agent) not tried for this prompt yet, reopen the session with it and send the prompt again.
+    /// An isolated profile keeps conversations in its own directory, so the conversation's files are copied over first
+    async fn continue_with_fallback(&self, id: &str, text: &str, attachments: &[Attachment], mut tried: Vec<String>) {
+        let inner = &self.inner;
+        let Ok(rec) = inner.store.get_session(id) else { return };
+        tried.push(rec.profile.clone());
+        let (to, from_dir, to_dir) = {
+            let config = inner.config.read().unwrap();
+            let Some(to) = config.fallback_for(&rec.profile).filter(|p| !tried.contains(p)) else { return };
+            let dirs = (config.data_dir_of(&rec.profile, &inner.state_dir), config.data_dir_of(&to, &inner.state_dir));
+            (to, dirs.0, dirs.1)
+        };
+        inner.notice(
+            id,
+            plyfold_i18n::tr!(
+                "{} のキーが上限に達したので、{to} に切り替えて同じ指示を送り直します",
+                "{}'s key hit its limit, so the session continues with {to} and sends the prompt again",
+                "{} 的密钥已达到上限，因此切换到 {to} 并重新发送同一指令",
+                rec.profile
+            ),
+        );
+        let result: Result<(), CoreError> = async {
+            self.close_session(id).await?;
+            if let Some(acp) = &rec.acp_session_id {
+                match (&from_dir, &to_dir) {
+                    (Some(from), Some(to_dir)) => {
+                        copy_conversation(from, to_dir, acp)?;
+                    }
+                    (None, None) => {}
+                    // One side uses the usual config, which Plyfold does not write to
+                    _ => inner.notice(
+                        id,
+                        plyfold_i18n::tr!(
+                            "片方のプロファイルが通常の設定を使うため、会話のファイルを写せません。エージェントが会話を開けないときは、新しい会話で続けます",
+                            "One of the profiles uses the usual config, so the conversation's files cannot be copied; if the agent cannot open the conversation, it continues in a new one",
+                            "其中一个配置使用常规设置，因此无法复制对话文件；如果代理无法打开该对话，将在新对话中继续"
+                        ),
+                    ),
+                }
+            }
+            inner.store.set_profile(id, &to)?;
+            inner.emit(EngineEvent::WorkspaceChanged { session: inner.store.get_session(id)? });
+            self.reopen_session(id).await?;
+            self.prompt_tried(id, text, attachments, tried)
+        }
+        .await;
+        if let Err(e) = result {
+            inner.notice(id, plyfold_i18n::tr!("{to} に切り替えられませんでした: {e}", "Could not continue with {to}: {e}", "无法切换到 {to}：{e}"));
+        }
     }
 
     /// Cancel. Pending permission requests are answered with "cancelled" (per the ACP spec)
@@ -1619,6 +1689,15 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
                     .then(|| update["content"]["text"].as_str())
                     .flatten();
                 let mut live_due = false;
+                if update["sessionUpdate"] == "agent_message_chunk"
+                    && let Some(t) = text
+                    && !live.replaying.load(Ordering::SeqCst)
+                {
+                    let mut kept = live.turn_text.lock().unwrap();
+                    if kept.len() < 4096 {
+                        kept.push_str(t);
+                    }
+                }
                 if let Some(t) = text
                     && let Some(clock) = live.clock.lock().unwrap().as_mut()
                 {
@@ -1807,8 +1886,105 @@ fn emit_info(inner: &Inner, id: &str, live: &Live) {
     inner.emit(EngineEvent::Info { session_id: id.into(), info: Box::new(info) });
 }
 
+/// Whether a turn ended on a rate or usage limit (of the key, not a fault in the work). `answer` is the turn's own
+/// text: agents report some limits as a short message rather than an error, so only a short one counts
+fn hit_limit(text: &str, answer: bool) -> bool {
+    let t = text.trim().to_lowercase();
+    const SIGNS: [&str; 9] = [
+        "rate limit",
+        "rate_limit",
+        "usage limit",
+        "quota",
+        "credit balance",
+        "insufficient_quota",
+        "resource_exhausted",
+        "too many requests",
+        "out of credits",
+    ];
+    let sign = SIGNS.iter().any(|s| t.contains(s)) || t.contains("429");
+    if !answer {
+        return sign;
+    }
+    // A short answer that is the agent passing on an API error, or a plan's "limit reached … resets …" message
+    // (an answer that merely talks about rate limits must not switch keys)
+    t.chars().count() <= 600
+        && ((t.starts_with("api error") && sign) || t.contains("usage limit reached") || (t.contains("limit reached") && t.contains("reset")))
+}
+
+/// Copy a conversation's files (those named after its id) between two profiles' data directories, at the same
+/// relative paths. Links are not followed and nothing outside `from` is read
+fn copy_conversation(from: &Path, to: &Path, acp_session_id: &str) -> std::io::Result<usize> {
+    fn walk(dir: &Path, depth: usize, found: &mut Vec<PathBuf>, id: &str) {
+        let Ok(entries) = std::fs::read_dir(dir) else { return };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else { continue };
+            let path = entry.path();
+            if kind.is_dir() && depth < 6 {
+                walk(&path, depth + 1, found, id);
+            } else if kind.is_file() && entry.file_name().to_string_lossy().contains(id) {
+                found.push(path);
+            }
+        }
+    }
+    // An id short enough to match unrelated names would copy the wrong files
+    if acp_session_id.len() < 8 || acp_session_id.contains(['/', '\\']) {
+        return Ok(0);
+    }
+    let mut found = Vec::new();
+    walk(from, 0, &mut found, acp_session_id);
+    for src in &found {
+        let rel = src.strip_prefix(from).map_err(std::io::Error::other)?;
+        let dest = to.join(rel);
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::copy(src, &dest)?;
+    }
+    Ok(found.len())
+}
+
 fn finish_turn(inner: &Inner, id: &str, live: &Live, usage: &Value) {
     let Some(clock) = live.clock.lock().unwrap().take() else { return };
     live.info.lock().unwrap().finish_turn(clock.finish(usage));
     emit_info(inner, id, live);
+}
+
+#[cfg(test)]
+mod limit_tests {
+    use super::*;
+
+    #[test]
+    fn a_limit_is_told_from_an_answer_about_limits() {
+        assert!(hit_limit(r#"API Error: 429 {"type":"error","error":{"type":"rate_limit_error"}}"#, true));
+        assert!(hit_limit("Claude AI usage limit reached|1767225600", true));
+        assert!(hit_limit("5-hour limit reached ∙ resets 3pm", true));
+        assert!(hit_limit("Credit balance is too low", false));
+        assert!(!hit_limit("I added a rate limit to the login route, so a client gets 429 after 10 tries.", true));
+        assert!(!hit_limit(&format!("API Error: 429 rate_limit_error {}", "x".repeat(700)), true));
+        assert!(!hit_limit("connection reset by peer", false));
+    }
+
+    #[test]
+    fn a_conversation_is_copied_by_its_id_without_following_links() {
+        let base = std::env::temp_dir().join(format!("plyfold-copy-conv-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let (from, to) = (base.join("a"), base.join("b"));
+        let sid = "0f6c1d2e-aaaa-bbbb-cccc-1234567890ab";
+        std::fs::create_dir_all(from.join("projects/-w-repo")).unwrap();
+        std::fs::write(from.join(format!("projects/-w-repo/{sid}.jsonl")), "conv").unwrap();
+        std::fs::write(from.join("projects/-w-repo/other.jsonl"), "other").unwrap();
+        assert_eq!(copy_conversation(&from, &to, sid).unwrap(), 1);
+        assert_eq!(std::fs::read_to_string(to.join(format!("projects/-w-repo/{sid}.jsonl"))).unwrap(), "conv");
+        assert!(!to.join("projects/-w-repo/other.jsonl").exists());
+        assert_eq!(copy_conversation(&from, &to, "short").unwrap(), 0, "an id that would match too much is refused");
+        #[cfg(unix)]
+        {
+            let outside = base.join("outside");
+            std::fs::create_dir_all(&outside).unwrap();
+            std::fs::write(outside.join(format!("{sid}.secret")), "no").unwrap();
+            std::os::unix::fs::symlink(&outside, from.join("linked")).unwrap();
+            copy_conversation(&from, &to, sid).unwrap();
+            assert!(!to.join("linked").exists(), "a linked directory is not followed");
+        }
+    }
 }

@@ -2,6 +2,7 @@ import { ChevronLeft, CircleAlert, CircleCheck, Plus, TriangleAlert, X } from "l
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { type MessageKey, useT, currentLang } from "@/i18n";
 import { api } from "@/lib/api";
@@ -11,7 +12,8 @@ import { cn } from "@/lib/utils";
 import { useStore, isListed } from "@/state/store";
 import { agentName, ProviderLogo } from "./icons";
 import { Keys } from "./Keys";
-import { useLiquidClip, useLiquidRevealed } from "./liquid/stage";
+import { liquidAnchor } from "./liquid/liquid";
+import { useLiquidClip, useLiquidMenu, useLiquidRevealed } from "./liquid/stage";
 import { Segmented } from "./Segmented";
 import { RegistryList } from "./RegistryList";
 
@@ -327,6 +329,46 @@ function McpEditor({ servers, onChange }: { servers: McpServerForm[]; onChange: 
   );
 }
 
+/** Another profile of the same agent to continue with when this one's key hits a rate or usage limit */
+function FallbackPicker({ agent, self, value, onChange }: { agent: string; self: string; value: string | null; onChange: (v: string | null) => void }) {
+  const t = useT();
+  const profiles = useStore((s) => s.profiles);
+  const menu = useLiquidMenu("menu:profiles:fallback", "profiles:fallback");
+  const NONE = "__none__";
+  const others = profiles.filter((p) => p.agent === agent && p.name !== self && p.name !== p.agent);
+  return (
+    <div className="flex items-start gap-4">
+      <div className="flex grow flex-col gap-1">
+        <span id="pf-fallback" className="font-medium">
+          {t("profiles.fallback")}
+        </span>
+        <span className="text-xs leading-relaxed text-muted-foreground">{others.length ? t("profiles.fallbackHint") : t("profiles.fallbackNone")}</span>
+      </div>
+      <Select value={value || NONE} onValueChange={(v) => onChange(v === NONE ? null : v)} onOpenChange={menu.onOpenChange} disabled={!others.length && !value}>
+        <SelectTrigger ref={liquidAnchor("profiles:fallback")} aria-labelledby="pf-fallback" className="h-8 min-w-40">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent
+          ref={menu.ref as React.Ref<HTMLDivElement>}
+          style={menu.style}
+          position="popper"
+          align="end"
+          sideOffset={6}
+          className={cn("z-[58]", menu.moving && "opacity-0")}
+        >
+          <SelectItem value={NONE}>{t("profiles.fallbackOff")}</SelectItem>
+          {others.map((p) => (
+            <SelectItem key={p.name} value={p.name}>
+              {p.name}
+            </SelectItem>
+          ))}
+          {value && !others.some((p) => p.name === value) && <SelectItem value={value}>{value}</SelectItem>}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 function Field({ label, htmlFor, hint, children }: { label: string; htmlFor?: string; hint?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -362,6 +404,7 @@ function Editor({ agent, name, sessions, check, onCheck, onSaved, onDeleted }: E
     base_url: null,
     isolate: true,
     mcp: [],
+    fallback: null,
   });
   const [key, setKey] = useState<string | null>(name ? null : "");
   const [busy, setBusy] = useState<"save" | "check" | "delete" | null>(null);
@@ -529,6 +572,8 @@ function Editor({ agent, name, sessions, check, onCheck, onSaved, onDeleted }: E
         </div>
         <Switch id="pf-iso" checked={codexCustom || form.isolate} disabled={codexCustom} onCheckedChange={(isolate) => set({ isolate })} />
       </div>
+
+      <FallbackPicker agent={agent} self={name ?? form.name} value={form.fallback ?? null} onChange={(fallback) => set({ fallback })} />
 
       <McpEditor servers={form.mcp} onChange={(mcp) => set({ mcp })} />
 

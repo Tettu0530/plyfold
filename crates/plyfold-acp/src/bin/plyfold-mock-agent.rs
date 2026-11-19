@@ -178,9 +178,13 @@ async fn prompt(st: Arc<State>, id: Value, params: Value) {
         if text.contains("silent") {
             tokio::time::sleep(Duration::from_secs(3)).await;
         }
-        // "env NAME": answer with the value of an environment variable the agent was started with
+        // "env NAME": answer with the value of an environment variable the agent was started with.
+        // "limit": started with MOCK_LIMITED=1, pass on a rate limit error the way Claude Code does
         let reply = match text.strip_prefix("env ") {
             Some(var) => format!("{var}={}", std::env::var(var.trim()).unwrap_or_default()),
+            None if text.contains("limit") && std::env::var("MOCK_LIMITED").as_deref() == Ok("1") => {
+                r#"API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"Rate limited"}}"#.to_string()
+            }
             None => format!("echo: {text}"),
         };
         st.update(&sid, text_chunk("agent_message_chunk", &reply));

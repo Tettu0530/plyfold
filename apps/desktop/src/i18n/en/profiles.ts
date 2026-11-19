@@ -82,4 +82,8 @@ export const profiles: Record<keyof typeof source, string> = {
   mcpArgs: "Arguments",
   mcpUrl: "URL",
   mcpKind: "Kind",
+  fallback: "When the key hits a limit",
+  fallbackHint: "If this key hits a rate or usage limit, the session switches to the chosen profile and sends the prompt again. The conversation carries over",
+  fallbackNone: "There is no other profile for this agent",
+  fallbackOff: "Don't switch",
 };
