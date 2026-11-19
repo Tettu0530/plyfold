@@ -38,7 +38,7 @@ export const draft: Record<keyof typeof source, string> = {
   cliSessionsEmpty: "此仓库还没有可打开的对话",
   cliSessionsUntitled: "（无标题）",
   chat: "对话",
-  chatOn: "对话：不使用仓库直接交谈。可以搜索和读取网页，但不编辑文件、不执行命令",
+  chatOn: "对话：不使用仓库交谈。可以搜索和获取网页、使用技能和自身文件夹中的文件；不执行命令",
   chatOff: "工作：在仓库中工作",
   compare: "并排比较",
   compareHint: "将同一指令发给选中的每个配置（2 到 {max} 个）。每个都在自己的 worktree 中运行，并排打开",

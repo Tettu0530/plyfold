@@ -4,6 +4,11 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Conversation
+
+- Everyday conversations allow more, like a chat on the web: besides searching and fetching from the web, they may load skills, keep a task list, ask helper agents, think, and read, search and write files inside their own folder. They still run no commands and use no files outside their folder
+- A conversation that is answering says "Answering" rather than "Working"
+
 ### Sessions
 
 - Compare: on the new session screen, turn on Compare and pick 2 to 4 profiles. Each gets the same prompt in a worktree of its own (with the repository's setup and a port of its own) and they open side by side. Their headers get a compare button that opens a pane with each one's state, time, tokens, cost and changes; "Merge this one" commits what is left and merges it into the original branch, and the others can then go to the trash together

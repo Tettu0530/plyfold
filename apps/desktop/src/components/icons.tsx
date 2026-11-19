@@ -129,13 +129,18 @@ export const STATUS: Record<SessionStatus, StatusMeta> = {
   closed: statusMeta("status.closed", { Icon: Square, color: "text-muted-foreground" }),
 };
 
-export function StatusIcon({ status, className }: { status: SessionStatus; className?: string }) {
+/** A conversation is answering rather than working (the same state, said the way a chat would) */
+export function statusLabelKey(status: SessionStatus, chat?: boolean): MessageKey {
+  return chat && status === "working" ? "status.answering" : STATUS[status].labelKey;
+}
+
+export function StatusIcon({ status, chat, className }: { status: SessionStatus; chat?: boolean; className?: string }) {
   const t = useT();
   const m = STATUS[status];
   return (
     <m.Icon
       role="img"
-      aria-label={t(m.labelKey)}
+      aria-label={t(statusLabelKey(status, chat))}
       strokeWidth={2.25}
       className={cn("size-3.5 shrink-0", m.color, m.spin && "animate-spin [animation-duration:1.1s]", className)}
     />

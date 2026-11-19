@@ -92,25 +92,33 @@ async fn a_conversation_looks_things_up_but_does_not_edit() {
     assert!(events.iter().any(|e| e.payload.contains("fetched the page")));
     assert!(!events.iter().any(|e| e.kind == plyfold_store::EventKind::Status && e.payload == "awaiting_permission"));
 
-    // An edit is declined
+    // An edit inside its own folder is allowed, like a file made in a chat on the web
     eng.prompt(&c.id, "permission please").unwrap();
     wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { session_id, .. } if session_id == &c.id)).await;
-    assert!(!dir.join("mock-output.txt").exists());
+    assert!(dir.join("mock-output.txt").exists());
+
+    // A command (whatever it is labelled) is declined, with a note
+    eng.prompt(&c.id, "permission read with-command").unwrap();
+    wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { session_id, .. } if session_id == &c.id)).await;
     let events = eng.store().events(&c.id, None, 10_000).unwrap();
     assert!(events.iter().any(|e| e.payload.contains("permission rejected")));
-    assert!(events.iter().any(|e| e.payload.contains("会話ではファイルの編集とコマンドを使わない")));
+    assert!(events.iter().any(|e| e.payload.contains("会話ではコマンドの実行と、会話のフォルダの外のファイルは使わない")));
 
     // Reading inside its own folder is allowed; outside it, a command labelled as a read, or an answer that would allow
     // from now on, is not
-    for (prompt, allowed) in
-        [("permission read", true), ("permission read outside", false), ("permission read with-command", false), ("permission fetch always-only", false)]
-    {
+    for (prompt, allowed) in [
+        ("permission read", true),
+        ("permission skill", true),
+        ("permission read outside", false),
+        ("permission read with-command", false),
+        ("permission fetch always-only", false),
+    ] {
         let before = eng.store().events(&c.id, None, 100_000).unwrap().len();
         eng.prompt(&c.id, prompt).unwrap();
         wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { session_id, .. } if session_id == &c.id)).await;
         let events = eng.store().events(&c.id, None, 100_000).unwrap();
         let turn = &events[before..];
-        let ran = turn.iter().any(|e| e.payload.contains("read the notes") || e.payload.contains("fetched the page"));
+        let ran = turn.iter().any(|e| ["read the notes", "fetched the page", "loaded the skill"].iter().any(|m| e.payload.contains(m)));
         assert_eq!(ran, allowed, "{prompt}");
         // Plyfold's answer (not the agent's list of options)
         assert!(!turn.iter().any(|e| e.payload.contains("\"selected\"") && e.payload.contains("\"optionId\":\"always\"")), "{prompt}: allowed from now on");

@@ -1476,6 +1476,16 @@ fn allow_once(v: &Value) -> Option<String> {
     v["options"].as_array()?.iter().find(|o| o["kind"] == "allow_once")?["optionId"].as_str().map(str::to_string)
 }
 
+/// Tools an everyday chat may use whatever kind they are labelled with (Claude Code's names): loading a skill, the
+/// task list, and helper agents, whose own tool calls come back through this same policy
+const CHAT_TOOLS: [&str; 3] = ["Skill", "TodoWrite", "Task"];
+
+/// The tool's own name, where the agent gives it (Claude Code: toolCall.name, or _meta.claudeCode.toolName)
+fn tool_name(v: &Value) -> Option<&str> {
+    let call = &v["toolCall"];
+    call["name"].as_str().or_else(|| call["_meta"]["claudeCode"]["toolName"].as_str())
+}
+
 /// The kind a request is treated as: "execute" when it carries a command, whatever the agent labelled it
 fn effective_kind(v: &Value) -> Option<&str> {
     let raw = &v["toolCall"]["rawInput"];
@@ -1646,14 +1656,16 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
                         .map(str::to_string)
                 };
                 let title = v["toolCall"]["title"].as_str().unwrap_or_default().to_string();
-                // An everyday chat may look things up on the web, and read or search inside its own folder; nothing that
-                // changes files, runs commands, or reaches the rest of the disk. The kind is the agent's own label, so a
+                // An everyday chat works like a chat on the web: it may search and fetch from the web, think, load
+                // skills, keep a task list, ask helper agents, and read, search and write files inside its own folder.
+                // It runs no commands and reaches nothing else on the disk. The kind is the agent's own label, so a
                 // request that carries a command counts as one whatever it is labelled, and paths are checked
+                let chat_dir = [self_chat_dir(inner, &id)];
                 let looks_up = live.policy == Policy::LookUpOnly
                     && match effective_kind(&v) {
-                        Some("fetch") => true,
-                        Some("read" | "search") => inside(&locations(&v), &[self_chat_dir(inner, &id)]),
-                        _ => false,
+                        Some("fetch" | "think") => true,
+                        Some("read" | "search" | "edit" | "delete" | "move") => inside(&locations(&v), &chat_dir),
+                        _ => CHAT_TOOLS.contains(&tool_name(&v).unwrap_or_default()),
                     };
                 if let (true, Some(once)) = (looks_up, allow_once(&v)) {
                     let _ = live.client.respond_permission(request_id, Some(&once)).await;
@@ -1668,9 +1680,9 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
                         )
                     } else {
                         plyfold_i18n::tr!(
-                            "会話ではファイルの編集とコマンドを使わないので、断りました: {title}",
-                            "Declined, because a conversation does not edit files or run commands: {title}",
-                            "对话中不编辑文件也不执行命令，因此已拒绝：{title}"
+                            "会話ではコマンドの実行と、会話のフォルダの外のファイルは使わないので、断りました: {title}",
+                            "Declined, because a conversation runs no commands and uses no files outside its folder: {title}",
+                            "对话中不执行命令，也不使用对话文件夹之外的文件，因此已拒绝：{title}"
                         )
                     };
                     inner.notice(&id, note);

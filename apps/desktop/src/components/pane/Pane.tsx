@@ -160,7 +160,7 @@ function SessionPane({ index }: { index: number }) {
           onPointerDown={(e) => startDrag(e, () => ({ kind: "pane", slot: index, title: r.title, agent: r.agent }))}
           className="flex h-9 shrink-0 cursor-grab items-center gap-2 border-b pr-1.5 pl-3"
         >
-          <StatusIcon status={r.status} />
+          <StatusIcon status={r.status} chat={r.chat} />
           <PaneTitle id={id} title={r.title} />
           <span
             title={t("pane.profileTitle", { agent: r.agent, profile: r.profile })}
