@@ -263,6 +263,8 @@ export interface ProfileForm {
   mcp: McpServerForm[];
   /** Profile to continue with when this one's key hits a rate or usage limit (same agent) */
   fallback?: string | null;
+  /** Model name to send instead of the agent's own (a custom provider often has names of its own) */
+  model?: string | null;
 }
 
 export interface ProfileDetail {

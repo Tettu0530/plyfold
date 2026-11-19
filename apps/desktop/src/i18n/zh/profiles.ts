@@ -85,4 +85,8 @@ export const profiles: Record<keyof typeof source, string> = {
   fallbackHint: "此密钥达到速率限制或用量上限时，切换到所选配置并重新发送同一指令。对话会延续",
   fallbackNone: "此代理没有其他配置",
   fallbackOff: "不切换",
+  model: "模型",
+  modelHint: "留空则使用代理的默认模型",
+  modelHintCustom: "填写提供商的模型名称。对只接受自有名称的提供商必须填写。在 Claude Code 中，模型菜单中的任一选项都会使用此模型",
+  modelPlaceholder: "默认",
 };

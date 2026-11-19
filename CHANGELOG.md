@@ -4,6 +4,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Profiles
+
+- A profile can name the model to use (Profiles → Model). For Claude Code it is used for every choice in the model menu and for helper agents, so a custom provider that accepts only its own model names works; Codex gets it in its config.toml and Gemini CLI in GEMINI_MODEL
+
 ## [0.5.0] - 2026-11-19
 
 Running in parallel: one prompt to several agents side by side, a task queue that runs a set number at a time, and moving on to another key when one hits its limit. Everyday conversations can do what a chat on the web does.

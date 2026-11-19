@@ -85,4 +85,9 @@ export const profiles = {
   fallbackHint: "このキーがレート制限や利用上限に達したら、選んだプロファイルに切り替えて同じ指示を送り直します。会話は引き継ぎます",
   fallbackNone: "同じエージェントのプロファイルがほかにありません",
   fallbackOff: "切り替えない",
+  model: "モデル",
+  modelHint: "空欄なら、エージェントの既定のモデルを使います",
+  modelHintCustom:
+    "プロバイダーのモデル名を入れます。独自の名前しか受け付けないプロバイダーでは必須です。Claude Code では、モデルのメニューのどれを選んでもこのモデルになります",
+  modelPlaceholder: "既定",
 } satisfies Record<string, string>;

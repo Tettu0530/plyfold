@@ -405,6 +405,7 @@ function Editor({ agent, name, sessions, check, onCheck, onSaved, onDeleted }: E
     isolate: true,
     mcp: [],
     fallback: null,
+    model: null,
   });
   const [key, setKey] = useState<string | null>(name ? null : "");
   const [busy, setBusy] = useState<"save" | "check" | "delete" | null>(null);
@@ -553,6 +554,18 @@ function Editor({ agent, name, sessions, check, onCheck, onSaved, onDeleted }: E
             )}
           </Field>
         </div>
+      )}
+
+      {supported.length > 1 && (
+        <Field label={t("profiles.model")} htmlFor="pf-model" hint={form.auth === "custom" ? t("profiles.modelHintCustom") : t("profiles.modelHint")}>
+          <Input
+            id="pf-model"
+            value={form.model ?? ""}
+            placeholder={t("profiles.modelPlaceholder")}
+            onChange={(e) => set({ model: e.target.value || null })}
+            className="h-8 font-mono text-xs"
+          />
+        </Field>
       )}
 
       <div className="flex items-start gap-4">
