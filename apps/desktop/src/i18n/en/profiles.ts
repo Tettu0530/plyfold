@@ -86,4 +86,9 @@ export const profiles: Record<keyof typeof source, string> = {
   fallbackHint: "If this key hits a rate or usage limit, the session switches to the chosen profile and sends the prompt again. The conversation carries over",
   fallbackNone: "There is no other profile for this agent",
   fallbackOff: "Don't switch",
+  model: "Model",
+  modelHint: "Leave empty to use the agent's default model",
+  modelHintCustom:
+    "The provider's model name. Required for a provider that accepts only its own names. In Claude Code, every choice in the model menu uses this model",
+  modelPlaceholder: "Default",
 };

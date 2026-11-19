@@ -38,6 +38,9 @@ pub struct ProfileForm {
     /// Profile to continue with when this one's key hits a rate or usage limit (same agent)
     #[serde(default)]
     pub fallback: Option<String>,
+    /// Model name to send instead of the agent's own (a custom provider often has names of its own)
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 /// One MCP server in the form. Unused fields stay empty (a URL for stdio, a command for HTTP)
@@ -91,6 +94,29 @@ pub fn key_var(agent: &str, auth: AuthKind) -> Option<&'static str> {
     }
 }
 
+/// Variables that set Claude Code's model: the default, what each alias in its model menu stands for, and helper
+/// agents. All get the same name, so every choice in the menu reaches a provider that knows only its own names
+const CLAUDE_MODEL_VARS: [&str; 5] =
+    ["ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "CLAUDE_CODE_SUBAGENT_MODEL"];
+const GEMINI_MODEL_VAR: &str = "GEMINI_MODEL";
+
+/// Codex's config.toml: the custom provider (when there is a base URL) and the model (when one is set)
+fn codex_toml(base_url: Option<&str>, model: Option<&str>) -> String {
+    let mut doc: DocumentMut = match base_url {
+        Some(url) => codex_provider_toml(url).parse().unwrap_or_default(),
+        None => DocumentMut::new(),
+    };
+    if let Some(m) = model {
+        doc["model"] = toml_edit::value(m);
+    }
+    doc.to_string()
+}
+
+fn codex_model(files: &BTreeMap<String, String>) -> Option<String> {
+    let doc: DocumentMut = files.get("config.toml")?.parse().ok()?;
+    doc.get("model")?.as_str().map(str::to_string)
+}
+
 fn codex_provider_toml(base_url: &str) -> String {
     let mut doc = DocumentMut::new();
     doc["model_provider"] = toml_edit::value("plyfold");
@@ -132,6 +158,12 @@ pub fn describe(name: &str, def: &ProfileDef) -> ProfileForm {
         isolate: def.isolate,
         mcp: def.mcp.iter().map(McpForm::from).collect(),
         fallback: def.fallback.clone(),
+        model: match def.agent.as_str() {
+            "claude" => def.env.get(CLAUDE_MODEL_VARS[0]).cloned(),
+            "gemini" => def.env.get(GEMINI_MODEL_VAR).cloned(),
+            "codex" => codex_model(&def.files),
+            _ => None,
+        },
     }
 }
 
@@ -177,8 +209,18 @@ pub fn to_def(form: &ProfileForm, existing: Option<&ProfileDef>) -> Result<Profi
             def.keys.insert(k.clone(), v.clone());
         }
     }
-    for v in all_base_vars {
-        def.env.remove(v);
+    for v in all_base_vars.iter().chain(&CLAUDE_MODEL_VARS).chain(&[GEMINI_MODEL_VAR]) {
+        def.env.remove(*v);
+    }
+    let model = form.model.as_deref().map(str::trim).filter(|m| !m.is_empty());
+    if let Some(m) = model
+        && (m.len() > 200 || m.chars().any(|c| c.is_whitespace() || c.is_control() || c == '"' || c == '\\'))
+    {
+        return Err(ProfileError::Form(plyfold_i18n::tr!(
+            "モデル名に空白や引用符は使えません",
+            "A model name has no spaces or quotes",
+            "模型名称不能包含空格或引号"
+        )));
     }
     if def.agent == "codex" || changed_agent {
         def.files.remove("config.toml");
@@ -207,9 +249,27 @@ pub fn to_def(form: &ProfileForm, existing: Option<&ProfileDef>) -> Result<Profi
                 None => {
                     // Codex writes the provider to config.toml, so it needs a dedicated directory
                     def.isolate = true;
-                    def.files.insert("config.toml".into(), codex_provider_toml(url));
+                    def.files.insert("config.toml".into(), codex_toml(Some(url), model));
                 }
             }
+        }
+    }
+    if let Some(m) = model {
+        match def.agent.as_str() {
+            "claude" => {
+                for v in CLAUDE_MODEL_VARS {
+                    def.env.insert(v.into(), m.into());
+                }
+            }
+            "gemini" => {
+                def.env.insert(GEMINI_MODEL_VAR.into(), m.into());
+            }
+            // Already written with the provider; otherwise a config.toml of its own (so a directory of its own)
+            "codex" if !def.files.contains_key("config.toml") => {
+                def.isolate = true;
+                def.files.insert("config.toml".into(), codex_toml(None, Some(m)));
+            }
+            _ => {}
         }
     }
     def.mcp = form.mcp.iter().map(mcp_from_form).collect::<Result<Vec<_>, _>>()?;
@@ -409,6 +469,7 @@ mod tests {
             isolate: true,
             mcp: Vec::new(),
             fallback: None,
+            model: None,
         }
     }
 
@@ -522,5 +583,31 @@ mod tests {
         let cfg = Config::load(&path).unwrap();
         assert!(!cfg.profiles.contains_key("proxy"));
         assert!(cfg.profiles.contains_key("keep"));
+    }
+
+    #[test]
+    fn a_model_name_reaches_every_choice_and_comes_back() {
+        let mut f = form("claude", AuthKind::Custom, Some("https://llm.example.com/api"));
+        f.model = Some("router-x".into());
+        let def = to_def(&f, None).unwrap();
+        for v in CLAUDE_MODEL_VARS {
+            assert_eq!(def.env.get(v).map(String::as_str), Some("router-x"), "{v}");
+        }
+        assert_eq!(describe("p", &def).model.as_deref(), Some("router-x"));
+        // Cleared: the variables go
+        f.model = None;
+        let def = to_def(&f, Some(&def)).unwrap();
+        assert!(CLAUDE_MODEL_VARS.iter().all(|v| !def.env.contains_key(*v)));
+
+        let mut c = form("codex", AuthKind::Custom, Some("https://llm.example.com/v1"));
+        c.model = Some("router-y".into());
+        let def = to_def(&c, None).unwrap();
+        let toml = &def.files["config.toml"];
+        assert!(toml.contains("model = \"router-y\"") && toml.contains("base_url"));
+        assert_eq!(describe("p", &def).model.as_deref(), Some("router-y"));
+        assert_eq!(describe("p", &def).base_url.as_deref(), Some("https://llm.example.com/v1"));
+
+        c.model = Some("bad name".into());
+        assert!(to_def(&c, None).is_err());
     }
 }
