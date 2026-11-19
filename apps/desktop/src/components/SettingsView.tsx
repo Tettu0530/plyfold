@@ -243,6 +243,14 @@ export function SettingsView() {
                     ]}
                   />
                 </Row>
+                <Row label={t("settings.maxParallel")} detail={t("settings.maxParallelDetail")}>
+                  <Segmented<number>
+                    label={t("settings.maxParallel")}
+                    value={settings.max_parallel ?? 2}
+                    onChange={(v) => change({ max_parallel: v })}
+                    options={[1, 2, 3, 4].map((v) => ({ value: v, label: <span className="px-2 font-mono tabular">{v}</span> }))}
+                  />
+                </Row>
                 <Row label={t("settings.stall")} detail={t("settings.stallDetail")}>
                   <Segmented<number>
                     label={t("settings.stall")}

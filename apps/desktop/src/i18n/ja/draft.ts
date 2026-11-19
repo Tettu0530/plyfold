@@ -42,4 +42,6 @@ export const draft = {
   compareHint: "同じ指示を、選んだプロファイルのそれぞれに出します（2〜{max} 個）。どれも専用の worktree で動き、横に並べて開きます",
   compareProfiles: "比べるプロファイル（{count} / {max}）",
   compareWorktree: "比べるときは、セッションごとに worktree を作ります",
+  queue: "予約に入れる",
+  queueHint: "今は始めず、予約に入れます。作業中のセッションが設定の数より少なくなると、順に始まります（いま {count} 件待ち）",
 } satisfies Record<string, string>;

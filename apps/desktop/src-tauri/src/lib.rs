@@ -5,6 +5,7 @@ mod files;
 mod platform;
 mod registry;
 mod shell_path;
+mod tasks;
 
 pub use shell_path::adopt_login_path;
 
@@ -26,6 +27,8 @@ const KEYCHAIN_SERVICE: &str = "plyfold";
 
 struct AppState {
     engine: Engine,
+    /// Where sessions (and the task queue) are kept: see data_dir
+    data_dir: PathBuf,
     config: RwLock<Config>,
     config_path: PathBuf,
     secrets: Arc<KeychainStore>,
@@ -69,6 +72,8 @@ struct AppSettings {
     default_profile: String,
     /// Name of the sidebar group for everyday conversations ("" = the default)
     chat_group_name: String,
+    /// How many queued tasks may run at once
+    max_parallel: u32,
 }
 
 impl Default for AppSettings {
@@ -90,6 +95,7 @@ impl Default for AppSettings {
             restore_panes: true,
             default_profile: String::new(),
             chat_group_name: String::new(),
+            max_parallel: 2,
         }
     }
 }
@@ -187,7 +193,10 @@ fn save_settings(state: State<'_, AppState>, settings: AppSettings) -> CmdResult
             "显示大小须在 80% 到 150% 之间"
         ));
     }
-    if !["system", "reduce"].contains(&settings.reduce_motion.as_str()) || settings.default_profile.len() > 128 || settings.chat_group_name.chars().count() > 80
+    if !["system", "reduce"].contains(&settings.reduce_motion.as_str())
+        || settings.default_profile.len() > 128
+        || settings.chat_group_name.chars().count() > 80
+        || !(1..=8).contains(&settings.max_parallel)
     {
         return Err(plyfold_i18n::tr!("設定の値が正しくありません", "A setting has an invalid value", "某项设置的值无效"));
     }
@@ -525,6 +534,16 @@ struct RepoEntry {
 fn list_repos(state: State<'_, AppState>) -> CmdResult<Vec<RepoEntry>> {
     let repos = state.engine.known_repos().map_err(err)?;
     Ok(repos.into_iter().map(|path| RepoEntry { settings: state.engine.repo_settings(&path), path }).collect())
+}
+
+#[tauri::command]
+fn list_tasks(state: State<'_, AppState>) -> Vec<tasks::Task> {
+    tasks::load(&state.data_dir)
+}
+
+#[tauri::command]
+fn save_tasks(state: State<'_, AppState>, tasks: Vec<tasks::Task>) -> CmdResult<()> {
+    tasks::save(&state.data_dir, &tasks)
 }
 
 /// Rename a repository's group in the sidebar ("" goes back to the folder's name)
@@ -884,7 +903,15 @@ pub fn run() {
                 }
             });
 
-            app.manage(AppState { engine, config: RwLock::new(config), config_path, secrets, state_dir, settings: RwLock::new(settings) });
+            app.manage(AppState {
+                engine,
+                data_dir: data_dir(&state_dir),
+                config: RwLock::new(config),
+                config_path,
+                secrets,
+                state_dir,
+                settings: RwLock::new(settings),
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -901,6 +928,8 @@ pub fn run() {
             set_run_group,
             empty_trash,
             list_repos,
+            list_tasks,
+            save_tasks,
             rename_repo,
             save_repo_settings,
             open_file_in_editor,

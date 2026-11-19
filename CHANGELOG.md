@@ -11,6 +11,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ### Sessions
 
+- A task queue: the new session screen can add a prompt to the queue instead of starting it. Queued prompts start in order, each as a session with the profile, repository and worktree choice they were queued with, while fewer sessions than "Run at once" (Settings → Sessions, 2 by default) are working. The queue sits at the top of the sidebar, where a task can be started now or removed; one that could not start says why and waits. It is kept across restarts
 - Compare: on the new session screen, turn on Compare and pick 2 to 4 profiles. Each gets the same prompt in a worktree of its own (with the repository's setup and a port of its own) and they open side by side. Their headers get a compare button that opens a pane with each one's state, time, tokens, cost and changes; "Merge this one" commits what is left and merges it into the original branch, and the others can then go to the trash together
 
 ## [0.4.1] - 2026-11-19

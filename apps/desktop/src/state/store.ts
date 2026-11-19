@@ -12,7 +12,7 @@ import { notify } from "@/lib/notify";
 import { loadInfoCache, saveInfoCache, snapshot, type InfoCache } from "./infoCache";
 import { commandsFromHistory } from "@/lib/commands";
 import type { SlashCommand } from "@/lib/types";
-import type { AppSettings, Category, SessionStatus, EngineEvent, ProfileSummary, ProfileUsage, SessionInfo, SessionRecord } from "@/lib/types";
+import type { AppSettings, Category, SessionStatus, EngineEvent, ProfileSummary, ProfileUsage, QueuedTask, SessionInfo, SessionRecord } from "@/lib/types";
 import { addNotice, applyUpdate, beginTurn, emptyTranscript, endTurn, fromHistory, type PendingPermission, type Transcript } from "./transcript";
 
 export interface SideChat {
@@ -336,6 +336,15 @@ interface State {
   /** Stop the agent (the log and worktree remain) */
   stopSession: (id: string) => Promise<void>;
   /** Delete along with the log. With removeWorktree, also delete the worktree and branch */
+  /** Prompts waiting to start as sessions, first first */
+  tasks: QueuedTask[];
+  /** Put the draft's prompt in the queue instead of starting it now */
+  queueTask: (draftId: string, prompt: string) => Promise<void>;
+  cancelTask: (id: string) => Promise<void>;
+  /** Start a queued task now, whatever is running */
+  startTaskNow: (id: string) => Promise<void>;
+  /** Start queued tasks while fewer than max_parallel sessions are busy */
+  pumpTasks: () => Promise<void>;
   /** Names given to repositories' sidebar groups (path → name) */
   repoNames: Record<string, string>;
   loadRepoNames: () => Promise<void>;
@@ -449,6 +458,7 @@ export const useStore = create<State>((set, get) => ({
   searchOpen: false,
   find: null,
   repoNames: {},
+  tasks: [],
   labOpen: false,
   diffVersion: 0,
   bumpDiff: () => set((s) => ({ diffVersion: s.diffVersion + 1 })),
@@ -488,6 +498,8 @@ export const useStore = create<State>((set, get) => ({
     const next = onEngineEvent((e) => {
       // When a turn ends, send queued instructions (not after a cancel or error; they stay queued)
       if (e.type === "turn_ended" && !e.error && e.stop_reason !== "cancelled") queueMicrotask(() => get().sendQueued(e.session_id));
+      // A session that stops working may make room for a queued task
+      if (e.type === "status") queueMicrotask(() => void get().pumpTasks());
       set((s) => {
         const sessions = reduceEvent(s.sessions, e);
         // Also post a macOS notification when the app isn't in focus
@@ -522,6 +534,13 @@ export const useStore = create<State>((set, get) => ({
     applyMotion(sv.settings.reduce_motion);
     set({ profiles, sessions, settings: sv.settings, ready: true, ...(layout ? { ...layout, paneCount: leaves(layout.layout).length } : {}) });
     void get().loadRepoNames();
+    void api.listTasks().then(
+      (tasks) => {
+        set({ tasks });
+        void get().pumpTasks();
+      },
+      () => {},
+    );
     for (const id of layout?.panes ?? []) if (id) void loadSession(id);
   },
 
@@ -1014,6 +1033,52 @@ export const useStore = create<State>((set, get) => ({
     await api.closeSession(id);
   },
 
+  queueTask: async (draftId, prompt) => {
+    const d = get().drafts[draftId];
+    if (!d?.profile || d.chat || !prompt.trim()) return;
+    const task: QueuedTask = {
+      id: crypto.randomUUID(),
+      profile: d.profile,
+      repo: d.repo,
+      worktree: d.worktree,
+      prompt,
+      title: prompt.trim().split("\n")[0].slice(0, 40),
+      created_at: Date.now(),
+    };
+    const tasks = [...get().tasks, task];
+    await api.saveTasks(tasks);
+    set({ tasks });
+    void get().pumpTasks();
+  },
+
+  cancelTask: async (id) => {
+    const tasks = get().tasks.filter((t) => t.id !== id);
+    await api.saveTasks(tasks);
+    set({ tasks });
+  },
+
+  startTaskNow: async (id) => {
+    const task = get().tasks.find((t) => t.id === id);
+    if (task) await runTask(task);
+  },
+
+  pumpTasks: async () => {
+    if (pumping) return;
+    pumping = true;
+    try {
+      for (;;) {
+        const s = get();
+        const limit = s.settings.max_parallel ?? 2;
+        const busy = Object.values(s.sessions).filter((v) => !v.record.side_of && BUSY.includes(v.record.status)).length;
+        const next = s.tasks.find((t) => !t.error);
+        if (!next || busy + starting >= limit) break;
+        await runTask(next);
+      }
+    } finally {
+      pumping = false;
+    }
+  },
+
   loadRepoNames: async () => {
     const repos = await api.listRepos().catch(() => []);
     set({ repoNames: Object.fromEntries(repos.filter((r) => r.settings.name).map((r) => [r.path, r.settings.name])) });
@@ -1079,6 +1144,37 @@ export const useStore = create<State>((set, get) => ({
     });
   },
 }));
+
+// ---- the task queue
+
+const BUSY: SessionStatus[] = ["starting", "working", "awaiting_permission", "stalled"];
+/** One pump at a time; tasks being started count as busy until their session reports a state */
+let pumping = false;
+let starting = 0;
+
+/** Take a task off the queue and start it as a session (in the sidebar; no pane is taken) */
+async function runTask(queued: QueuedTask) {
+  const task = { ...queued, error: null };
+  const store = useStore.getState();
+  const tasks = store.tasks.filter((t) => t.id !== task.id);
+  useStore.setState({ tasks });
+  await api.saveTasks(tasks).catch(() => {});
+  starting += 1;
+  try {
+    const rec = await api.startSession({ profile: task.profile, repo: task.repo, title: task.title || t("store.newSessionTitle"), worktree: task.worktree });
+    useStore.setState((s) => ({
+      sessions: { ...s.sessions, [rec.id]: s.sessions[rec.id] ? { ...s.sessions[rec.id], record: rec } : { ...newView(rec), historyLoaded: true } },
+    }));
+    await useStore.getState().sendPrompt(rec.id, task.prompt);
+  } catch (e) {
+    // Back at the head of the queue with the reason, waiting to be started again by hand
+    const back = [{ ...task, error: String(e).slice(0, 500) }, ...useStore.getState().tasks];
+    useStore.setState({ tasks: back });
+    await api.saveTasks(back).catch(() => {});
+  } finally {
+    starting -= 1;
+  }
+}
 
 /** For a stopped session, load the conversation from the log, and fetch config options if missing */
 async function loadSession(id: string) {

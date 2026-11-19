@@ -1,4 +1,4 @@
-import { ChevronRight, CircleArrowUp, KeyRound, Pencil, Plus, RotateCcw, Search, Settings, Trash2 } from "lucide-react";
+import { ChevronRight, CircleArrowUp, KeyRound, ListTodo, Pencil, Play, Plus, RotateCcw, Search, Settings, Trash2, X } from "lucide-react";
 import { Spinner } from "./icons";
 import { motion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
@@ -120,6 +120,7 @@ export function Sidebar() {
       </div>
 
       <div className="flex min-h-0 grow flex-col overflow-y-auto px-2">
+        <TaskQueue />
         {groups.length === 0 && <p className="px-2 py-4 text-xs text-muted-foreground">{t("sidebar.empty")}</p>}
         {groups.map(([repo, items]) => {
           const isClosed = !!closed[repo];
@@ -548,5 +549,71 @@ function GroupHeader({
       </div>
       {error && <p className="px-2 text-xs text-error">{error}</p>}
     </>
+  );
+}
+
+/** Prompts waiting to start as sessions, first first (shown only while there are any) */
+function TaskQueue() {
+  const t = useT();
+  const tasks = useStore((s) => s.tasks);
+  const limit = useStore((s) => s.settings.max_parallel ?? 2);
+  const profiles = useStore((s) => s.profiles);
+  const [open, setOpen] = useState(true);
+  if (tasks.length === 0) return null;
+  const { cancelTask, startTaskNow } = useStore.getState();
+  return (
+    <div className="mb-1">
+      <button
+        type="button"
+        aria-expanded={open}
+        title={t("sidebar.queueHint", { count: limit })}
+        onClick={() => setOpen((o) => !o)}
+        className="mt-1 flex h-7 w-full items-center gap-1 rounded-md pr-2 pl-1 text-xs text-muted-foreground hover:text-foreground"
+      >
+        <motion.span animate={{ rotate: open ? 90 : 0 }} transition={snappy} className="flex">
+          <ChevronRight className="size-3.5" aria-hidden />
+        </motion.span>
+        <ListTodo className="size-3.5" aria-hidden />
+        <span className="grow text-left">{t("sidebar.queue")}</span>
+        <span className="font-mono tabular">{tasks.length}</span>
+      </button>
+      {open &&
+        tasks.map((task) => {
+          const agent = profiles.find((p) => p.name === task.profile)?.agent ?? task.profile;
+          return (
+            <div key={task.id} className="group flex flex-col gap-0.5 rounded-lg px-2 py-1.5 hover:bg-accent">
+              <span className="flex min-w-0 items-center gap-2">
+                <ProviderLogo agent={agent} className="text-muted-foreground" />
+                <span className="min-w-0 grow truncate" title={task.prompt}>
+                  {task.title}
+                </span>
+              </span>
+              <span className="flex min-w-0 items-center gap-2 pl-[22px] text-xs text-muted-foreground">
+                <span className="shrink-0">{task.profile === agent ? "default" : task.profile}</span>
+                <span className="min-w-0 grow truncate">{repoName(task.repo)}</span>
+                <button
+                  type="button"
+                  aria-label={t("sidebar.startNow", { title: task.title })}
+                  title={t("sidebar.startNow", { title: task.title })}
+                  onClick={() => void startTaskNow(task.id)}
+                  className="flex size-5 shrink-0 items-center justify-center rounded-md opacity-0 group-hover:opacity-100 hover:bg-background hover:text-foreground focus-visible:opacity-100"
+                >
+                  <Play className="size-3" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  aria-label={t("sidebar.cancelTask", { title: task.title })}
+                  title={t("sidebar.cancelTask", { title: task.title })}
+                  onClick={() => void cancelTask(task.id)}
+                  className="flex size-5 shrink-0 items-center justify-center rounded-md opacity-0 group-hover:opacity-100 hover:bg-background hover:text-error focus-visible:opacity-100"
+                >
+                  <X className="size-3" aria-hidden />
+                </button>
+              </span>
+              {task.error && <span className="pl-[22px] text-xs whitespace-pre-wrap text-error">{t("sidebar.taskFailed", { error: task.error })}</span>}
+            </div>
+          );
+        })}
+    </div>
   );
 }

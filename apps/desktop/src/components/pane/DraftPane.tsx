@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Check, Coins, Columns3, FolderOpen, GitBranch, MessageCircle, MessageSquare, Plus, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Coins, Columns3, FolderOpen, GitBranch, ListPlus, MessageCircle, MessageSquare, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -114,7 +114,10 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const t = useT();
   const draft = useStore((s) => s.drafts[id]);
   const profiles = useStore((s) => s.profiles);
-  const { updateDraft, startDraft, startCompare, closePane, focusPane } = useStore.getState();
+  const { updateDraft, startDraft, startCompare, queueTask, closePane, focusPane } = useStore.getState();
+  const waiting = useStore((s) => s.tasks.length);
+  // Shown for a moment after a prompt went into the queue
+  const [queued, setQueued] = useState(false);
   const [text, setText] = useState("");
   // A chip added with @ and its "@path" in the text are kept together: removing either removes the other
   const att = useAttachments({ scope: id, onMentionRemoved: (path) => setText((cur) => removeMention(cur, path)) });
@@ -358,6 +361,25 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
                   }}
                   className="min-h-0 grow resize-none bg-transparent py-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
                 />
+                {/* Into the queue instead of now: it starts when fewer than the set number of sessions are working */}
+                {!draft.chat && !picks && (
+                  <button
+                    type="button"
+                    aria-label={t("draft.queue")}
+                    title={t("draft.queueHint", { count: waiting })}
+                    disabled={!canStart || !text.trim()}
+                    onClick={() =>
+                      void queueTask(id, text).then(() => {
+                        setText("");
+                        setQueued(true);
+                        setTimeout(() => setQueued(false), 2000);
+                      })
+                    }
+                    className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+                  >
+                    {queued ? <Check className="size-3.5" aria-hidden /> : <ListPlus className="size-3.5" aria-hidden />}
+                  </button>
+                )}
                 <button
                   type="button"
                   aria-label={t("draft.start")}

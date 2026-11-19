@@ -170,6 +170,8 @@ export interface AppSettings {
   default_profile: string;
   /** Name of the sidebar group for everyday conversations ("" = the default) */
   chat_group_name?: string;
+  /** How many queued tasks may run at once */
+  max_parallel?: number;
 }
 
 /** Settings → Info (src-tauri app_info) */
@@ -342,6 +344,19 @@ export interface RepoSettings {
 export interface RepoEntry {
   path: string;
   settings: RepoSettings;
+}
+
+/** A prompt waiting to start as a session (the task queue) */
+export interface QueuedTask {
+  id: string;
+  profile: string;
+  repo: string;
+  worktree: boolean;
+  prompt: string;
+  title: string;
+  created_at: number;
+  /** Why it could not start; it then waits until started again by hand */
+  error?: string | null;
 }
 
 /** A file's contents for the touched-files pane (read_text_file) */

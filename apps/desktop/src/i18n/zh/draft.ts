@@ -44,4 +44,6 @@ export const draft: Record<keyof typeof source, string> = {
   compareHint: "将同一指令发给选中的每个配置（2 到 {max} 个）。每个都在自己的 worktree 中运行，并排打开",
   compareProfiles: "要比较的配置（{count} / {max}）",
   compareWorktree: "比较时每个会话都有自己的 worktree",
+  queue: "加入排队",
+  queueHint: "不立即开始，而是加入排队。工作中的会话少于设定数量时会依次开始（当前 {count} 个在等待）",
 };

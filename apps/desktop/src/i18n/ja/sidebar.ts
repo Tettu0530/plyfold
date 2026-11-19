@@ -21,4 +21,9 @@ export const sidebar = {
   trashNote: "30 日たつと記録は自動で消えます。worktree は残ります",
   groupName: "グループの名前",
   renameGroup: "「{name}」の名前を変える",
+  queue: "予約",
+  queueHint: "作業中のセッションが {count} 件より少なくなると、上から順に始まります",
+  startNow: "「{title}」を今すぐ始める",
+  cancelTask: "「{title}」の予約を取り消す",
+  taskFailed: "始められませんでした: {error}",
 } satisfies Record<string, string>;
