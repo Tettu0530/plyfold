@@ -1,4 +1,4 @@
-import { ChevronRight, CircleArrowUp, KeyRound, Pencil, Plus, RotateCcw, Search, Settings, Trash2 } from "lucide-react";
+import { ChevronRight, CircleArrowUp, KeyRound, Library, Pencil, Plus, RotateCcw, Search, Settings, Trash2 } from "lucide-react";
 import { Spinner } from "./icons";
 import { motion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
@@ -19,6 +19,7 @@ import { startDrag } from "./pane/dnd";
 import { keysOf } from "@/lib/keymap";
 import { useBindings } from "@/state/keys";
 import { installUpdate, useUpdate } from "@/state/update";
+import { openPrompts, usePromptsScreen } from "@/state/promptsScreen";
 
 /** Group key for everyday conversations (no repository name can contain a NUL) */
 const CHAT_GROUP = "\0chat";
@@ -37,6 +38,7 @@ export function Sidebar() {
   const settingsOpen = useStore((s) => !!s.settingsView);
   const openProfiles = useStore((s) => s.openProfiles);
   const profilesOpen = useStore((s) => !!s.profilesView);
+  const promptsOpen = usePromptsScreen((s) => !!s.view);
   // The blob emerges from behind its anchor (button or row) only. Blob sits above the sidebar background (55), the anchor above that (57)
   const searchLayer = useStore((s) => s.searchLayerActive);
   const unread = useStore((s) => s.unread);
@@ -231,6 +233,21 @@ export function Sidebar() {
 
       <div className="flex flex-col border-t p-2">
         <UpdateRow />
+        <motion.button
+          ref={liquidAnchor("prompts")}
+          type="button"
+          whileTap={{ scale: 1.06 }}
+          transition={snappy}
+          onClick={() => openPrompts("prompts")}
+          className={cn(
+            "relative flex h-7 items-center gap-2 rounded-lg px-2 text-muted-foreground hover:bg-accent hover:text-foreground",
+            promptsOpen && "bg-accent text-foreground",
+            active.has("prompts") && "z-[57] bg-accent text-foreground",
+          )}
+        >
+          <Library className="size-4" aria-hidden />
+          <span className="grow text-left">{t("sidebar.prompts")}</span>
+        </motion.button>
         <motion.button
           ref={liquidAnchor("profiles")}
           type="button"

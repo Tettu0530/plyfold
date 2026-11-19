@@ -27,6 +27,7 @@ import type {
   TextFile,
   RepoEntry,
   RepoSettings,
+  SavedPrompt,
 } from "./types";
 
 // Thin wrappers around the Tauri commands (src-tauri/src/lib.rs). Argument names follow the Rust side's camelCase conversion
@@ -90,6 +91,11 @@ export const api = {
   setProfileKey: (name: string, value: string) => invoke<void>("set_profile_key", { name, value }),
   deleteProfile: (name: string) => invoke<void>("delete_profile", { name }),
   checkProfile: (name: string) => invoke<CheckResult>("check_profile", { name }),
+  listPrompts: () => invoke<SavedPrompt[]>("list_prompts"),
+  savePrompt: (prompt: SavedPrompt) => invoke<SavedPrompt[]>("save_prompt", { prompt }),
+  deletePrompt: (id: string) => invoke<SavedPrompt[]>("delete_prompt", { id }),
+  exportPrompts: (path: string) => invoke<void>("export_prompts", { path }),
+  importPrompts: (path: string) => invoke<SavedPrompt[]>("import_prompts", { path }),
 };
 
 export function onEngineEvent(handler: (e: EngineEvent) => void): Promise<UnlistenFn> {

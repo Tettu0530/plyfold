@@ -14,6 +14,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 ### Conversation
 
 - The agent's thinking is shown as Markdown like its answers (lists, emphasis, code, headings), still small and muted
+- Saved prompts live in the state directory (`prompts.json`, shared with a development build). Search them, limit one to a repository, and insert it into the open session or start a session with it. `{repo}` and `{branch}` are filled from that session. A JSON file can be written out or read in; a file that is not this shape is left unused
 
 ### Fixed
 

@@ -8,6 +8,7 @@ export const sidebar: Record<keyof typeof source, string> = {
   empty: "还没有会话",
   renameLabel: "会话名称",
   unread: "有未读通知",
+  prompts: "已保存的提示词",
   profiles: "配置",
   settings: "设置",
   rowTitle: "{title}（{profile}，{age}）",

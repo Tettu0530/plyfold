@@ -8,6 +8,7 @@ export const sidebar: Record<keyof typeof source, string> = {
   empty: "No sessions yet",
   renameLabel: "Session name",
   unread: "Has unread notifications",
+  prompts: "Saved prompts",
   profiles: "Profiles",
   settings: "Settings",
   rowTitle: "{title} ({profile}, {age})",

@@ -3,6 +3,7 @@
 mod dirs;
 mod files;
 mod platform;
+mod prompts;
 mod registry;
 mod shell_path;
 
@@ -818,6 +819,31 @@ async fn discard_session_changes(state: State<'_, AppState>, id: String) -> CmdR
     state.engine.discard(&id).map_err(err)
 }
 
+#[tauri::command]
+fn list_prompts(state: State<'_, AppState>) -> Result<Vec<prompts::Prompt>, String> {
+    prompts::load(&state.state_dir)
+}
+
+#[tauri::command]
+fn save_prompt(state: State<'_, AppState>, prompt: prompts::Prompt) -> Result<Vec<prompts::Prompt>, String> {
+    prompts::save(&state.state_dir, prompt)
+}
+
+#[tauri::command]
+fn delete_prompt(state: State<'_, AppState>, id: String) -> Result<Vec<prompts::Prompt>, String> {
+    prompts::delete(&state.state_dir, &id)
+}
+
+#[tauri::command]
+fn export_prompts(state: State<'_, AppState>, path: String) -> Result<(), String> {
+    prompts::export_to(&state.state_dir, std::path::Path::new(&path))
+}
+
+#[tauri::command]
+fn import_prompts(state: State<'_, AppState>, path: String) -> Result<Vec<prompts::Prompt>, String> {
+    prompts::import_file(&state.state_dir, std::path::Path::new(&path))
+}
+
 /// Rename a session
 #[tauri::command]
 fn rename_session(state: State<'_, AppState>, id: String, title: String) -> CmdResult<()> {
@@ -941,6 +967,11 @@ pub fn run() {
             app_info,
             reveal_path,
             set_ui_lang,
+            list_prompts,
+            save_prompt,
+            delete_prompt,
+            export_prompts,
+            import_prompts,
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Plyfold");

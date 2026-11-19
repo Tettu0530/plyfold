@@ -1,4 +1,4 @@
-// pane/Composer.tsx (input box, model / effort, context, queue)
+// pane/Composer.tsx (input box, model / effort, context, queue) and PromptsView.tsx (saved messages)
 import type { composer as source } from "../ja/composer";
 
 export const composer: Record<keyof typeof source, string> = {
@@ -31,4 +31,28 @@ export const composer: Record<keyof typeof source, string> = {
   slashEmpty: "No matching commands",
   modelLabel: "Model",
   effortLabel: "Effort",
+  prompts: "Saved prompts",
+  promptsBack: "Back",
+  promptsSearch: "Search",
+  promptsEmpty: "No saved prompts yet",
+  promptsNoMatch: "No matching prompts",
+  promptsNew: "Add",
+  promptsName: "Name",
+  promptsBody: "Prompt",
+  promptsPlaceholders: "{repo} and {branch} are filled in when you insert the prompt or start a session",
+  promptsRepo: "Repository",
+  promptsAnyRepo: "Every repository",
+  promptsBrowse: "Choose folder",
+  promptsSave: "Save",
+  promptsCancel: "Cancel",
+  promptsInsert: "Insert",
+  promptsStart: "Start session",
+  promptsEdit: "Edit",
+  promptsDelete: "Delete",
+  promptsDeleteConfirm: "Delete it",
+  promptsNotThisRepo: "This prompt is for another repository, so it cannot be inserted here",
+  promptsNeedRepo: "There is no repository to start in. Set one on the prompt, or open a session in that repository",
+  promptsNeedProfile: "There is no profile. Create one first",
+  promptsExport: "Export",
+  promptsImport: "Import",
 };

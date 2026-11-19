@@ -6,6 +6,7 @@ export const sidebar = {
   empty: "セッションはまだありません",
   renameLabel: "セッションの名前",
   unread: "見ていない通知があります",
+  prompts: "保存したプロンプト",
   profiles: "プロファイル",
   settings: "設定",
   rowTitle: "{title}（{profile}、{age}）",

@@ -8,6 +8,7 @@ import { LiquidStage } from "./components/liquid/stage";
 import { ImagePreview } from "./components/ImagePreview";
 import { ProfilesView } from "./components/ProfilesView";
 import { Notifications } from "./components/Notifications";
+import { PromptsView } from "./components/PromptsView";
 import { SettingsView } from "./components/SettingsView";
 import { PaneGrid } from "./components/pane/PaneGrid";
 import { SearchCard } from "./components/SearchCard";
@@ -184,6 +185,7 @@ export default function App() {
         <GooDefs />
         <ProfilesView />
         <SettingsView />
+        <PromptsView />
         <LiquidStage />
         <SearchCard />
         <ImagePreview />

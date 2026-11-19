@@ -1,4 +1,4 @@
-import { ArrowUp, CornerDownRight, ListOrdered, ListPlus, Paperclip, Pencil, Square, X } from "lucide-react";
+import { ArrowUp, CornerDownRight, Library, ListOrdered, ListPlus, Paperclip, Pencil, Square, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
@@ -23,6 +23,7 @@ import { isImeKey, isSendKey } from "@/lib/keys";
 import { useStore, type Queued } from "@/state/store";
 import { useT } from "@/i18n";
 import { ModelMenu } from "./ModelMenu";
+import { openPrompts, usePromptsScreen } from "@/state/promptsScreen";
 
 function option(info: SessionInfo | null, c: Category): ConfigOption | undefined {
   return info?.config.find((o) => o.category === c);
@@ -134,6 +135,7 @@ export function ControlRow({
 }) {
   const t = useT();
   const raised = useLiquidActiveAnchors();
+  const promptsOpen = usePromptsScreen((s) => s.view?.anchor === `prompts:${scope}`);
   const modeMenu = useLiquidMenu(`menu:${scope}:mode`, `${scope}:mode`);
   // The side chat keeps the main session's model and effort: changing them would drop the prompt cache it shares
   const model = noPickers ? null : option(info, "model");
@@ -192,6 +194,19 @@ export function ControlRow({
       )}
       {empty && !model && !effort && modes.length === 0 && <span className="px-1.5 text-muted-foreground">{empty}</span>}
       <span className="grow" />
+      <button
+        type="button"
+        ref={liquidAnchor(`prompts:${scope}`)}
+        aria-label={t("composer.prompts")}
+        onClick={() => openPrompts(`prompts:${scope}`)}
+        className={cn(
+          "relative flex h-6 items-center gap-1 rounded-md px-1.5 text-muted-foreground hover:bg-accent hover:text-foreground",
+          promptsOpen && "bg-accent text-foreground",
+          raised.has(`prompts:${scope}`) && "z-[57] bg-accent text-foreground",
+        )}
+      >
+        <Library className="size-3.5" aria-hidden />
+      </button>
       {ctxPct != null && info && <ContextMeter info={info} pct={ctxPct} scope={scope} />}
     </div>
   );

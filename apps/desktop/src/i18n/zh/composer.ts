@@ -1,4 +1,4 @@
-// pane/Composer.tsx (input box, model / effort, context, queue)
+// pane/Composer.tsx (input box, model / effort, context, queue) and PromptsView.tsx (saved messages)
 import type { composer as source } from "../ja/composer";
 
 export const composer: Record<keyof typeof source, string> = {
@@ -31,4 +31,28 @@ export const composer: Record<keyof typeof source, string> = {
   slashEmpty: "没有匹配的命令",
   modelLabel: "模型",
   effortLabel: "推理强度",
+  prompts: "已保存的提示词",
+  promptsBack: "返回",
+  promptsSearch: "搜索",
+  promptsEmpty: "还没有已保存的提示词",
+  promptsNoMatch: "没有匹配的提示词",
+  promptsNew: "添加",
+  promptsName: "名称",
+  promptsBody: "提示词",
+  promptsPlaceholders: "插入或开始会话时，会填入 {repo} 和 {branch}",
+  promptsRepo: "仓库",
+  promptsAnyRepo: "所有仓库",
+  promptsBrowse: "选择文件夹",
+  promptsSave: "保存",
+  promptsCancel: "取消",
+  promptsInsert: "插入",
+  promptsStart: "开始会话",
+  promptsEdit: "编辑",
+  promptsDelete: "删除",
+  promptsDeleteConfirm: "确认删除",
+  promptsNotThisRepo: "这条提示词属于其他仓库，无法插入到这里",
+  promptsNeedRepo: "没有可开始的仓库。请在提示词上指定仓库，或打开该仓库的会话",
+  promptsNeedProfile: "没有配置。请先创建一个",
+  promptsExport: "导出",
+  promptsImport: "导入",
 };

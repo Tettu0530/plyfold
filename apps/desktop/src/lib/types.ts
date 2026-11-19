@@ -342,6 +342,14 @@ export interface RepoEntry {
   settings: RepoSettings;
 }
 
+/** A saved message (src-tauri/src/prompts.rs). `repo` null means every repository */
+export interface SavedPrompt {
+  id: string;
+  name: string;
+  body: string;
+  repo: string | null;
+}
+
 /** A file's contents for the touched-files pane (read_text_file) */
 export interface TextFile {
   /** null for a binary file */
