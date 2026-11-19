@@ -6,6 +6,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ### Sessions
 
+- An MCP server address must be https://; plain http:// is accepted only for a server on this machine (localhost, 127.0.0.1, ::1), since the traffic carries the conversation
 - A profile can list MCP servers: a local command (stdio), or an HTTP or SSE address. They are passed when a session starts, is reopened, or is forked. HTTP and SSE go out only when the agent says it supports them, and a command that cannot be found is left out; the conversation names each server that was not passed. Headers and environment values for those servers are not stored
 - Sidebar groups can be renamed: double-click a group's name, or the pencil that shows on hover (Enter keeps, Esc cancels, an empty name goes back to the default). A repository's name is kept with its other settings, and can also be set in Settings → Repositories; the conversations group's in the app settings. Groups now follow the repository's path, so two repositories with the same folder name are two groups (the path shows on hover)
 - Each session gets a port of its own for dev servers, kept for its lifetime (3101 to 3999, one no other session has and nothing listens on): agents start with `PORT` and `PLYFOLD_PORT` set to it, and so does the worktree setup script (`PLYFOLD_PORT`). Sessions side by side no longer fight over 3000, and an empty preview lists the ports of the sessions on screen

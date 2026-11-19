@@ -254,11 +254,11 @@ fn mcp_from_form(form: &McpForm) -> Result<McpServerDef, ProfileError> {
         }
         "http" | "sse" => {
             let url = form.url.trim();
-            if !(url.starts_with("https://") || url.starts_with("http://")) {
+            if !crate::mcp_url_ok(url) {
                 return Err(ProfileError::Form(plyfold_i18n::tr!(
-                    "MCP サーバー「{name}」の URL は http:// か https:// で始めてください",
-                    "The URL for MCP server “{name}” must start with http:// or https://",
-                    "MCP 服务器“{name}”的 URL 必须以 http:// 或 https:// 开头"
+                    "MCP サーバー「{name}」の URL は https:// で始めてください（http:// はこの機械のサーバーだけ）",
+                    "The URL for MCP server “{name}” must start with https:// (http:// only for a server on this machine)",
+                    "MCP 服务器“{name}”的 URL 必须以 https:// 开头（http:// 仅限本机的服务器）"
                 )));
             }
             if form.transport == "http" {
