@@ -51,6 +51,7 @@ export const api = {
   deleteSession: (id: string, removeWorktree: boolean) => invoke<void>("delete_session", { id, removeWorktree }),
   trashSession: (id: string) => invoke<SessionRecord>("trash_session", { id }),
   restoreSession: (id: string) => invoke<SessionRecord>("restore_session", { id }),
+  setRunGroup: (id: string, group: string | null) => invoke<SessionRecord>("set_run_group", { id, group }),
   emptyTrash: (removeWorktree: boolean) => invoke<string[]>("empty_trash", { removeWorktree }),
   setUiLang: (lang: string) => invoke<void>("set_ui_lang", { lang }),
   revealFile: (path: string) => invoke<void>("reveal_file", { path }),

@@ -1,4 +1,4 @@
-import { ArrowUp, GitBranch, Square, TriangleAlert, X } from "lucide-react";
+import { ArrowUp, Columns3, GitBranch, Square, TriangleAlert, X } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
@@ -6,7 +6,8 @@ import { useT } from "@/i18n";
 import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/keys";
 import { cn } from "@/lib/utils";
-import { gitPaneOf, isDraft, isFiles, isGit, isPreview, leavesShowing, useStore } from "@/state/store";
+import { comparePaneOf, gitPaneOf, isCompare, isDraft, isFiles, isGit, isListed, isPreview, leavesShowing, useStore } from "@/state/store";
+import { ComparePane } from "./ComparePane";
 import { FilesPane } from "./FilesPane";
 import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidRevealed } from "../liquid/stage";
@@ -86,6 +87,8 @@ export function Pane({ index }: { index: number }) {
         <GitPane index={index} id={id} />
       ) : isFiles(id) ? (
         <FilesPane index={index} id={id} />
+      ) : isCompare(id) ? (
+        <ComparePane index={index} id={id} />
       ) : (
         <SessionPane index={index} />
       )}
@@ -209,6 +212,8 @@ function SessionPane({ index }: { index: number }) {
               )}
             </button>
           )}
+          {/* Started with others from one prompt: compare them */}
+          {r.run_group && <CompareButton group={r.run_group} from={id} />}
           {/* Side chat: a read-only fork for questions that stay out of this conversation (Gemini CLI cannot fork) */}
           {r.acp_session_id && r.agent !== "gemini" && <SideChatButton mainId={id} />}
           {working && (
@@ -347,5 +352,31 @@ function PaneTitle({ id, title }: { id: string; title: string }) {
     >
       {title}
     </span>
+  );
+}
+
+/** Opens the comparison this session belongs to, beside it (it grows out of this button) */
+function CompareButton({ group, from }: { group: string; from: string }) {
+  const t = useT();
+  const anchor = `compare:${group}`;
+  const raised = useLiquidActiveAnchors().has(anchor);
+  const open = useStore((s) => leavesShowing(s, comparePaneOf(group)));
+  const count = useStore((s) => Object.values(s.sessions).filter((v) => isListed(v) && v.record.run_group === group).length);
+  return (
+    <button
+      ref={liquidAnchor(anchor)}
+      type="button"
+      aria-label={t("compare.openPane", { count })}
+      title={t("compare.openPane", { count })}
+      onClick={() => useStore.getState().openCompare(group, from)}
+      className={cn(
+        "relative flex h-6 items-center gap-1 rounded-md px-1.5 font-mono text-xs text-muted-foreground hover:bg-accent hover:text-foreground",
+        (raised || open) && "bg-accent text-foreground",
+        raised && "z-[57]",
+      )}
+    >
+      <Columns3 className="size-3.5" aria-hidden />
+      <span className="tabular">{count}</span>
+    </button>
   );
 }

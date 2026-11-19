@@ -9,4 +9,5 @@ export const store: Record<keyof typeof source, string> = {
   newSessionTitle: "New session",
   skippedLines: "… {count, plural, one {# line} other {# lines}}",
   newChatTitle: "New conversation",
+  compareStartFailed: "One of the sessions started side by side could not start: {error}",
 };

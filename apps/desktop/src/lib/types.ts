@@ -21,6 +21,8 @@ export interface SessionRecord {
   trashed_at?: number | null;
   /** The port its dev servers get (PORT in the agent's environment) */
   port?: number | null;
+  /** Sessions started together from one prompt to compare share this id */
+  run_group?: string | null;
   /** An everyday conversation (no repository; it may look things up but not edit or run commands) */
   chat?: boolean;
 }

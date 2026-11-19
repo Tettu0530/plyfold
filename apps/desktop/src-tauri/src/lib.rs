@@ -404,6 +404,11 @@ async fn trash_session(state: State<'_, AppState>, id: String) -> CmdResult<Sess
 }
 
 #[tauri::command]
+fn set_run_group(state: State<'_, AppState>, id: String, group: Option<String>) -> CmdResult<SessionRecord> {
+    state.engine.set_run_group(&id, group.as_deref()).map_err(err)
+}
+
+#[tauri::command]
 fn restore_session(state: State<'_, AppState>, id: String) -> CmdResult<SessionRecord> {
     state.engine.restore_session(&id).map_err(err)
 }
@@ -893,6 +898,7 @@ pub fn run() {
             read_text_file,
             trash_session,
             restore_session,
+            set_run_group,
             empty_trash,
             list_repos,
             rename_repo,

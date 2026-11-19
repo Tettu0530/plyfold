@@ -40,4 +40,8 @@ export const draft: Record<keyof typeof source, string> = {
   chat: "对话",
   chatOn: "对话：不使用仓库直接交谈。可以搜索和读取网页，但不编辑文件、不执行命令",
   chatOff: "工作：在仓库中工作",
+  compare: "并排比较",
+  compareHint: "将同一指令发给选中的每个配置（2 到 {max} 个）。每个都在自己的 worktree 中运行，并排打开",
+  compareProfiles: "要比较的配置（{count} / {max}）",
+  compareWorktree: "比较时每个会话都有自己的 worktree",
 };

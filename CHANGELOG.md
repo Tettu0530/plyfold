@@ -15,6 +15,8 @@ MCP servers per profile, a port of its own for each session, renamable sidebar g
 - Sidebar groups can be renamed: double-click a group's name, or the pencil that shows on hover (Enter keeps, Esc cancels, an empty name goes back to the default). A repository's name is kept with its other settings, and can also be set in Settings → Repositories; the conversations group's in the app settings. Groups now follow the repository's path, so two repositories with the same folder name are two groups (the path shows on hover)
 - Each session gets a port of its own for dev servers, kept for its lifetime (3101 to 3999, one no other session has and nothing listens on): agents start with `PORT` and `PLYFOLD_PORT` set to it, and so does the worktree setup script (`PLYFOLD_PORT`). Sessions side by side no longer fight over 3000, and an empty preview lists the ports of the sessions on screen
 
+- Compare: on the new session screen, turn on Compare and pick 2 to 4 profiles. Each gets the same prompt in a worktree of its own (with the repository's setup and a port of its own) and they open side by side. Their headers get a compare button that opens a pane with each one's state, time, tokens, cost and changes; "Merge this one" commits what is left and merges it into the original branch, and the others can then go to the trash together
+
 ### Conversation
 
 - The agent's thinking is shown as Markdown like its answers (lists, emphasis, code, headings), still small and muted

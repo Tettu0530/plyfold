@@ -7,4 +7,5 @@ export const store = {
   newSessionTitle: "新しいセッション",
   skippedLines: "… {count} 行",
   newChatTitle: "新しい会話",
+  compareStartFailed: "並べて始めたうちの 1 つを始められませんでした: {error}",
 } satisfies Record<string, string>;
