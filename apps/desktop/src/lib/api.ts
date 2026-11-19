@@ -56,6 +56,7 @@ export const api = {
   revealFile: (path: string) => invoke<void>("reveal_file", { path }),
   readTextFile: (path: string) => invoke<TextFile>("read_text_file", { path }),
   listRepos: () => invoke<RepoEntry[]>("list_repos"),
+  renameRepo: (path: string, name: string) => invoke<void>("rename_repo", { path, name }),
   saveRepoSettings: (path: string, settings: RepoSettings) => invoke<void>("save_repo_settings", { path, settings }),
   openFileInEditor: (path: string) => invoke<string>("open_file_in_editor", { path }),
   openUrl: (url: string) => invoke<void>("open_url", { url }),

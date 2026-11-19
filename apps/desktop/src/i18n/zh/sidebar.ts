@@ -21,4 +21,6 @@ export const sidebar: Record<keyof typeof source, string> = {
   deleteForGood: "永久删除「{title}」",
   emptyTrash: "清空废纸篓",
   trashNote: "记录 30 天后自动删除，worktree 会保留",
+  groupName: "分组名称",
+  renameGroup: "重命名「{name}」",
 };

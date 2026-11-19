@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RepoSettings {
+    /// The name shown for the repository's group in the sidebar ("" = the folder's name)
+    pub name: String,
     /// A shell script run in every new worktree before the agent starts (`npm install`, for example)
     pub setup: String,
     /// Files and folders copied from the repository into every new worktree, relative to its root (`.env`, for
@@ -22,7 +24,7 @@ pub struct RepoSettings {
 
 impl RepoSettings {
     pub fn is_empty(&self) -> bool {
-        self.setup.trim().is_empty() && self.copy.is_empty() && self.allow.is_empty()
+        self.name.trim().is_empty() && self.setup.trim().is_empty() && self.copy.is_empty() && self.allow.is_empty()
     }
 
     /// Whether a permission request for this tool kind is allowed without asking
@@ -143,13 +145,19 @@ const SETUP_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 /// Run the setup script in the worktree, in the user's login shell (so tools installed through a version manager
 /// are on PATH). Blocking: call it from spawn_blocking
-pub(crate) fn run_setup(script: &str, worktree: &Path, repo: &Path, log: &Path) -> std::io::Result<SetupRun> {
+pub(crate) fn run_setup(script: &str, worktree: &Path, repo: &Path, port: Option<u16>, log: &Path) -> std::io::Result<SetupRun> {
     let mut cmd = shell(script);
     if let Some(d) = log.parent() {
         std::fs::create_dir_all(d)?;
     }
     let out = std::fs::File::create(log)?;
-    cmd.current_dir(worktree).env("PLYFOLD_REPO", repo).env("PLYFOLD_WORKTREE", worktree).stdin(Stdio::null()).stdout(out.try_clone()?).stderr(out);
+    cmd.current_dir(worktree)
+        .env("PLYFOLD_REPO", repo)
+        .env("PLYFOLD_WORKTREE", worktree)
+        .envs(port.map(|p| ("PLYFOLD_PORT", p.to_string())))
+        .stdin(Stdio::null())
+        .stdout(out.try_clone()?)
+        .stderr(out);
     let started = Instant::now();
     let mut child = cmd.spawn()?;
     let (status, timed_out) = loop {
@@ -201,7 +209,7 @@ mod tests {
     fn settings_round_trip_and_empty_ones_are_dropped() {
         let d = tmp("store");
         let repos = Repos::new(&d);
-        let s = RepoSettings { setup: "npm install".into(), copy: vec![".env".into()], allow: vec!["read".into()] };
+        let s = RepoSettings { setup: "npm install".into(), copy: vec![".env".into()], allow: vec!["read".into()], ..Default::default() };
         repos.set("/r", s.clone()).unwrap();
         assert_eq!(repos.get("/r"), s);
         repos.set("/r", RepoSettings::default()).unwrap();
@@ -251,10 +259,10 @@ mod tests {
     fn setup_runs_in_the_worktree_and_reports_failure() {
         let (repo, wt) = (tmp("setup-repo"), tmp("setup-wt"));
         let log = wt.join("log/setup.log");
-        let ok = run_setup("pwd; echo \"$PLYFOLD_REPO\" > from.txt", &wt, &repo, &log).unwrap();
+        let ok = run_setup("pwd; echo \"$PLYFOLD_REPO\" > from.txt", &wt, &repo, None, &log).unwrap();
         assert!(ok.ok, "{}", ok.tail);
         assert_eq!(std::fs::read_to_string(wt.join("from.txt")).unwrap().trim(), repo.display().to_string());
-        let bad = run_setup("echo broken >&2; exit 3", &wt, &repo, &log).unwrap();
+        let bad = run_setup("echo broken >&2; exit 3", &wt, &repo, None, &log).unwrap();
         assert!(!bad.ok && !bad.timed_out);
         assert!(bad.tail.contains("broken"));
     }

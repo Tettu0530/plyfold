@@ -95,6 +95,11 @@ async fn worktree_session_with_permission_and_diff() {
 
     let s = eng.start_session(StartSession { profile: "mock".into(), title: "t".into(), repo: repo.clone(), worktree: true }).await.unwrap();
     assert_eq!(s.status, Status::Idle);
+    // The UI is told the repository and worktree (SessionCreated went out before they were set)
+    let told = wait_for(&mut rx, |e| matches!(e, EngineEvent::WorkspaceChanged { session } if session.id == s.id)).await;
+    let EngineEvent::WorkspaceChanged { session } = told else { unreachable!() };
+    assert_eq!(session.worktree_path, s.worktree_path);
+    assert!(session.repo_path.is_some());
     let wt = PathBuf::from(s.worktree_path.clone().unwrap());
     assert!(wt.exists() && wt != repo);
 
@@ -172,7 +177,7 @@ async fn a_new_worktree_is_prepared_and_the_repository_rules_answer_for_it() {
     git_repo(&repo);
     std::fs::write(repo.join(".env"), "SECRET=1").unwrap();
     let eng = engine(&base.join("state"), 60_000);
-    let settings = RepoSettings { setup: "echo ready > setup-ran.txt".into(), copy: vec![".env".into()], allow: vec!["edit".into()] };
+    let settings = RepoSettings { setup: "echo ready > setup-ran.txt".into(), copy: vec![".env".into()], allow: vec!["edit".into()], ..Default::default() };
     eng.set_repo_settings(&repo.display().to_string(), settings).unwrap();
     assert_eq!(eng.known_repos().unwrap(), [repo.display().to_string()]);
     let mut rx = eng.subscribe();
@@ -214,6 +219,41 @@ async fn a_trashed_session_keeps_its_work_until_the_trash_is_emptied() {
     assert_eq!(eng.empty_trash(true).await.unwrap(), std::slice::from_ref(&s.id));
     assert!(eng.store().get_session(&s.id).is_err());
     assert!(!wt.exists());
+}
+
+#[tokio::test]
+async fn each_session_gets_a_port_of_its_own_and_keeps_it() {
+    let base = tmp("port");
+    let eng = engine(&base.join("state"), 60_000);
+    let mut rx = eng.subscribe();
+    let answer = |id: &str| {
+        let events = eng.store().events(id, None, 10_000).unwrap();
+        events
+            .iter()
+            .rev()
+            .find_map(|e| e.payload.split("PORT=").nth(1).map(|v| v.chars().take_while(char::is_ascii_digit).collect::<String>()))
+            .unwrap_or_default()
+    };
+    let mut ports = Vec::new();
+    for title in ["a", "b"] {
+        let s = eng.start_session(StartSession { profile: "mock".into(), title: title.into(), repo: base.clone(), worktree: false }).await.unwrap();
+        eng.prompt(&s.id, "env PORT").unwrap();
+        wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { session_id, .. } if session_id == &s.id)).await;
+        let rec = eng.store().get_session(&s.id).unwrap();
+        let port = rec.port.expect("a port");
+        assert!((3101..=3999).contains(&port));
+        assert_eq!(answer(&s.id), port.to_string(), "the agent sees it as PORT");
+        ports.push((s.id, port));
+    }
+    assert_ne!(ports[0].1, ports[1].1);
+    // Reopened, a session keeps its port
+    let (id, port) = ports[0].clone();
+    eng.close_session(&id).await.unwrap();
+    eng.reopen_session(&id).await.unwrap();
+    assert_eq!(eng.store().get_session(&id).unwrap().port, Some(port));
+    // A conversation runs no dev servers
+    let c = eng.start_chat("mock", "Talk").await.unwrap();
+    assert_eq!(eng.store().get_session(&c.id).unwrap().port, None);
 }
 
 #[tokio::test]

@@ -174,7 +174,7 @@ jobs:
           find dist -type f -exec mv -t out {} +
           # The macOS update file has no version in its name
           for f in out/*.app.tar.gz out/*.app.tar.gz.sig; do
-            [ -e "$f" ] && mv "$f" "out/Plyfold_${VERSION}_universal.${f#out/*.app.}"
+            [ -e "$f" ] && mv "$f" "out/Plyfold_${VERSION}_universal.app.${f#out/*.app.}"
           done
           (cd out && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt)
           # This version's section of the changelog, without its heading

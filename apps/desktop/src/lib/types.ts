@@ -19,6 +19,8 @@ export interface SessionRecord {
   side_of?: string | null;
   /** When it was moved to the trash (ms); trashed sessions stay out of the list until restored */
   trashed_at?: number | null;
+  /** The port its dev servers get (PORT in the agent's environment) */
+  port?: number | null;
   /** An everyday conversation (no repository; it may look things up but not edit or run commands) */
   chat?: boolean;
 }
@@ -164,6 +166,8 @@ export interface AppSettings {
   restore_panes: boolean;
   /** Profile for new sessions ("" = the one used last) */
   default_profile: string;
+  /** Name of the sidebar group for everyday conversations ("" = the default) */
+  chat_group_name?: string;
 }
 
 /** Settings → Info (src-tauri app_info) */
@@ -325,6 +329,8 @@ export interface ProfileUsage {
 /** A file offered for an @-mention (apps/desktop/src-tauri/src/files.rs) */
 /** Per repository (Settings → Repositories): what a new worktree gets, and the kinds allowed without asking */
 export interface RepoSettings {
+  /** Name of its group in the sidebar ("" = the folder's name) */
+  name: string;
   setup: string;
   copy: string[];
   /** "read" | "edit" | "execute" | "fetch" */

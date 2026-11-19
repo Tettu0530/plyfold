@@ -132,4 +132,6 @@ export const settings: Record<keyof typeof source, string> = {
   updateInstall: "Update and restart",
   updateError: "Could not check: {error}",
   updateDev: "A development build does not update",
+  repoName: "Name in the sidebar",
+  repoNameDetail: "The name of its group in the sidebar. Leave it empty for the folder's name",
 };
