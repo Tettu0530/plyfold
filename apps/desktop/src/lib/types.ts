@@ -261,6 +261,8 @@ export interface ProfileForm {
   base_url: string | null;
   isolate: boolean;
   mcp: McpServerForm[];
+  /** Profile to continue with when this one's key hits a rate or usage limit (same agent) */
+  fallback?: string | null;
 }
 
 export interface ProfileDetail {

@@ -364,6 +364,11 @@ impl Store {
         Ok(())
     }
 
+    /// Continue the session with another profile (another key of the same agent)
+    pub fn set_profile(&self, id: &str, profile: &str) -> Result<(), StoreError> {
+        self.update(id, "profile", &profile)
+    }
+
     pub fn set_run_group(&self, id: &str, group: Option<&str>) -> Result<(), StoreError> {
         self.update(id, "run_group", &group)
     }

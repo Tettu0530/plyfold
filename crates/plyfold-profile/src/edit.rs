@@ -35,6 +35,9 @@ pub struct ProfileForm {
     /// MCP servers. `transport` is `stdio`, `http` or `sse`. `args` is only used for stdio
     #[serde(default)]
     pub mcp: Vec<McpForm>,
+    /// Profile to continue with when this one's key hits a rate or usage limit (same agent)
+    #[serde(default)]
+    pub fallback: Option<String>,
 }
 
 /// One MCP server in the form. Unused fields stay empty (a URL for stdio, a command for HTTP)
@@ -128,6 +131,7 @@ pub fn describe(name: &str, def: &ProfileDef) -> ProfileForm {
         base_url,
         isolate: def.isolate,
         mcp: def.mcp.iter().map(McpForm::from).collect(),
+        fallback: def.fallback.clone(),
     }
 }
 
@@ -152,6 +156,7 @@ pub fn to_def(form: &ProfileForm, existing: Option<&ProfileDef>) -> Result<Profi
     def.agent = form.agent.clone();
     def.label = form.label.clone().filter(|l| !l.trim().is_empty());
     def.isolate = form.isolate;
+    def.fallback = form.fallback.clone().filter(|f| !f.trim().is_empty() && *f != form.name);
 
     let s = spec(&form.agent);
     if form.auth != AuthKind::Login && s.is_none() {
@@ -395,7 +400,16 @@ mod tests {
     use super::*;
 
     fn form(agent: &str, auth: AuthKind, url: Option<&str>) -> ProfileForm {
-        ProfileForm { name: "p".into(), agent: agent.into(), label: None, auth, base_url: url.map(str::to_string), isolate: true, mcp: Vec::new() }
+        ProfileForm {
+            name: "p".into(),
+            agent: agent.into(),
+            label: None,
+            auth,
+            base_url: url.map(str::to_string),
+            isolate: true,
+            mcp: Vec::new(),
+            fallback: None,
+        }
     }
 
     #[test]

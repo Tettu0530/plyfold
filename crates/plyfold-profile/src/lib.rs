@@ -91,6 +91,9 @@ pub struct ProfileDef {
     /// Headers and environment values are not stored: both would be secrets, and the agent starts the server itself
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mcp: Vec<McpServerDef>,
+    /// Another profile of the same agent to continue with when this one's key hits a rate or usage limit
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback: Option<String>,
 }
 
 /// One MCP server, as written in config.toml. `transport` is `stdio`, `http` or `sse`
@@ -162,6 +165,24 @@ pub fn builtin_agents() -> BTreeMap<String, AgentDef> {
 }
 
 impl Config {
+    /// The profile to continue with when `profile`'s key hits a limit: its fallback, if that is another profile of
+    /// the same agent
+    pub fn fallback_for(&self, profile: &str) -> Option<String> {
+        let def = self.profiles.get(profile)?;
+        let to = def.fallback.as_deref().filter(|f| *f != profile)?;
+        let agent = self.profiles.get(to).map(|p| p.agent.as_str()).or_else(|| self.agents.contains_key(to).then_some(to))?;
+        (agent == def.agent).then(|| to.to_string())
+    }
+
+    /// Where an isolated profile's CLI keeps its data (conversations included); None for one that uses the usual
+    /// config
+    pub fn data_dir_of(&self, profile: &str, state_dir: &Path) -> Option<PathBuf> {
+        let def = self.profiles.get(profile).filter(|p| p.isolate)?;
+        let name = safe_rel("profile", profile).ok().filter(|n| n.components().count() == 1)?;
+        self.agents.get(&def.agent)?.config_dir_env.as_ref()?;
+        Some(state_dir.join("profiles").join(name))
+    }
+
     /// Layers the file's contents over the built-in agent definitions
     pub fn from_toml(text: &str) -> Result<Self, ProfileError> {
         let file: Config = toml::from_str(text)?;
@@ -662,5 +683,33 @@ command = "git"
         let (no_http, skipped) = prepare_mcp(&cfg.profiles["p"].mcp, false, false);
         assert!(no_http.iter().all(|s| !matches!(s, McpServer::Http(_))));
         assert!(skipped.iter().any(|s| s.contains("docs") && s.contains("HTTP")));
+    }
+
+    #[test]
+    fn a_fallback_is_another_profile_of_the_same_agent() {
+        let cfg = Config::from_toml(
+            r#"
+[profiles.a]
+agent = "claude"
+isolate = true
+fallback = "b"
+[profiles.b]
+agent = "claude"
+fallback = "c"
+[profiles.c]
+agent = "codex"
+[profiles.self]
+agent = "claude"
+fallback = "self"
+"#,
+        )
+        .unwrap();
+        assert_eq!(cfg.fallback_for("a").as_deref(), Some("b"));
+        assert_eq!(cfg.fallback_for("b"), None, "another agent would not have the conversation");
+        assert_eq!(cfg.fallback_for("self"), None);
+        assert_eq!(cfg.fallback_for("missing"), None);
+        let state = Path::new("/state");
+        assert_eq!(cfg.data_dir_of("a", state), Some(state.join("profiles").join("a")));
+        assert_eq!(cfg.data_dir_of("b", state), None, "not isolated: the usual config");
     }
 }

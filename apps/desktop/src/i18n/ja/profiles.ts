@@ -81,4 +81,8 @@ export const profiles = {
   mcpArgs: "引数",
   mcpUrl: "URL",
   mcpKind: "種類",
+  fallback: "上限に達したときの切り替え先",
+  fallbackHint: "このキーがレート制限や利用上限に達したら、選んだプロファイルに切り替えて同じ指示を送り直します。会話は引き継ぎます",
+  fallbackNone: "同じエージェントのプロファイルがほかにありません",
+  fallbackOff: "切り替えない",
 } satisfies Record<string, string>;
