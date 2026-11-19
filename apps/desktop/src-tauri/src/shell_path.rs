@@ -4,9 +4,10 @@
 //!
 //! The shell runs once, without input, with a time limit; anything it prints besides the PATH (rc file messages) is
 //! ignored. If it fails, common install locations are added instead. On Linux the shell is `$SHELL`, then the login
-//! shell in `/etc/passwd`, then `/bin/bash`, and the PATH it printed is kept for a day so the next start does not wait
-//! on it. A shell that did not answer is not kept. Directories that exist are added on every launch, so a CLI installed
-//! into one of them is found before that day is up. Homebrew's paths stay a macOS fallback.
+//! shell in `/etc/passwd`, then `/bin/bash`. A PATH kept in the state directory is used for this start even when it is
+//! old, so the start does not wait on the shell. The shell is read again in the background and the file is written for
+//! the next start. A shell that did not answer is not kept. Directories that exist are added on every launch, so a CLI
+//! installed into one of them is found on this start. Homebrew's paths stay a macOS fallback.
 
 // Only Unix-like systems need this; on Windows the helpers below are unused
 #![cfg_attr(windows, allow(unused_imports, dead_code))]
@@ -15,15 +16,12 @@ use std::io::Read;
 #[cfg(any(test, target_os = "linux"))]
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-#[cfg(any(test, target_os = "linux"))]
+#[cfg(test)]
 use std::time::SystemTime;
 use std::time::{Duration, Instant};
 
 const MARK: &str = "__PLYFOLD_PATH__";
 const TIMEOUT: Duration = Duration::from_secs(5);
-/// How long a PATH read from the login shell is reused. Install locations are checked on every launch anyway.
-#[cfg(any(test, target_os = "linux"))]
-const CACHE_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 /// A login shell's PATH is a short line. Anything larger is not one, and is not worth reading at startup.
 #[cfg(any(test, target_os = "linux"))]
 const CACHE_MAX_BYTES: u64 = 64 * 1024;
@@ -129,24 +127,19 @@ fn cache_file() -> PathBuf {
     plyfold_profile::default_state_dir().join("login-path")
 }
 
-#[cfg(target_os = "linux")]
-fn remembered_shell_path() -> Option<String> {
-    let dest = cache_file();
-    if let Some(path) = read_cache(&dest, SystemTime::now()) {
-        return Some(path);
-    }
-    let path = login_shell_path()?;
-    let _ = write_cache(&dest, &path);
-    Some(path)
+/// A usable cache for this start. `refresh` means the login shell is read after PATH is published, and the file is
+/// written for the next start. The age of the file does not matter: a start never waits on the shell when a PATH is
+/// already on disk.
+#[cfg(any(test, target_os = "linux"))]
+struct CachedStart {
+    path: String,
+    refresh: bool,
 }
 
 #[cfg(any(test, target_os = "linux"))]
-fn fresh(modified: SystemTime, now: SystemTime, max_age: Duration) -> bool {
-    match now.duration_since(modified) {
-        Ok(age) => age <= max_age,
-        // The file is dated in the future (the clock moved). Keep it; dropping it would run the shell on every launch.
-        Err(_) => true,
-    }
+fn cached_start(path: &Path) -> Option<CachedStart> {
+    let path = read_cache(path)?;
+    Some(CachedStart { path, refresh: true })
 }
 
 /// A single PATH line. Empty, multi-line, or without a directory separator is not a PATH we should adopt.
@@ -159,18 +152,16 @@ fn accepted_path(text: &str) -> Option<String> {
     Some(path.to_string())
 }
 
-/// The cached PATH, when the file is a regular file, small enough, and not older than a day.
+/// The cached PATH, when the file is a regular file and small enough. Age is ignored: an old file is still this
+/// start's PATH, and a later start gets whatever the background read wrote.
 /// A symlink is ignored: the state directory is ours, and a link there must not point PATH somewhere else.
 #[cfg(any(test, target_os = "linux"))]
-fn read_cache(path: &Path, now: SystemTime) -> Option<String> {
+fn read_cache(path: &Path) -> Option<String> {
     let meta = std::fs::symlink_metadata(path).ok()?;
     if !meta.file_type().is_file() {
         return None;
     }
     if meta.len() > CACHE_MAX_BYTES {
-        return None;
-    }
-    if !fresh(meta.modified().ok()?, now, CACHE_MAX_AGE) {
         return None;
     }
     accepted_path(&std::fs::read_to_string(path).ok()?)
@@ -225,18 +216,49 @@ fn macos_fallback(home: &str) -> String {
     ["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin", &format!("{home}/.cargo/bin"), &format!("{home}/.local/bin")].join(":")
 }
 
+/// The PATH to put in front, and whether Linux should refresh the cache after this start.
 #[cfg(not(windows))]
-fn shell_path(home: &str) -> String {
+fn shell_path(home: &str) -> (String, bool) {
     #[cfg(target_os = "linux")]
     {
-        let remembered = remembered_shell_path().unwrap_or_default();
+        let dest = cache_file();
         let extra = linux_fallback(home);
-        if remembered.is_empty() { extra } else { merge(&remembered, &extra) }
+        if let Some(hit) = cached_start(&dest) {
+            return (merge(&hit.path, &extra), hit.refresh);
+        }
+        // Nothing usable on disk. This first start is the one that waits; the answer is kept for the next one.
+        let read = login_shell_path().unwrap_or_default();
+        if !read.is_empty() {
+            let _ = write_cache(&dest, &read);
+        }
+        let path = if read.is_empty() { extra } else { merge(&read, &extra) };
+        (path, false)
     }
     #[cfg(not(target_os = "linux"))]
     {
-        login_shell_path().unwrap_or_else(|| macos_fallback(home))
+        (login_shell_path().unwrap_or_else(|| macos_fallback(home)), false)
     }
+}
+
+/// Read the login shell after startup and write the cache for the next start. A shell that does not answer leaves the
+/// file as it is.
+#[cfg(target_os = "linux")]
+fn refresh_cached_path() {
+    let dest = cache_file();
+    if let Some(path) = login_shell_path() {
+        let _ = write_cache(&dest, &path);
+    }
+}
+
+#[cfg(not(windows))]
+fn schedule_refresh(refresh: bool) {
+    // set_var is unsound once another thread is running, so this is called only after PATH is published.
+    #[cfg(target_os = "linux")]
+    if refresh {
+        let _ = std::thread::spawn(refresh_cached_path);
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = refresh;
 }
 
 /// Call before anything else starts (setting environment variables is only safe while the process is single-threaded).
@@ -249,9 +271,11 @@ pub fn adopt_login_path() {}
 pub fn adopt_login_path() {
     let current = std::env::var("PATH").unwrap_or_default();
     let home = std::env::var("HOME").unwrap_or_default();
-    let path = merge(&shell_path(&home), &current);
-    // SAFETY: called first thing in main, before Tauri or any other thread starts
-    unsafe { std::env::set_var("PATH", path) };
+    let (front, refresh) = shell_path(&home);
+    // SAFETY: called first thing in main, before Tauri or any other thread starts. The refresh thread is spawned
+    // after this, so it does not race with set_var.
+    unsafe { std::env::set_var("PATH", merge(&front, &current)) };
+    schedule_refresh(refresh);
 }
 
 #[cfg(test)]
@@ -306,15 +330,6 @@ short:x:1001
     }
 
     #[test]
-    fn a_cached_path_is_fresh_for_a_day() {
-        let t = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
-        assert!(fresh(t, t, CACHE_MAX_AGE));
-        assert!(fresh(t, t + CACHE_MAX_AGE, CACHE_MAX_AGE));
-        assert!(!fresh(t, t + CACHE_MAX_AGE + Duration::from_secs(1), CACHE_MAX_AGE));
-        assert!(fresh(t + Duration::from_secs(10), t, CACHE_MAX_AGE));
-    }
-
-    #[test]
     fn a_path_line_has_one_line_and_a_directory() {
         assert_eq!(accepted_path("  /usr/bin:/bin  \n").as_deref(), Some("/usr/bin:/bin"));
         assert_eq!(accepted_path(""), None);
@@ -330,25 +345,18 @@ short:x:1001
     }
 
     #[test]
-    fn the_cache_roundtrips_and_rejects_a_symlink_a_large_file_and_a_stale_one() {
+    fn the_cache_roundtrips_and_rejects_a_symlink_and_a_large_file() {
         let dir = tmp("cache");
         let dest = dir.join("login-path");
         write_cache(&dest, "  /usr/bin:/home/t/.local/bin \n").unwrap();
-        assert_eq!(read_cache(&dest, SystemTime::now()).as_deref(), Some("/usr/bin:/home/t/.local/bin"));
+        assert_eq!(read_cache(&dest).as_deref(), Some("/usr/bin:/home/t/.local/bin"));
         assert!(write_cache(&dest, "relative").is_err());
         // The rejected write must not replace a good cache
-        assert_eq!(read_cache(&dest, SystemTime::now()).as_deref(), Some("/usr/bin:/home/t/.local/bin"));
-
-        let file = std::fs::File::options().write(true).open(&dest).unwrap();
-        file.set_modified(SystemTime::now() - (CACHE_MAX_AGE + Duration::from_secs(60))).unwrap();
-        assert_eq!(read_cache(&dest, SystemTime::now()), None);
-        file.set_modified(SystemTime::now() + Duration::from_secs(3600)).unwrap();
-        assert_eq!(read_cache(&dest, SystemTime::now()).as_deref(), Some("/usr/bin:/home/t/.local/bin"));
-        drop(file);
+        assert_eq!(read_cache(&dest).as_deref(), Some("/usr/bin:/home/t/.local/bin"));
 
         let big = format!("/usr/bin:{}", "a".repeat(CACHE_MAX_BYTES as usize));
         std::fs::write(&dest, &big).unwrap();
-        assert_eq!(read_cache(&dest, SystemTime::now()), None);
+        assert_eq!(read_cache(&dest), None);
 
         #[cfg(unix)]
         {
@@ -356,8 +364,24 @@ short:x:1001
             std::fs::write(&real, "/usr/bin").unwrap();
             let link = dir.join("linked");
             std::os::unix::fs::symlink(&real, &link).unwrap();
-            assert_eq!(read_cache(&link, SystemTime::now()), None);
+            assert_eq!(read_cache(&link), None);
         }
+    }
+
+    #[test]
+    fn a_stale_cache_is_used_and_a_refresh_is_scheduled() {
+        let dir = tmp("stale");
+        let dest = dir.join("login-path");
+        let kept = "/home/t/.nvm/versions/node/v20/bin:/usr/bin";
+        write_cache(&dest, kept).unwrap();
+        let file = std::fs::File::options().write(true).open(&dest).unwrap();
+        file.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(10)).unwrap();
+        drop(file);
+
+        let hit = cached_start(&dest).unwrap();
+        assert_eq!(hit.path, kept);
+        // adopt_login_path spawns the login-shell read only when this is set, and only after PATH is published
+        assert!(hit.refresh);
     }
 
     #[test]
