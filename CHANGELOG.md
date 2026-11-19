@@ -4,6 +4,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-19
+
+Running in parallel: one prompt to several agents side by side, a task queue that runs a set number at a time, and moving on to another key when one hits its limit. Everyday conversations can do what a chat on the web does.
+
 ### Conversation
 
 - Everyday conversations allow more, like a chat on the web: besides searching and fetching from the web, they may load skills, keep a task list, ask helper agents, think, and read, search and write files inside their own folder. They still run no commands and use no files outside their folder
@@ -187,6 +191,7 @@ The first release, for macOS (Apple Silicon) and Windows 10/11 (x64; new, please
 - Settings for display size, reduced motion, notifications, defaults for new sessions and more
 - Spring-based motion modelled on SwiftUI, with a fade-only mode for Reduce motion
 
+[0.5.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.5.0
 [0.4.1]: https://github.com/Tettu0530/plyfold/releases/tag/v0.4.1
 [0.4.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.3.0
