@@ -1,8 +1,9 @@
 //! A simplified profile form for editing from the UI, and rewriting config.toml
 //!
-//! The UI only deals with auth kind, base URL and dedicated directory;
-//! per-agent env var names and the contents of Codex's config.toml are decided here.
-//! Hand-written fields (default_mode, links, ...) survive a save.
+//! The UI deals with auth kind, base URL, dedicated directory and MCP servers.
+//! Per-agent env var names and the contents of Codex's config.toml are decided here.
+//! Hand-written fields (default_mode, links, ...) survive a save. MCP servers are edited in the form,
+//! so a save writes the list the form is showing.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -10,7 +11,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use toml_edit::DocumentMut;
 
-use crate::{Config, ProfileDef, ProfileError};
+use crate::{Config, McpServerDef, ProfileDef, ProfileError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -31,6 +32,22 @@ pub struct ProfileForm {
     pub auth: AuthKind,
     pub base_url: Option<String>,
     pub isolate: bool,
+    /// MCP servers. `transport` is `stdio`, `http` or `sse`. `args` is only used for stdio
+    #[serde(default)]
+    pub mcp: Vec<McpForm>,
+}
+
+/// One MCP server in the form. Unused fields stay empty (a URL for stdio, a command for HTTP)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct McpForm {
+    pub transport: String,
+    pub name: String,
+    #[serde(default)]
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub url: String,
 }
 
 /// How each agent receives the key and base URL
@@ -103,7 +120,29 @@ pub fn describe(name: &str, def: &ProfileDef) -> ProfileForm {
         Some(s) if def.keys.contains_key(s.api_key) => (AuthKind::Api, None),
         _ => (AuthKind::Login, None),
     };
-    ProfileForm { name: name.into(), agent: def.agent.clone(), label: def.label.clone(), auth, base_url, isolate: def.isolate }
+    ProfileForm {
+        name: name.into(),
+        agent: def.agent.clone(),
+        label: def.label.clone(),
+        auth,
+        base_url,
+        isolate: def.isolate,
+        mcp: def.mcp.iter().map(McpForm::from).collect(),
+    }
+}
+
+impl From<&McpServerDef> for McpForm {
+    fn from(server: &McpServerDef) -> Self {
+        match server {
+            McpServerDef::Stdio { name, command, args } => {
+                Self { transport: "stdio".into(), name: name.clone(), command: command.clone(), args: args.clone(), url: String::new() }
+            }
+            McpServerDef::Http { name, url } => {
+                Self { transport: "http".into(), name: name.clone(), command: String::new(), args: Vec::new(), url: url.clone() }
+            }
+            McpServerDef::Sse { name, url } => Self { transport: "sse".into(), name: name.clone(), command: String::new(), args: Vec::new(), url: url.clone() },
+        }
+    }
 }
 
 /// Builds a definition from the UI form, keeping fields of the existing definition that the UI does not handle
@@ -168,7 +207,72 @@ pub fn to_def(form: &ProfileForm, existing: Option<&ProfileDef>) -> Result<Profi
             }
         }
     }
+    def.mcp = form.mcp.iter().map(mcp_from_form).collect::<Result<Vec<_>, _>>()?;
+    let mut names = std::collections::HashSet::new();
+    for server in &def.mcp {
+        let name = server.name();
+        if !names.insert(name.to_string()) {
+            return Err(ProfileError::Form(plyfold_i18n::tr!(
+                "MCP サーバーの名前「{name}」が重複しています",
+                "MCP server name “{name}” is used more than once",
+                "MCP 服务器的名称“{name}”重复"
+            )));
+        }
+    }
     Ok(def)
+}
+
+fn mcp_from_form(form: &McpForm) -> Result<McpServerDef, ProfileError> {
+    let name = form.name.trim();
+    if name.is_empty() || name.len() > 40 || name.chars().any(char::is_whitespace) {
+        return Err(ProfileError::Form(plyfold_i18n::tr!(
+            "MCP サーバーの名前は空白を入れず、40 文字までにしてください",
+            "An MCP server name has no spaces and is at most 40 characters",
+            "MCP 服务器的名称不能含空格，且不超过 40 个字符"
+        )));
+    }
+    let names_ok = name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.');
+    if !names_ok {
+        return Err(ProfileError::Form(plyfold_i18n::tr!(
+            "MCP サーバーの名前は英数字と . - _ だけにしてください",
+            "Use only letters, digits, . - and _ in an MCP server name",
+            "MCP 服务器的名称只能包含字母、数字、.、- 和 _"
+        )));
+    }
+    match form.transport.as_str() {
+        "stdio" => {
+            let command = form.command.trim();
+            if command.is_empty() {
+                return Err(ProfileError::Form(plyfold_i18n::tr!(
+                    "MCP サーバー「{name}」のコマンドを入力してください",
+                    "Enter a command for MCP server “{name}”",
+                    "请输入 MCP 服务器“{name}”的命令"
+                )));
+            }
+            let args = form.args.iter().map(|a| a.trim()).filter(|a| !a.is_empty()).map(str::to_string).collect();
+            Ok(McpServerDef::Stdio { name: name.into(), command: command.into(), args })
+        }
+        "http" | "sse" => {
+            let url = form.url.trim();
+            if !(url.starts_with("https://") || url.starts_with("http://")) {
+                return Err(ProfileError::Form(plyfold_i18n::tr!(
+                    "MCP サーバー「{name}」の URL は http:// か https:// で始めてください",
+                    "The URL for MCP server “{name}” must start with http:// or https://",
+                    "MCP 服务器“{name}”的 URL 必须以 http:// 或 https:// 开头"
+                )));
+            }
+            if form.transport == "http" {
+                Ok(McpServerDef::Http { name: name.into(), url: url.into() })
+            } else {
+                Ok(McpServerDef::Sse { name: name.into(), url: url.into() })
+            }
+        }
+        _ => Err(ProfileError::Form(plyfold_i18n::tr!(
+            "MCP サーバー「{name}」の種類が不明です",
+            "MCP server “{name}” has an unknown kind",
+            "MCP 服务器“{name}”的类型未知"
+        ))),
+    }
 }
 
 /// Keychain account name ("keychain" → "<profile>/<var>", "keychain:<name>" → "<name>")
@@ -291,7 +395,7 @@ mod tests {
     use super::*;
 
     fn form(agent: &str, auth: AuthKind, url: Option<&str>) -> ProfileForm {
-        ProfileForm { name: "p".into(), agent: agent.into(), label: None, auth, base_url: url.map(str::to_string), isolate: true }
+        ProfileForm { name: "p".into(), agent: agent.into(), label: None, auth, base_url: url.map(str::to_string), isolate: true, mcp: Vec::new() }
     }
 
     #[test]
@@ -355,6 +459,35 @@ mod tests {
         assert!(validate_name("work", &cfg).is_ok());
         assert!(validate_name("claude", &cfg).is_err());
         assert!(validate_name("../x", &cfg).is_err());
+    }
+
+    #[test]
+    fn mcp_survives_a_save_and_rejects_a_bad_row() {
+        let mut f = form("claude", AuthKind::Login, None);
+        f.mcp = vec![
+            McpForm { transport: "stdio".into(), name: "files".into(), command: "npx".into(), args: vec!["-y".into(), "srv".into()], url: String::new() },
+            McpForm { transport: "http".into(), name: "docs".into(), command: String::new(), args: Vec::new(), url: "https://example.invalid/mcp".into() },
+        ];
+        let def = to_def(&f, None).unwrap();
+        assert_eq!(describe("p", &def), f);
+        let dir = std::env::temp_dir().join(format!("plyfold-mcp-edit-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        upsert_profile(&path, "p", &def).unwrap();
+        let loaded = crate::Config::load(&path).unwrap();
+        assert_eq!(loaded.profiles["p"].mcp, def.mcp);
+
+        f.mcp.push(McpForm {
+            transport: "sse".into(),
+            name: "docs".into(),
+            command: String::new(),
+            args: Vec::new(),
+            url: "https://example.invalid/sse".into(),
+        });
+        assert!(to_def(&f, None).is_err());
+        f.mcp.pop();
+        f.mcp[1].url = "example.invalid".into();
+        assert!(to_def(&f, None).is_err());
     }
 
     #[test]

@@ -61,7 +61,8 @@ async fn run(config: &Config, profile: &str, state_dir: &Path, secrets: &dyn Sec
     let client = Arc::new(client);
 
     let result = async {
-        let r = client.new_session(&cwd).await.map_err(|e| e.to_string())?;
+        let (mcp, _) = plyfold_profile::prepare_mcp(&resolved.mcp, client.supports_mcp_http(), client.supports_mcp_sse());
+        let r = client.new_session(&cwd, mcp).await.map_err(|e| e.to_string())?;
         let sid = r.session_id.0.to_string();
         let info = Arc::new(Mutex::new(SessionInfo::default()));
         info.lock().unwrap().apply_session_response(&serde_json::to_value(&r).unwrap_or_default());

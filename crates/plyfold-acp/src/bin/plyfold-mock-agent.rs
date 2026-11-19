@@ -9,6 +9,7 @@
 //! History is kept in `<cwd>/.plyfold-mock/<sessionId>.jsonl` and replayed on session/load.
 //! A pointer in the temp dir lets a later process `session/fork` or `session/list` that id (agents persist sessions outside the worktree).
 //! Also reports config options (model / effort / mode) and usage (usage_update, per-turn usage).
+//! `initialize` advertises HTTP MCP and not SSE, so a test can tell those apart.
 
 use std::collections::{HashMap, HashSet};
 use std::io::Write as _;
@@ -262,7 +263,7 @@ fn handle_request(st: &Arc<State>, id: Value, method: &str, params: Value) {
     match method {
         "initialize" => reply(json!({
             "protocolVersion": 1,
-            "agentCapabilities": {"loadSession": true, "promptCapabilities": {}, "mcpCapabilities": {}, "sessionCapabilities": {"fork": {}, "list": {}}},
+            "agentCapabilities": {"loadSession": true, "promptCapabilities": {}, "mcpCapabilities": {"http": true}, "sessionCapabilities": {"fork": {}, "list": {}}},
             "authMethods": [],
             "agentInfo": {"name": "plyfold-mock-agent", "version": env!("CARGO_PKG_VERSION")}
         })),
