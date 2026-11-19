@@ -23,4 +23,9 @@ export const sidebar: Record<keyof typeof source, string> = {
   trashNote: "记录 30 天后自动删除，worktree 会保留",
   groupName: "分组名称",
   renameGroup: "重命名「{name}」",
+  queue: "排队",
+  queueHint: "工作中的会话少于 {count} 个时，从上往下依次开始",
+  startNow: "立即开始「{title}」",
+  cancelTask: "取消「{title}」的排队",
+  taskFailed: "无法开始：{error}",
 };

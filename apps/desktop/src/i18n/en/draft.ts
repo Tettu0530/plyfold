@@ -44,4 +44,6 @@ export const draft: Record<keyof typeof source, string> = {
   compareHint: "Give the same prompt to each profile you pick (2 to {max}). Each runs in a worktree of its own, opened side by side",
   compareProfiles: "Profiles to compare ({count} / {max})",
   compareWorktree: "Comparing gives each session a worktree of its own",
+  queue: "Add to the queue",
+  queueHint: "Queue it instead of starting now. Queued prompts start in order while fewer sessions than the set number are working ({count} waiting)",
 };

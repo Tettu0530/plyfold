@@ -23,4 +23,9 @@ export const sidebar: Record<keyof typeof source, string> = {
   trashNote: "Records are deleted after 30 days. Worktrees are kept",
   groupName: "Group name",
   renameGroup: "Rename “{name}”",
+  queue: "Queue",
+  queueHint: "Starts from the top while fewer than {count} sessions are working",
+  startNow: "Start “{title}” now",
+  cancelTask: "Remove “{title}” from the queue",
+  taskFailed: "Could not start: {error}",
 };

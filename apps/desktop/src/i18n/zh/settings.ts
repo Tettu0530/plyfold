@@ -133,4 +133,6 @@ export const settings: Record<keyof typeof source, string> = {
   updateDev: "开发版不会更新",
   repoName: "侧边栏中的名称",
   repoNameDetail: "侧边栏中分组显示的名称。留空则使用文件夹名称",
+  maxParallel: "同时运行数",
+  maxParallelDetail: "排队的指令会在工作中的会话少于此数量时依次开始",
 };
