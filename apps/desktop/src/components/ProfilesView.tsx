@@ -256,7 +256,7 @@ function ArgsField({ args, onChange, label }: { args: string[]; onChange: (args:
   );
 }
 
-function McpEditor({ servers, onChange }: { servers: McpServerForm[]; onChange: (next: McpServerForm[]) => void }) {
+export function McpEditor({ servers, onChange }: { servers: McpServerForm[]; onChange: (next: McpServerForm[]) => void }) {
   const t = useT();
   const patch = (i: number, next: Partial<McpServerForm>) => onChange(servers.map((s, j) => (j === i ? { ...s, ...next } : s)));
   return (

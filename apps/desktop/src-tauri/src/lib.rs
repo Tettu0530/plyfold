@@ -719,6 +719,19 @@ fn save_profile(state: State<'_, AppState>, form: ProfileForm, original: Option<
     state.reload()
 }
 
+/// MCP servers passed to every profile, as forms for the settings screen
+#[tauri::command]
+fn shared_mcp(state: State<'_, AppState>) -> Vec<edit::McpForm> {
+    state.config.read().unwrap().mcp.iter().map(edit::McpForm::from).collect()
+}
+
+#[tauri::command]
+fn save_shared_mcp(state: State<'_, AppState>, servers: Vec<edit::McpForm>) -> CmdResult<()> {
+    let servers = edit::mcp_servers(&servers).map_err(err)?;
+    edit::set_shared_mcp(&state.config_path, &servers).map_err(err)?;
+    state.reload()
+}
+
 /// Save a key to the keychain (the value is never logged or returned to the UI)
 #[tauri::command]
 fn set_profile_key(state: State<'_, AppState>, name: String, value: String) -> CmdResult<()> {
@@ -949,6 +962,8 @@ pub fn run() {
             set_reviewer,
             review_now,
             hand_over,
+            shared_mcp,
+            save_shared_mcp,
             save_tasks,
             rename_repo,
             save_repo_settings,

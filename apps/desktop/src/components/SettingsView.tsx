@@ -13,6 +13,7 @@ import {
   MessagesSquare,
   SlidersHorizontal,
   Sparkles,
+  Plug,
 } from "lucide-react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 
@@ -27,6 +28,7 @@ import { useLiquidClip, useLiquidRevealed } from "./liquid/stage";
 import { Segmented } from "./Segmented";
 import { ShortcutSettings } from "./ShortcutSettings";
 import { RepoSettings } from "./RepoSettings";
+import { SharedMcp } from "./SharedMcp";
 import { checkForUpdate, installUpdate, useUpdate } from "@/state/update";
 import { agentName, ProviderLogo } from "./icons";
 import { useLiquidMenu } from "./liquid/stage";
@@ -55,6 +57,7 @@ const SECTIONS: { id: string; label: MessageKey; Icon: typeof Info }[] = [
   { id: "notifications", label: "settings.sectionNotifications", Icon: Bell },
   { id: "diff", label: "settings.sectionDiff", Icon: GitCompare },
   { id: "repos", label: "settings.sectionRepos", Icon: FolderGit2 },
+  { id: "mcp", label: "settings.sectionMcp", Icon: Plug },
   { id: "storage", label: "settings.sectionStorage", Icon: HardDrive },
   { id: "motion", label: "settings.sectionMotion", Icon: Sparkles },
 ];
@@ -343,6 +346,10 @@ export function SettingsView() {
 
               <Section id="repos" title={t("settings.sectionRepos")}>
                 <RepoSettings onError={setError} />
+              </Section>
+
+              <Section id="mcp" title={t("settings.sectionMcp")}>
+                <SharedMcp />
               </Section>
 
               <Section id="storage" title={t("settings.sectionStorage")}>
