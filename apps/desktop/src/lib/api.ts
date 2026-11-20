@@ -44,6 +44,8 @@ export const api = {
   forkSession: (id: string, newWorktree: boolean) => invoke<SessionRecord>("fork_session", { id, newWorktree }),
   openSideChat: (id: string) => invoke<SessionRecord>("open_side_chat", { id }),
   closeSideChat: (id: string) => invoke<void>("close_side_chat", { id }),
+  setReviewer: (id: string, profile: string | null) => invoke<SessionRecord>("set_reviewer", { id, profile }),
+  reviewNow: (id: string) => invoke<string | null>("review_now", { id }),
   listCliSessions: (profile: string, repo: string) => invoke<CliSession[]>("list_cli_sessions", { profile, repo }),
   adoptCliSession: (profile: string, repo: string, acpSessionId: string, title: string, worktree: boolean) =>
     invoke<SessionRecord>("adopt_cli_session", { profile, repo, acpSessionId, title, worktree }),

@@ -8,6 +8,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 - A profile can name the model to use (Profiles → Model). For Claude Code it is used for every choice in the model menu and for helper agents, so a custom provider that accepts only its own model names works; Codex gets it in its config.toml and Gemini CLI in GEMINI_MODEL
 
+### Sessions
+
+- Review: a session can name a profile that reviews its diff after each turn (the button in the pane header). When a turn ends normally with a diff not reviewed yet, that agent gets the instruction behind the turn, the files changed and the diff, and lists problems as `path:line — problem — fix` in a column at the pane's right edge. It works read-only (its own read-only mode where it has one, and every permission request declined), carries on one conversation so it mentions earlier problems only while they are unfixed, and can be asked about its findings. A diff that arrives while it is still answering is reviewed when it is done
+
 ## [0.5.0] - 2026-11-19
 
 Running in parallel: one prompt to several agents side by side, a task queue that runs a set number at a time, and moving on to another key when one hits its limit. Everyday conversations can do what a chat on the web does.
