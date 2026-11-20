@@ -303,6 +303,8 @@ interface State {
   setLiquidLag: (v: number) => void;
   startSession: (args: { profile: string; repo: string; title: string; worktree: boolean; prompt?: string }) => Promise<void>;
   /** Fork into a new session. newWorktree is false only when the source agent is stopped */
+  /** Hand the session over to another profile in the same workspace; the new session replaces it in its pane */
+  handOver: (id: string, profile: string) => Promise<void>;
   forkSession: (id: string, newWorktree: boolean) => Promise<void>;
   /** Side chats, by the session they belong to. `id` is null while the fork starts */
   sideChats: Record<string, SideChat>;
@@ -935,6 +937,14 @@ export const useStore = create<State>((set, get) => ({
     const rec = await api.startSession(args);
     await get().openInPane(rec.id);
     if (prompt?.trim()) await get().sendPrompt(rec.id, prompt);
+  },
+
+  handOver: async (id, profile) => {
+    const rec = await api.handOver(id, profile);
+    // The new session takes the old one's pane
+    const slot = get().panes.indexOf(id);
+    if (slot >= 0) set((s) => ({ panes: s.panes.map((p) => (p === id ? rec.id : p)) }));
+    else await get().openInPane(rec.id, undefined, `session:${id}`);
   },
 
   forkSession: async (id, newWorktree) => {

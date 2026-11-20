@@ -10,6 +10,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ### Sessions
 
+- Hand over: a session's menu (H) hands its work to another profile in the same workspace. The current agent is asked for a handover note (what was asked, done and left; up to three minutes), then stopped; a new session with the same title starts there with the instructions so far, the note, and the diff, and carries on. It takes the old session's pane; the old session keeps its record, and a failure is told on it
 - Review: a session can name a profile that reviews its diff after each turn (the button in the pane header). When a turn ends normally with a diff not reviewed yet, that agent gets the instruction behind the turn, the files changed and the diff, and lists problems as `path:line — problem — fix` in a column at the pane's right edge. It works read-only (its own read-only mode where it has one, and every permission request declined), carries on one conversation so it mentions earlier problems only while they are unfixed, and can be asked about its findings. A diff that arrives while it is still answering is reviewed when it is done
 
 ## [0.5.0] - 2026-11-19
