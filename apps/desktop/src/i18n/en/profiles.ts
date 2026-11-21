@@ -82,8 +82,9 @@ export const profiles: Record<keyof typeof source, string> = {
   mcpUrl: "URL",
   mcpKind: "Kind",
   fallback: "When the key hits a limit",
-  fallbackHint: "If this key hits a rate or usage limit, the session switches to the chosen profile and sends the prompt again. The conversation carries over",
-  fallbackNone: "There is no other profile for this agent",
+  fallbackHint:
+    "If this key hits a rate or usage limit, the session switches to the chosen profile and sends the prompt again. The conversation carries over. Only profiles that use an API key or a custom provider can be chosen: rotating through subscription accounts may break the provider's terms",
+  fallbackNone: "There is no other profile for this agent that uses an API key or a custom provider",
   fallbackOff: "Don't switch",
   model: "Model",
   modelHint: "Leave empty to use the agent's default model",

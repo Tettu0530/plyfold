@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use plyfold_core::{Engine, EngineEvent, EngineOptions, StartSession};
 use plyfold_profile::{Config, MemoryStore};
+use plyfold_store::EventKind;
 use tokio::sync::broadcast::Receiver;
 
 fn mock_agent() -> PathBuf {
@@ -63,6 +64,7 @@ MOCK_LIMITED = "1"
 [profiles.second]
 agent = "mock"
 fallback = "first"
+keys = {{ MOCK_KEY = "keychain" }}
 "#,
         mock_agent().display()
     );
@@ -70,7 +72,8 @@ fallback = "first"
         state_dir: base.join("state"),
         data_dir: None,
         config: Config::from_toml(&toml).unwrap(),
-        secrets: Arc::new(MemoryStore::default()),
+        // The fallback uses a key billed by use (only such a profile can be one)
+        secrets: Arc::new(MemoryStore::from([("second/MOCK_KEY", "k")])),
         stall_after: Duration::from_secs(60),
     })
     .unwrap();
@@ -92,5 +95,90 @@ fallback = "first"
     assert!(events.iter().any(|e| e.payload.contains("rate_limit_error")));
     assert!(events.iter().any(|e| e.payload.contains("echo: limit me")), "answered with the second key");
     assert!(events.iter().any(|e| e.payload.contains("first のキーが上限に達した") || e.payload.contains("first's key hit its limit")));
+    eng.close_session(&s.id).await.unwrap();
+}
+
+async fn next_resume(rx: &mut Receiver<EngineEvent>, id: &str) -> Option<i64> {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let EngineEvent::ResumeScheduled { session_id, at } = rx.recv().await.unwrap()
+                && session_id == id
+            {
+                return at;
+            }
+        }
+    })
+    .await
+    .expect("no resume event")
+}
+
+fn prompts_to(eng: &Engine, id: &str) -> Vec<String> {
+    eng.store()
+        .events(id, None, 100_000)
+        .unwrap()
+        .into_iter()
+        .filter(|e| e.kind == EventKind::FrameOut && e.payload.contains("\"session/prompt\""))
+        .map(|e| e.payload)
+        .collect()
+}
+
+#[tokio::test]
+async fn a_limit_with_no_key_to_move_to_waits_and_resumes() {
+    let base = tmp("resume");
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    // The fallback uses the CLI's own sign-in: moving to it would rotate subscriptions, so the session waits instead
+    let toml = format!(
+        r#"
+[agents.mock]
+command = '{}'
+[profiles.first]
+agent = "mock"
+fallback = "login"
+[profiles.first.env]
+MOCK_LIMITED = "1"
+[profiles.login]
+agent = "mock"
+"#,
+        mock_agent().display()
+    );
+    let eng = Engine::open(EngineOptions {
+        state_dir: base.join("state"),
+        data_dir: None,
+        config: Config::from_toml(&toml).unwrap(),
+        secrets: Arc::new(MemoryStore::default()),
+        stall_after: Duration::from_secs(60),
+    })
+    .unwrap();
+    let mut rx = eng.subscribe();
+    let s = eng.start_session(StartSession { profile: "first".into(), title: "Work".into(), repo: repo.clone(), worktree: false }).await.unwrap();
+
+    eng.prompt(&s.id, "limit me").unwrap();
+    let at = next_resume(&mut rx, &s.id).await.expect("a resume is planned");
+    assert_eq!(eng.store().get_session(&s.id).unwrap().profile, "first", "not moved to a sign-in profile");
+    // The message gives no time, so a guess half an hour ahead
+    assert!(at > plyfold_store::now_ms() + 25 * 60_000, "{at}");
+    assert_eq!(eng.scheduled_resumes(), vec![(s.id.clone(), at)]);
+
+    // Now: the prompt goes out again, and as the key is still limited, waits again
+    assert!(eng.resume_now(&s.id).await);
+    assert_eq!(next_resume(&mut rx, &s.id).await, None, "sent");
+    assert!(next_resume(&mut rx, &s.id).await.is_some(), "waiting again");
+    let sent = prompts_to(&eng, &s.id);
+    assert_eq!(sent.len(), 2);
+    assert!(sent[1].contains("limit me"), "the stopped instruction goes out again");
+
+    // A prompt from the user replaces the wait
+    eng.prompt(&s.id, "hello").unwrap();
+    assert_eq!(next_resume(&mut rx, &s.id).await, None);
+    turn_ended(&mut rx, &s.id).await;
+    assert!(eng.scheduled_resumes().is_empty());
+
+    // Turned off: a limit only ends the turn
+    eng.set_resume_after_limit(false);
+    eng.prompt(&s.id, "limit again").unwrap();
+    turn_ended(&mut rx, &s.id).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(eng.scheduled_resumes().is_empty());
     eng.close_session(&s.id).await.unwrap();
 }

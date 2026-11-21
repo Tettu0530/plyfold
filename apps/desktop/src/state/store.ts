@@ -338,6 +338,8 @@ interface State {
   /** Stop the agent (the log and worktree remain) */
   stopSession: (id: string) => Promise<void>;
   /** Delete along with the log. With removeWorktree, also delete the worktree and branch */
+  /** Sessions whose prompt waits for a usage limit to lift, and when it goes out (ms) */
+  resumes: Record<string, number>;
   /** Prompts waiting to start as sessions, first first */
   tasks: QueuedTask[];
   /** Put the draft's prompt in the queue instead of starting it now */
@@ -461,6 +463,7 @@ export const useStore = create<State>((set, get) => ({
   find: null,
   repoNames: {},
   tasks: [],
+  resumes: {},
   labOpen: false,
   diffVersion: 0,
   bumpDiff: () => set((s) => ({ diffVersion: s.diffVersion + 1 })),
@@ -502,6 +505,14 @@ export const useStore = create<State>((set, get) => ({
       if (e.type === "turn_ended" && !e.error && e.stop_reason !== "cancelled") queueMicrotask(() => get().sendQueued(e.session_id));
       // A session that stops working may make room for a queued task
       if (e.type === "status") queueMicrotask(() => void get().pumpTasks());
+      if (e.type === "resume_scheduled") {
+        set((s) => {
+          const resumes = { ...s.resumes };
+          if (e.at) resumes[e.session_id] = e.at;
+          else delete resumes[e.session_id];
+          return { resumes };
+        });
+      }
       set((s) => {
         const sessions = reduceEvent(s.sessions, e);
         // Also post a macOS notification when the app isn't in focus
@@ -536,6 +547,10 @@ export const useStore = create<State>((set, get) => ({
     applyMotion(sv.settings.reduce_motion);
     set({ profiles, sessions, settings: sv.settings, ready: true, ...(layout ? { ...layout, paneCount: leaves(layout.layout).length } : {}) });
     void get().loadRepoNames();
+    void api.scheduledResumes().then(
+      (list) => set({ resumes: Object.fromEntries(list) }),
+      () => {},
+    );
     void api.listTasks().then(
       (tasks) => {
         set({ tasks });

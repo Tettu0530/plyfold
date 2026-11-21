@@ -25,6 +25,7 @@ import { startDrag } from "./dnd";
 import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
 import { useKeys } from "@/state/keys";
 import { PlyfoldMark } from "../Logo";
+import { ResumeBar } from "./ResumeBar";
 import { ReviewButton, ReviewColumn } from "./Review";
 import { SideChatButton, SideChatColumn } from "./SideChat";
 import { unpushed, useGitInfo } from "./GitMenu";
@@ -267,6 +268,7 @@ function SessionPane({ index }: { index: number }) {
             </AnimatePresence>
           </div>
 
+          <ResumeBar id={id} />
           <Composer
             noMode={!!r.chat}
             scope={id}

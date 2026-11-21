@@ -140,4 +140,7 @@ export const settings: Record<keyof typeof source, string> = {
   sharedMcpHint:
     "MCP servers set up here are passed to sessions of every profile. A profile's own server with the same name is used instead. Applies to sessions started or reopened from now on",
   sharedMcpSave: "Save",
+  resumeAfterLimit: "Resume when a limit lifts",
+  resumeAfterLimitDetail:
+    "A prompt stopped by a usage limit is sent again with the same key when the limit lifts. When the time is not known, it is tried after 30 minutes. A fallback profile, if there is one, comes first",
 };

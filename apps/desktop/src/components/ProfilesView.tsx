@@ -335,7 +335,8 @@ function FallbackPicker({ agent, self, value, onChange }: { agent: string; self:
   const profiles = useStore((s) => s.profiles);
   const menu = useLiquidMenu("menu:profiles:fallback", "profiles:fallback");
   const NONE = "__none__";
-  const others = profiles.filter((p) => p.agent === agent && p.name !== self && p.name !== p.agent);
+  // Only a key billed by use: moving between subscriptions when one hits its limit is what providers' terms forbid
+  const others = profiles.filter((p) => p.agent === agent && p.name !== self && p.uses_key);
   return (
     <div className="flex items-start gap-4">
       <div className="flex grow flex-col gap-1">

@@ -137,4 +137,7 @@ export const settings = {
   sharedMcpHint:
     "ここで設定した MCP サーバーは、すべてのプロファイルのセッションに渡されます。プロファイルに同じ名前のサーバーがあれば、そちらを使います。新しく始めるセッションと、開き直すセッションから効きます",
   sharedMcpSave: "保存",
+  resumeAfterLimit: "上限が解けたら再開",
+  resumeAfterLimitDetail:
+    "利用上限で止まった指示を、上限が解ける時刻に同じキーで自動で送り直します。時刻がわからないときは 30 分後に試します。切り替え先のプロファイルがあれば、そちらが先です",
 } satisfies Record<string, string>;

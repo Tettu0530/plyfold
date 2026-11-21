@@ -118,7 +118,9 @@ export type EngineEvent =
   | { type: "info"; session_id: string; info: SessionInfo }
   | { type: "renamed"; session_id: string; title: string }
   /** Where the session works changed (its worktree folder was removed, so it continues in the repository) */
-  | { type: "workspace_changed"; session: SessionRecord };
+  | { type: "workspace_changed"; session: SessionRecord }
+  /** A prompt stopped by a usage limit goes out again at `at` (ms); null when that is no longer planned */
+  | { type: "resume_scheduled"; session_id: string; at: number | null };
 
 /** A conversation the CLI already has, which Plyfold has not recorded */
 export interface CliSession {
@@ -176,6 +178,8 @@ export interface AppSettings {
   chat_group_name?: string;
   /** How many queued tasks may run at once */
   max_parallel?: number;
+  /** Send a prompt stopped by a usage limit again, with the same key, when the limit lifts */
+  resume_after_limit?: boolean;
 }
 
 /** Settings → Info (src-tauri app_info) */
@@ -299,6 +303,8 @@ export interface ProfileSummary {
   label: string;
   isolate: boolean;
   keyed: boolean;
+  /** Uses a key billed by use, so it can be another profile's fallback (not a sign-in or subscription token) */
+  uses_key: boolean;
   custom_provider: boolean;
   /** Name of an agent added from the ACP Registry (built-in agents are named by the UI) */
   agent_name?: string | null;

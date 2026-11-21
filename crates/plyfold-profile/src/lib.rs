@@ -167,14 +167,26 @@ pub fn builtin_agents() -> BTreeMap<String, AgentDef> {
     ])
 }
 
+/// Variables that carry a subscription's sign-in rather than a key billed by use
+const SUBSCRIPTION_VARS: [&str; 1] = ["CLAUDE_CODE_OAUTH_TOKEN"];
+
+impl ProfileDef {
+    /// Whether Plyfold passes this profile a key billed by use (an API key, or a custom provider's key), as opposed to
+    /// the CLI's own sign-in or a subscription token. Only such a profile can be a fallback: moving between
+    /// subscriptions when one hits its limit is the kind of use providers' terms forbid
+    pub fn uses_key(&self) -> bool {
+        self.keys.keys().any(|var| !SUBSCRIPTION_VARS.contains(&var.as_str()))
+    }
+}
+
 impl Config {
     /// The profile to continue with when `profile`'s key hits a limit: its fallback, if that is another profile of
-    /// the same agent
+    /// the same agent that uses a key (see ProfileDef::uses_key)
     pub fn fallback_for(&self, profile: &str) -> Option<String> {
         let def = self.profiles.get(profile)?;
         let to = def.fallback.as_deref().filter(|f| *f != profile)?;
-        let agent = self.profiles.get(to).map(|p| p.agent.as_str()).or_else(|| self.agents.contains_key(to).then_some(to))?;
-        (agent == def.agent).then(|| to.to_string())
+        let target = self.profiles.get(to)?;
+        (target.agent == def.agent && target.uses_key()).then(|| to.to_string())
     }
 
     /// Where an isolated profile's CLI keeps its data (conversations included); None for one that uses the usual
@@ -699,11 +711,29 @@ fallback = "b"
 [profiles.b]
 agent = "claude"
 fallback = "c"
+keys = { ANTHROPIC_API_KEY = "keychain" }
 [profiles.c]
 agent = "codex"
+keys = { OPENAI_API_KEY = "keychain" }
 [profiles.self]
 agent = "claude"
 fallback = "self"
+keys = { ANTHROPIC_API_KEY = "keychain" }
+[profiles.to-login]
+agent = "claude"
+fallback = "login"
+[profiles.login]
+agent = "claude"
+isolate = true
+[profiles.to-sub]
+agent = "claude"
+fallback = "sub"
+[profiles.sub]
+agent = "claude"
+keys = { CLAUDE_CODE_OAUTH_TOKEN = "keychain" }
+[profiles.to-bare]
+agent = "claude"
+fallback = "claude"
 "#,
         )
         .unwrap();
@@ -711,6 +741,10 @@ fallback = "self"
         assert_eq!(cfg.fallback_for("b"), None, "another agent would not have the conversation");
         assert_eq!(cfg.fallback_for("self"), None);
         assert_eq!(cfg.fallback_for("missing"), None);
+        // Only to a key billed by use: not to another sign-in or subscription token
+        assert_eq!(cfg.fallback_for("to-login"), None);
+        assert_eq!(cfg.fallback_for("to-sub"), None);
+        assert_eq!(cfg.fallback_for("to-bare"), None, "the bare agent uses the CLI's own sign-in");
         let state = Path::new("/state");
         assert_eq!(cfg.data_dir_of("a", state), Some(state.join("profiles").join("a")));
         assert_eq!(cfg.data_dir_of("b", state), None, "not isolated: the usual config");
