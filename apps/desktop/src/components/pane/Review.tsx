@@ -5,7 +5,9 @@ import { ScanSearch, RefreshCw, X } from "lucide-react";
 import { motion } from "motion/react";
 import { useLayoutEffect, useState } from "react";
 
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import { Select as SelectPrimitive } from "radix-ui";
+
+import { Select, SelectContent, SelectItem } from "@/components/ui/select";
 import { useT } from "@/i18n";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -27,18 +29,18 @@ export function ReviewButton({ mainId }: { mainId: string }) {
   const menu = useLiquidMenu(`menu:review:${mainId}`, `review:${mainId}`);
   return (
     <Select value={reviewer ?? OFF} onValueChange={(v) => void api.setReviewer(mainId, v === OFF ? null : v)} onOpenChange={menu.onOpenChange}>
-      <SelectTrigger
+      {/* The bare trigger, so it looks like the header's other buttons (the styled one brings a box, a height and a chevron) */}
+      <SelectPrimitive.Trigger
         ref={liquidAnchor(`review:${mainId}`)}
         aria-label={t("side.review")}
         title={reviewer ? t("side.reviewBy", { profile: reviewer }) : t("side.review")}
-        // A plain icon button, not the select's usual box
         className={cn(
-          "flex size-6 items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted-foreground shadow-none hover:bg-accent hover:text-foreground [&>svg:last-child]:hidden",
+          "flex size-6 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
           reviewer && "bg-accent text-foreground",
         )}
       >
         <ScanSearch className="size-3.5" aria-hidden />
-      </SelectTrigger>
+      </SelectPrimitive.Trigger>
       <SelectContent
         ref={menu.ref as React.Ref<HTMLDivElement>}
         style={menu.style}
