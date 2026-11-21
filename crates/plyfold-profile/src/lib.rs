@@ -122,6 +122,9 @@ pub struct Config {
     pub agents: BTreeMap<String, AgentDef>,
     #[serde(default)]
     pub profiles: BTreeMap<String, ProfileDef>,
+    /// MCP servers passed to every profile. A profile's own server with the same name takes its place
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mcp: Vec<McpServerDef>,
 }
 
 /// Everything needed for a launch, resolved
@@ -186,7 +189,7 @@ impl Config {
     /// Layers the file's contents over the built-in agent definitions
     pub fn from_toml(text: &str) -> Result<Self, ProfileError> {
         let file: Config = toml::from_str(text)?;
-        let mut cfg = Config { agents: builtin_agents(), profiles: BTreeMap::new() };
+        let mut cfg = Config { agents: builtin_agents(), profiles: BTreeMap::new(), mcp: file.mcp };
         cfg.agents.extend(file.agents);
         cfg.profiles.extend(file.profiles);
         Ok(cfg)
@@ -279,7 +282,7 @@ impl Config {
             label: profile.label.clone().unwrap_or_else(|| target.to_string()),
             spawn: SpawnSpec { command: agent.command.clone(), args: agent.args.clone(), cwd: cwd.to_path_buf(), env_set, env_remove, secrets: secret_values },
             default_mode: profile.default_mode.clone(),
-            mcp: profile.mcp.clone(),
+            mcp: self.mcp.iter().filter(|s| !profile.mcp.iter().any(|p| p.name() == s.name())).chain(&profile.mcp).cloned().collect(),
             env_summary,
         })
     }
@@ -711,5 +714,41 @@ fallback = "self"
         let state = Path::new("/state");
         assert_eq!(cfg.data_dir_of("a", state), Some(state.join("profiles").join("a")));
         assert_eq!(cfg.data_dir_of("b", state), None, "not isolated: the usual config");
+    }
+
+    #[test]
+    fn shared_mcp_servers_reach_every_profile_unless_it_has_its_own() {
+        let cfg = Config::from_toml(
+            r#"
+[[mcp]]
+transport = "http"
+name = "docs"
+url = "https://shared.example.com/docs"
+[[mcp]]
+transport = "http"
+name = "search"
+url = "https://shared.example.com/search"
+[profiles.p]
+agent = "claude"
+[[profiles.p.mcp]]
+transport = "http"
+name = "docs"
+url = "https://own.example.com/docs"
+"#,
+        )
+        .unwrap();
+        let state = tmp("shared-mcp");
+        let r = cfg.resolve("p", &state, &state, &MemoryStore::default()).unwrap();
+        let urls: Vec<_> = r
+            .mcp
+            .iter()
+            .map(|s| match s {
+                McpServerDef::Http { url, .. } => url.as_str(),
+                _ => "",
+            })
+            .collect();
+        assert_eq!(urls, ["https://shared.example.com/search", "https://own.example.com/docs"]);
+        let plain = cfg.resolve("claude", &state, &state, &MemoryStore::default()).unwrap();
+        assert_eq!(plain.mcp.len(), 2, "a bare agent gets the shared ones too");
     }
 }

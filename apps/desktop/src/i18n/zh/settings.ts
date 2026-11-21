@@ -135,4 +135,7 @@ export const settings: Record<keyof typeof source, string> = {
   repoNameDetail: "侧边栏中分组显示的名称。留空则使用文件夹名称",
   maxParallel: "同时运行数",
   maxParallelDetail: "排队的指令会在工作中的会话少于此数量时依次开始",
+  sectionMcp: "MCP",
+  sharedMcpHint: "在此设置的 MCP 服务器会传给所有配置的会话。若配置中有同名服务器，则使用配置中的那个。对之后新开始或重新打开的会话生效",
+  sharedMcpSave: "保存",
 };

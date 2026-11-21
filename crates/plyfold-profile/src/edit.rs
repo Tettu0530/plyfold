@@ -272,9 +272,15 @@ pub fn to_def(form: &ProfileForm, existing: Option<&ProfileDef>) -> Result<Profi
             _ => {}
         }
     }
-    def.mcp = form.mcp.iter().map(mcp_from_form).collect::<Result<Vec<_>, _>>()?;
+    def.mcp = mcp_servers(&form.mcp)?;
+    Ok(def)
+}
+
+/// Servers from the UI form, checked; names must not repeat
+pub fn mcp_servers(forms: &[McpForm]) -> Result<Vec<McpServerDef>, ProfileError> {
+    let servers = forms.iter().map(mcp_from_form).collect::<Result<Vec<_>, _>>()?;
     let mut names = std::collections::HashSet::new();
-    for server in &def.mcp {
+    for server in &servers {
         let name = server.name();
         if !names.insert(name.to_string()) {
             return Err(ProfileError::Form(plyfold_i18n::tr!(
@@ -284,7 +290,25 @@ pub fn to_def(form: &ProfileForm, existing: Option<&ProfileDef>) -> Result<Profi
             )));
         }
     }
-    Ok(def)
+    Ok(servers)
+}
+
+/// Writes the MCP servers shared by every profile ([[mcp]] at the top of config.toml); an empty list removes them
+pub fn set_shared_mcp(path: &Path, servers: &[McpServerDef]) -> Result<(), ProfileError> {
+    let mut doc = read_doc(path)?;
+    doc.remove("mcp");
+    if !servers.is_empty() {
+        #[derive(Serialize)]
+        struct Shared<'a> {
+            mcp: &'a [McpServerDef],
+        }
+        let value = toml_edit::ser::to_document(&Shared { mcp: servers }).map_err(|e| ProfileError::Form(e.to_string()))?;
+        if let Some(item) = value.get("mcp") {
+            // [[mcp]] headers: valid wherever they land among [agents] and [profiles]
+            doc.insert("mcp", item.clone());
+        }
+    }
+    write_doc(path, &doc)
 }
 
 fn mcp_from_form(form: &McpForm) -> Result<McpServerDef, ProfileError> {
@@ -609,5 +633,26 @@ mod tests {
 
         c.model = Some("bad name".into());
         assert!(to_def(&c, None).is_err());
+    }
+
+    #[test]
+    fn shared_mcp_servers_round_trip_beside_profiles() {
+        let dir = std::env::temp_dir().join(format!("plyfold-shared-mcp-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("config.toml");
+        upsert_profile(&path, "p", &to_def(&form("claude", AuthKind::Login, None), None).unwrap()).unwrap();
+        let servers = mcp_servers(&[
+            McpForm { transport: "http".into(), name: "docs".into(), command: String::new(), args: Vec::new(), url: "https://mcp.example.com/docs".into() },
+            McpForm { transport: "stdio".into(), name: "fs".into(), command: "mcp-fs".into(), args: vec!["--ro".into()], url: String::new() },
+        ])
+        .unwrap();
+        set_shared_mcp(&path, &servers).unwrap();
+        let cfg = Config::load(&path).unwrap();
+        assert_eq!(cfg.mcp, servers);
+        assert!(cfg.profiles.contains_key("p"), "profiles are kept");
+        set_shared_mcp(&path, &[]).unwrap();
+        assert!(Config::load(&path).unwrap().mcp.is_empty());
+        let dup = McpForm { transport: "http".into(), name: "docs".into(), command: String::new(), args: Vec::new(), url: "https://a.example.com".into() };
+        assert!(mcp_servers(&[dup.clone(), dup]).is_err());
     }
 }

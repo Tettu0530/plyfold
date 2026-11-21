@@ -6,6 +6,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ### Profiles
 
+- Shared MCP servers: Settings → MCP sets up servers once for every profile (`[[mcp]]` at the top of config.toml). A profile's own server with the same name is used in its place. They reach sessions started or reopened afterwards
 - A profile can name the model to use (Profiles → Model). For Claude Code it is used for every choice in the model menu and for helper agents, so a custom provider that accepts only its own model names works; Codex gets it in its config.toml and Gemini CLI in GEMINI_MODEL
 
 ### Sessions

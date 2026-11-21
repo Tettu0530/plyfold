@@ -28,6 +28,7 @@ import type {
   RepoEntry,
   RepoSettings,
   QueuedTask,
+  McpServerForm,
 } from "./types";
 
 // Thin wrappers around the Tauri commands (src-tauri/src/lib.rs). Argument names follow the Rust side's camelCase conversion
@@ -61,6 +62,8 @@ export const api = {
   revealFile: (path: string) => invoke<void>("reveal_file", { path }),
   readTextFile: (path: string) => invoke<TextFile>("read_text_file", { path }),
   listRepos: () => invoke<RepoEntry[]>("list_repos"),
+  sharedMcp: () => invoke<McpServerForm[]>("shared_mcp"),
+  saveSharedMcp: (servers: McpServerForm[]) => invoke<void>("save_shared_mcp", { servers }),
   listTasks: () => invoke<QueuedTask[]>("list_tasks"),
   saveTasks: (tasks: QueuedTask[]) => invoke<void>("save_tasks", { tasks }),
   renameRepo: (path: string, name: string) => invoke<void>("rename_repo", { path, name }),
