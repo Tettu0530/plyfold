@@ -254,6 +254,9 @@ export function SettingsView() {
                     options={[1, 2, 3, 4].map((v) => ({ value: v, label: <span className="px-2 font-mono tabular">{v}</span> }))}
                   />
                 </Row>
+                <Row label={t("settings.resumeAfterLimit")} htmlFor="st-resume" detail={t("settings.resumeAfterLimitDetail")}>
+                  <Switch id="st-resume" checked={settings.resume_after_limit ?? true} onCheckedChange={(v) => change({ resume_after_limit: v })} />
+                </Row>
                 <Row label={t("settings.stall")} detail={t("settings.stallDetail")}>
                   <Segmented<number>
                     label={t("settings.stall")}

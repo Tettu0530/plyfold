@@ -74,6 +74,8 @@ struct AppSettings {
     chat_group_name: String,
     /// How many queued tasks may run at once
     max_parallel: u32,
+    /// Send a prompt that hit a usage limit again, with the same key, when the limit lifts
+    resume_after_limit: bool,
 }
 
 impl Default for AppSettings {
@@ -96,6 +98,7 @@ impl Default for AppSettings {
             default_profile: String::new(),
             chat_group_name: String::new(),
             max_parallel: 2,
+            resume_after_limit: true,
         }
     }
 }
@@ -210,6 +213,7 @@ fn save_settings(state: State<'_, AppState>, settings: AppSettings) -> CmdResult
     std::fs::write(&tmp, serde_json::to_string_pretty(&settings).map_err(err)?).map_err(err)?;
     std::fs::rename(tmp, path).map_err(err)?;
     state.engine.set_stall_after(Duration::from_secs(settings.stall_seconds));
+    state.engine.set_resume_after_limit(settings.resume_after_limit);
     *state.settings.write().unwrap() = settings;
     Ok(())
 }
@@ -250,6 +254,8 @@ struct ProfileSummary {
     isolate: bool,
     /// Authenticates with a key (not an existing login)
     keyed: bool,
+    /// Uses a key billed by use, so it can be another profile's fallback (not a sign-in or subscription token)
+    uses_key: bool,
     /// Has a custom endpoint (base URL)
     custom_provider: bool,
     /// The agent's name, for agents added from the ACP Registry (built-in ones are named by the UI)
@@ -277,6 +283,7 @@ fn list_profiles(state: State<'_, AppState>) -> Vec<ProfileSummary> {
                 label: p.label.clone().unwrap_or_else(|| name.clone()),
                 isolate: p.isolate,
                 keyed: !p.keys.is_empty(),
+                uses_key: p.uses_key(),
                 custom_provider: p.env.keys().any(|k| k.ends_with("BASE_URL")) || p.files.contains_key("config.toml"),
                 agent_name,
                 agent_icon,
@@ -292,6 +299,7 @@ fn list_profiles(state: State<'_, AppState>) -> Vec<ProfileSummary> {
             label: "default".into(),
             isolate: false,
             keyed: false,
+            uses_key: false,
             custom_provider: false,
             agent_name,
             agent_icon,
@@ -376,6 +384,22 @@ async fn start_chat(state: State<'_, AppState>, profile: String, title: String) 
 #[tauri::command]
 async fn open_side_chat(state: State<'_, AppState>, id: String) -> CmdResult<SessionRecord> {
     state.engine.open_side_chat(&id).await.map_err(err)
+}
+
+/// Sessions whose prompt waits for a usage limit to lift, and when it goes out (ms)
+#[tauri::command]
+fn scheduled_resumes(state: State<'_, AppState>) -> Vec<(String, i64)> {
+    state.engine.scheduled_resumes()
+}
+
+#[tauri::command]
+async fn resume_now(state: State<'_, AppState>, id: String) -> CmdResult<bool> {
+    Ok(state.engine.resume_now(&id).await)
+}
+
+#[tauri::command]
+fn cancel_resume(state: State<'_, AppState>, id: String) -> bool {
+    state.engine.cancel_resume(&id)
 }
 
 /// Hand the session over to another profile in the same workspace (see Engine::hand_over)
@@ -699,6 +723,17 @@ fn save_profile(state: State<'_, AppState>, form: ProfileForm, original: Option<
         }
         let existing = original.as_ref().and_then(|o| cfg.profiles.get(o));
         let def = edit::to_def(&form, existing).map_err(err)?;
+        // A fallback is another profile of the same agent with a key billed by use; moving between subscriptions when
+        // one hits its limit is the kind of use providers' terms forbid
+        if let Some(to) = &def.fallback
+            && !cfg.profiles.get(to).is_some_and(|p| p.agent == def.agent && p.uses_key())
+        {
+            return Err(plyfold_i18n::tr!(
+                "切り替え先には、同じエージェントで API キーかカスタムプロバイダーを使うプロファイルだけを選べます（CLI のログインのまま使うプロファイルは選べません）",
+                "The fallback must be a profile of the same agent that uses an API key or a custom provider (not one that uses the CLI's own sign-in)",
+                "切换目标只能是同一代理中使用 API 密钥或自定义提供商的配置（不能选择沿用 CLI 登录的配置）"
+            ));
+        }
         let old_account = original.as_ref().zip(existing).and_then(|(o, d)| edit::key_account(o, d));
         (def, old_account)
     };
@@ -917,6 +952,7 @@ pub fn run() {
                 secrets: secrets.clone(),
                 stall_after: Duration::from_secs(settings.stall_seconds),
             })?;
+            engine.set_resume_after_limit(settings.resume_after_limit);
 
             // Forward engine events to the UI as-is
             let mut rx = engine.subscribe();
@@ -959,6 +995,9 @@ pub fn run() {
             empty_trash,
             list_repos,
             list_tasks,
+            scheduled_resumes,
+            resume_now,
+            cancel_resume,
             set_reviewer,
             review_now,
             hand_over,

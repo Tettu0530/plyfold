@@ -25,6 +25,7 @@ pub mod attach;
 pub mod check;
 pub use attach::Attachment;
 pub mod info;
+mod limits;
 pub mod repos;
 pub mod usage;
 use info::TurnClock;
@@ -156,6 +157,12 @@ pub enum EngineEvent {
     Renamed {
         session_id: String,
         title: String,
+    },
+    /// A turn hit a rate or usage limit with no fallback to move to: the session is sent its prompt again with the
+    /// same key at `at` (ms). `at: None` when that is no longer planned (sent, cancelled, or given up)
+    ResumeScheduled {
+        session_id: String,
+        at: Option<i64>,
     },
     /// Where the session works changed outside the usual actions (its worktree folder was removed, so it continues in
     /// the original repository)
@@ -307,7 +314,33 @@ struct Inner {
     perm_seq: AtomicU64,
     /// Per reviewed session: what was last reviewed, and a review waiting for the reviewer to finish its turn
     reviews: Mutex<HashMap<String, ReviewState>>,
+    /// Send a prompt again when the limit it hit lifts (Settings → Sessions)
+    resume_after_limit: AtomicBool,
+    /// Per session: the prompt waiting for a limit to lift
+    resumes: Mutex<HashMap<String, PendingResume>>,
+    resume_seq: AtomicU64,
 }
+
+/// A prompt to send again when the limit it hit lifts
+struct PendingResume {
+    text: String,
+    attachments: Vec<Attachment>,
+    /// How many times this prompt has waited on a limit; past MAX_RESUMES Plyfold stops trying
+    attempts: u32,
+    /// When it is sent (ms); None while the resumed turn is under way
+    at: Option<i64>,
+    /// The current wait: a newer one, or a cancel, leaves an older timer with nothing to do
+    token: u64,
+}
+
+/// Waits on a limit for one prompt before giving up
+const MAX_RESUMES: u32 = 6;
+/// After the reset time, so the provider has caught up
+const RESUME_SLACK_MS: i64 = 30_000;
+/// When the message does not say when the limit lifts
+const RESUME_GUESS_MS: i64 = 30 * 60_000;
+/// A limit per minute that does not say when it lifts
+const RESUME_SHORT_MS: i64 = 90_000;
 
 #[derive(Default)]
 struct ReviewState {
@@ -389,6 +422,9 @@ impl Engine {
                 stall_after_ms: AtomicU64::new(opts.stall_after.as_millis() as u64),
                 perm_seq: AtomicU64::new(0),
                 reviews: Mutex::new(HashMap::new()),
+                resume_after_limit: AtomicBool::new(true),
+                resumes: Mutex::new(HashMap::new()),
+                resume_seq: AtomicU64::new(0),
             }),
         })
     }
@@ -1140,6 +1176,8 @@ impl Engine {
 
     /// Start a turn with images or files attached
     pub fn prompt_with(&self, id: &str, text: &str, attachments: &[Attachment]) -> Result<(), CoreError> {
+        // A new prompt replaces one waiting for a limit to lift
+        self.drop_resume(id);
         self.prompt_tried(id, text, attachments, Vec::new())
     }
 
@@ -1170,10 +1208,11 @@ impl Engine {
             }
             live.in_turn.store(false, Ordering::SeqCst);
             live.permissions.lock().unwrap().clear();
-            let limited = match &r {
-                Ok(_) => hit_limit(&live.turn_text.lock().unwrap(), true),
-                Err(e) => hit_limit(&e.to_string(), false),
+            let limit_text = match &r {
+                Ok(_) => live.turn_text.lock().unwrap().clone(),
+                Err(e) => e.to_string(),
             };
+            let limited = hit_limit(&limit_text, r.is_ok());
             let ended = r
                 .as_ref()
                 .is_ok_and(|t| serde_json::to_value(t.response.stop_reason).ok().and_then(|v| v.as_str().map(str::to_string)).as_deref() == Some("end_turn"));
@@ -1195,9 +1234,15 @@ impl Engine {
             inner.set_status(&id, SessionStatus::Idle);
             let engine = Engine { inner };
             if limited {
-                engine.continue_with_fallback(&id, &text, &attachments, tried).await;
-            } else if ended {
-                engine.after_turn(&id, &text).await;
+                if !engine.continue_with_fallback(&id, &text, &attachments, tried).await {
+                    engine.schedule_resume(&id, &text, &attachments, &limit_text);
+                }
+            } else {
+                // The prompt got through, or failed for another reason: nothing waits on a limit any more
+                engine.inner.resumes.lock().unwrap().remove(&id);
+                if ended {
+                    engine.after_turn(&id, &text).await;
+                }
             }
         });
         Ok(())
@@ -1332,13 +1377,14 @@ impl Engine {
     /// After a turn hit a rate or usage limit: when the session's profile names a fallback (another key of the same
     /// agent) not tried for this prompt yet, reopen the session with it and send the prompt again.
     /// An isolated profile keeps conversations in its own directory, so the conversation's files are copied over first
-    async fn continue_with_fallback(&self, id: &str, text: &str, attachments: &[Attachment], mut tried: Vec<String>) {
+    /// True when the session moved to the fallback and the prompt went out again
+    async fn continue_with_fallback(&self, id: &str, text: &str, attachments: &[Attachment], mut tried: Vec<String>) -> bool {
         let inner = &self.inner;
-        let Ok(rec) = inner.store.get_session(id) else { return };
+        let Ok(rec) = inner.store.get_session(id) else { return false };
         tried.push(rec.profile.clone());
         let (to, from_dir, to_dir) = {
             let config = inner.config.read().unwrap();
-            let Some(to) = config.fallback_for(&rec.profile).filter(|p| !tried.contains(p)) else { return };
+            let Some(to) = config.fallback_for(&rec.profile).filter(|p| !tried.contains(p)) else { return false };
             let dirs = (config.data_dir_of(&rec.profile, &inner.state_dir), config.data_dir_of(&to, &inner.state_dir));
             (to, dirs.0, dirs.1)
         };
@@ -1376,8 +1422,171 @@ impl Engine {
             self.prompt_tried(id, text, attachments, tried)
         }
         .await;
+        match result {
+            Ok(()) => true,
+            Err(e) => {
+                inner.notice(id, plyfold_i18n::tr!("{to} に切り替えられませんでした: {e}", "Could not continue with {to}: {e}", "无法切换到 {to}：{e}"));
+                false
+            }
+        }
+    }
+
+    /// After a limit with no fallback: send the prompt again with the same key when the limit lifts (the time the
+    /// message gives, else a guess), unless that is turned off. Side sessions are not resumed
+    fn schedule_resume(&self, id: &str, text: &str, attachments: &[Attachment], limit_text: &str) {
+        let inner = &self.inner;
+        if !inner.resume_after_limit.load(Ordering::SeqCst) || inner.store.get_session(id).map_or(true, |r| r.side_of.is_some()) {
+            return;
+        }
+        let now = jiff::Zoned::now();
+        let now_ms = now.timestamp().as_millisecond();
+        let found = limits::reset_at(limit_text, &now);
+        let at = match found {
+            Some(ts) => ts.as_millisecond().max(now_ms) + RESUME_SLACK_MS,
+            None if limit_text.to_lowercase().contains("minute") => now_ms + RESUME_SHORT_MS,
+            None => now_ms + RESUME_GUESS_MS,
+        };
+        let token = inner.resume_seq.fetch_add(1, Ordering::SeqCst) + 1;
+        {
+            let mut map = inner.resumes.lock().unwrap();
+            let entry = map.entry(id.to_string()).or_insert_with(|| PendingResume {
+                text: text.to_string(),
+                attachments: attachments.to_vec(),
+                attempts: 0,
+                at: None,
+                token: 0,
+            });
+            entry.attempts += 1;
+            if entry.attempts > MAX_RESUMES {
+                map.remove(id);
+                drop(map);
+                inner.notice(
+                    id,
+                    plyfold_i18n::tr!(
+                        "同じ指示が利用上限に {MAX_RESUMES} 回続けて当たったので、自動での再開をやめました",
+                        "The same prompt hit a limit {MAX_RESUMES} times in a row, so it is no longer resumed by itself",
+                        "同一指令连续 {MAX_RESUMES} 次遇到用量上限，已停止自动继续"
+                    ),
+                );
+                return;
+            }
+            entry.at = Some(at);
+            entry.token = token;
+        }
+        let when = local_time(at);
+        inner.notice(
+            id,
+            if found.is_some() {
+                plyfold_i18n::tr!(
+                    "利用上限に達しました。{when} に上限が解けるので、同じキーで自動で再開します",
+                    "Hit a usage limit. It lifts at {when}, when the session resumes with the same key",
+                    "已达到用量上限。上限将于 {when} 解除，届时会用同一密钥自动继续"
+                )
+            } else {
+                plyfold_i18n::tr!(
+                    "利用上限に達しました。解ける時刻がわからないので、{when} に同じキーで試します",
+                    "Hit a usage limit. When it lifts is not known, so the session tries again with the same key at {when}",
+                    "已达到用量上限。不知道何时解除，将于 {when} 用同一密钥重试"
+                )
+            },
+        );
+        inner.emit(EngineEvent::ResumeScheduled { session_id: id.into(), at: Some(at) });
+        let engine = self.clone();
+        let id = id.to_string();
+        tokio::spawn(async move {
+            loop {
+                let left = at - plyfold_store::now_ms();
+                if left <= 0 {
+                    break;
+                }
+                // Wake at least once a minute: a timer stands still while the machine sleeps, the clock does not
+                tokio::time::sleep(Duration::from_millis(left.min(60_000) as u64)).await;
+                if !engine.resume_waits(&id, token) {
+                    return;
+                }
+            }
+            engine.fire_resume(&id, token).await;
+        });
+    }
+
+    fn resume_waits(&self, id: &str, token: u64) -> bool {
+        self.inner.resumes.lock().unwrap().get(id).is_some_and(|e| e.token == token && e.at.is_some())
+    }
+
+    /// Send the waiting prompt again (reopening the session if it was stopped)
+    async fn fire_resume(&self, id: &str, token: u64) {
+        let inner = &self.inner;
+        let (text, attachments) = {
+            let mut map = inner.resumes.lock().unwrap();
+            let Some(e) = map.get_mut(id).filter(|e| e.token == token && e.at.is_some()) else { return };
+            e.at = None;
+            (e.text.clone(), e.attachments.clone())
+        };
+        inner.emit(EngineEvent::ResumeScheduled { session_id: id.into(), at: None });
+        let result: Result<(), CoreError> = async {
+            if !self.is_running(id) {
+                self.reopen_session(id).await?;
+            }
+            if inner.live(id)?.in_turn.load(Ordering::SeqCst) {
+                return Err(CoreError::Busy(id.into()));
+            }
+            inner.notice(id, plyfold_i18n::tr!("利用上限が解けたので、再開します", "The limit has lifted; resuming", "上限已解除，正在继续"));
+            let again = plyfold_i18n::tr!(
+                "利用上限が解けたので、上限で止まった指示を続けてください。止まったときの指示:\n{text}",
+                "The usage limit has lifted. Carry on with the instruction that stopped at the limit:\n{text}",
+                "用量上限已解除。请继续执行因上限而停止的指令：\n{text}"
+            );
+            self.prompt_tried(id, &again, &attachments, Vec::new())
+        }
+        .await;
         if let Err(e) = result {
-            inner.notice(id, plyfold_i18n::tr!("{to} に切り替えられませんでした: {e}", "Could not continue with {to}: {e}", "无法切换到 {to}：{e}"));
+            inner.resumes.lock().unwrap().remove(id);
+            inner.notice(id, plyfold_i18n::tr!("自動で再開できませんでした: {e}", "Could not resume by itself: {e}", "无法自动继续：{e}"));
+        }
+    }
+
+    /// Send a prompt waiting on a limit now. False when none is waiting
+    pub async fn resume_now(&self, id: &str) -> bool {
+        let token = self.inner.resumes.lock().unwrap().get(id).filter(|e| e.at.is_some()).map(|e| e.token);
+        match token {
+            Some(t) => {
+                self.fire_resume(id, t).await;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Drop a prompt waiting on a limit, at the user's request. False when none was waiting
+    pub fn cancel_resume(&self, id: &str) -> bool {
+        let dropped = self.drop_resume(id);
+        if dropped {
+            self.inner.notice(id, plyfold_i18n::tr!("自動の再開を取り消しました", "The automatic resume was cancelled", "已取消自动继续"));
+        }
+        dropped
+    }
+
+    fn drop_resume(&self, id: &str) -> bool {
+        let waiting = self.inner.resumes.lock().unwrap().remove(id).is_some_and(|e| e.at.is_some());
+        if waiting {
+            self.inner.emit(EngineEvent::ResumeScheduled { session_id: id.into(), at: None });
+        }
+        waiting
+    }
+
+    /// Sessions whose prompt waits on a limit, and when it goes out (ms)
+    pub fn scheduled_resumes(&self) -> Vec<(String, i64)> {
+        self.inner.resumes.lock().unwrap().iter().filter_map(|(id, e)| e.at.map(|at| (id.clone(), at))).collect()
+    }
+
+    /// Settings → Sessions. Turning it off drops the prompts already waiting
+    pub fn set_resume_after_limit(&self, on: bool) {
+        self.inner.resume_after_limit.store(on, Ordering::SeqCst);
+        if !on {
+            let ids: Vec<String> = self.inner.resumes.lock().unwrap().keys().cloned().collect();
+            for id in ids {
+                self.drop_resume(&id);
+            }
         }
     }
 
@@ -1509,6 +1718,8 @@ impl Engine {
 
     /// Stop the agent (the record and worktree are kept)
     pub async fn close_session(&self, id: &str) -> Result<(), CoreError> {
+        // A stopped session does not start again by itself
+        self.drop_resume(id);
         let live = self.inner.live.lock().unwrap().remove(id);
         if let Some(live) = live {
             live.closing.store(true, Ordering::SeqCst);
@@ -2165,6 +2376,11 @@ fn emit_info(inner: &Inner, id: &str, live: &Live) {
 }
 
 /// Whether a turn ended on a rate or usage limit (of the key, not a fault in the work). `answer` is the turn's own
+/// A time as this machine shows it, for notes ("11/21 15:00")
+fn local_time(ms: i64) -> String {
+    jiff::Timestamp::from_millisecond(ms).map(|ts| ts.to_zoned(jiff::tz::TimeZone::system()).strftime("%m/%d %H:%M").to_string()).unwrap_or_default()
+}
+
 /// text: agents report some limits as a short message rather than an error, so only a short one counts
 fn hit_limit(text: &str, answer: bool) -> bool {
     let t = text.trim().to_lowercase();

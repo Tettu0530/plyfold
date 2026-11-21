@@ -81,8 +81,9 @@ export const profiles: Record<keyof typeof source, string> = {
   mcpUrl: "URL",
   mcpKind: "类型",
   fallback: "达到上限时切换到",
-  fallbackHint: "此密钥达到速率限制或用量上限时，切换到所选配置并重新发送同一指令。对话会延续",
-  fallbackNone: "此代理没有其他配置",
+  fallbackHint:
+    "此密钥达到速率限制或用量上限时，切换到所选配置并重新发送同一指令。对话会延续。只能选择使用 API 密钥或自定义提供商的配置（轮换订阅账号的用法可能违反提供商的条款）",
+  fallbackNone: "此代理没有其他使用 API 密钥或自定义提供商的配置",
   fallbackOff: "不切换",
   model: "模型",
   modelHint: "留空则使用代理的默认模型",

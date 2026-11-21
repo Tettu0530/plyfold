@@ -369,7 +369,8 @@ fn belongs(e: &EngineEvent, sid: &str) -> bool {
         | EngineEvent::TurnEnded { session_id, .. }
         | EngineEvent::Notice { session_id, .. }
         | EngineEvent::Info { session_id, .. }
-        | EngineEvent::Renamed { session_id, .. } => session_id,
+        | EngineEvent::Renamed { session_id, .. }
+        | EngineEvent::ResumeScheduled { session_id, .. } => session_id,
     };
     id == sid
 }

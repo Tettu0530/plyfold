@@ -106,4 +106,7 @@ export const pane: Record<keyof typeof source, string> = {
   previewNew: "New browser",
   previewStart: "Type a URL in the field above to open it",
   viewChanges: "View Git and changes",
+  resumeAt: "Hit a usage limit. Resumes with the same key at {when}",
+  resumeNow: "Resume now",
+  resumeCancel: "Cancel the automatic resume",
 };

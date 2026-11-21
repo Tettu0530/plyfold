@@ -138,4 +138,6 @@ export const settings: Record<keyof typeof source, string> = {
   sectionMcp: "MCP",
   sharedMcpHint: "在此设置的 MCP 服务器会传给所有配置的会话。若配置中有同名服务器，则使用配置中的那个。对之后新开始或重新打开的会话生效",
   sharedMcpSave: "保存",
+  resumeAfterLimit: "上限解除后继续",
+  resumeAfterLimitDetail: "因用量上限而停止的指令，会在上限解除时用同一密钥自动重新发送。不知道解除时间时，30 分钟后重试。若设置了切换目标配置，则优先切换",
 };

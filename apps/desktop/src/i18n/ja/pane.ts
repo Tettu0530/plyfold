@@ -104,4 +104,7 @@ export const pane = {
   previewNew: "新しいブラウザ",
   previewStart: "上の欄に URL を入れると開きます",
   viewChanges: "Git と変更を見る",
+  resumeAt: "利用上限に達しました。{when} に同じキーで自動で再開します",
+  resumeNow: "今すぐ再開",
+  resumeCancel: "自動の再開を取り消す",
 } satisfies Record<string, string>;

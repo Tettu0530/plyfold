@@ -106,4 +106,7 @@ export const pane: Record<keyof typeof source, string> = {
   previewNew: "新建浏览器",
   previewStart: "在上方输入 URL 即可打开",
   viewChanges: "查看 Git 与更改",
+  resumeAt: "已达到用量上限。将于 {when} 用同一密钥自动继续",
+  resumeNow: "立即继续",
+  resumeCancel: "取消自动继续",
 };
