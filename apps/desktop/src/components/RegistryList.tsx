@@ -113,7 +113,10 @@ export function RegistryList({ onAdded }: { onAdded: (id: string) => void }) {
                 {a.built_in ? (
                   <span className="text-xs text-muted-foreground">{t("profiles.registryBuiltIn")}</span>
                 ) : !a.addable ? (
-                  <span className="text-xs text-muted-foreground" title={t("profiles.registryBinaryHint")}>
+                  <span
+                    className="text-xs text-muted-foreground"
+                    title={a.unavailable === "platform" ? t("profiles.registryNoBuild") : t("profiles.registryNoChecksum")}
+                  >
                     {t("profiles.registryBinary")}
                   </span>
                 ) : a.added === null ? (

@@ -71,7 +71,6 @@ export const profiles: Record<keyof typeof source, string> = {
   registryRemove: "删除",
   registryBuiltIn: "已内置",
   registryBinary: "暂不支持",
-  registryBinaryHint: "暂不支持以二进制发布的代理",
   mcp: "MCP 服务器",
   mcpHint: "stdio 是本机上的命令。命令名会在启动时解析为绝对路径。仅当代理支持时才传递 HTTP 和 SSE。参数以空格分隔。",
   mcpAdd: "添加服务器",
@@ -89,4 +88,6 @@ export const profiles: Record<keyof typeof source, string> = {
   modelHint: "留空则使用代理的默认模型",
   modelHintCustom: "填写提供商的模型名称。对只接受自有名称的提供商必须填写。在 Claude Code 中，模型菜单中的任一选项都会使用此模型",
   modelPlaceholder: "默认",
+  registryNoBuild: "没有适用于此系统的版本",
+  registryNoChecksum: "未公开校验和，无法验证下载内容，因此不添加",
 };

@@ -316,8 +316,10 @@ export interface RegistryAgent {
   website: string | null;
   license: string | null;
   kind: "npx" | "uvx" | "binary";
-  /** Can be added (npx or uvx, and not built in) */
+  /** Can be added (not built in, and for a binary: a build for this system with a checksum) */
   addable: boolean;
+  /** Why a binary cannot be added */
+  unavailable: "platform" | "checksum" | null;
   /** The built-in agent it is, if any */
   built_in: string | null;
   /** The version added, if it was */

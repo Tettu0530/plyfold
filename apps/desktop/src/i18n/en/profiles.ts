@@ -71,7 +71,6 @@ export const profiles: Record<keyof typeof source, string> = {
   registryRemove: "Remove",
   registryBuiltIn: "Built in",
   registryBinary: "Not supported",
-  registryBinaryHint: "Agents distributed as binaries are not supported yet",
   mcp: "MCP servers",
   mcpHint:
     "stdio is a command on this machine. A command name becomes an absolute path at launch. HTTP and SSE are passed only when the agent supports them. Separate arguments with spaces.",
@@ -91,4 +90,6 @@ export const profiles: Record<keyof typeof source, string> = {
   modelHintCustom:
     "The provider's model name. Required for a provider that accepts only its own names. In Claude Code, every choice in the model menu uses this model",
   modelPlaceholder: "Default",
+  registryNoBuild: "There is no build for this system",
+  registryNoChecksum: "No checksum is published, so a download could not be checked; it is not added",
 };
