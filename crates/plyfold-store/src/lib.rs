@@ -96,6 +96,15 @@ pub struct SessionRecord {
     /// The port given to this session's dev servers (PORT in the agent's environment); kept for its lifetime
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
+    /// Sessions started together from one prompt to compare share this id
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_group: Option<String>,
+    /// The profile that reviews this session's diff after each turn (None: no review)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reviewer: Option<String>,
+    /// A side session that reviews the session in side_of (rather than a side chat)
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub review: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -109,6 +118,7 @@ pub struct NewSession {
     pub base_ref: Option<String>,
     pub side_of: Option<String>,
     pub chat: bool,
+    pub review: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -202,8 +212,7 @@ CREATE TABLE IF NOT EXISTS dismissed_conversations (
 );
 ";
 
-const SESSION_COLS: &str =
-    "id, title, profile, agent, repo_path, worktree_path, branch, base_ref, acp_session_id, status, created_at, updated_at, side_of, chat, trashed_at, port";
+const SESSION_COLS: &str = "id, title, profile, agent, repo_path, worktree_path, branch, base_ref, acp_session_id, status, created_at, updated_at, side_of, chat, trashed_at, port, run_group, reviewer, review";
 
 fn row_to_session(r: &rusqlite::Row) -> rusqlite::Result<SessionRecord> {
     Ok(SessionRecord {
@@ -223,6 +232,9 @@ fn row_to_session(r: &rusqlite::Row) -> rusqlite::Result<SessionRecord> {
         chat: r.get::<_, i64>(13)? != 0,
         trashed_at: r.get(14)?,
         port: r.get(15)?,
+        run_group: r.get(16)?,
+        reviewer: r.get(17)?,
+        review: r.get::<_, i64>(18)? != 0,
     })
 }
 
@@ -276,6 +288,14 @@ impl Store {
         if !has_port {
             conn.execute_batch("ALTER TABLE sessions ADD COLUMN port INTEGER")?;
         }
+        let has_group: bool = conn.prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'run_group'")?.exists([])?;
+        if !has_group {
+            conn.execute_batch("ALTER TABLE sessions ADD COLUMN run_group TEXT")?;
+        }
+        let has_reviewer: bool = conn.prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'reviewer'")?.exists([])?;
+        if !has_reviewer {
+            conn.execute_batch("ALTER TABLE sessions ADD COLUMN reviewer TEXT; ALTER TABLE sessions ADD COLUMN review INTEGER NOT NULL DEFAULT 0")?;
+        }
         Ok(Self { conn: Mutex::new(conn) })
     }
 
@@ -298,9 +318,12 @@ impl Store {
             chat: s.chat,
             trashed_at: None,
             port: None,
+            run_group: None,
+            reviewer: None,
+            review: s.review,
         };
         self.conn.lock().unwrap().execute(
-            &format!("INSERT INTO sessions ({SESSION_COLS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)"),
+            &format!("INSERT INTO sessions ({SESSION_COLS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)"),
             params![
                 rec.id,
                 rec.title,
@@ -317,7 +340,10 @@ impl Store {
                 rec.side_of,
                 rec.chat as i64,
                 rec.trashed_at,
-                rec.port
+                rec.port,
+                rec.run_group,
+                rec.reviewer,
+                rec.review as i64
             ],
         )?;
         Ok(rec)
@@ -353,6 +379,20 @@ impl Store {
         self.update(id, "status", &status.as_str())?;
         self.append_event(id, EventKind::Status, status.as_str())?;
         Ok(())
+    }
+
+    /// Continue the session with another profile (another key of the same agent)
+    pub fn set_profile(&self, id: &str, profile: &str) -> Result<(), StoreError> {
+        self.update(id, "profile", &profile)
+    }
+
+    /// The profile that reviews the session after each turn (None turns review off)
+    pub fn set_reviewer(&self, id: &str, profile: Option<&str>) -> Result<(), StoreError> {
+        self.update(id, "reviewer", &profile)
+    }
+
+    pub fn set_run_group(&self, id: &str, group: Option<&str>) -> Result<(), StoreError> {
+        self.update(id, "run_group", &group)
     }
 
     pub fn set_port(&self, id: &str, port: u16) -> Result<(), StoreError> {

@@ -15,4 +15,6 @@ export const sessionMenu = {
   deleteRecordOnly: "記録だけ消す（worktree は残す）",
   deleteRecord: "記録を消す",
   cancel: "やめる",
+  handOver: "引き継ぐ…",
+  handOverTitle: "「{title}」を別のエージェントに引き継ぎます。今のエージェントに引き継ぎのメモを書かせてから止め、同じ作業場所で新しいセッションが続けます",
 } satisfies Record<string, string>;

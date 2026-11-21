@@ -70,7 +70,6 @@ export const profiles = {
   registryRemove: "削除",
   registryBuiltIn: "組み込み済み",
   registryBinary: "未対応",
-  registryBinaryHint: "バイナリで配布されているエージェントには、まだ対応していません",
   mcp: "MCP サーバー",
   mcpHint:
     "stdio は手元のコマンドです。コマンド名は起動時に絶対パスへ直します。HTTP と SSE は、エージェントが対応しているときだけ渡します。引数は空白で区切ります。",
@@ -81,4 +80,15 @@ export const profiles = {
   mcpArgs: "引数",
   mcpUrl: "URL",
   mcpKind: "種類",
+  fallback: "上限に達したときの切り替え先",
+  fallbackHint: "このキーがレート制限や利用上限に達したら、選んだプロファイルに切り替えて同じ指示を送り直します。会話は引き継ぎます",
+  fallbackNone: "同じエージェントのプロファイルがほかにありません",
+  fallbackOff: "切り替えない",
+  model: "モデル",
+  modelHint: "空欄なら、エージェントの既定のモデルを使います",
+  modelHintCustom:
+    "プロバイダーのモデル名を入れます。独自の名前しか受け付けないプロバイダーでは必須です。Claude Code では、モデルのメニューのどれを選んでもこのモデルになります",
+  modelPlaceholder: "既定",
+  registryNoBuild: "このシステム向けの版が配布されていません",
+  registryNoChecksum: "チェックサムが公開されていないため、ダウンロードしたものを確かめられないので追加しません",
 } satisfies Record<string, string>;

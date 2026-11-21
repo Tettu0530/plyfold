@@ -38,6 +38,12 @@ export const draft: Record<keyof typeof source, string> = {
   cliSessionsEmpty: "此仓库还没有可打开的对话",
   cliSessionsUntitled: "（无标题）",
   chat: "对话",
-  chatOn: "对话：不使用仓库直接交谈。可以搜索和读取网页，但不编辑文件、不执行命令",
+  chatOn: "对话：不使用仓库交谈。可以搜索和获取网页、使用技能和自身文件夹中的文件；不执行命令",
   chatOff: "工作：在仓库中工作",
+  compare: "并排比较",
+  compareHint: "将同一指令发给选中的每个配置（2 到 {max} 个）。每个都在自己的 worktree 中运行，并排打开",
+  compareProfiles: "要比较的配置（{count} / {max}）",
+  compareWorktree: "比较时每个会话都有自己的 worktree",
+  queue: "加入排队",
+  queueHint: "不立即开始，而是加入排队。工作中的会话少于设定数量时会依次开始（当前 {count} 个在等待）",
 };

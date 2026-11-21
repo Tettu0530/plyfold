@@ -27,6 +27,8 @@ import type {
   TextFile,
   RepoEntry,
   RepoSettings,
+  QueuedTask,
+  McpServerForm,
 } from "./types";
 
 // Thin wrappers around the Tauri commands (src-tauri/src/lib.rs). Argument names follow the Rust side's camelCase conversion
@@ -43,6 +45,9 @@ export const api = {
   forkSession: (id: string, newWorktree: boolean) => invoke<SessionRecord>("fork_session", { id, newWorktree }),
   openSideChat: (id: string) => invoke<SessionRecord>("open_side_chat", { id }),
   closeSideChat: (id: string) => invoke<void>("close_side_chat", { id }),
+  setReviewer: (id: string, profile: string | null) => invoke<SessionRecord>("set_reviewer", { id, profile }),
+  reviewNow: (id: string) => invoke<string | null>("review_now", { id }),
+  handOver: (id: string, profile: string) => invoke<SessionRecord>("hand_over", { id, profile }),
   listCliSessions: (profile: string, repo: string) => invoke<CliSession[]>("list_cli_sessions", { profile, repo }),
   adoptCliSession: (profile: string, repo: string, acpSessionId: string, title: string, worktree: boolean) =>
     invoke<SessionRecord>("adopt_cli_session", { profile, repo, acpSessionId, title, worktree }),
@@ -51,11 +56,16 @@ export const api = {
   deleteSession: (id: string, removeWorktree: boolean) => invoke<void>("delete_session", { id, removeWorktree }),
   trashSession: (id: string) => invoke<SessionRecord>("trash_session", { id }),
   restoreSession: (id: string) => invoke<SessionRecord>("restore_session", { id }),
+  setRunGroup: (id: string, group: string | null) => invoke<SessionRecord>("set_run_group", { id, group }),
   emptyTrash: (removeWorktree: boolean) => invoke<string[]>("empty_trash", { removeWorktree }),
   setUiLang: (lang: string) => invoke<void>("set_ui_lang", { lang }),
   revealFile: (path: string) => invoke<void>("reveal_file", { path }),
   readTextFile: (path: string) => invoke<TextFile>("read_text_file", { path }),
   listRepos: () => invoke<RepoEntry[]>("list_repos"),
+  sharedMcp: () => invoke<McpServerForm[]>("shared_mcp"),
+  saveSharedMcp: (servers: McpServerForm[]) => invoke<void>("save_shared_mcp", { servers }),
+  listTasks: () => invoke<QueuedTask[]>("list_tasks"),
+  saveTasks: (tasks: QueuedTask[]) => invoke<void>("save_tasks", { tasks }),
   renameRepo: (path: string, name: string) => invoke<void>("rename_repo", { path, name }),
   saveRepoSettings: (path: string, settings: RepoSettings) => invoke<void>("save_repo_settings", { path, settings }),
   openFileInEditor: (path: string) => invoke<string>("open_file_in_editor", { path }),

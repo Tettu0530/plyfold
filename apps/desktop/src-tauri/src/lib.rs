@@ -5,6 +5,7 @@ mod files;
 mod platform;
 mod registry;
 mod shell_path;
+mod tasks;
 
 pub use shell_path::adopt_login_path;
 
@@ -26,6 +27,8 @@ const KEYCHAIN_SERVICE: &str = "plyfold";
 
 struct AppState {
     engine: Engine,
+    /// Where sessions (and the task queue) are kept: see data_dir
+    data_dir: PathBuf,
     config: RwLock<Config>,
     config_path: PathBuf,
     secrets: Arc<KeychainStore>,
@@ -69,6 +72,8 @@ struct AppSettings {
     default_profile: String,
     /// Name of the sidebar group for everyday conversations ("" = the default)
     chat_group_name: String,
+    /// How many queued tasks may run at once
+    max_parallel: u32,
 }
 
 impl Default for AppSettings {
@@ -90,6 +95,7 @@ impl Default for AppSettings {
             restore_panes: true,
             default_profile: String::new(),
             chat_group_name: String::new(),
+            max_parallel: 2,
         }
     }
 }
@@ -187,7 +193,10 @@ fn save_settings(state: State<'_, AppState>, settings: AppSettings) -> CmdResult
             "显示大小须在 80% 到 150% 之间"
         ));
     }
-    if !["system", "reduce"].contains(&settings.reduce_motion.as_str()) || settings.default_profile.len() > 128 || settings.chat_group_name.chars().count() > 80
+    if !["system", "reduce"].contains(&settings.reduce_motion.as_str())
+        || settings.default_profile.len() > 128
+        || settings.chat_group_name.chars().count() > 80
+        || !(1..=8).contains(&settings.max_parallel)
     {
         return Err(plyfold_i18n::tr!("設定の値が正しくありません", "A setting has an invalid value", "某项设置的值无效"));
     }
@@ -369,6 +378,23 @@ async fn open_side_chat(state: State<'_, AppState>, id: String) -> CmdResult<Ses
     state.engine.open_side_chat(&id).await.map_err(err)
 }
 
+/// Hand the session over to another profile in the same workspace (see Engine::hand_over)
+#[tauri::command]
+async fn hand_over(state: State<'_, AppState>, id: String, profile: String) -> CmdResult<SessionRecord> {
+    state.engine.hand_over(&id, &profile).await.map_err(err)
+}
+
+#[tauri::command]
+async fn set_reviewer(state: State<'_, AppState>, id: String, profile: Option<String>) -> CmdResult<SessionRecord> {
+    state.engine.set_reviewer(&id, profile.as_deref()).await.map_err(err)
+}
+
+/// Review the session's current diff now, even if it was reviewed already (None: there is no diff)
+#[tauri::command]
+async fn review_now(state: State<'_, AppState>, id: String) -> CmdResult<Option<String>> {
+    state.engine.review(&id, None, true).await.map_err(err)
+}
+
 #[tauri::command]
 async fn close_side_chat(state: State<'_, AppState>, id: String) -> CmdResult<()> {
     state.engine.close_side_chat(&id).await.map_err(err)
@@ -401,6 +427,11 @@ async fn close_session(state: State<'_, AppState>, id: String) -> CmdResult<()> 
 #[tauri::command]
 async fn trash_session(state: State<'_, AppState>, id: String) -> CmdResult<SessionRecord> {
     state.engine.trash_session(&id).await.map_err(err)
+}
+
+#[tauri::command]
+fn set_run_group(state: State<'_, AppState>, id: String, group: Option<String>) -> CmdResult<SessionRecord> {
+    state.engine.set_run_group(&id, group.as_deref()).map_err(err)
 }
 
 #[tauri::command]
@@ -520,6 +551,16 @@ struct RepoEntry {
 fn list_repos(state: State<'_, AppState>) -> CmdResult<Vec<RepoEntry>> {
     let repos = state.engine.known_repos().map_err(err)?;
     Ok(repos.into_iter().map(|path| RepoEntry { settings: state.engine.repo_settings(&path), path }).collect())
+}
+
+#[tauri::command]
+fn list_tasks(state: State<'_, AppState>) -> Vec<tasks::Task> {
+    tasks::load(&state.data_dir)
+}
+
+#[tauri::command]
+fn save_tasks(state: State<'_, AppState>, tasks: Vec<tasks::Task>) -> CmdResult<()> {
+    tasks::save(&state.data_dir, &tasks)
 }
 
 /// Rename a repository's group in the sidebar ("" goes back to the folder's name)
@@ -675,6 +716,19 @@ fn save_profile(state: State<'_, AppState>, form: ProfileForm, original: Option<
     if let Some(orig) = original.filter(|o| *o != form.name) {
         edit::remove_profile(&state.config_path, &orig).map_err(err)?;
     }
+    state.reload()
+}
+
+/// MCP servers passed to every profile, as forms for the settings screen
+#[tauri::command]
+fn shared_mcp(state: State<'_, AppState>) -> Vec<edit::McpForm> {
+    state.config.read().unwrap().mcp.iter().map(edit::McpForm::from).collect()
+}
+
+#[tauri::command]
+fn save_shared_mcp(state: State<'_, AppState>, servers: Vec<edit::McpForm>) -> CmdResult<()> {
+    let servers = edit::mcp_servers(&servers).map_err(err)?;
+    edit::set_shared_mcp(&state.config_path, &servers).map_err(err)?;
     state.reload()
 }
 
@@ -879,7 +933,15 @@ pub fn run() {
                 }
             });
 
-            app.manage(AppState { engine, config: RwLock::new(config), config_path, secrets, state_dir, settings: RwLock::new(settings) });
+            app.manage(AppState {
+                engine,
+                data_dir: data_dir(&state_dir),
+                config: RwLock::new(config),
+                config_path,
+                secrets,
+                state_dir,
+                settings: RwLock::new(settings),
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -893,8 +955,16 @@ pub fn run() {
             read_text_file,
             trash_session,
             restore_session,
+            set_run_group,
             empty_trash,
             list_repos,
+            list_tasks,
+            set_reviewer,
+            review_now,
+            hand_over,
+            shared_mcp,
+            save_shared_mcp,
+            save_tasks,
             rename_repo,
             save_repo_settings,
             open_file_in_editor,

@@ -17,4 +17,6 @@ export const sessionMenu: Record<keyof typeof source, string> = {
   deleteRecordOnly: "Delete session only (keep worktree)",
   deleteRecord: "Delete session",
   cancel: "Cancel",
+  handOver: "Hand over…",
+  handOverTitle: "Hand “{title}” over to another agent. The current agent writes a handover note and stops, and a new session carries on in the same workspace",
 };

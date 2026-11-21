@@ -251,6 +251,11 @@ async fn each_session_gets_a_port_of_its_own_and_keeps_it() {
     eng.close_session(&id).await.unwrap();
     eng.reopen_session(&id).await.unwrap();
     assert_eq!(eng.store().get_session(&id).unwrap().port, Some(port));
+    // Sessions started together can be tied into a comparison, and out of it again
+    let rec = eng.set_run_group(&ports[1].0, Some("g1")).unwrap();
+    assert_eq!(rec.run_group.as_deref(), Some("g1"));
+    assert_eq!(eng.store().get_session(&ports[1].0).unwrap().run_group.as_deref(), Some("g1"));
+    assert_eq!(eng.set_run_group(&ports[1].0, None).unwrap().run_group, None);
     // A conversation runs no dev servers
     let c = eng.start_chat("mock", "Talk").await.unwrap();
     assert_eq!(eng.store().get_session(&c.id).unwrap().port, None);

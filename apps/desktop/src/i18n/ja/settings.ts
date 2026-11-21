@@ -131,4 +131,10 @@ export const settings = {
   updateDev: "開発版は更新しません",
   repoName: "サイドバーでの名前",
   repoNameDetail: "サイドバーのグループに出す名前です。空にすると、フォルダの名前に戻ります",
+  maxParallel: "同時に動かす数",
+  maxParallelDetail: "予約した指示は、作業中のセッションがこの数より少ないときに、順に始まります",
+  sectionMcp: "MCP",
+  sharedMcpHint:
+    "ここで設定した MCP サーバーは、すべてのプロファイルのセッションに渡されます。プロファイルに同じ名前のサーバーがあれば、そちらを使います。新しく始めるセッションと、開き直すセッションから効きます",
+  sharedMcpSave: "保存",
 } satisfies Record<string, string>;

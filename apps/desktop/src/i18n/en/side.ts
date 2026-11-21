@@ -11,4 +11,13 @@ export const side: Record<keyof typeof source, string> = {
   hint: "A fork of the main conversation. Questions and answers here stay out of it. Edits and commands are declined",
   quote: "Add to the main input",
   placeholder: "Ask about the main session",
+  review: "Review",
+  reviewBy: "{profile} reviews the diff after each turn",
+  reviewOff: "No review",
+  reviewTitle: "Review",
+  reviewNow: "Review the current diff again",
+  reviewStop: "Stop reviewing",
+  reviewHint: "When a turn ends with a diff, the chosen agent reviews it read-only and the result shows here",
+  reviewNothing: "There is no diff to review",
+  reviewPlaceholder: "Ask about the review",
 };

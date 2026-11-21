@@ -2,6 +2,7 @@
 export const status = {
   starting: "起動中",
   working: "作業中",
+  answering: "回答中",
   awaitingPermission: "確認待ち",
   stalled: "無応答",
   error: "エラー",

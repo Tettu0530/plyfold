@@ -4,12 +4,46 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Profiles
+
+- Agents from the ACP Registry that ship as binaries can be added: this system's build is downloaded over https, checked against the registry's sha256, and unpacked under `<state>/agents/<id>/<version>` (.tar.gz, .tar.bz2, .tar.xz, .zip, or the program itself); the program must lie inside that folder. One without a checksum, or without a build for this system, is listed with the reason and not added. Removing the agent removes its files, and updating replaces the older version
+- Shared MCP servers: Settings → MCP sets up servers once for every profile (`[[mcp]]` at the top of config.toml). A profile's own server with the same name is used in its place. They reach sessions started or reopened afterwards
+- A profile can name the model to use (Profiles → Model). For Claude Code it is used for every choice in the model menu and for helper agents, so a custom provider that accepts only its own model names works; Codex gets it in its config.toml and Gemini CLI in GEMINI_MODEL
+
+### Sessions
+
+- Hand over: a session's menu (H) hands its work to another profile in the same workspace. The current agent is asked for a handover note (what was asked, done and left; up to three minutes), then stopped; a new session with the same title starts there with the instructions so far, the note, and the diff, and carries on. It takes the old session's pane; the old session keeps its record, and a failure is told on it
+- Review: a session can name a profile that reviews its diff after each turn (the button in the pane header). When a turn ends normally with a diff not reviewed yet, that agent gets the instruction behind the turn, the files changed and the diff, and lists problems as `path:line — problem — fix` in a column at the pane's right edge. It works read-only (its own read-only mode where it has one, and every permission request declined), carries on one conversation so it mentions earlier problems only while they are unfixed, and can be asked about its findings. A diff that arrives while it is still answering is reviewed when it is done
+
+## [0.5.0] - 2026-11-19
+
+Running in parallel: one prompt to several agents side by side, a task queue that runs a set number at a time, and moving on to another key when one hits its limit. Everyday conversations can do what a chat on the web does.
+
+### Conversation
+
+- Everyday conversations allow more, like a chat on the web: besides searching and fetching from the web, they may load skills, keep a task list, ask helper agents, think, and read, search and write files inside their own folder. They still run no commands and use no files outside their folder
+- A conversation that is answering says "Answering" rather than "Working"
+
+### Sessions
+
+- A task queue: the new session screen can add a prompt to the queue instead of starting it. Queued prompts start in order, each as a session with the profile, repository and worktree choice they were queued with, while fewer sessions than "Run at once" (Settings → Sessions, 2 by default) are working. The queue sits at the top of the sidebar, where a task can be started now or removed; one that could not start says why and waits. It is kept across restarts
+- Compare: on the new session screen, turn on Compare and pick 2 to 4 profiles. Each gets the same prompt in a worktree of its own (with the repository's setup and a port of its own) and they open side by side. Their headers get a compare button that opens a pane with each one's state, time, tokens, cost and changes; "Merge this one" commits what is left and merges it into the original branch, and the others can then go to the trash together
+
+### Profiles
+
+- Key fallback: a profile can name another profile of the same agent to continue with when its key hits a rate or usage limit (Profiles → "When the key hits a limit"). The session switches to it, carries the conversation over (an isolated profile's conversation files are copied to the other), and sends the prompt again. A chain stops at a profile the prompt already tried, and an answer that only talks about rate limits does not switch
+
+## [0.4.1] - 2026-11-19
+
+MCP servers per profile, a port of its own for each session, renamable sidebar groups, the agent's thinking as Markdown, and fixes (a new session under its repository, a steady context meter, the sidebar button and Esc in full screen).
+
 ### Sessions
 
 - An MCP server address must be https://; plain http:// is accepted only for a server on this machine (localhost, 127.0.0.1, ::1), since the traffic carries the conversation
 - A profile can list MCP servers: a local command (stdio), or an HTTP or SSE address. They are passed when a session starts, is reopened, or is forked. HTTP and SSE go out only when the agent says it supports them, and a command that cannot be found is left out; the conversation names each server that was not passed. Headers and environment values for those servers are not stored
 - Sidebar groups can be renamed: double-click a group's name, or the pencil that shows on hover (Enter keeps, Esc cancels, an empty name goes back to the default). A repository's name is kept with its other settings, and can also be set in Settings → Repositories; the conversations group's in the app settings. Groups now follow the repository's path, so two repositories with the same folder name are two groups (the path shows on hover)
 - Each session gets a port of its own for dev servers, kept for its lifetime (3101 to 3999, one no other session has and nothing listens on): agents start with `PORT` and `PLYFOLD_PORT` set to it, and so does the worktree setup script (`PLYFOLD_PORT`). Sessions side by side no longer fight over 3000, and an empty preview lists the ports of the sessions on screen
+
 
 ### Conversation
 
@@ -169,6 +203,8 @@ The first release, for macOS (Apple Silicon) and Windows 10/11 (x64; new, please
 - Settings for display size, reduced motion, notifications, defaults for new sessions and more
 - Spring-based motion modelled on SwiftUI, with a fade-only mode for Reduce motion
 
+[0.5.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.5.0
+[0.4.1]: https://github.com/Tettu0530/plyfold/releases/tag/v0.4.1
 [0.4.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.2.0

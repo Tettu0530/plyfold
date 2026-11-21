@@ -1,10 +1,10 @@
-import { ArrowDown, ArrowUp, Check, Coins, FolderOpen, GitBranch, MessageCircle, MessageSquare, Plus, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Coins, Columns3, FolderOpen, GitBranch, ListPlus, MessageCircle, MessageSquare, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { money, repoName, tokens } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { useStore } from "@/state/store";
+import { COMPARE_MAX, useStore } from "@/state/store";
 import { agentName, ProviderLogo } from "../icons";
 import { ControlRow } from "./Composer";
 import { AttachBox, useAttachments } from "./Attachments";
@@ -40,15 +40,28 @@ function Num({ icon: Icon, title, children }: { icon: typeof Coins; title: strin
 }
 
 /** One profile row: name and auth type, plus turns, tokens and cost over the last 30 days */
-function ProfileRow({ p, u, selected, onSelect }: { p: ProfileSummary; u: ProfileUsage | undefined; selected: boolean; onSelect: () => void }) {
+function ProfileRow({
+  p,
+  u,
+  selected,
+  multi,
+  onSelect,
+}: {
+  p: ProfileSummary;
+  u: ProfileUsage | undefined;
+  selected: boolean;
+  /** Several can be picked (comparing): a checkbox rather than a radio */
+  multi?: boolean;
+  onSelect: () => void;
+}) {
   const t = useT();
   const tok = u?.input != null || u?.output != null ? (u.input ?? 0) + (u.output ?? 0) : null;
   return (
     <button
       type="button"
-      role="radio"
+      role={multi ? "checkbox" : "radio"}
       aria-checked={selected}
-      tabIndex={selected ? 0 : -1}
+      tabIndex={selected || multi ? 0 : -1}
       data-profile={p.name}
       onClick={onSelect}
       className={cn("flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-accent", selected && "bg-accent")}
@@ -101,7 +114,10 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const t = useT();
   const draft = useStore((s) => s.drafts[id]);
   const profiles = useStore((s) => s.profiles);
-  const { updateDraft, startDraft, closePane, focusPane } = useStore.getState();
+  const { updateDraft, startDraft, startCompare, queueTask, closePane, focusPane } = useStore.getState();
+  const waiting = useStore((s) => s.tasks.length);
+  // Shown for a moment after a prompt went into the queue
+  const [queued, setQueued] = useState(false);
   const [text, setText] = useState("");
   // A chip added with @ and its "@path" in the text are kept together: removing either removes the other
   const att = useAttachments({ scope: id, onMentionRemoved: (path) => setText((cur) => removeMention(cur, path)) });
@@ -147,7 +163,14 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const byProfile = new Map((usage ?? []).map((u) => [u.profile, u]));
   // Recently used first (unused ones: default profile first, then by name)
   const ordered = [...sorted].sort((a, b) => (byProfile.get(b.name)?.last_used ?? 0) - (byProfile.get(a.name)?.last_used ?? 0));
-  const select = (name: string) => updateDraft(id, { profile: name, choices: {} });
+  const picks = draft.compare ?? null;
+  // Comparing: each click adds or removes a profile (up to COMPARE_MAX); the first picked drives the controls below
+  const select = (name: string) => {
+    if (!picks) return updateDraft(id, { profile: name, choices: {} });
+    const next = picks.includes(name) ? picks.filter((n) => n !== name) : picks.length < COMPARE_MAX ? [...picks, name] : picks;
+    updateDraft(id, { compare: next, profile: next[0] ?? null, choices: {} });
+  };
+  const canStart = !draft.busy && (picks ? picks.length >= 2 : !!draft.profile);
   const onListKey = (e: React.KeyboardEvent) => {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
@@ -159,8 +182,8 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
     }
   };
   const send = () => {
-    if (draft.busy || !draft.profile) return;
-    void startDraft(id, text, att.items);
+    if (!canStart) return;
+    void (picks ? startCompare(id, text, att.items) : startDraft(id, text, att.items));
   };
 
   return (
@@ -190,13 +213,25 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
       <div className="flex min-h-0 grow flex-col overflow-y-auto px-3 py-4">
         <div className="mx-auto my-auto w-full max-w-xl">
           <div className="mb-1 flex items-center justify-between px-2.5 text-xs text-muted-foreground">
-            <span id={`${id}-profiles`}>{t("draft.profiles")}</span>
+            <span id={`${id}-profiles`}>{picks ? t("draft.compareProfiles", { count: picks.length, max: COMPARE_MAX }) : t("draft.profiles")}</span>
             <span>{t("draft.last30Days")}</span>
           </div>
           {/* Hide tokens when narrow (decided by row width) */}
-          <div role="radiogroup" aria-labelledby={`${id}-profiles`} onKeyDown={onListKey} className="@container flex flex-col gap-0.5">
+          <div
+            role={picks ? "group" : "radiogroup"}
+            aria-labelledby={`${id}-profiles`}
+            onKeyDown={picks ? undefined : onListKey}
+            className="@container flex flex-col gap-0.5"
+          >
             {ordered.map((p) => (
-              <ProfileRow key={p.name} p={p} u={byProfile.get(p.name)} selected={p.name === draft.profile} onSelect={() => select(p.name)} />
+              <ProfileRow
+                key={p.name}
+                p={p}
+                u={byProfile.get(p.name)}
+                selected={picks ? picks.includes(p.name) : p.name === draft.profile}
+                multi={!!picks}
+                onSelect={() => select(p.name)}
+              />
             ))}
             {profiles.length === 0 && <p className="px-2.5 py-2 text-xs text-muted-foreground">{t("draft.noProfiles")}</p>}
           </div>
@@ -249,20 +284,35 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
                         </button>
                       </PopoverTrigger>
 
+                      {/* Comparing always uses worktrees, one per session */}
                       <button
                         type="button"
-                        aria-pressed={draft.worktree}
+                        aria-pressed={draft.worktree || !!picks}
+                        disabled={!!picks}
                         onClick={() => updateDraft(id, { worktree: !draft.worktree })}
-                        title={draft.worktree ? t("draft.worktreeOn") : t("draft.worktreeOff")}
+                        title={picks ? t("draft.compareWorktree") : draft.worktree ? t("draft.worktreeOn") : t("draft.worktreeOff")}
                         className={cn(
-                          "flex h-6 items-center gap-1.5 rounded-md border px-1.5 hover:bg-accent",
-                          draft.worktree ? "border-border text-foreground" : "border-dashed border-border text-muted-foreground",
+                          "flex h-6 items-center gap-1.5 rounded-md border px-1.5 hover:bg-accent disabled:hover:bg-transparent",
+                          draft.worktree || picks ? "border-border text-foreground" : "border-dashed border-border text-muted-foreground",
                         )}
                       >
                         <GitBranch className="size-3" aria-hidden />
-                        {draft.worktree ? "worktree" : t("draft.inPlace")}
+                        {draft.worktree || picks ? "worktree" : t("draft.inPlace")}
                       </button>
-                      {current?.agent !== "gemini" && draft.profile && (
+                      <button
+                        type="button"
+                        aria-pressed={!!picks}
+                        onClick={() => updateDraft(id, picks ? { compare: null } : { compare: draft.profile ? [draft.profile] : [], choices: {} })}
+                        title={t("draft.compareHint", { max: COMPARE_MAX })}
+                        className={cn(
+                          "flex h-6 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent",
+                          picks ? "bg-accent text-foreground" : "text-muted-foreground",
+                        )}
+                      >
+                        <Columns3 className="size-3" aria-hidden />
+                        {t("draft.compare")}
+                      </button>
+                      {!picks && current?.agent !== "gemini" && draft.profile && (
                         <CliSessions key={`${draft.profile}:${draft.repo}`} draftId={id} profile={draft.profile} repo={draft.repo} busy={draft.busy} />
                       )}
                     </>
@@ -311,10 +361,29 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
                   }}
                   className="min-h-0 grow resize-none bg-transparent py-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
                 />
+                {/* Into the queue instead of now: it starts when fewer than the set number of sessions are working */}
+                {!draft.chat && !picks && (
+                  <button
+                    type="button"
+                    aria-label={t("draft.queue")}
+                    title={t("draft.queueHint", { count: waiting })}
+                    disabled={!canStart || !text.trim()}
+                    onClick={() =>
+                      void queueTask(id, text).then(() => {
+                        setText("");
+                        setQueued(true);
+                        setTimeout(() => setQueued(false), 2000);
+                      })
+                    }
+                    className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+                  >
+                    {queued ? <Check className="size-3.5" aria-hidden /> : <ListPlus className="size-3.5" aria-hidden />}
+                  </button>
+                )}
                 <button
                   type="button"
                   aria-label={t("draft.start")}
-                  disabled={draft.busy || !draft.profile}
+                  disabled={!canStart}
                   onClick={send}
                   className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
                 >

@@ -158,6 +158,8 @@ async fn prompt(st: Arc<State>, id: Value, params: Value) {
     let stop = if text.contains("permission") {
         let kind = if text.contains("fetch") {
             "fetch"
+        } else if text.contains("skill") {
+            "other"
         } else if text.contains("read") {
             "read"
         } else {
@@ -176,9 +178,13 @@ async fn prompt(st: Arc<State>, id: Value, params: Value) {
         if text.contains("silent") {
             tokio::time::sleep(Duration::from_secs(3)).await;
         }
-        // "env NAME": answer with the value of an environment variable the agent was started with
+        // "env NAME": answer with the value of an environment variable the agent was started with.
+        // "limit": started with MOCK_LIMITED=1, pass on a rate limit error the way Claude Code does
         let reply = match text.strip_prefix("env ") {
             Some(var) => format!("{var}={}", std::env::var(var.trim()).unwrap_or_default()),
+            None if text.contains("limit") && std::env::var("MOCK_LIMITED").as_deref() == Ok("1") => {
+                r#"API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"Rate limited"}}"#.to_string()
+            }
             None => format!("echo: {text}"),
         };
         st.update(&sid, text_chunk("agent_message_chunk", &reply));
@@ -206,11 +212,15 @@ async fn permission_flow(st: &State, sid: &str, kind: &str, text: &str) -> &'sta
     let title = match kind {
         "fetch" => "Fetch https://example.invalid",
         "read" => "Read notes.txt",
+        "other" => "Load skill: notes",
         _ => "Write mock-output.txt",
     };
     st.update(sid, json!({"sessionUpdate": "tool_call", "toolCallId": tool_id, "title": title, "kind": kind, "status": "pending"}));
     let target = if text.contains("outside") { cwd.parent().unwrap_or(&cwd).join("outside.txt") } else { cwd.join("notes.txt") };
     let mut call = json!({"toolCallId": tool_id, "title": title, "kind": kind, "locations": [{"path": target}]});
+    if kind == "other" {
+        call["name"] = json!("Skill");
+    }
     if text.contains("with-command") {
         call["rawInput"] = json!({"command": "cat ~/.ssh/id_ed25519"});
     }
@@ -235,7 +245,10 @@ async fn permission_flow(st: &State, sid: &str, kind: &str, text: &str) -> &'sta
         return "cancelled";
     }
     let allowed = outcome["optionId"] == "allow" || outcome["optionId"] == "always";
-    if allowed && kind == "read" {
+    if allowed && kind == "other" {
+        st.update(sid, json!({"sessionUpdate": "tool_call_update", "toolCallId": tool_id, "status": "completed"}));
+        st.update(sid, text_chunk("agent_message_chunk", "loaded the skill"));
+    } else if allowed && kind == "read" {
         st.update(sid, json!({"sessionUpdate": "tool_call_update", "toolCallId": tool_id, "status": "completed"}));
         st.update(sid, text_chunk("agent_message_chunk", "read the notes"));
     } else if allowed && kind == "fetch" {

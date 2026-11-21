@@ -134,4 +134,10 @@ export const settings: Record<keyof typeof source, string> = {
   updateDev: "A development build does not update",
   repoName: "Name in the sidebar",
   repoNameDetail: "The name of its group in the sidebar. Leave it empty for the folder's name",
+  maxParallel: "Run at once",
+  maxParallelDetail: "Queued prompts start in order while fewer sessions than this are working",
+  sectionMcp: "MCP",
+  sharedMcpHint:
+    "MCP servers set up here are passed to sessions of every profile. A profile's own server with the same name is used instead. Applies to sessions started or reopened from now on",
+  sharedMcpSave: "Save",
 };

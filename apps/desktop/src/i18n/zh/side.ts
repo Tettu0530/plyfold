@@ -11,4 +11,13 @@ export const side: Record<keyof typeof source, string> = {
   hint: "这是主对话的分叉。这里的问答不会进入主对话。编辑文件和执行命令会被拒绝",
   quote: "添加到主输入框",
   placeholder: "就主会话提问",
+  review: "审查",
+  reviewBy: "{profile} 在每轮结束后审查差异",
+  reviewOff: "不审查",
+  reviewTitle: "审查",
+  reviewNow: "重新审查当前差异",
+  reviewStop: "停止审查",
+  reviewHint: "一轮结束且有差异时，所选代理会以只读方式审查，结果显示在这里",
+  reviewNothing: "没有可审查的差异",
+  reviewPlaceholder: "就审查结果提问",
 };

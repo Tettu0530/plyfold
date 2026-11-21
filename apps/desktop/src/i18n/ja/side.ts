@@ -10,4 +10,13 @@ export const side = {
   hint: "本筋の会話を受け継いだ分岐です。ここでの質問と答えは本筋に入りません。ファイルの編集とコマンドは断ります",
   quote: "本筋の入力欄へ",
   placeholder: "本筋について質問",
+  review: "レビュー",
+  reviewBy: "{profile} が毎ターンの差分をレビュー",
+  reviewOff: "レビューしない",
+  reviewTitle: "レビュー",
+  reviewNow: "今の差分をレビューし直す",
+  reviewStop: "レビューをやめる",
+  reviewHint: "ターンが終わって差分があると、選んだエージェントが読むだけでレビューし、ここに結果が出ます",
+  reviewNothing: "レビューする差分がありません",
+  reviewPlaceholder: "レビューについて質問",
 } satisfies Record<string, string>;

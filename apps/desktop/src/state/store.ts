@@ -12,7 +12,7 @@ import { notify } from "@/lib/notify";
 import { loadInfoCache, saveInfoCache, snapshot, type InfoCache } from "./infoCache";
 import { commandsFromHistory } from "@/lib/commands";
 import type { SlashCommand } from "@/lib/types";
-import type { AppSettings, Category, SessionStatus, EngineEvent, ProfileSummary, ProfileUsage, SessionInfo, SessionRecord } from "@/lib/types";
+import type { AppSettings, Category, SessionStatus, EngineEvent, ProfileSummary, ProfileUsage, QueuedTask, SessionInfo, SessionRecord } from "@/lib/types";
 import { addNotice, applyUpdate, beginTurn, emptyTranscript, endTurn, fromHistory, type PendingPermission, type Transcript } from "./transcript";
 
 export interface SideChat {
@@ -59,6 +59,8 @@ export interface Draft {
   chat: boolean;
   /** model / effort / mode chosen before starting (applied right after start) */
   choices: Partial<Record<Category, string>>;
+  /** Comparing: the profiles that each get the same prompt in a worktree of their own (null: one session) */
+  compare?: string[] | null;
   busy: boolean;
   error: string | null;
 }
@@ -71,6 +73,13 @@ export const isPreview = (id: string | null | undefined): id is string => !!id &
 export const isGit = (id: string | null | undefined): id is string => !!id && id.startsWith("git:");
 export const gitSessionOf = (id: string) => id.slice("git:".length);
 export const gitPaneOf = (sessionId: string) => `git:${sessionId}`;
+
+/** A pane comparing the sessions started together from one prompt ("compare:<run group>") */
+export const isCompare = (id: string | null | undefined): id is string => !!id && id.startsWith("compare:");
+export const compareGroupOf = (id: string) => id.slice("compare:".length);
+export const comparePaneOf = (group: string) => `compare:${group}`;
+/** At most this many sessions run side by side from one prompt */
+export const COMPARE_MAX = 4;
 
 /** A pane listing the files a session read or edited, with the picked one's contents ("files:<session id>") */
 export const isFiles = (id: string | null | undefined): id is string => !!id && id.startsWith("files:");
@@ -97,7 +106,9 @@ const anchorOf = (id: string) =>
         ? `diff:${gitSessionOf(id)}`
         : isFiles(id)
           ? `${filesSessionOf(id)}:files`
-          : `session:${id}`;
+          : isCompare(id)
+            ? `compare:${compareGroupOf(id)}`
+            : `session:${id}`;
 const LAST_REPO_KEY = "plyfold.lastRepo";
 function lastRepo(): string {
   try {
@@ -177,7 +188,7 @@ export function restoreLayout(saved: unknown, exists: (id: string) => boolean): 
   const size = Math.max(4, ...leaves(layout).map((i) => i + 1));
   const panes = Array.from({ length: size }, (_, i) => {
     const id = o.panes![i];
-    return typeof id === "string" && !isDraft(id) && !isPreview(id) && !isGit(id) && !isFiles(id) && exists(id) ? id : null;
+    return typeof id === "string" && !isDraft(id) && !isPreview(id) && !isGit(id) && !isFiles(id) && !isCompare(id) && exists(id) ? id : null;
   });
   const visible = leaves(layout);
   const focusedPane = typeof o.focusedPane === "number" && visible.includes(o.focusedPane) ? o.focusedPane : visible[0];
@@ -254,6 +265,10 @@ interface State {
   openDiff: (id: string) => void;
   /** The files the session read or edited, as a pane beside it */
   openFiles: (id: string) => void;
+  /** The comparison a session belongs to, as a pane beside it (it grows out of that session's compare button) */
+  openCompare: (group: string, from: string) => void;
+  /** Start one session per chosen profile, each in a worktree of its own, with the same prompt, side by side */
+  startCompare: (draftId: string, prompt: string, attachments?: Attached[]) => Promise<void>;
   /** Bumped after worktree operations (so panes refetch their diff counts) */
   diffVersion: number;
   bumpDiff: () => void;
@@ -288,6 +303,8 @@ interface State {
   setLiquidLag: (v: number) => void;
   startSession: (args: { profile: string; repo: string; title: string; worktree: boolean; prompt?: string }) => Promise<void>;
   /** Fork into a new session. newWorktree is false only when the source agent is stopped */
+  /** Hand the session over to another profile in the same workspace; the new session replaces it in its pane */
+  handOver: (id: string, profile: string) => Promise<void>;
   forkSession: (id: string, newWorktree: boolean) => Promise<void>;
   /** Side chats, by the session they belong to. `id` is null while the fork starts */
   sideChats: Record<string, SideChat>;
@@ -321,6 +338,15 @@ interface State {
   /** Stop the agent (the log and worktree remain) */
   stopSession: (id: string) => Promise<void>;
   /** Delete along with the log. With removeWorktree, also delete the worktree and branch */
+  /** Prompts waiting to start as sessions, first first */
+  tasks: QueuedTask[];
+  /** Put the draft's prompt in the queue instead of starting it now */
+  queueTask: (draftId: string, prompt: string) => Promise<void>;
+  cancelTask: (id: string) => Promise<void>;
+  /** Start a queued task now, whatever is running */
+  startTaskNow: (id: string) => Promise<void>;
+  /** Start queued tasks while fewer than max_parallel sessions are busy */
+  pumpTasks: () => Promise<void>;
   /** Names given to repositories' sidebar groups (path → name) */
   repoNames: Record<string, string>;
   loadRepoNames: () => Promise<void>;
@@ -434,6 +460,7 @@ export const useStore = create<State>((set, get) => ({
   searchOpen: false,
   find: null,
   repoNames: {},
+  tasks: [],
   labOpen: false,
   diffVersion: 0,
   bumpDiff: () => set((s) => ({ diffVersion: s.diffVersion + 1 })),
@@ -473,6 +500,8 @@ export const useStore = create<State>((set, get) => ({
     const next = onEngineEvent((e) => {
       // When a turn ends, send queued instructions (not after a cancel or error; they stay queued)
       if (e.type === "turn_ended" && !e.error && e.stop_reason !== "cancelled") queueMicrotask(() => get().sendQueued(e.session_id));
+      // A session that stops working may make room for a queued task
+      if (e.type === "status") queueMicrotask(() => void get().pumpTasks());
       set((s) => {
         const sessions = reduceEvent(s.sessions, e);
         // Also post a macOS notification when the app isn't in focus
@@ -507,6 +536,13 @@ export const useStore = create<State>((set, get) => ({
     applyMotion(sv.settings.reduce_motion);
     set({ profiles, sessions, settings: sv.settings, ready: true, ...(layout ? { ...layout, paneCount: leaves(layout.layout).length } : {}) });
     void get().loadRepoNames();
+    void api.listTasks().then(
+      (tasks) => {
+        set({ tasks });
+        void get().pumpTasks();
+      },
+      () => {},
+    );
     for (const id of layout?.panes ?? []) if (id) void loadSession(id);
   },
 
@@ -579,7 +615,7 @@ export const useStore = create<State>((set, get) => ({
       if (isPreview(displaced)) delete previews[displaced!];
       set({ panes, focusedPane: target, drafts, previews });
     }
-    if (isDraft(id) || isPreview(id) || isGit(id) || isFiles(id)) return;
+    if (isDraft(id) || isPreview(id) || isGit(id) || isFiles(id) || isCompare(id)) return;
     await loadSession(id);
   },
 
@@ -595,6 +631,61 @@ export const useStore = create<State>((set, get) => ({
     const beside = leaves(s.layout).find((i) => s.panes[i] === id) ?? s.focusedPane;
     const slot = get().splitPane(beside, "right", null);
     void get().openInPane(git, slot, `diff:${id}`);
+  },
+
+  openCompare: (group, from) => {
+    const s = get();
+    const pane = comparePaneOf(group);
+    const shown = leaves(s.layout).find((i) => s.panes[i] === pane);
+    if (shown !== undefined) {
+      set({ focusedPane: shown });
+      return;
+    }
+    const beside = leaves(s.layout).find((i) => s.panes[i] === from) ?? s.focusedPane;
+    const slot = get().splitPane(beside, "right", null);
+    void get().openInPane(pane, slot, `compare:${group}`);
+  },
+
+  startCompare: async (id, prompt, attachments = []) => {
+    const d = get().drafts[id];
+    const picks = d?.compare ?? [];
+    if (!d || d.busy || d.chat || picks.length < 2) return;
+    get().updateDraft(id, { busy: true, error: null });
+    try {
+      try {
+        localStorage.setItem(LAST_REPO_KEY, d.repo);
+      } catch {
+        // Continue even if saving fails
+      }
+      const title = prompt.trim().split("\n")[0].slice(0, 40) || t("store.newSessionTitle");
+      const group = crypto.randomUUID();
+      // Started together; each gets its own worktree, port and setup run
+      const started = await Promise.allSettled(picks.map((profile) => api.startSession({ profile, repo: d.repo, title, worktree: true })));
+      const recs: SessionRecord[] = [];
+      for (const r of started) if (r.status === "fulfilled") recs.push(await api.setRunGroup(r.value.id, group));
+      const failed = started.find((r): r is PromiseRejectedResult => r.status === "rejected");
+      if (recs.length === 0) throw failed?.reason ?? new Error("no session started");
+      set((s) => {
+        const panes = s.panes.map((p) => (p === id ? recs[0].id : p));
+        const drafts = { ...s.drafts };
+        delete drafts[id];
+        const sessions = { ...s.sessions };
+        for (const rec of recs) sessions[rec.id] = sessions[rec.id] ? { ...sessions[rec.id], record: rec } : { ...newView(rec), historyLoaded: true };
+        return { panes, drafts, sessions };
+      });
+      // The others open to its right, one after another
+      let slot = leaves(get().layout).find((i) => get().panes[i] === recs[0].id) ?? get().focusedPane;
+      for (const rec of recs.slice(1)) slot = get().splitPane(slot, "right", rec.id, `session:${rec.id}`);
+      if (prompt.trim() || attachments.length) for (const rec of recs) void get().sendPrompt(rec.id, prompt, attachments);
+      // One that could not start is told in the first one's pane; the others run
+      if (failed)
+        set((s) => {
+          const v = s.sessions[recs[0].id];
+          return v ? { sessions: { ...s.sessions, [recs[0].id]: { ...v, lastError: t("store.compareStartFailed", { error: String(failed.reason) }) } } } : s;
+        });
+    } catch (e) {
+      get().updateDraft(id, { busy: false, error: String(e) });
+    }
   },
 
   openFiles: (id) => {
@@ -848,6 +939,14 @@ export const useStore = create<State>((set, get) => ({
     if (prompt?.trim()) await get().sendPrompt(rec.id, prompt);
   },
 
+  handOver: async (id, profile) => {
+    const rec = await api.handOver(id, profile);
+    // The new session takes the old one's pane
+    const slot = get().panes.indexOf(id);
+    if (slot >= 0) set((s) => ({ panes: s.panes.map((p) => (p === id ? rec.id : p)) }));
+    else await get().openInPane(rec.id, undefined, `session:${id}`);
+  },
+
   forkSession: async (id, newWorktree) => {
     const rec = await api.forkSession(id, newWorktree);
     // SessionCreated marks history as loaded, but the copied conversation is only in the log
@@ -944,6 +1043,52 @@ export const useStore = create<State>((set, get) => ({
     await api.closeSession(id);
   },
 
+  queueTask: async (draftId, prompt) => {
+    const d = get().drafts[draftId];
+    if (!d?.profile || d.chat || !prompt.trim()) return;
+    const task: QueuedTask = {
+      id: crypto.randomUUID(),
+      profile: d.profile,
+      repo: d.repo,
+      worktree: d.worktree,
+      prompt,
+      title: prompt.trim().split("\n")[0].slice(0, 40),
+      created_at: Date.now(),
+    };
+    const tasks = [...get().tasks, task];
+    await api.saveTasks(tasks);
+    set({ tasks });
+    void get().pumpTasks();
+  },
+
+  cancelTask: async (id) => {
+    const tasks = get().tasks.filter((t) => t.id !== id);
+    await api.saveTasks(tasks);
+    set({ tasks });
+  },
+
+  startTaskNow: async (id) => {
+    const task = get().tasks.find((t) => t.id === id);
+    if (task) await runTask(task);
+  },
+
+  pumpTasks: async () => {
+    if (pumping) return;
+    pumping = true;
+    try {
+      for (;;) {
+        const s = get();
+        const limit = s.settings.max_parallel ?? 2;
+        const busy = Object.values(s.sessions).filter((v) => !v.record.side_of && BUSY.includes(v.record.status)).length;
+        const next = s.tasks.find((t) => !t.error);
+        if (!next || busy + starting >= limit) break;
+        await runTask(next);
+      }
+    } finally {
+      pumping = false;
+    }
+  },
+
   loadRepoNames: async () => {
     const repos = await api.listRepos().catch(() => []);
     set({ repoNames: Object.fromEntries(repos.filter((r) => r.settings.name).map((r) => [r.path, r.settings.name])) });
@@ -1010,6 +1155,37 @@ export const useStore = create<State>((set, get) => ({
   },
 }));
 
+// ---- the task queue
+
+const BUSY: SessionStatus[] = ["starting", "working", "awaiting_permission", "stalled"];
+/** One pump at a time; tasks being started count as busy until their session reports a state */
+let pumping = false;
+let starting = 0;
+
+/** Take a task off the queue and start it as a session (in the sidebar; no pane is taken) */
+async function runTask(queued: QueuedTask) {
+  const task = { ...queued, error: null };
+  const store = useStore.getState();
+  const tasks = store.tasks.filter((t) => t.id !== task.id);
+  useStore.setState({ tasks });
+  await api.saveTasks(tasks).catch(() => {});
+  starting += 1;
+  try {
+    const rec = await api.startSession({ profile: task.profile, repo: task.repo, title: task.title || t("store.newSessionTitle"), worktree: task.worktree });
+    useStore.setState((s) => ({
+      sessions: { ...s.sessions, [rec.id]: s.sessions[rec.id] ? { ...s.sessions[rec.id], record: rec } : { ...newView(rec), historyLoaded: true } },
+    }));
+    await useStore.getState().sendPrompt(rec.id, task.prompt);
+  } catch (e) {
+    // Back at the head of the queue with the reason, waiting to be started again by hand
+    const back = [{ ...task, error: String(e).slice(0, 500) }, ...useStore.getState().tasks];
+    useStore.setState({ tasks: back });
+    await api.saveTasks(back).catch(() => {});
+  } finally {
+    starting -= 1;
+  }
+}
+
 /** For a stopped session, load the conversation from the log, and fetch config options if missing */
 async function loadSession(id: string) {
   const v = useStore.getState().sessions[id];
@@ -1048,7 +1224,7 @@ useStore.subscribe((st, prev) => {
     return;
   const layout: Layout = {
     // Drafts, previews, Git and file panes are not restored on the next launch
-    panes: st.panes.map((p) => (isDraft(p) || isPreview(p) || isGit(p) || isFiles(p) ? null : p)),
+    panes: st.panes.map((p) => (isDraft(p) || isPreview(p) || isGit(p) || isFiles(p) || isCompare(p) ? null : p)),
     layout: st.layout,
     focusedPane: st.focusedPane,
     sidebarOpen: st.sidebarOpen,

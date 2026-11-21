@@ -9,4 +9,5 @@ export const store: Record<keyof typeof source, string> = {
   newSessionTitle: "新建会话",
   skippedLines: "… {count} 行",
   newChatTitle: "新对话",
+  compareStartFailed: "并排启动的会话中有一个无法启动：{error}",
 };

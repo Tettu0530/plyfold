@@ -239,6 +239,10 @@ struct Live {
     /// SessionInfo, but are not sent to the UI: it already has the conversation from the event log, and showing the
     /// resend would duplicate it and push the message being sent above the earlier output
     replaying: AtomicBool,
+    /// The start of this turn's answer, to tell a rate or usage limit reported as a message (see hit_limit)
+    turn_text: Mutex<String>,
+    /// While Some, the whole answer is kept here too (the summary asked for when handing a session over)
+    capture: Mutex<Option<String>>,
     /// Permission requests answered without asking: a side chat declines them all, an everyday chat allows looking things
     /// up (search, fetch, read) and declines the rest
     policy: Policy,
@@ -301,6 +305,18 @@ struct Inner {
     tx: broadcast::Sender<EngineEvent>,
     stall_after_ms: AtomicU64,
     perm_seq: AtomicU64,
+    /// Per reviewed session: what was last reviewed, and a review waiting for the reviewer to finish its turn
+    reviews: Mutex<HashMap<String, ReviewState>>,
+}
+
+#[derive(Default)]
+struct ReviewState {
+    /// Hash of the diff last sent for review (the same diff is not reviewed twice)
+    last: Option<u64>,
+    /// The instruction behind the latest turn, shown to the reviewer
+    instruction: Option<String>,
+    /// A turn ended while the reviewer was still answering: review again when it is done
+    pending: bool,
 }
 
 impl Inner {
@@ -372,6 +388,7 @@ impl Engine {
                 tx: broadcast::channel(4096).0,
                 stall_after_ms: AtomicU64::new(opts.stall_after.as_millis() as u64),
                 perm_seq: AtomicU64::new(0),
+                reviews: Mutex::new(HashMap::new()),
             }),
         })
     }
@@ -637,6 +654,130 @@ impl Engine {
         Ok(inner.store.get_session(&rec.id)?)
     }
 
+    /// Hand the session's work over to another profile (another agent, or another key) in the same workspace.
+    /// The session's agent is asked for a summary first when it can answer (skipped after HANDOVER_WAIT); then it is
+    /// stopped, and a new session starts there and is sent the instructions so far, the summary and the diff, and asked
+    /// to carry on. The old session keeps its record
+    pub async fn hand_over(&self, id: &str, profile: &str) -> Result<SessionRecord, CoreError> {
+        let r = self.hand_over_inner(id, profile).await;
+        // The UI does not wait on this (the note can take minutes), so a failure is told on the session
+        if let Err(e) = &r {
+            self.inner
+                .notice(id, plyfold_i18n::tr!("{profile} に引き継げませんでした: {e}", "Could not hand over to {profile}: {e}", "无法交给 {profile}：{e}"));
+        }
+        r
+    }
+
+    async fn hand_over_inner(&self, id: &str, profile: &str) -> Result<SessionRecord, CoreError> {
+        let inner = &self.inner;
+        let src = inner.store.get_session(id)?;
+        if src.side_of.is_some() || src.chat {
+            return Err(CoreError::NoWorkspace(id.into()));
+        }
+        if src.status == SessionStatus::Starting || inner.live(id).is_ok_and(|l| l.in_turn.load(Ordering::SeqCst)) {
+            return Err(CoreError::Busy(id.into()));
+        }
+        let agent = {
+            let config = inner.config.read().unwrap();
+            if !config.profiles.contains_key(profile) && !config.agents.contains_key(profile) {
+                return Err(ProfileError::UnknownTarget(profile.into()).into());
+            }
+            config.profiles.get(profile).map(|p| p.agent.clone()).unwrap_or_else(|| profile.to_string())
+        };
+        let repo = src.repo_path.clone().ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
+        let cwd = src.worktree_path.clone().unwrap_or_else(|| repo.clone());
+
+        let summary = self.ask_summary(&src).await;
+        for side in inner.store.list_sessions()?.into_iter().filter(|s| s.side_of.as_deref() == Some(id)) {
+            self.close_side_chat(&side.id).await?;
+        }
+        self.close_session(id).await?;
+        if workspace_in_use(inner, &cwd) {
+            return Err(CoreError::SharedWorkspace(id.into()));
+        }
+
+        let rec = inner.store.create_session(NewSession {
+            title: src.title.clone(),
+            profile: profile.to_string(),
+            agent,
+            repo_path: Some(repo.clone()),
+            worktree_path: src.worktree_path.clone(),
+            branch: src.branch.clone(),
+            base_ref: src.base_ref.clone(),
+            ..Default::default()
+        })?;
+        if let Some(group) = &src.run_group {
+            inner.store.set_run_group(&rec.id, Some(group))?;
+        }
+        inner.emit(EngineEvent::SessionCreated { session: inner.store.get_session(&rec.id)? });
+        self.launch(&rec.id, profile, Path::new(&cwd), Resume::New).await?;
+        let diff = self.diff(&rec.id).unwrap_or_default();
+        let from = src.profile.clone();
+        inner.notice(&rec.id, plyfold_i18n::tr!("{from} から引き継ぎました", "Taken over from {from}", "已从 {from} 接手"));
+        inner.notice(id, plyfold_i18n::tr!("{profile} に引き継ぎました", "Handed over to {profile}", "已交给 {profile}"));
+        self.prompt(&rec.id, &handover_prompt(&self.instructions_of(id), summary.as_deref(), &diff))?;
+        Ok(inner.store.get_session(&rec.id)?)
+    }
+
+    /// The session's agent, asked to sum up its work for whoever continues. None when it has no conversation, cannot
+    /// be started, or takes longer than HANDOVER_WAIT
+    async fn ask_summary(&self, src: &SessionRecord) -> Option<String> {
+        src.acp_session_id.as_ref()?;
+        if !self.is_running(&src.id) {
+            self.reopen_session(&src.id).await.ok()?;
+        }
+        let live = self.inner.live(&src.id).ok()?;
+        let mut rx = self.subscribe();
+        *live.capture.lock().unwrap() = Some(String::new());
+        let ask = plyfold_i18n::tr!(
+            "この作業を別のエージェントに引き継ぎます。ファイルは変えずに、引き継ぎのメモを書いてください: 何を頼まれたか、何をしたか、何が残っているか、気をつけること。",
+            "This work is being handed over to another agent. Without changing any files, write a handover note: what was asked, what was done, what is left, and anything to watch out for.",
+            "这项工作将交给另一个代理。请不要更改任何文件，写一份交接说明：被要求做什么、已完成什么、还剩什么、需要注意什么。"
+        );
+        let asked = self.prompt(&src.id, &ask).is_ok();
+        let ended = asked
+            && tokio::time::timeout(HANDOVER_WAIT, async {
+                loop {
+                    match rx.recv().await {
+                        Ok(EngineEvent::TurnEnded { session_id, error, .. }) if session_id == src.id => return error.is_none(),
+                        Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => {}
+                        Err(_) => return false,
+                    }
+                }
+            })
+            .await
+            .unwrap_or(false);
+        let text = live.capture.lock().unwrap().take();
+        if !ended {
+            let _ = self.cancel(&src.id).await;
+            return None;
+        }
+        text.map(|t| t.trim().to_string()).filter(|t| !t.is_empty())
+    }
+
+    /// What the user asked the session, oldest first (the last HANDOVER_INSTRUCTIONS, each cut short)
+    fn instructions_of(&self, id: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut after = None;
+        while let Ok(batch) = self.inner.store.events(id, after, 5000) {
+            let Some(last) = batch.last() else { break };
+            after = Some(last.id);
+            for e in batch.iter().filter(|e| e.kind == EventKind::FrameOut && e.payload.contains("\"session/prompt\"")) {
+                let Ok(v) = serde_json::from_str::<Value>(&e.payload) else { continue };
+                let text: String =
+                    v["params"]["prompt"].as_array().map(|a| a.iter().filter_map(|b| b["text"].as_str()).collect::<Vec<_>>().join("")).unwrap_or_default();
+                let text = text.trim();
+                if !text.is_empty() {
+                    out.push(text.chars().take(2000).collect());
+                }
+            }
+        }
+        // The note asked for by hand_over is not one of the user's instructions
+        out.retain(|t: &String| !t.contains(HANDOVER_MARK_JA) && !t.contains(HANDOVER_MARK_EN) && !t.contains(HANDOVER_MARK_ZH));
+        let skip = out.len().saturating_sub(HANDOVER_INSTRUCTIONS);
+        out.split_off(skip)
+    }
+
     /// Open a side chat on a session: a read-only fork in the same workspace, for questions that should not enter the
     /// main conversation. Allowed while the main session is working (the fork starts from what the agent has saved so
     /// far). Its permission requests are declined, and a read-only mode is chosen when the agent has one
@@ -663,6 +804,7 @@ impl Engine {
             base_ref: src.base_ref.clone(),
             side_of: Some(id.to_string()),
             chat: src.chat,
+            review: false,
         })?;
         inner.emit(EngineEvent::SessionCreated { session: rec.clone() });
         if let Err(e) = self.launch(&rec.id, &src.profile, Path::new(&cwd), Resume::Fork(acp)).await {
@@ -831,6 +973,8 @@ impl Engine {
                 clock: Mutex::new(None),
                 last_live_emit: Mutex::new(Instant::now()),
                 replaying: AtomicBool::new(false),
+                turn_text: Mutex::new(String::new()),
+                capture: Mutex::new(None),
                 policy: inner.store.get_session(id).map(|r| Policy::of(&r)).unwrap_or(Policy::Ask),
             });
             // Start receiving first so the history resent by session/load is captured
@@ -996,6 +1140,11 @@ impl Engine {
 
     /// Start a turn with images or files attached
     pub fn prompt_with(&self, id: &str, text: &str, attachments: &[Attachment]) -> Result<(), CoreError> {
+        self.prompt_tried(id, text, attachments, Vec::new())
+    }
+
+    /// `tried`: profiles this prompt already hit a limit with (a fallback chain never goes round in a circle)
+    fn prompt_tried(&self, id: &str, text: &str, attachments: &[Attachment], tried: Vec<String>) -> Result<(), CoreError> {
         let inner = self.inner.clone();
         let live = inner.live(id)?;
         // For agents without image support, write images to the state dir and pass them as links
@@ -1008,8 +1157,10 @@ impl Engine {
         live.stalled.store(false, Ordering::SeqCst);
         *live.clock.lock().unwrap() = Some(TurnClock::new());
         live.info.lock().unwrap().live = Some(LiveTurn::default());
+        live.turn_text.lock().unwrap().clear();
         inner.set_status(id, SessionStatus::Working);
         let id = id.to_string();
+        let (text, attachments) = (text.to_string(), attachments.to_vec());
         tokio::spawn(async move {
             let r = live.client.prompt_blocks(&live.sid(), blocks).await;
             // The turn is still on while its last notifications are handled (a stalled turn that gets its answer
@@ -1019,6 +1170,13 @@ impl Engine {
             }
             live.in_turn.store(false, Ordering::SeqCst);
             live.permissions.lock().unwrap().clear();
+            let limited = match &r {
+                Ok(_) => hit_limit(&live.turn_text.lock().unwrap(), true),
+                Err(e) => hit_limit(&e.to_string(), false),
+            };
+            let ended = r
+                .as_ref()
+                .is_ok_and(|t| serde_json::to_value(t.response.stop_reason).ok().and_then(|v| v.as_str().map(str::to_string)).as_deref() == Some("end_turn"));
             match r {
                 Ok(turn) => {
                     finish_turn(&inner, &id, &live, &turn.raw["usage"]);
@@ -1031,11 +1189,196 @@ impl Engine {
                     inner.emit(EngineEvent::TurnEnded { session_id: id.clone(), stop_reason: None, error: Some(e.to_string()) });
                 }
             }
-            if !live.closing.load(Ordering::SeqCst) {
-                inner.set_status(&id, SessionStatus::Idle);
+            if live.closing.load(Ordering::SeqCst) {
+                return;
+            }
+            inner.set_status(&id, SessionStatus::Idle);
+            let engine = Engine { inner };
+            if limited {
+                engine.continue_with_fallback(&id, &text, &attachments, tried).await;
+            } else if ended {
+                engine.after_turn(&id, &text).await;
             }
         });
         Ok(())
+    }
+
+    /// After a turn that ended normally: a reviewed session sends its diff to the reviewer; a reviewer that finished
+    /// sends the review that waited on it
+    async fn after_turn(&self, id: &str, text: &str) {
+        let Ok(rec) = self.inner.store.get_session(id) else { return };
+        let (main, instruction) = if rec.review {
+            let Some(main) = rec.side_of.clone() else { return };
+            let waiting = self.inner.reviews.lock().unwrap().get_mut(&main).is_some_and(|s| std::mem::take(&mut s.pending));
+            if !waiting {
+                return;
+            }
+            (main, None)
+        } else if rec.side_of.is_none() && !rec.chat && rec.reviewer.is_some() {
+            (rec.id.clone(), Some(text))
+        } else {
+            return;
+        };
+        if let Err(e) = self.review(&main, instruction, false).await {
+            self.inner.notice(&main, plyfold_i18n::tr!("レビューを始められませんでした: {e}", "Could not start the review: {e}", "无法开始审查：{e}"));
+        }
+    }
+
+    /// Choose the profile that reviews this session after each turn (None: no review). Turning it off, or changing
+    /// it, closes the reviewer that was running
+    pub async fn set_reviewer(&self, id: &str, profile: Option<&str>) -> Result<SessionRecord, CoreError> {
+        let inner = &self.inner;
+        let rec = inner.store.get_session(id)?;
+        if rec.side_of.is_some() || rec.chat {
+            return Err(CoreError::NoWorkspace(id.into()));
+        }
+        if let Some(p) = profile {
+            let config = inner.config.read().unwrap();
+            if !config.profiles.contains_key(p) && !config.agents.contains_key(p) {
+                return Err(ProfileError::UnknownTarget(p.into()).into());
+            }
+        }
+        if rec.reviewer.as_deref() != profile {
+            for r in self.reviewers_of(id)? {
+                self.close_side_chat(&r.id).await?;
+            }
+            inner.reviews.lock().unwrap().remove(id);
+        }
+        inner.store.set_reviewer(id, profile)?;
+        let rec = inner.store.get_session(id)?;
+        inner.emit(EngineEvent::WorkspaceChanged { session: rec.clone() });
+        Ok(rec)
+    }
+
+    fn reviewers_of(&self, id: &str) -> Result<Vec<SessionRecord>, CoreError> {
+        Ok(self.inner.store.list_sessions()?.into_iter().filter(|s| s.review && s.side_of.as_deref() == Some(id)).collect())
+    }
+
+    /// Send the session's diff to its reviewer (started when needed, read-only). `instruction` is what the latest turn
+    /// was asked to do. Without `force`, a diff already reviewed is not sent again. Returns the reviewer's id, or None
+    /// when there was nothing to review
+    pub async fn review(&self, id: &str, instruction: Option<&str>, force: bool) -> Result<Option<String>, CoreError> {
+        let inner = &self.inner;
+        let rec = inner.store.get_session(id)?;
+        let Some(profile) = rec.reviewer.clone() else { return Ok(None) };
+        let diff = self.diff(id)?;
+        if diff.patch.trim().is_empty() {
+            return Ok(None);
+        }
+        let hash = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            diff.patch.hash(&mut h);
+            h.finish()
+        };
+        let instruction = {
+            let mut reviews = inner.reviews.lock().unwrap();
+            let state = reviews.entry(id.to_string()).or_default();
+            if let Some(i) = instruction {
+                state.instruction = Some(i.to_string());
+            }
+            if !force && state.last == Some(hash) {
+                return Ok(None);
+            }
+            state.instruction.clone()
+        };
+
+        let reviewer = match self.reviewers_of(id)?.into_iter().next() {
+            Some(r) if self.is_running(&r.id) => r.id,
+            Some(r) => {
+                self.reopen_session(&r.id).await?;
+                r.id
+            }
+            None => self.start_reviewer(&rec, &profile).await?,
+        };
+        let live = inner.live(&reviewer)?;
+        if live.in_turn.load(Ordering::SeqCst) {
+            inner.reviews.lock().unwrap().entry(id.to_string()).or_default().pending = true;
+            return Ok(Some(reviewer));
+        }
+        self.prompt(&reviewer, &review_prompt(&diff, instruction.as_deref()))?;
+        inner.reviews.lock().unwrap().entry(id.to_string()).or_default().last = Some(hash);
+        Ok(Some(reviewer))
+    }
+
+    async fn start_reviewer(&self, rec: &SessionRecord, profile: &str) -> Result<String, CoreError> {
+        let inner = &self.inner;
+        let cwd = rec.worktree_path.clone().or(rec.repo_path.clone()).ok_or_else(|| CoreError::NoWorkspace(rec.id.clone()))?;
+        let agent = inner.config.read().unwrap().profiles.get(profile).map(|p| p.agent.clone()).unwrap_or_else(|| profile.to_string());
+        let r = inner.store.create_session(NewSession {
+            title: plyfold_i18n::tr!("レビュー", "Review", "审查"),
+            profile: profile.to_string(),
+            agent,
+            repo_path: rec.repo_path.clone(),
+            worktree_path: rec.worktree_path.clone(),
+            branch: rec.branch.clone(),
+            base_ref: rec.base_ref.clone(),
+            side_of: Some(rec.id.clone()),
+            chat: false,
+            review: true,
+        })?;
+        inner.emit(EngineEvent::SessionCreated { session: r.clone() });
+        if let Err(e) = self.launch(&r.id, profile, Path::new(&cwd), Resume::New).await {
+            let _ = self.close_side_chat(&r.id).await;
+            return Err(e);
+        }
+        // Ask the agent itself not to edit too, where it has such a mode; the policy declines edits either way
+        if let Some(mode) = self.session_info(&r.id).and_then(|info| read_only_mode(&info)) {
+            let _ = self.set_category(&r.id, Category::Mode, &mode).await;
+        }
+        Ok(r.id)
+    }
+
+    /// After a turn hit a rate or usage limit: when the session's profile names a fallback (another key of the same
+    /// agent) not tried for this prompt yet, reopen the session with it and send the prompt again.
+    /// An isolated profile keeps conversations in its own directory, so the conversation's files are copied over first
+    async fn continue_with_fallback(&self, id: &str, text: &str, attachments: &[Attachment], mut tried: Vec<String>) {
+        let inner = &self.inner;
+        let Ok(rec) = inner.store.get_session(id) else { return };
+        tried.push(rec.profile.clone());
+        let (to, from_dir, to_dir) = {
+            let config = inner.config.read().unwrap();
+            let Some(to) = config.fallback_for(&rec.profile).filter(|p| !tried.contains(p)) else { return };
+            let dirs = (config.data_dir_of(&rec.profile, &inner.state_dir), config.data_dir_of(&to, &inner.state_dir));
+            (to, dirs.0, dirs.1)
+        };
+        inner.notice(
+            id,
+            plyfold_i18n::tr!(
+                "{} のキーが上限に達したので、{to} に切り替えて同じ指示を送り直します",
+                "{}'s key hit its limit, so the session continues with {to} and sends the prompt again",
+                "{} 的密钥已达到上限，因此切换到 {to} 并重新发送同一指令",
+                rec.profile
+            ),
+        );
+        let result: Result<(), CoreError> = async {
+            self.close_session(id).await?;
+            if let Some(acp) = &rec.acp_session_id {
+                match (&from_dir, &to_dir) {
+                    (Some(from), Some(to_dir)) => {
+                        copy_conversation(from, to_dir, acp)?;
+                    }
+                    (None, None) => {}
+                    // One side uses the usual config, which Plyfold does not write to
+                    _ => inner.notice(
+                        id,
+                        plyfold_i18n::tr!(
+                            "片方のプロファイルが通常の設定を使うため、会話のファイルを写せません。エージェントが会話を開けないときは、新しい会話で続けます",
+                            "One of the profiles uses the usual config, so the conversation's files cannot be copied; if the agent cannot open the conversation, it continues in a new one",
+                            "其中一个配置使用常规设置，因此无法复制对话文件；如果代理无法打开该对话，将在新对话中继续"
+                        ),
+                    ),
+                }
+            }
+            inner.store.set_profile(id, &to)?;
+            inner.emit(EngineEvent::WorkspaceChanged { session: inner.store.get_session(id)? });
+            self.reopen_session(id).await?;
+            self.prompt_tried(id, text, attachments, tried)
+        }
+        .await;
+        if let Err(e) = result {
+            inner.notice(id, plyfold_i18n::tr!("{to} に切り替えられませんでした: {e}", "Could not continue with {to}: {e}", "无法切换到 {to}：{e}"));
+        }
     }
 
     /// Cancel. Pending permission requests are answered with "cancelled" (per the ACP spec)
@@ -1183,6 +1526,14 @@ impl Engine {
         }
         self.close_session(id).await?;
         self.inner.store.set_trashed(id, Some(plyfold_store::now_ms()))?;
+        let rec = self.inner.store.get_session(id)?;
+        self.inner.emit(EngineEvent::WorkspaceChanged { session: rec.clone() });
+        Ok(rec)
+    }
+
+    /// Tie sessions started from one prompt into a comparison (None takes a session out of it)
+    pub fn set_run_group(&self, id: &str, group: Option<&str>) -> Result<SessionRecord, CoreError> {
+        self.inner.store.set_run_group(id, group)?;
         let rec = self.inner.store.get_session(id)?;
         self.inner.emit(EngineEvent::WorkspaceChanged { session: rec.clone() });
         Ok(rec)
@@ -1468,6 +1819,16 @@ fn allow_once(v: &Value) -> Option<String> {
     v["options"].as_array()?.iter().find(|o| o["kind"] == "allow_once")?["optionId"].as_str().map(str::to_string)
 }
 
+/// Tools an everyday chat may use whatever kind they are labelled with (Claude Code's names): loading a skill, the
+/// task list, and helper agents, whose own tool calls come back through this same policy
+const CHAT_TOOLS: [&str; 3] = ["Skill", "TodoWrite", "Task"];
+
+/// The tool's own name, where the agent gives it (Claude Code: toolCall.name, or _meta.claudeCode.toolName)
+fn tool_name(v: &Value) -> Option<&str> {
+    let call = &v["toolCall"];
+    call["name"].as_str().or_else(|| call["_meta"]["claudeCode"]["toolName"].as_str())
+}
+
 /// The kind a request is treated as: "execute" when it carries a command, whatever the agent labelled it
 fn effective_kind(v: &Value) -> Option<&str> {
     let raw = &v["toolCall"]["rawInput"];
@@ -1601,6 +1962,20 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
                     .then(|| update["content"]["text"].as_str())
                     .flatten();
                 let mut live_due = false;
+                if update["sessionUpdate"] == "agent_message_chunk"
+                    && let Some(t) = text
+                    && !live.replaying.load(Ordering::SeqCst)
+                {
+                    let mut kept = live.turn_text.lock().unwrap();
+                    if kept.len() < 4096 {
+                        kept.push_str(t);
+                    }
+                    if let Some(c) = live.capture.lock().unwrap().as_mut()
+                        && c.len() < HANDOVER_SUMMARY_MAX
+                    {
+                        c.push_str(t);
+                    }
+                }
                 if let Some(t) = text
                     && let Some(clock) = live.clock.lock().unwrap().as_mut()
                 {
@@ -1638,14 +2013,16 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
                         .map(str::to_string)
                 };
                 let title = v["toolCall"]["title"].as_str().unwrap_or_default().to_string();
-                // An everyday chat may look things up on the web, and read or search inside its own folder; nothing that
-                // changes files, runs commands, or reaches the rest of the disk. The kind is the agent's own label, so a
+                // An everyday chat works like a chat on the web: it may search and fetch from the web, think, load
+                // skills, keep a task list, ask helper agents, and read, search and write files inside its own folder.
+                // It runs no commands and reaches nothing else on the disk. The kind is the agent's own label, so a
                 // request that carries a command counts as one whatever it is labelled, and paths are checked
+                let chat_dir = [self_chat_dir(inner, &id)];
                 let looks_up = live.policy == Policy::LookUpOnly
                     && match effective_kind(&v) {
-                        Some("fetch") => true,
-                        Some("read" | "search") => inside(&locations(&v), &[self_chat_dir(inner, &id)]),
-                        _ => false,
+                        Some("fetch" | "think") => true,
+                        Some("read" | "search" | "edit" | "delete" | "move") => inside(&locations(&v), &chat_dir),
+                        _ => CHAT_TOOLS.contains(&tool_name(&v).unwrap_or_default()),
                     };
                 if let (true, Some(once)) = (looks_up, allow_once(&v)) {
                     let _ = live.client.respond_permission(request_id, Some(&once)).await;
@@ -1660,9 +2037,9 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
                         )
                     } else {
                         plyfold_i18n::tr!(
-                            "会話ではファイルの編集とコマンドを使わないので、断りました: {title}",
-                            "Declined, because a conversation does not edit files or run commands: {title}",
-                            "对话中不编辑文件也不执行命令，因此已拒绝：{title}"
+                            "会話ではコマンドの実行と、会話のフォルダの外のファイルは使わないので、断りました: {title}",
+                            "Declined, because a conversation runs no commands and uses no files outside its folder: {title}",
+                            "对话中不执行命令，也不使用对话文件夹之外的文件，因此已拒绝：{title}"
                         )
                     };
                     inner.notice(&id, note);
@@ -1787,8 +2164,194 @@ fn emit_info(inner: &Inner, id: &str, live: &Live) {
     inner.emit(EngineEvent::Info { session_id: id.into(), info: Box::new(info) });
 }
 
+/// Whether a turn ended on a rate or usage limit (of the key, not a fault in the work). `answer` is the turn's own
+/// text: agents report some limits as a short message rather than an error, so only a short one counts
+fn hit_limit(text: &str, answer: bool) -> bool {
+    let t = text.trim().to_lowercase();
+    const SIGNS: [&str; 9] = [
+        "rate limit",
+        "rate_limit",
+        "usage limit",
+        "quota",
+        "credit balance",
+        "insufficient_quota",
+        "resource_exhausted",
+        "too many requests",
+        "out of credits",
+    ];
+    let sign = SIGNS.iter().any(|s| t.contains(s)) || t.contains("429");
+    if !answer {
+        return sign;
+    }
+    // A short answer that is the agent passing on an API error, or a plan's "limit reached … resets …" message
+    // (an answer that merely talks about rate limits must not switch keys)
+    t.chars().count() <= 600
+        && ((t.starts_with("api error") && sign) || t.contains("usage limit reached") || (t.contains("limit reached") && t.contains("reset")))
+}
+
+/// The longest diff sent to a reviewer (it reads files itself for the rest)
+const REVIEW_DIFF_MAX: usize = 120_000;
+
+/// What a reviewer is asked: the instruction behind the turn, the files changed and the diff, and the shape of the answer
+fn review_prompt(diff: &Diff, instruction: Option<&str>) -> String {
+    let files = diff.files.iter().map(|f| format!("- {} (+{} -{})", f.path, f.added, f.removed)).collect::<Vec<_>>().join("\n");
+    let mut patch = diff.patch.as_str();
+    let cut = patch.len() > REVIEW_DIFF_MAX;
+    if cut {
+        let mut end = REVIEW_DIFF_MAX;
+        while !patch.is_char_boundary(end) {
+            end -= 1;
+        }
+        patch = &patch[..end];
+    }
+    let instruction = instruction.map(str::trim).filter(|i| !i.is_empty()).unwrap_or("—");
+    let mut text = plyfold_i18n::tr!(
+        "別のエージェントがこの作業フォルダで行った変更をレビューしてください。ファイルの編集や、何かを変えるコマンドの実行はしないでください（ファイルを読むのはかまいません）。\n\nそのエージェントが受けた最後の指示:\n{instruction}\n\n変更のあったファイル:\n{files}\n\nベースとの差分:\n~~~~diff\n{patch}\n~~~~",
+        "Review the changes another agent made in this working folder. Do not edit files or run commands that change anything (reading files is fine).\n\nThe last instruction that agent was given:\n{instruction}\n\nFiles changed:\n{files}\n\nDiff against the base:\n~~~~diff\n{patch}\n~~~~",
+        "请审查另一个代理在此工作文件夹中所做的更改。不要编辑文件，也不要运行会更改任何内容的命令（可以读取文件）。\n\n该代理收到的最后一条指令：\n{instruction}\n\n有更改的文件：\n{files}\n\n与基准的差异：\n~~~~diff\n{patch}\n~~~~"
+    );
+    if cut {
+        text += &plyfold_i18n::tr!(
+            "\n\n（差分が長いので途中で切りました。残りはファイルを読んで確かめてください）",
+            "\n\n(The diff is long and was cut here; read the files for the rest)",
+            "\n\n（差异过长，已在此截断；其余部分请直接读取文件）"
+        );
+    }
+    text += &plyfold_i18n::tr!(
+        "\n\n問題を重いものから順に、1 件ずつ「パス:行 — 問題 — 直し方」の形で挙げてください。この会話の前のレビューで挙げたものは、まだ直っていないときだけ挙げます。問題がなければ「指摘なし」とだけ答えてください。",
+        "\n\nList the problems, most severe first, one per line as `path:line — problem — fix`. Mention a problem from an earlier review in this conversation only if it is still not fixed. If nothing is wrong, answer only \"No findings\".",
+        "\n\n请按严重程度从高到低逐条列出问题，每条一行，格式为「路径:行 — 问题 — 修复方法」。本对话中之前审查已提出的问题，仅在仍未修复时再列出。如果没有问题，只回答「没有发现问题」。"
+    );
+    text
+}
+
+/// How long the old agent may take to write its handover note
+const HANDOVER_WAIT: Duration = Duration::from_secs(180);
+const HANDOVER_SUMMARY_MAX: usize = 20_000;
+const HANDOVER_INSTRUCTIONS: usize = 10;
+/// The longest diff passed on (the new agent reads the files for the rest)
+const HANDOVER_DIFF_MAX: usize = 120_000;
+/// Words from the note request, to keep it out of the instructions passed on
+const HANDOVER_MARK_JA: &str = "引き継ぎのメモを書いてください";
+const HANDOVER_MARK_EN: &str = "write a handover note";
+const HANDOVER_MARK_ZH: &str = "写一份交接说明";
+
+/// What the new agent is sent: the instructions so far, the old agent's note, and the diff
+fn handover_prompt(instructions: &[String], summary: Option<&str>, diff: &Diff) -> String {
+    let asked = if instructions.is_empty() {
+        "—".to_string()
+    } else {
+        instructions.iter().map(|i| format!("- {}", i.replace('\n', "\n  "))).collect::<Vec<_>>().join("\n")
+    };
+    let note = summary.unwrap_or("—");
+    let files = if diff.files.is_empty() {
+        "—".to_string()
+    } else {
+        diff.files.iter().map(|f| format!("- {} (+{} -{})", f.path, f.added, f.removed)).collect::<Vec<_>>().join("\n")
+    };
+    let mut patch = diff.patch.as_str();
+    let cut = patch.len() > HANDOVER_DIFF_MAX;
+    if cut {
+        let mut end = HANDOVER_DIFF_MAX;
+        while !patch.is_char_boundary(end) {
+            end -= 1;
+        }
+        patch = &patch[..end];
+    }
+    let mut text = plyfold_i18n::tr!(
+        "別のエージェントがこの作業フォルダで進めていた作業を引き継いでください。\n\nこれまでに受けた指示（古い順）:\n{asked}\n\n前のエージェントの引き継ぎメモ:\n{note}\n\n変更のあったファイル:\n{files}\n\nベースとの差分:\n~~~~diff\n{patch}\n~~~~",
+        "Take over the work another agent was doing in this working folder.\n\nThe instructions it was given (oldest first):\n{asked}\n\nIts handover note:\n{note}\n\nFiles changed:\n{files}\n\nDiff against the base:\n~~~~diff\n{patch}\n~~~~",
+        "请接手另一个代理在此工作文件夹中进行的工作。\n\n它收到的指令（从旧到新）：\n{asked}\n\n它的交接说明：\n{note}\n\n有更改的文件：\n{files}\n\n与基准的差异：\n~~~~diff\n{patch}\n~~~~"
+    );
+    if cut {
+        text += &plyfold_i18n::tr!(
+            "\n\n（差分が長いので途中で切りました。残りはファイルを読んで確かめてください）",
+            "\n\n(The diff is long and was cut here; read the files for the rest)",
+            "\n\n（差异过长，已在此截断；其余部分请直接读取文件）"
+        );
+    }
+    text += &plyfold_i18n::tr!(
+        "\n\nまずファイルの今の状態を確かめ、残っている作業を続けてください。残りがなければ、そう伝えてください。",
+        "\n\nFirst check the files as they are now, then carry on with what is left. If nothing is left, say so.",
+        "\n\n请先确认文件的当前状态，然后继续完成剩余的工作。如果没有剩余工作，请直接说明。"
+    );
+    text
+}
+
+/// Copy a conversation's files (those named after its id) between two profiles' data directories, at the same
+/// relative paths. Links are not followed and nothing outside `from` is read
+fn copy_conversation(from: &Path, to: &Path, acp_session_id: &str) -> std::io::Result<usize> {
+    fn walk(dir: &Path, depth: usize, found: &mut Vec<PathBuf>, id: &str) {
+        let Ok(entries) = std::fs::read_dir(dir) else { return };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else { continue };
+            let path = entry.path();
+            if kind.is_dir() && depth < 6 {
+                walk(&path, depth + 1, found, id);
+            } else if kind.is_file() && entry.file_name().to_string_lossy().contains(id) {
+                found.push(path);
+            }
+        }
+    }
+    // An id short enough to match unrelated names would copy the wrong files
+    if acp_session_id.len() < 8 || acp_session_id.contains(['/', '\\']) {
+        return Ok(0);
+    }
+    let mut found = Vec::new();
+    walk(from, 0, &mut found, acp_session_id);
+    for src in &found {
+        let rel = src.strip_prefix(from).map_err(std::io::Error::other)?;
+        let dest = to.join(rel);
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::copy(src, &dest)?;
+    }
+    Ok(found.len())
+}
+
 fn finish_turn(inner: &Inner, id: &str, live: &Live, usage: &Value) {
     let Some(clock) = live.clock.lock().unwrap().take() else { return };
     live.info.lock().unwrap().finish_turn(clock.finish(usage));
     emit_info(inner, id, live);
+}
+
+#[cfg(test)]
+mod limit_tests {
+    use super::*;
+
+    #[test]
+    fn a_limit_is_told_from_an_answer_about_limits() {
+        assert!(hit_limit(r#"API Error: 429 {"type":"error","error":{"type":"rate_limit_error"}}"#, true));
+        assert!(hit_limit("Claude AI usage limit reached|1767225600", true));
+        assert!(hit_limit("5-hour limit reached ∙ resets 3pm", true));
+        assert!(hit_limit("Credit balance is too low", false));
+        assert!(!hit_limit("I added a rate limit to the login route, so a client gets 429 after 10 tries.", true));
+        assert!(!hit_limit(&format!("API Error: 429 rate_limit_error {}", "x".repeat(700)), true));
+        assert!(!hit_limit("connection reset by peer", false));
+    }
+
+    #[test]
+    fn a_conversation_is_copied_by_its_id_without_following_links() {
+        let base = std::env::temp_dir().join(format!("plyfold-copy-conv-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let (from, to) = (base.join("a"), base.join("b"));
+        let sid = "0f6c1d2e-aaaa-bbbb-cccc-1234567890ab";
+        std::fs::create_dir_all(from.join("projects/-w-repo")).unwrap();
+        std::fs::write(from.join(format!("projects/-w-repo/{sid}.jsonl")), "conv").unwrap();
+        std::fs::write(from.join("projects/-w-repo/other.jsonl"), "other").unwrap();
+        assert_eq!(copy_conversation(&from, &to, sid).unwrap(), 1);
+        assert_eq!(std::fs::read_to_string(to.join(format!("projects/-w-repo/{sid}.jsonl"))).unwrap(), "conv");
+        assert!(!to.join("projects/-w-repo/other.jsonl").exists());
+        assert_eq!(copy_conversation(&from, &to, "short").unwrap(), 0, "an id that would match too much is refused");
+        #[cfg(unix)]
+        {
+            let outside = base.join("outside");
+            std::fs::create_dir_all(&outside).unwrap();
+            std::fs::write(outside.join(format!("{sid}.secret")), "no").unwrap();
+            std::os::unix::fs::symlink(&outside, from.join("linked")).unwrap();
+            copy_conversation(&from, &to, sid).unwrap();
+            assert!(!to.join("linked").exists(), "a linked directory is not followed");
+        }
+    }
 }

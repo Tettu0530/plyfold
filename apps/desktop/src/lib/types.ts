@@ -17,10 +17,16 @@ export interface SessionRecord {
   updated_at: number;
   /** A side chat: the session it was forked from (read-only, not listed, deleted when closed) */
   side_of?: string | null;
+  /** The profile that reviews this session after each turn */
+  reviewer?: string | null;
+  /** A side session that reviews the session in side_of */
+  review?: boolean;
   /** When it was moved to the trash (ms); trashed sessions stay out of the list until restored */
   trashed_at?: number | null;
   /** The port its dev servers get (PORT in the agent's environment) */
   port?: number | null;
+  /** Sessions started together from one prompt to compare share this id */
+  run_group?: string | null;
   /** An everyday conversation (no repository; it may look things up but not edit or run commands) */
   chat?: boolean;
 }
@@ -168,6 +174,8 @@ export interface AppSettings {
   default_profile: string;
   /** Name of the sidebar group for everyday conversations ("" = the default) */
   chat_group_name?: string;
+  /** How many queued tasks may run at once */
+  max_parallel?: number;
 }
 
 /** Settings → Info (src-tauri app_info) */
@@ -257,6 +265,10 @@ export interface ProfileForm {
   base_url: string | null;
   isolate: boolean;
   mcp: McpServerForm[];
+  /** Profile to continue with when this one's key hits a rate or usage limit (same agent) */
+  fallback?: string | null;
+  /** Model name to send instead of the agent's own (a custom provider often has names of its own) */
+  model?: string | null;
 }
 
 export interface ProfileDetail {
@@ -304,8 +316,10 @@ export interface RegistryAgent {
   website: string | null;
   license: string | null;
   kind: "npx" | "uvx" | "binary";
-  /** Can be added (npx or uvx, and not built in) */
+  /** Can be added (not built in, and for a binary: a build for this system with a checksum) */
   addable: boolean;
+  /** Why a binary cannot be added */
+  unavailable: "platform" | "checksum" | null;
   /** The built-in agent it is, if any */
   built_in: string | null;
   /** The version added, if it was */
@@ -340,6 +354,19 @@ export interface RepoSettings {
 export interface RepoEntry {
   path: string;
   settings: RepoSettings;
+}
+
+/** A prompt waiting to start as a session (the task queue) */
+export interface QueuedTask {
+  id: string;
+  profile: string;
+  repo: string;
+  worktree: boolean;
+  prompt: string;
+  title: string;
+  created_at: number;
+  /** Why it could not start; it then waits until started again by hand */
+  error?: string | null;
 }
 
 /** A file's contents for the touched-files pane (read_text_file) */
