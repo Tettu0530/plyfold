@@ -4,11 +4,11 @@ Where Plyfold is heading on the way to 1.0. Plans change; the [changelog](CHANGE
 
 ## Focus
 
-Plyfold is for running the same coding agents with **several keys and models, and comparing and checking what they do**. Work goes first to what serves that:
+Plyfold is for **running one task on several agents, keys and models, having another agent check the work, and taking the best result**. Work goes first to what serves that:
 
-- Keeping, choosing and moving between keys (profiles, fallback, spending)
-- Running one task more than once and comparing the results
-- Having another agent check the work before you take it
+- Running a task more than once, side by side, and comparing the results
+- Having another agent review the work before you take it
+- The keys, providers and models to compare (profiles, custom providers, limits)
 
 Plyfold stays a desktop app for your own machine. Reaching it from a phone or the web, and growing into a general control panel for agents, are not on the way to 1.0.
 
@@ -42,21 +42,21 @@ Plyfold stays a desktop app for your own machine. Reaching it from a phone or th
 - MCP servers set up once in Plyfold and passed to every agent
 - Agents from the ACP Registry that ship as binaries (downloaded, checked against their checksum and unpacked for you)
 
-## 0.7 — Keys at the center
-
-- Usage and cost per profile over time (today, this week, this month), from what the agents report, on the profiles screen
-- Spending limits per profile (cost or tokens per day): a session stops starting turns on a profile past its limit, and moves on to its fallback if it has one
-- Spreading queued tasks over several profiles of the same agent instead of one
-- The remaining rate limit or credit of a key, where the provider tells it, shown before it runs out
-- Fallback chains that are easy to see and edit (A → B → C) on the profiles screen
-
-## 0.8 — Compare and check, deeper
+## 0.7 — Compare and check, deeper
 
 - A comparison verdict: after a Compare run, a reviewer agent reads every diff and says which one to take and why
-- Taking the chosen run (merging its branch) and closing the others from the compare view
+- A record of past comparisons: which run was taken, and each one's time, tokens and cost
 - Running the same task again with another key or model from a finished session, to compare after the fact
 - Sending a review finding back to the session as an instruction with one click
 - Review rules per repository (what the reviewer should look for, and which profile reviews by default)
+
+## 0.8 — Keys and providers
+
+- Usage and cost per profile over time (today, this week, this month) on the profiles screen
+- Spending limits per profile (cost or tokens per day): a session stops starting turns on a profile past its limit, and moves on to its fallback if it has one
+- Spreading queued tasks over several API key or provider profiles of the same agent
+- The remaining rate limit or credit of a key, where the provider tells it, shown before it runs out
+- Fallback chains that are easy to see and edit (A → B → C) on the profiles screen
 
 ## 0.9 — Settling
 
