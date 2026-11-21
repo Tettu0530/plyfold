@@ -303,6 +303,18 @@ struct Inner {
     tx: broadcast::Sender<EngineEvent>,
     stall_after_ms: AtomicU64,
     perm_seq: AtomicU64,
+    /// Per reviewed session: what was last reviewed, and a review waiting for the reviewer to finish its turn
+    reviews: Mutex<HashMap<String, ReviewState>>,
+}
+
+#[derive(Default)]
+struct ReviewState {
+    /// Hash of the diff last sent for review (the same diff is not reviewed twice)
+    last: Option<u64>,
+    /// The instruction behind the latest turn, shown to the reviewer
+    instruction: Option<String>,
+    /// A turn ended while the reviewer was still answering: review again when it is done
+    pending: bool,
 }
 
 impl Inner {
@@ -374,6 +386,7 @@ impl Engine {
                 tx: broadcast::channel(4096).0,
                 stall_after_ms: AtomicU64::new(opts.stall_after.as_millis() as u64),
                 perm_seq: AtomicU64::new(0),
+                reviews: Mutex::new(HashMap::new()),
             }),
         })
     }
@@ -665,6 +678,7 @@ impl Engine {
             base_ref: src.base_ref.clone(),
             side_of: Some(id.to_string()),
             chat: src.chat,
+            review: false,
         })?;
         inner.emit(EngineEvent::SessionCreated { session: rec.clone() });
         if let Err(e) = self.launch(&rec.id, &src.profile, Path::new(&cwd), Resume::Fork(acp)).await {
@@ -1033,6 +1047,9 @@ impl Engine {
                 Ok(_) => hit_limit(&live.turn_text.lock().unwrap(), true),
                 Err(e) => hit_limit(&e.to_string(), false),
             };
+            let ended = r
+                .as_ref()
+                .is_ok_and(|t| serde_json::to_value(t.response.stop_reason).ok().and_then(|v| v.as_str().map(str::to_string)).as_deref() == Some("end_turn"));
             match r {
                 Ok(turn) => {
                     finish_turn(&inner, &id, &live, &turn.raw["usage"]);
@@ -1049,11 +1066,140 @@ impl Engine {
                 return;
             }
             inner.set_status(&id, SessionStatus::Idle);
+            let engine = Engine { inner };
             if limited {
-                Engine { inner }.continue_with_fallback(&id, &text, &attachments, tried).await;
+                engine.continue_with_fallback(&id, &text, &attachments, tried).await;
+            } else if ended {
+                engine.after_turn(&id, &text).await;
             }
         });
         Ok(())
+    }
+
+    /// After a turn that ended normally: a reviewed session sends its diff to the reviewer; a reviewer that finished
+    /// sends the review that waited on it
+    async fn after_turn(&self, id: &str, text: &str) {
+        let Ok(rec) = self.inner.store.get_session(id) else { return };
+        let (main, instruction) = if rec.review {
+            let Some(main) = rec.side_of.clone() else { return };
+            let waiting = self.inner.reviews.lock().unwrap().get_mut(&main).is_some_and(|s| std::mem::take(&mut s.pending));
+            if !waiting {
+                return;
+            }
+            (main, None)
+        } else if rec.side_of.is_none() && !rec.chat && rec.reviewer.is_some() {
+            (rec.id.clone(), Some(text))
+        } else {
+            return;
+        };
+        if let Err(e) = self.review(&main, instruction, false).await {
+            self.inner.notice(&main, plyfold_i18n::tr!("レビューを始められませんでした: {e}", "Could not start the review: {e}", "无法开始审查：{e}"));
+        }
+    }
+
+    /// Choose the profile that reviews this session after each turn (None: no review). Turning it off, or changing
+    /// it, closes the reviewer that was running
+    pub async fn set_reviewer(&self, id: &str, profile: Option<&str>) -> Result<SessionRecord, CoreError> {
+        let inner = &self.inner;
+        let rec = inner.store.get_session(id)?;
+        if rec.side_of.is_some() || rec.chat {
+            return Err(CoreError::NoWorkspace(id.into()));
+        }
+        if let Some(p) = profile {
+            let config = inner.config.read().unwrap();
+            if !config.profiles.contains_key(p) && !config.agents.contains_key(p) {
+                return Err(ProfileError::UnknownTarget(p.into()).into());
+            }
+        }
+        if rec.reviewer.as_deref() != profile {
+            for r in self.reviewers_of(id)? {
+                self.close_side_chat(&r.id).await?;
+            }
+            inner.reviews.lock().unwrap().remove(id);
+        }
+        inner.store.set_reviewer(id, profile)?;
+        let rec = inner.store.get_session(id)?;
+        inner.emit(EngineEvent::WorkspaceChanged { session: rec.clone() });
+        Ok(rec)
+    }
+
+    fn reviewers_of(&self, id: &str) -> Result<Vec<SessionRecord>, CoreError> {
+        Ok(self.inner.store.list_sessions()?.into_iter().filter(|s| s.review && s.side_of.as_deref() == Some(id)).collect())
+    }
+
+    /// Send the session's diff to its reviewer (started when needed, read-only). `instruction` is what the latest turn
+    /// was asked to do. Without `force`, a diff already reviewed is not sent again. Returns the reviewer's id, or None
+    /// when there was nothing to review
+    pub async fn review(&self, id: &str, instruction: Option<&str>, force: bool) -> Result<Option<String>, CoreError> {
+        let inner = &self.inner;
+        let rec = inner.store.get_session(id)?;
+        let Some(profile) = rec.reviewer.clone() else { return Ok(None) };
+        let diff = self.diff(id)?;
+        if diff.patch.trim().is_empty() {
+            return Ok(None);
+        }
+        let hash = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            diff.patch.hash(&mut h);
+            h.finish()
+        };
+        let instruction = {
+            let mut reviews = inner.reviews.lock().unwrap();
+            let state = reviews.entry(id.to_string()).or_default();
+            if let Some(i) = instruction {
+                state.instruction = Some(i.to_string());
+            }
+            if !force && state.last == Some(hash) {
+                return Ok(None);
+            }
+            state.instruction.clone()
+        };
+
+        let reviewer = match self.reviewers_of(id)?.into_iter().next() {
+            Some(r) if self.is_running(&r.id) => r.id,
+            Some(r) => {
+                self.reopen_session(&r.id).await?;
+                r.id
+            }
+            None => self.start_reviewer(&rec, &profile).await?,
+        };
+        let live = inner.live(&reviewer)?;
+        if live.in_turn.load(Ordering::SeqCst) {
+            inner.reviews.lock().unwrap().entry(id.to_string()).or_default().pending = true;
+            return Ok(Some(reviewer));
+        }
+        self.prompt(&reviewer, &review_prompt(&diff, instruction.as_deref()))?;
+        inner.reviews.lock().unwrap().entry(id.to_string()).or_default().last = Some(hash);
+        Ok(Some(reviewer))
+    }
+
+    async fn start_reviewer(&self, rec: &SessionRecord, profile: &str) -> Result<String, CoreError> {
+        let inner = &self.inner;
+        let cwd = rec.worktree_path.clone().or(rec.repo_path.clone()).ok_or_else(|| CoreError::NoWorkspace(rec.id.clone()))?;
+        let agent = inner.config.read().unwrap().profiles.get(profile).map(|p| p.agent.clone()).unwrap_or_else(|| profile.to_string());
+        let r = inner.store.create_session(NewSession {
+            title: plyfold_i18n::tr!("レビュー", "Review", "审查"),
+            profile: profile.to_string(),
+            agent,
+            repo_path: rec.repo_path.clone(),
+            worktree_path: rec.worktree_path.clone(),
+            branch: rec.branch.clone(),
+            base_ref: rec.base_ref.clone(),
+            side_of: Some(rec.id.clone()),
+            chat: false,
+            review: true,
+        })?;
+        inner.emit(EngineEvent::SessionCreated { session: r.clone() });
+        if let Err(e) = self.launch(&r.id, profile, Path::new(&cwd), Resume::New).await {
+            let _ = self.close_side_chat(&r.id).await;
+            return Err(e);
+        }
+        // Ask the agent itself not to edit too, where it has such a mode; the policy declines edits either way
+        if let Some(mode) = self.session_info(&r.id).and_then(|info| read_only_mode(&info)) {
+            let _ = self.set_category(&r.id, Category::Mode, &mode).await;
+        }
+        Ok(r.id)
     }
 
     /// After a turn hit a rate or usage limit: when the session's profile names a fallback (another key of the same
@@ -1909,6 +2055,42 @@ fn hit_limit(text: &str, answer: bool) -> bool {
     // (an answer that merely talks about rate limits must not switch keys)
     t.chars().count() <= 600
         && ((t.starts_with("api error") && sign) || t.contains("usage limit reached") || (t.contains("limit reached") && t.contains("reset")))
+}
+
+/// The longest diff sent to a reviewer (it reads files itself for the rest)
+const REVIEW_DIFF_MAX: usize = 120_000;
+
+/// What a reviewer is asked: the instruction behind the turn, the files changed and the diff, and the shape of the answer
+fn review_prompt(diff: &Diff, instruction: Option<&str>) -> String {
+    let files = diff.files.iter().map(|f| format!("- {} (+{} -{})", f.path, f.added, f.removed)).collect::<Vec<_>>().join("\n");
+    let mut patch = diff.patch.as_str();
+    let cut = patch.len() > REVIEW_DIFF_MAX;
+    if cut {
+        let mut end = REVIEW_DIFF_MAX;
+        while !patch.is_char_boundary(end) {
+            end -= 1;
+        }
+        patch = &patch[..end];
+    }
+    let instruction = instruction.map(str::trim).filter(|i| !i.is_empty()).unwrap_or("—");
+    let mut text = plyfold_i18n::tr!(
+        "別のエージェントがこの作業フォルダで行った変更をレビューしてください。ファイルの編集や、何かを変えるコマンドの実行はしないでください（ファイルを読むのはかまいません）。\n\nそのエージェントが受けた最後の指示:\n{instruction}\n\n変更のあったファイル:\n{files}\n\nベースとの差分:\n~~~~diff\n{patch}\n~~~~",
+        "Review the changes another agent made in this working folder. Do not edit files or run commands that change anything (reading files is fine).\n\nThe last instruction that agent was given:\n{instruction}\n\nFiles changed:\n{files}\n\nDiff against the base:\n~~~~diff\n{patch}\n~~~~",
+        "请审查另一个代理在此工作文件夹中所做的更改。不要编辑文件，也不要运行会更改任何内容的命令（可以读取文件）。\n\n该代理收到的最后一条指令：\n{instruction}\n\n有更改的文件：\n{files}\n\n与基准的差异：\n~~~~diff\n{patch}\n~~~~"
+    );
+    if cut {
+        text += &plyfold_i18n::tr!(
+            "\n\n（差分が長いので途中で切りました。残りはファイルを読んで確かめてください）",
+            "\n\n(The diff is long and was cut here; read the files for the rest)",
+            "\n\n（差异过长，已在此截断；其余部分请直接读取文件）"
+        );
+    }
+    text += &plyfold_i18n::tr!(
+        "\n\n問題を重いものから順に、1 件ずつ「パス:行 — 問題 — 直し方」の形で挙げてください。この会話の前のレビューで挙げたものは、まだ直っていないときだけ挙げます。問題がなければ「指摘なし」とだけ答えてください。",
+        "\n\nList the problems, most severe first, one per line as `path:line — problem — fix`. Mention a problem from an earlier review in this conversation only if it is still not fixed. If nothing is wrong, answer only \"No findings\".",
+        "\n\n请按严重程度从高到低逐条列出问题，每条一行，格式为「路径:行 — 问题 — 修复方法」。本对话中之前审查已提出的问题，仅在仍未修复时再列出。如果没有问题，只回答「没有发现问题」。"
+    );
+    text
 }
 
 /// Copy a conversation's files (those named after its id) between two profiles' data directories, at the same

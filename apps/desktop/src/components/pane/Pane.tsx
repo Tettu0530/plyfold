@@ -25,6 +25,7 @@ import { startDrag } from "./dnd";
 import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
 import { useKeys } from "@/state/keys";
 import { PlyfoldMark } from "../Logo";
+import { ReviewButton, ReviewColumn } from "./Review";
 import { SideChatButton, SideChatColumn } from "./SideChat";
 import { unpushed, useGitInfo } from "./GitMenu";
 
@@ -216,6 +217,8 @@ function SessionPane({ index }: { index: number }) {
           {r.run_group && <CompareButton group={r.run_group} from={id} />}
           {/* Side chat: a read-only fork for questions that stay out of this conversation (Gemini CLI cannot fork) */}
           {r.acp_session_id && r.agent !== "gemini" && <SideChatButton mainId={id} />}
+          {/* Review: another agent reads the diff after each turn (not for conversations, which have no diff) */}
+          {!r.chat && r.repo_path && <ReviewButton mainId={id} />}
           {working && (
             <button
               type="button"
@@ -297,6 +300,7 @@ function SessionPane({ index }: { index: number }) {
           />
         </div>
         <SideChatColumn mainId={id} pane={paneRef} />
+        <ReviewColumn mainId={id} pane={paneRef} />
       </div>
     </section>
   );

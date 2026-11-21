@@ -17,6 +17,10 @@ export interface SessionRecord {
   updated_at: number;
   /** A side chat: the session it was forked from (read-only, not listed, deleted when closed) */
   side_of?: string | null;
+  /** The profile that reviews this session after each turn */
+  reviewer?: string | null;
+  /** A side session that reviews the session in side_of */
+  review?: boolean;
   /** When it was moved to the trash (ms); trashed sessions stay out of the list until restored */
   trashed_at?: number | null;
   /** The port its dev servers get (PORT in the agent's environment) */

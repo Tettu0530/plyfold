@@ -379,6 +379,17 @@ async fn open_side_chat(state: State<'_, AppState>, id: String) -> CmdResult<Ses
 }
 
 #[tauri::command]
+async fn set_reviewer(state: State<'_, AppState>, id: String, profile: Option<String>) -> CmdResult<SessionRecord> {
+    state.engine.set_reviewer(&id, profile.as_deref()).await.map_err(err)
+}
+
+/// Review the session's current diff now, even if it was reviewed already (None: there is no diff)
+#[tauri::command]
+async fn review_now(state: State<'_, AppState>, id: String) -> CmdResult<Option<String>> {
+    state.engine.review(&id, None, true).await.map_err(err)
+}
+
+#[tauri::command]
 async fn close_side_chat(state: State<'_, AppState>, id: String) -> CmdResult<()> {
     state.engine.close_side_chat(&id).await.map_err(err)
 }
@@ -929,6 +940,8 @@ pub fn run() {
             empty_trash,
             list_repos,
             list_tasks,
+            set_reviewer,
+            review_now,
             save_tasks,
             rename_repo,
             save_repo_settings,
