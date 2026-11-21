@@ -17,4 +17,6 @@ export const sessionMenu: Record<keyof typeof source, string> = {
   deleteRecordOnly: "仅删除记录（保留 worktree）",
   deleteRecord: "删除记录",
   cancel: "取消",
+  handOver: "交接…",
+  handOverTitle: "将「{title}」交给另一个代理。当前代理会先写一份交接说明再停止，新会话将在同一工作区继续",
 };

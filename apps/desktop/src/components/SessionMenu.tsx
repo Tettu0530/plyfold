@@ -1,4 +1,4 @@
-import { GitFork, Pencil, Square, Trash2 } from "lucide-react";
+import { ArrowRightLeft, GitFork, Pencil, Square, Trash2 } from "lucide-react";
 import { ContextMenu } from "radix-ui";
 import { useState } from "react";
 
@@ -6,6 +6,7 @@ import { useT } from "@/i18n";
 import type { SessionRecord } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
+import { ProviderLogo } from "./icons";
 import { Keys } from "./Keys";
 import { useLiquidMenu } from "./liquid/stage";
 
@@ -33,13 +34,16 @@ export function pickByKey(e: React.KeyboardEvent<HTMLDivElement>) {
 /** Context menu for sidebar rows: rename, stop, delete (with a choice to keep the worktree) */
 export function SessionMenu({ record, onRename, children }: { record: SessionRecord; onRename: () => void; children: React.ReactNode }) {
   const t = useT();
-  const { stopSession, trashSession, forkSession } = useStore.getState();
-  const [view, setView] = useState<"main" | "fork">("main");
+  const { stopSession, trashSession, forkSession, handOver } = useStore.getState();
+  const profiles = useStore((s) => s.profiles);
+  const [view, setView] = useState<"main" | "fork" | "hand">("main");
   const [error, setError] = useState<string | null>(null);
   const running = record.status !== "closed" && record.status !== "error";
   const inTurn = record.status === "starting" || record.status === "working" || record.status === "awaiting_permission" || record.status === "stalled";
   const run = (f: () => Promise<void>) => void f().catch((e) => setError(String(e)));
   const forkHint = !record.acp_session_id ? t("sessionMenu.forkNeedsConversation") : inTurn ? t("sessionMenu.forkBusy") : undefined;
+  // Handing over takes the work, so it needs a workspace; a turn in progress has to end first
+  const canHand = !!record.repo_path && !record.chat && !inTurn;
   // The menu expands out of the right-clicked row and shrinks back into it on close
   const menu = useLiquidMenu(`menu:session:${record.id}`, `session:${record.id}`);
 
@@ -96,6 +100,20 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
                 {t("sessionMenu.fork")}
                 <Shortcut k="f" />
               </ContextMenu.Item>
+              <ContextMenu.Item
+                data-key="h"
+                className={MENU_ITEM}
+                disabled={!canHand}
+                title={inTurn ? t("sessionMenu.forkBusy") : undefined}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setView("hand");
+                }}
+              >
+                <ArrowRightLeft className="size-3.5 text-muted-foreground" aria-hidden />
+                {t("sessionMenu.handOver")}
+                <Shortcut k="h" />
+              </ContextMenu.Item>
               <ContextMenu.Separator className="my-0.5 h-px bg-border" />
               <ContextMenu.Item
                 data-key="d"
@@ -133,6 +151,31 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
                 {t("sessionMenu.forkSame")}
                 <Shortcut k="w" />
               </ContextMenu.Item>
+              <ContextMenu.Item
+                className={MENU_ITEM}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setView("main");
+                }}
+              >
+                {t("sessionMenu.cancel")}
+                <Shortcut k="esc" />
+              </ContextMenu.Item>
+            </>
+          ) : view === "hand" ? (
+            <>
+              <ContextMenu.Label className="max-w-64 px-2 pt-1 pb-1.5 text-xs leading-relaxed text-muted-foreground">
+                {t("sessionMenu.handOverTitle", { title: record.title })}
+              </ContextMenu.Label>
+              {profiles
+                .filter((p) => p.name !== record.profile)
+                .map((p) => (
+                  // Fire and forget: the old agent's note can take minutes; a failure is told on the session
+                  <ContextMenu.Item key={p.name} className={MENU_ITEM} onSelect={() => void handOver(record.id, p.name).catch(() => {})}>
+                    <ProviderLogo agent={p.agent} className="size-3.5 text-muted-foreground" />
+                    {p.name === p.agent ? p.label : p.name}
+                  </ContextMenu.Item>
+                ))}
               <ContextMenu.Item
                 className={MENU_ITEM}
                 onSelect={(e) => {

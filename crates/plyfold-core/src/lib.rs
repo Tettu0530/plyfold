@@ -241,6 +241,8 @@ struct Live {
     replaying: AtomicBool,
     /// The start of this turn's answer, to tell a rate or usage limit reported as a message (see hit_limit)
     turn_text: Mutex<String>,
+    /// While Some, the whole answer is kept here too (the summary asked for when handing a session over)
+    capture: Mutex<Option<String>>,
     /// Permission requests answered without asking: a side chat declines them all, an everyday chat allows looking things
     /// up (search, fetch, read) and declines the rest
     policy: Policy,
@@ -652,6 +654,130 @@ impl Engine {
         Ok(inner.store.get_session(&rec.id)?)
     }
 
+    /// Hand the session's work over to another profile (another agent, or another key) in the same workspace.
+    /// The session's agent is asked for a summary first when it can answer (skipped after HANDOVER_WAIT); then it is
+    /// stopped, and a new session starts there and is sent the instructions so far, the summary and the diff, and asked
+    /// to carry on. The old session keeps its record
+    pub async fn hand_over(&self, id: &str, profile: &str) -> Result<SessionRecord, CoreError> {
+        let r = self.hand_over_inner(id, profile).await;
+        // The UI does not wait on this (the note can take minutes), so a failure is told on the session
+        if let Err(e) = &r {
+            self.inner
+                .notice(id, plyfold_i18n::tr!("{profile} に引き継げませんでした: {e}", "Could not hand over to {profile}: {e}", "无法交给 {profile}：{e}"));
+        }
+        r
+    }
+
+    async fn hand_over_inner(&self, id: &str, profile: &str) -> Result<SessionRecord, CoreError> {
+        let inner = &self.inner;
+        let src = inner.store.get_session(id)?;
+        if src.side_of.is_some() || src.chat {
+            return Err(CoreError::NoWorkspace(id.into()));
+        }
+        if src.status == SessionStatus::Starting || inner.live(id).is_ok_and(|l| l.in_turn.load(Ordering::SeqCst)) {
+            return Err(CoreError::Busy(id.into()));
+        }
+        let agent = {
+            let config = inner.config.read().unwrap();
+            if !config.profiles.contains_key(profile) && !config.agents.contains_key(profile) {
+                return Err(ProfileError::UnknownTarget(profile.into()).into());
+            }
+            config.profiles.get(profile).map(|p| p.agent.clone()).unwrap_or_else(|| profile.to_string())
+        };
+        let repo = src.repo_path.clone().ok_or_else(|| CoreError::NoWorkspace(id.into()))?;
+        let cwd = src.worktree_path.clone().unwrap_or_else(|| repo.clone());
+
+        let summary = self.ask_summary(&src).await;
+        for side in inner.store.list_sessions()?.into_iter().filter(|s| s.side_of.as_deref() == Some(id)) {
+            self.close_side_chat(&side.id).await?;
+        }
+        self.close_session(id).await?;
+        if workspace_in_use(inner, &cwd) {
+            return Err(CoreError::SharedWorkspace(id.into()));
+        }
+
+        let rec = inner.store.create_session(NewSession {
+            title: src.title.clone(),
+            profile: profile.to_string(),
+            agent,
+            repo_path: Some(repo.clone()),
+            worktree_path: src.worktree_path.clone(),
+            branch: src.branch.clone(),
+            base_ref: src.base_ref.clone(),
+            ..Default::default()
+        })?;
+        if let Some(group) = &src.run_group {
+            inner.store.set_run_group(&rec.id, Some(group))?;
+        }
+        inner.emit(EngineEvent::SessionCreated { session: inner.store.get_session(&rec.id)? });
+        self.launch(&rec.id, profile, Path::new(&cwd), Resume::New).await?;
+        let diff = self.diff(&rec.id).unwrap_or_default();
+        let from = src.profile.clone();
+        inner.notice(&rec.id, plyfold_i18n::tr!("{from} から引き継ぎました", "Taken over from {from}", "已从 {from} 接手"));
+        inner.notice(id, plyfold_i18n::tr!("{profile} に引き継ぎました", "Handed over to {profile}", "已交给 {profile}"));
+        self.prompt(&rec.id, &handover_prompt(&self.instructions_of(id), summary.as_deref(), &diff))?;
+        Ok(inner.store.get_session(&rec.id)?)
+    }
+
+    /// The session's agent, asked to sum up its work for whoever continues. None when it has no conversation, cannot
+    /// be started, or takes longer than HANDOVER_WAIT
+    async fn ask_summary(&self, src: &SessionRecord) -> Option<String> {
+        src.acp_session_id.as_ref()?;
+        if !self.is_running(&src.id) {
+            self.reopen_session(&src.id).await.ok()?;
+        }
+        let live = self.inner.live(&src.id).ok()?;
+        let mut rx = self.subscribe();
+        *live.capture.lock().unwrap() = Some(String::new());
+        let ask = plyfold_i18n::tr!(
+            "この作業を別のエージェントに引き継ぎます。ファイルは変えずに、引き継ぎのメモを書いてください: 何を頼まれたか、何をしたか、何が残っているか、気をつけること。",
+            "This work is being handed over to another agent. Without changing any files, write a handover note: what was asked, what was done, what is left, and anything to watch out for.",
+            "这项工作将交给另一个代理。请不要更改任何文件，写一份交接说明：被要求做什么、已完成什么、还剩什么、需要注意什么。"
+        );
+        let asked = self.prompt(&src.id, &ask).is_ok();
+        let ended = asked
+            && tokio::time::timeout(HANDOVER_WAIT, async {
+                loop {
+                    match rx.recv().await {
+                        Ok(EngineEvent::TurnEnded { session_id, error, .. }) if session_id == src.id => return error.is_none(),
+                        Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => {}
+                        Err(_) => return false,
+                    }
+                }
+            })
+            .await
+            .unwrap_or(false);
+        let text = live.capture.lock().unwrap().take();
+        if !ended {
+            let _ = self.cancel(&src.id).await;
+            return None;
+        }
+        text.map(|t| t.trim().to_string()).filter(|t| !t.is_empty())
+    }
+
+    /// What the user asked the session, oldest first (the last HANDOVER_INSTRUCTIONS, each cut short)
+    fn instructions_of(&self, id: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut after = None;
+        while let Ok(batch) = self.inner.store.events(id, after, 5000) {
+            let Some(last) = batch.last() else { break };
+            after = Some(last.id);
+            for e in batch.iter().filter(|e| e.kind == EventKind::FrameOut && e.payload.contains("\"session/prompt\"")) {
+                let Ok(v) = serde_json::from_str::<Value>(&e.payload) else { continue };
+                let text: String =
+                    v["params"]["prompt"].as_array().map(|a| a.iter().filter_map(|b| b["text"].as_str()).collect::<Vec<_>>().join("")).unwrap_or_default();
+                let text = text.trim();
+                if !text.is_empty() {
+                    out.push(text.chars().take(2000).collect());
+                }
+            }
+        }
+        // The note asked for by hand_over is not one of the user's instructions
+        out.retain(|t: &String| !t.contains(HANDOVER_MARK_JA) && !t.contains(HANDOVER_MARK_EN) && !t.contains(HANDOVER_MARK_ZH));
+        let skip = out.len().saturating_sub(HANDOVER_INSTRUCTIONS);
+        out.split_off(skip)
+    }
+
     /// Open a side chat on a session: a read-only fork in the same workspace, for questions that should not enter the
     /// main conversation. Allowed while the main session is working (the fork starts from what the agent has saved so
     /// far). Its permission requests are declined, and a read-only mode is chosen when the agent has one
@@ -848,6 +974,7 @@ impl Engine {
                 last_live_emit: Mutex::new(Instant::now()),
                 replaying: AtomicBool::new(false),
                 turn_text: Mutex::new(String::new()),
+                capture: Mutex::new(None),
                 policy: inner.store.get_session(id).map(|r| Policy::of(&r)).unwrap_or(Policy::Ask),
             });
             // Start receiving first so the history resent by session/load is captured
@@ -1843,6 +1970,11 @@ async fn handle(inner: &Arc<Inner>, id: &str, live: &Arc<Live>, msg: AgentMessag
                     if kept.len() < 4096 {
                         kept.push_str(t);
                     }
+                    if let Some(c) = live.capture.lock().unwrap().as_mut()
+                        && c.len() < HANDOVER_SUMMARY_MAX
+                    {
+                        c.push_str(t);
+                    }
                 }
                 if let Some(t) = text
                     && let Some(clock) = live.clock.lock().unwrap().as_mut()
@@ -2089,6 +2221,59 @@ fn review_prompt(diff: &Diff, instruction: Option<&str>) -> String {
         "\n\n問題を重いものから順に、1 件ずつ「パス:行 — 問題 — 直し方」の形で挙げてください。この会話の前のレビューで挙げたものは、まだ直っていないときだけ挙げます。問題がなければ「指摘なし」とだけ答えてください。",
         "\n\nList the problems, most severe first, one per line as `path:line — problem — fix`. Mention a problem from an earlier review in this conversation only if it is still not fixed. If nothing is wrong, answer only \"No findings\".",
         "\n\n请按严重程度从高到低逐条列出问题，每条一行，格式为「路径:行 — 问题 — 修复方法」。本对话中之前审查已提出的问题，仅在仍未修复时再列出。如果没有问题，只回答「没有发现问题」。"
+    );
+    text
+}
+
+/// How long the old agent may take to write its handover note
+const HANDOVER_WAIT: Duration = Duration::from_secs(180);
+const HANDOVER_SUMMARY_MAX: usize = 20_000;
+const HANDOVER_INSTRUCTIONS: usize = 10;
+/// The longest diff passed on (the new agent reads the files for the rest)
+const HANDOVER_DIFF_MAX: usize = 120_000;
+/// Words from the note request, to keep it out of the instructions passed on
+const HANDOVER_MARK_JA: &str = "引き継ぎのメモを書いてください";
+const HANDOVER_MARK_EN: &str = "write a handover note";
+const HANDOVER_MARK_ZH: &str = "写一份交接说明";
+
+/// What the new agent is sent: the instructions so far, the old agent's note, and the diff
+fn handover_prompt(instructions: &[String], summary: Option<&str>, diff: &Diff) -> String {
+    let asked = if instructions.is_empty() {
+        "—".to_string()
+    } else {
+        instructions.iter().map(|i| format!("- {}", i.replace('\n', "\n  "))).collect::<Vec<_>>().join("\n")
+    };
+    let note = summary.unwrap_or("—");
+    let files = if diff.files.is_empty() {
+        "—".to_string()
+    } else {
+        diff.files.iter().map(|f| format!("- {} (+{} -{})", f.path, f.added, f.removed)).collect::<Vec<_>>().join("\n")
+    };
+    let mut patch = diff.patch.as_str();
+    let cut = patch.len() > HANDOVER_DIFF_MAX;
+    if cut {
+        let mut end = HANDOVER_DIFF_MAX;
+        while !patch.is_char_boundary(end) {
+            end -= 1;
+        }
+        patch = &patch[..end];
+    }
+    let mut text = plyfold_i18n::tr!(
+        "別のエージェントがこの作業フォルダで進めていた作業を引き継いでください。\n\nこれまでに受けた指示（古い順）:\n{asked}\n\n前のエージェントの引き継ぎメモ:\n{note}\n\n変更のあったファイル:\n{files}\n\nベースとの差分:\n~~~~diff\n{patch}\n~~~~",
+        "Take over the work another agent was doing in this working folder.\n\nThe instructions it was given (oldest first):\n{asked}\n\nIts handover note:\n{note}\n\nFiles changed:\n{files}\n\nDiff against the base:\n~~~~diff\n{patch}\n~~~~",
+        "请接手另一个代理在此工作文件夹中进行的工作。\n\n它收到的指令（从旧到新）：\n{asked}\n\n它的交接说明：\n{note}\n\n有更改的文件：\n{files}\n\n与基准的差异：\n~~~~diff\n{patch}\n~~~~"
+    );
+    if cut {
+        text += &plyfold_i18n::tr!(
+            "\n\n（差分が長いので途中で切りました。残りはファイルを読んで確かめてください）",
+            "\n\n(The diff is long and was cut here; read the files for the rest)",
+            "\n\n（差异过长，已在此截断；其余部分请直接读取文件）"
+        );
+    }
+    text += &plyfold_i18n::tr!(
+        "\n\nまずファイルの今の状態を確かめ、残っている作業を続けてください。残りがなければ、そう伝えてください。",
+        "\n\nFirst check the files as they are now, then carry on with what is left. If nothing is left, say so.",
+        "\n\n请先确认文件的当前状态，然后继续完成剩余的工作。如果没有剩余工作，请直接说明。"
     );
     text
 }

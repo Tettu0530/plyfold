@@ -378,6 +378,12 @@ async fn open_side_chat(state: State<'_, AppState>, id: String) -> CmdResult<Ses
     state.engine.open_side_chat(&id).await.map_err(err)
 }
 
+/// Hand the session over to another profile in the same workspace (see Engine::hand_over)
+#[tauri::command]
+async fn hand_over(state: State<'_, AppState>, id: String, profile: String) -> CmdResult<SessionRecord> {
+    state.engine.hand_over(&id, &profile).await.map_err(err)
+}
+
 #[tauri::command]
 async fn set_reviewer(state: State<'_, AppState>, id: String, profile: Option<String>) -> CmdResult<SessionRecord> {
     state.engine.set_reviewer(&id, profile.as_deref()).await.map_err(err)
@@ -942,6 +948,7 @@ pub fn run() {
             list_tasks,
             set_reviewer,
             review_now,
+            hand_over,
             save_tasks,
             rename_repo,
             save_repo_settings,
