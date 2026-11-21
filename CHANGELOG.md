@@ -4,6 +4,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-21
+
+Agents working together: another agent reviews each turn's diff, a session can be handed over to another agent, MCP servers are set up once for every profile, and ACP Registry agents that ship as binaries can be added. Key fallback now moves only to keys billed by use, and a prompt stopped by a limit is sent again when the limit lifts.
+
 ### Profiles
 
 - Agents from the ACP Registry that ship as binaries can be added: this system's build is downloaded over https, checked against the registry's sha256, and unpacked under `<state>/agents/<id>/<version>` (.tar.gz, .tar.bz2, .tar.xz, .zip, or the program itself); the program must lie inside that folder. One without a checksum, or without a build for this system, is listed with the reason and not added. Removing the agent removes its files, and updating replaces the older version
@@ -16,13 +20,13 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 - Hand over: a session's menu (H) hands its work to another profile in the same workspace. The current agent is asked for a handover note (what was asked, done and left; up to three minutes), then stopped; a new session with the same title starts there with the instructions so far, the note, and the diff, and carries on. It takes the old session's pane; the old session keeps its record, and a failure is told on it
 - Review: a session can name a profile that reviews its diff after each turn (the button in the pane header). When a turn ends normally with a diff not reviewed yet, that agent gets the instruction behind the turn, the files changed and the diff, and lists problems as `path:line — problem — fix` in a column at the pane's right edge. It works read-only (its own read-only mode where it has one, and every permission request declined), carries on one conversation so it mentions earlier problems only while they are unfixed, and can be asked about its findings. A diff that arrives while it is still answering is reviewed when it is done
 
-### Fixed
-
-- On Linux, starting from a desktop launcher uses the login shell's PATH, so agent CLIs set up there are found. The shell is `$SHELL`, or the one in `/etc/passwd`, or `/bin/bash`. A PATH kept in the state directory (`login-path`) is used for this start even when it is old, so the start does not wait on the shell. The shell is read again in the background and the file is written for the next start, so a CLI installed today is found the next time the app opens. A shell that did not answer is not kept. Directories that exist are added on every launch: `~/.local/bin`, `~/.cargo/bin`, `/usr/local/bin`, `/snap/bin`, `~/.bun/bin` and `~/.volta/bin`
-
 ### Changed
 
 - Key fallback moves only to a profile that uses an API key or a custom provider. A profile that uses the CLI's own sign-in or a subscription token can no longer be a fallback: moving between subscriptions when one hits its limit may break the provider's terms. The profile editor lists only profiles that qualify and says why, and saving another kind of fallback is refused
+
+### Fixed
+
+- On Linux, starting from a desktop launcher uses the login shell's PATH, so agent CLIs set up there are found. The shell is `$SHELL`, or the one in `/etc/passwd`, or `/bin/bash`. A PATH kept in the state directory (`login-path`) is used for this start even when it is old, so the start does not wait on the shell. The shell is read again in the background and the file is written for the next start, so a CLI installed today is found the next time the app opens. A shell that did not answer is not kept. Directories that exist are added on every launch: `~/.local/bin`, `~/.cargo/bin`, `/usr/local/bin`, `/snap/bin`, `~/.bun/bin` and `~/.volta/bin`
 
 ## [0.5.0] - 2026-11-19
 
@@ -211,6 +215,7 @@ The first release, for macOS (Apple Silicon) and Windows 10/11 (x64; new, please
 - Settings for display size, reduced motion, notifications, defaults for new sessions and more
 - Spring-based motion modelled on SwiftUI, with a fade-only mode for Reduce motion
 
+[0.6.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.5.0
 [0.4.1]: https://github.com/Tettu0530/plyfold/releases/tag/v0.4.1
 [0.4.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.4.0
