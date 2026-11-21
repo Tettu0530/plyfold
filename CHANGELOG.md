@@ -15,6 +15,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 - Hand over: a session's menu (H) hands its work to another profile in the same workspace. The current agent is asked for a handover note (what was asked, done and left; up to three minutes), then stopped; a new session with the same title starts there with the instructions so far, the note, and the diff, and carries on. It takes the old session's pane; the old session keeps its record, and a failure is told on it
 - Review: a session can name a profile that reviews its diff after each turn (the button in the pane header). When a turn ends normally with a diff not reviewed yet, that agent gets the instruction behind the turn, the files changed and the diff, and lists problems as `path:line — problem — fix` in a column at the pane's right edge. It works read-only (its own read-only mode where it has one, and every permission request declined), carries on one conversation so it mentions earlier problems only while they are unfixed, and can be asked about its findings. A diff that arrives while it is still answering is reviewed when it is done
 
+### Fixed
+
+- On Linux, starting from a desktop launcher uses the login shell's PATH, so agent CLIs set up there are found. The shell is `$SHELL`, or the one in `/etc/passwd`, or `/bin/bash`. A PATH kept in the state directory (`login-path`) is used for this start even when it is old, so the start does not wait on the shell. The shell is read again in the background and the file is written for the next start, so a CLI installed today is found the next time the app opens. A shell that did not answer is not kept. Directories that exist are added on every launch: `~/.local/bin`, `~/.cargo/bin`, `/usr/local/bin`, `/snap/bin`, `~/.bun/bin` and `~/.volta/bin`
+
 ## [0.5.0] - 2026-11-19
 
 Running in parallel: one prompt to several agents side by side, a task queue that runs a set number at a time, and moving on to another key when one hits its limit. Everyday conversations can do what a chat on the web does.
@@ -55,7 +59,6 @@ MCP servers per profile, a port of its own for each session, renamable sidebar g
 - A new worktree session (and a conversation opened from the CLI) no longer shows under "No repository" in the sidebar until the next start: the screen kept the record it was first told about, made before the repository and worktree were set
 - On macOS in full screen, where the window buttons are hidden, the sidebar button moves to the left edge of the header instead of keeping their space
 - On macOS in full screen, Esc closes what it closes (menus, the find bar, previews) without also leaving full screen; ⌃⌘F or the window button leaves it
-- On Linux, starting from a desktop launcher uses the login shell's PATH, so agent CLIs set up there are found. The shell is `$SHELL`, or the one in `/etc/passwd`, or `/bin/bash`. A PATH kept in the state directory (`login-path`) is used for this start even when it is old, so the start does not wait on the shell. The shell is read again in the background and the file is written for the next start, so a CLI installed today is found the next time the app opens. A shell that did not answer is not kept. Directories that exist are added on every launch: `~/.local/bin`, `~/.cargo/bin`, `/usr/local/bin`, `/snap/bin`, `~/.bun/bin` and `~/.volta/bin`
 
 ## [0.4.0] - 2026-11-18
 
