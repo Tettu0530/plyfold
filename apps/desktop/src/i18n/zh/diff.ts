@@ -9,6 +9,7 @@ export const diff: Record<keyof typeof source, string> = {
   dialogLabel: "Git 与更改：{title}",
   backToFiles: "文件",
   sessionGone: "此会话已不存在",
+  noRepository: "此会话不使用仓库（对话文件夹不是 git 仓库）",
   resizeColumn: "左栏宽度",
   resizeColumnHint: "拖动以调整宽度。双击恢复默认宽度",
   resizeSection: "Git 与已更改文件之间的分隔线",

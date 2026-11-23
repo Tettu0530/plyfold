@@ -9,6 +9,7 @@ export const profiles = {
   baseHintClaude: "起動時に ANTHROPIC_BASE_URL として渡します",
   baseHintCodex: "専用ディレクトリの config.toml に、プロバイダーとして書きます",
   baseHintGemini: "起動時に GOOGLE_GEMINI_BASE_URL として渡します",
+  baseHintOpencode: "専用ディレクトリの opencode.json に、プロバイダーとして書きます",
   title: "プロファイル",
   back: "戻る",
   agents: "エージェント",

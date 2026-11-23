@@ -30,11 +30,13 @@ const KEY_VAR: Record<string, Partial<Record<AuthKind, string>>> = {
   claude: { api: "ANTHROPIC_API_KEY", custom: "ANTHROPIC_AUTH_TOKEN" },
   codex: { api: "OPENAI_API_KEY", custom: "PLYFOLD_PROVIDER_KEY" },
   gemini: { api: "GEMINI_API_KEY", custom: "GEMINI_API_KEY" },
+  opencode: { api: "OPENAI_API_KEY", custom: "OPENCODE_PROVIDER_KEY" },
 };
 const BASE_HINT: Record<string, MessageKey> = {
   claude: "profiles.baseHintClaude",
   codex: "profiles.baseHintCodex",
   gemini: "profiles.baseHintGemini",
+  opencode: "profiles.baseHintOpencode",
 };
 
 function summaryAuth(p: ProfileSummary): AuthKind {
