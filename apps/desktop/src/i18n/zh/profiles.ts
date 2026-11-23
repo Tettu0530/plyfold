@@ -11,6 +11,7 @@ export const profiles: Record<keyof typeof source, string> = {
   baseHintClaude: "启动时作为 ANTHROPIC_BASE_URL 传入。",
   baseHintCodex: "作为提供方写入专用目录中的 config.toml。",
   baseHintGemini: "启动时作为 GOOGLE_GEMINI_BASE_URL 传入。",
+  baseHintOpencode: "作为提供方写入专用目录中的 opencode.json。",
   title: "配置",
   back: "返回",
   agents: "代理",

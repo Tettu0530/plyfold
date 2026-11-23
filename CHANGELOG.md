@@ -4,6 +4,14 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Profiles
+
+- OpenCode profiles can use a key and a custom provider (base URL + key), like the other agents. A custom provider is written as a `plyfold` provider in `opencode.json` under the profile's directory; the key is not in the file, which names the environment variable it arrives in (`{env:OPENCODE_PROVIDER_KEY}`). A profile with a model of its own gets one too, since OpenCode names models `<provider>/<model>`
+
+### Fixed
+
+- An isolated OpenCode profile now separates its configuration from the usual one. The directory was passed as `XDG_DATA_HOME`, which only moves the sessions and the log: OpenCode still read `~/.config/opencode`, so a provider set up there reached every profile and the profile's own `opencode.json` was ignored. It is passed as `XDG_CONFIG_HOME` (where OpenCode looks for `opencode/opencode.json`)
+
 ## [0.6.0] - 2026-11-21
 
 Agents working together: another agent reviews each turn's diff, a session can be handed over to another agent, MCP servers are set up once for every profile, and ACP Registry agents that ship as binaries can be added. Key fallback now moves only to keys billed by use, and a prompt stopped by a limit is sent again when the limit lifts.

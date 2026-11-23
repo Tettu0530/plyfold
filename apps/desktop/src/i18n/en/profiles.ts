@@ -11,6 +11,7 @@ export const profiles: Record<keyof typeof source, string> = {
   baseHintClaude: "Passed as ANTHROPIC_BASE_URL at launch.",
   baseHintCodex: "Written as a provider to config.toml in the dedicated directory.",
   baseHintGemini: "Passed as GOOGLE_GEMINI_BASE_URL at launch.",
+  baseHintOpencode: "Written as a provider to opencode.json in the dedicated directory.",
   title: "Profiles",
   back: "Back",
   agents: "Agents",
