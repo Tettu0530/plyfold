@@ -4,6 +4,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-23
+
+OpenCode profiles can now use a key or a custom provider, and a conversation no longer shows the Git view.
+
 ### Profiles
 
 - OpenCode profiles can use a key and a custom provider (base URL + key), like the other agents. A custom provider is written as a `plyfold` provider in `opencode.json` under the profile's directory; the key is not in the file, which names the environment variable it arrives in (`{env:OPENCODE_PROVIDER_KEY}`). A profile with a model of its own gets one too, since OpenCode names models `<provider>/<model>`
@@ -12,6 +16,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 - An isolated OpenCode profile now separates its configuration from the usual one. The directory was passed as `XDG_DATA_HOME`, which only moves the sessions and the log: OpenCode still read `~/.config/opencode`, so a provider set up there reached every profile and the profile's own `opencode.json` was ignored. It is passed as `XDG_CONFIG_HOME` (where OpenCode looks for `opencode/opencode.json`)
 - An everyday conversation and a side chat no longer open a Git view (⌘⇧D, or a Git pane kept in the layout from a coding session). Their folder is not a repository, and git walked up from it to the repository around the state directory, so the pane listed an unrelated repository's changes. The engine refuses `diff`, `git_info` and `worktree_status` for them, the shortcut leaves them out, and a pane already showing one says so
+- `url` is updated to 2.5.9, which no longer overflows the stack on a deeply nested `blob:` URL (RUSTSEC-2026-0592)
 
 ## [0.6.0] - 2026-11-21
 
@@ -224,6 +229,7 @@ The first release, for macOS (Apple Silicon) and Windows 10/11 (x64; new, please
 - Settings for display size, reduced motion, notifications, defaults for new sessions and more
 - Spring-based motion modelled on SwiftUI, with a fade-only mode for Reduce motion
 
+[0.6.1]: https://github.com/Tettu0530/plyfold/releases/tag/v0.6.1
 [0.6.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.5.0
 [0.4.1]: https://github.com/Tettu0530/plyfold/releases/tag/v0.4.1
