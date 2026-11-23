@@ -132,3 +132,23 @@ async fn a_conversation_looks_things_up_but_does_not_edit() {
     eng.delete_session(&c.id, false).await.unwrap();
     assert!(!dir.exists());
 }
+
+/// A conversation has no repository, so there is no Git view to build for it. Without this check, git walked up from
+/// the conversation's folder and reported the repository around it (the state directory can sit inside one), which is
+/// how the pane's Git button came to work on a conversation
+#[tokio::test]
+async fn a_conversation_has_no_git_view() {
+    let base = tmp("chat-git");
+    // A repository around the whole state directory, as a user's home may be one
+    for args in
+        [vec!["init", "-q", "-b", "main"], vec!["-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "--allow-empty", "-m", "init"]]
+    {
+        assert!(Command::new("git").args(&args).current_dir(&base).status().unwrap().success());
+    }
+    let state = base.join("state");
+    let eng = engine(&state);
+    let c = eng.start_chat("mock", "Talk").await.unwrap();
+    assert!(matches!(eng.diff(&c.id), Err(plyfold_core::CoreError::NoWorkspace(_))));
+    assert!(matches!(eng.git_info(&c.id), Err(plyfold_core::CoreError::NoWorkspace(_))));
+    assert!(matches!(eng.worktree_status(&c.id), Err(plyfold_core::CoreError::NoWorkspace(_))));
+}

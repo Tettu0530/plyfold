@@ -11,6 +11,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 ### Fixed
 
 - An isolated OpenCode profile now separates its configuration from the usual one. The directory was passed as `XDG_DATA_HOME`, which only moves the sessions and the log: OpenCode still read `~/.config/opencode`, so a provider set up there reached every profile and the profile's own `opencode.json` was ignored. It is passed as `XDG_CONFIG_HOME` (where OpenCode looks for `opencode/opencode.json`)
+- An everyday conversation and a side chat no longer open a Git view (⌘⇧D, or a Git pane kept in the layout from a coding session). Their folder is not a repository, and git walked up from it to the repository around the state directory, so the pane listed an unrelated repository's changes. The engine refuses `diff`, `git_info` and `worktree_status` for them, the shortcut leaves them out, and a pane already showing one says so
 
 ## [0.6.0] - 2026-11-21
 

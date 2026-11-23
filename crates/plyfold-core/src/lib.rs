@@ -1804,6 +1804,11 @@ impl Engine {
     /// uncommitted changes (against HEAD); committing, merging and discarding stay with worktree sessions
     pub fn diff(&self, id: &str) -> Result<Diff, CoreError> {
         let rec = self.reconcile_workspace(id)?;
+        // A conversation and a side chat have no repository: their folder is not one, and git would walk up from it to
+        // whatever repository contains it
+        if rec.chat || rec.side_of.is_some() {
+            return Err(CoreError::NoWorkspace(id.into()));
+        }
         let wt = match worktree_of(&rec) {
             Some(wt) => wt,
             None => {
@@ -1863,6 +1868,10 @@ impl Engine {
     /// the branch it will be merged into for a worktree, the remote's default branch otherwise
     fn git_dir(&self, id: &str) -> Result<(PathBuf, Option<String>), CoreError> {
         let rec = self.reconcile_workspace(id)?;
+        // As with diff: a conversation's folder is not a repository, and git would find the one around it
+        if rec.chat || rec.side_of.is_some() {
+            return Err(CoreError::NoWorkspace(id.into()));
+        }
         if let Some(wt) = worktree_of(&rec) {
             plyfold_worktree::verify(&wt)?;
             let base = plyfold_worktree::ops::status(&wt).ok().and_then(|s| s.target);

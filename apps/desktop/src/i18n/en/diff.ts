@@ -9,6 +9,7 @@ export const diff: Record<keyof typeof source, string> = {
   dialogLabel: "Git and changes: {title}",
   backToFiles: "Files",
   sessionGone: "This session no longer exists",
+  noRepository: "This session uses no repository (a conversation folder is not a git repository)",
   resizeColumn: "Width of the left column",
   resizeColumnHint: "Drag to resize. Double-click for the default width",
   resizeSection: "Divider between Git and the changed files",

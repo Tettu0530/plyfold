@@ -7,6 +7,7 @@ export const diff = {
   dialogLabel: "Git と変更: {title}",
   backToFiles: "ファイル",
   sessionGone: "このセッションはもうありません",
+  noRepository: "このセッションはリポジトリを使いません（会話のフォルダは Git リポジトリではありません）",
   resizeColumn: "左の列の幅",
   resizeColumnHint: "ドラッグで幅を変える。ダブルクリックで元の幅に戻す",
   resizeSection: "Git と変更したファイルの境目",

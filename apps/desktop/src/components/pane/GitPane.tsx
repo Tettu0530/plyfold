@@ -201,10 +201,13 @@ export function GitPane({ index, id }: { index: number; id: string }) {
   }, [data]);
   const total = files.reduce((a, f) => ({ add: a.add + f.stat.added, del: a.del + f.stat.removed }), { add: 0, del: 0 });
 
-  if (!view) {
+  // A conversation and a side chat have no repository, so there is no Git view for them. A pane opened before this
+  // was checked (an older layout saved with one, say) says so rather than reading a folder that is not a repository
+  const noRepo = view && (view.record.chat || view.record.side_of);
+  if (!view || noRepo) {
     return (
       <section ref={pane} className="flex min-w-0 flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
-        <p>{t("diff.sessionGone")}</p>
+        <p>{view ? t("diff.noRepository") : t("diff.sessionGone")}</p>
         <button type="button" onClick={() => closePane(index)} className="rounded-md px-2 py-1 hover:bg-accent hover:text-foreground">
           {t("pane.closePane")}
         </button>

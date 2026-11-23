@@ -77,10 +77,12 @@ function useShortcuts() {
         zoomIn: () => zoom(1),
         zoomOut: () => zoom(-1),
         zoomReset: () => void s.saveSettings({ ui_scale: 100 }).catch(() => {}),
-        // The focused session's Git and changes view
+        // The focused session's Git and changes view. A conversation and a side chat have no repository (their folder
+        // is not one), so the button and this shortcut leave them out, as the pane's own Git button does
         openDiff: () => {
           const id = s.panes[s.focusedPane];
-          if (id && s.sessions[id]?.record.repo_path) s.openDiff(id);
+          const r = id ? s.sessions[id]?.record : undefined;
+          if (id && r && !r.chat && !r.side_of && r.repo_path) s.openDiff(id);
         },
         // The focused session's side chat: open it, or put the cursor in it when it is open (closing clears it, so only the × button does)
         sideChat: () => {
