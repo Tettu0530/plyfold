@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, Check, Code2, Coins, FolderOpen, GitBranch, ListPlus, MessageSquare, Plus, Repeat2, Sparkles, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { money, repoName, tokens } from "@/lib/format";
