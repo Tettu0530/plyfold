@@ -119,6 +119,7 @@ export function ControlRow({
   scope,
   noPickers = false,
   noMode = false,
+  showContext = true,
 }: {
   agent: string;
   info: SessionInfo | null;
@@ -131,6 +132,8 @@ export function ControlRow({
   noPickers?: boolean;
   /** No mode picker (an everyday conversation keeps the mode Plyfold chose) */
   noMode?: boolean;
+  /** Hide context usage while composing a new session */
+  showContext?: boolean;
 }) {
   const t = useT();
   const raised = useLiquidActiveAnchors();
@@ -192,7 +195,7 @@ export function ControlRow({
       )}
       {empty && !model && !effort && modes.length === 0 && <span className="px-1.5 text-muted-foreground">{empty}</span>}
       <span className="grow" />
-      {ctxPct != null && info && <ContextMeter info={info} pct={ctxPct} scope={scope} />}
+      {showContext && ctxPct != null && info && <ContextMeter info={info} pct={ctxPct} scope={scope} />}
     </div>
   );
 }

@@ -2,8 +2,7 @@
 
 import { create } from "zustand";
 
-import type { Look, LiquidStyle } from "@/components/liquid/liquid";
-import { liquidCloseFrom, liquidOpen } from "@/components/liquid/stage";
+import type { LiquidStyle } from "@/components/liquid/liquid";
 import type { Attached } from "@/lib/attachments";
 import { evenSizes, freeSlot, leaves, moveSlot, preset, removeSlot, setSizes, splitAt, swapSlots, validLayout, type Edge, type LayoutNode } from "./layout";
 import { resolveLang, setLang, t } from "@/i18n";
@@ -92,24 +91,7 @@ export interface PreviewPage {
   anchor: string;
 }
 
-/** Pane appearance (the target of separation animations) */
-const PANE_LOOK: Look = { background: "rgba(10, 10, 10, 1)", border: "rgba(255, 255, 255, 0.1)", shadow: "0px 0px 0px rgba(0, 0, 0, 0)", blur: 0 };
-const settingsEl = () => document.querySelector<HTMLElement>("[data-settings-view]");
-const profilesEl = () => document.querySelector<HTMLElement>("[data-profiles-view]");
-const paneEl = (i: number) => document.querySelector<HTMLElement>(`[data-pane-index="${i}"]`);
-const anchorOf = (id: string) =>
-  isDraft(id)
-    ? "new-session"
-    : isPreview(id)
-      ? (useStore.getState().previews[id]?.anchor ?? "new-session")
-      : isGit(id)
-        ? `diff:${gitSessionOf(id)}`
-        : isFiles(id)
-          ? `${filesSessionOf(id)}:files`
-          : isCompare(id)
-            ? `compare:${compareGroupOf(id)}`
-            : `session:${id}`;
-const LAST_REPO_KEY = "plyfold.lastRepo";
+/** A pane listing the files a session read or edited, with the picked one's contents ("files:<session id>") */const LAST_REPO_KEY = "plyfold.lastRepo";
 function lastRepo(): string {
   try {
     return localStorage.getItem(LAST_REPO_KEY) ?? "~/projects";
@@ -602,7 +584,7 @@ export const useStore = create<State>((set, get) => ({
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setSidebarWidth: (px) => set({ sidebarWidth: clampSidebar(px) }),
 
-  openInPane: async (id, pane, from) => {
+  openInPane: async (id, pane) => {
     if (get().unread[id]) {
       const unread = { ...get().unread };
       delete unread[id];
@@ -620,10 +602,6 @@ export const useStore = create<State>((set, get) => ({
       while (panes.length <= target) panes.push(null);
       const displaced = panes[target];
       panes[target] = id;
-      // A replaced session shrinks out of the pane back behind where it came from (its sidebar row)
-      if (displaced) liquidCloseFrom(`pane-${target}-out`, { anchor: anchorOf(displaced), target: () => paneEl(target), toLook: PANE_LOOK });
-      // When replacing, wait for the return animation to start before emerging (staggers the crossover slightly)
-      if (from) liquidOpen(`pane-${target}`, { anchor: from, target: () => paneEl(target), toLook: PANE_LOOK, delay: displaced ? 140 : 0 });
       const drafts = { ...s.drafts };
       if (isDraft(displaced)) delete drafts[displaced!];
       const previews = { ...s.previews };
@@ -719,28 +697,24 @@ export const useStore = create<State>((set, get) => ({
 
   openProfiles: () => {
     if (get().profilesView) return;
-    liquidOpen("profiles", { cover: true, anchor: "profiles", target: profilesEl, toLook: PANE_LOOK });
     set({ profilesView: { closing: false } });
   },
 
   closeProfiles: () => {
     const v = get().profilesView;
     if (!v || v.closing) return;
-    set({ profilesView: { closing: true } });
-    liquidCloseFrom("profiles", { cover: true, anchor: "profiles", target: profilesEl, toLook: PANE_LOOK, onDone: () => set({ profilesView: null }) });
+    set({ profilesView: null });
   },
 
   openSettings: () => {
     if (get().settingsView) return;
-    liquidOpen("settings", { cover: true, anchor: "settings", target: settingsEl, toLook: PANE_LOOK });
     set({ settingsView: { closing: false } });
   },
 
   closeSettings: () => {
     const v = get().settingsView;
     if (!v || v.closing) return;
-    set({ settingsView: { closing: true } });
-    liquidCloseFrom("settings", { cover: true, anchor: "settings", target: settingsEl, toLook: PANE_LOOK, onDone: () => set({ settingsView: null }) });
+    set({ settingsView: null });
   },
 
   saveSettings: async (patch) => {
@@ -778,11 +752,6 @@ export const useStore = create<State>((set, get) => ({
     const id = get().panes[pane];
     // A side chat lives only beside its pane
     if (id && get().sideChats[id]) void get().closeSideChat(id);
-    // On close, shrink out of the pane back behind the anchor (the sidebar row). The pane itself goes away at once
-    // (its neighbours grow into the space), so the blob starts from where the pane was
-    const was = paneEl(pane)?.getBoundingClientRect();
-    const ghost = was ? ({ getBoundingClientRect: () => was } as unknown as HTMLElement) : null;
-    if (id) liquidCloseFrom(`pane-${pane}`, { anchor: anchorOf(id), target: () => ghost ?? paneEl(pane), toLook: PANE_LOOK });
     set((s) => {
       const panes = [...s.panes];
       panes[pane] = null;

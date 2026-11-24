@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Check, Coins, Columns3, FolderOpen, GitBranch, ListPlus, MessageCircle, MessageSquare, Plus, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Code2, Coins, FolderOpen, GitBranch, ListPlus, MessageSquare, Plus, Repeat2, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -20,10 +20,16 @@ import { api } from "@/lib/api";
 import type { CliSession } from "@/lib/types";
 import { isSendKey } from "@/lib/keys";
 import { useT, type MessageKey } from "@/i18n";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CHIP_TRIGGER } from "./chip";
 import { startDrag } from "./dnd";
 import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
 
-/** Label for the auth type */
+function StartModeIcon({ mode }: { mode: "conversation" | "coding" | "parallel" | "continue" }) {
+  const Icon = mode === "conversation" ? MessageSquare : mode === "coding" ? Code2 : mode === "parallel" ? Sparkles : Repeat2;
+  return <Icon className="size-3.5 text-muted-foreground" aria-hidden />;
+}
+
 function authLabel(p: { keyed: boolean; custom_provider: boolean }): MessageKey {
   return p.custom_provider ? "draft.authCustom" : p.keyed ? "draft.authKeyed" : "draft.authLogin";
 }
@@ -138,10 +144,14 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
   const [repoOpen, setRepoOpen] = useState(false);
-  // The repository picker also pops out of its button and returns to it on close (same separation animation as other menus)
+  const [continueOpen, setContinueOpen] = useState(false);
+  const [startKind, setStartKind] = useState<"conversation" | "coding" | "parallel" | "continue">(draft?.chat ? "conversation" : "coding");
   const repoAnchor = `${id}:repo`;
   const repoMenu = useLiquidMenu(`menu:${repoAnchor}`, repoAnchor);
   const repoRaised = useLiquidActiveAnchors().has(repoAnchor);
+  const modeAnchor = `${id}:start-mode`;
+  const modeMenu = useLiquidMenu(`menu:${modeAnchor}`, modeAnchor);
+  const modeRaised = useLiquidActiveAnchors().has(modeAnchor);
   const toggleRepo = (o: boolean) => {
     repoMenu.onOpenChange(o);
     setRepoOpen(o);
@@ -164,13 +174,15 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   // Recently used first (unused ones: default profile first, then by name)
   const ordered = [...sorted].sort((a, b) => (byProfile.get(b.name)?.last_used ?? 0) - (byProfile.get(a.name)?.last_used ?? 0));
   const picks = draft.compare ?? null;
+  const activePicks = startKind === "parallel" ? picks : null;
+  const continueMode = startKind === "continue";
   // Comparing: each click adds or removes a profile (up to COMPARE_MAX); the first picked drives the controls below
   const select = (name: string) => {
-    if (!picks) return updateDraft(id, { profile: name, choices: {} });
-    const next = picks.includes(name) ? picks.filter((n) => n !== name) : picks.length < COMPARE_MAX ? [...picks, name] : picks;
+    if (!activePicks) return updateDraft(id, { profile: name, choices: {} });
+    const next = activePicks.includes(name) ? activePicks.filter((n) => n !== name) : activePicks.length < COMPARE_MAX ? [...activePicks, name] : activePicks;
     updateDraft(id, { compare: next, profile: next[0] ?? null, choices: {} });
   };
-  const canStart = !draft.busy && (picks ? picks.length >= 2 : !!draft.profile);
+  const canStart = !draft.busy && (activePicks ? activePicks.length >= 2 : !!draft.profile) && (!continueMode || current?.agent !== "gemini");
   const onListKey = (e: React.KeyboardEvent) => {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
@@ -182,8 +194,8 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
     }
   };
   const send = () => {
-    if (!canStart) return;
-    void (picks ? startCompare(id, text, att.items) : startDraft(id, text, att.items));
+    if (!canStart || continueMode) return;
+    void (activePicks ? startCompare(id, text, att.items) : startDraft(id, text, att.items));
   };
 
   return (
@@ -245,90 +257,91 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
       </div>
 
       <Popover open={repoOpen} onOpenChange={toggleRepo}>
-        <div className="flex shrink-0 flex-col px-[max(0.75rem,calc((100%_-_53rem)/2))] pb-3">
-          {/* The repository picker aligns with the left edge of this row + input group and opens right above it */}
-          <PopoverAnchor asChild>
+        <PopoverAnchor asChild>
+          <div className="flex shrink-0 flex-col px-[max(0.75rem,calc((100%_-_53rem)/2))] pb-3">
             <div className="flex flex-col gap-1">
-              {/* If there's not enough width, model / effort / mode wrap to a second row */}
               <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 text-xs">
-                <div className="flex items-center gap-0.5">
-                  {/* Work in a repository, or an everyday conversation (no repository, nothing edited) */}
-                  <button
-                    type="button"
-                    aria-pressed={draft.chat}
-                    onClick={() => updateDraft(id, { chat: !draft.chat })}
-                    title={draft.chat ? t("draft.chatOn") : t("draft.chatOff")}
-                    className={cn(
-                      "flex h-6 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent",
-                      draft.chat ? "bg-accent text-foreground" : "text-muted-foreground",
-                    )}
+                <Select
+                  value={startKind}
+                  onOpenChange={modeMenu.onOpenChange}
+                  onValueChange={(value) => {
+                    const next = value as typeof startKind;
+                    setStartKind(next);
+                    updateDraft(id, {
+                      chat: next === "conversation",
+                      compare: next === "parallel" ? (picks ?? (draft.profile ? [draft.profile] : [])) : null,
+                    });
+                    setContinueOpen(next === "continue");
+                  }}
+                >
+                  <SelectTrigger
+                    ref={liquidAnchor(modeAnchor)}
+                    aria-label={t("draft.startMode")}
+                    className={cn(CHIP_TRIGGER, "relative w-fit border border-transparent", "data-[state=open]:bg-accent", modeRaised && "z-[57]")}
                   >
-                    <MessageCircle className="size-3" aria-hidden />
-                    {t("draft.chat")}
-                  </button>
-                  {!draft.chat && (
-                    <>
-                      <PopoverTrigger asChild>
-                        <button
-                          ref={liquidAnchor(repoAnchor)}
-                          type="button"
-                          aria-label={t("draft.repo")}
-                          title={draft.repo}
-                          className={cn(
-                            "relative flex h-6 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent data-[state=open]:bg-accent",
-                            repoRaised && "z-[57]",
-                          )}
-                        >
-                          <FolderOpen className="size-3 text-muted-foreground" aria-hidden />
-                          <span className="font-mono">{repoName(draft.repo)}</span>
-                        </button>
-                      </PopoverTrigger>
-
-                      {/* Comparing always uses worktrees, one per session */}
-                      <button
-                        type="button"
-                        aria-pressed={draft.worktree || !!picks}
-                        disabled={!!picks}
-                        onClick={() => updateDraft(id, { worktree: !draft.worktree })}
-                        title={picks ? t("draft.compareWorktree") : draft.worktree ? t("draft.worktreeOn") : t("draft.worktreeOff")}
-                        className={cn(
-                          "flex h-6 items-center gap-1.5 rounded-md border px-1.5 hover:bg-accent disabled:hover:bg-transparent",
-                          draft.worktree || picks ? "border-border text-foreground" : "border-dashed border-border text-muted-foreground",
-                        )}
-                      >
-                        <GitBranch className="size-3" aria-hidden />
-                        {draft.worktree || picks ? "worktree" : t("draft.inPlace")}
-                      </button>
-                      <button
-                        type="button"
-                        aria-pressed={!!picks}
-                        onClick={() => updateDraft(id, picks ? { compare: null } : { compare: draft.profile ? [draft.profile] : [], choices: {} })}
-                        title={t("draft.compareHint", { max: COMPARE_MAX })}
-                        className={cn(
-                          "flex h-6 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent",
-                          picks ? "bg-accent text-foreground" : "text-muted-foreground",
-                        )}
-                      >
-                        <Columns3 className="size-3" aria-hidden />
-                        {t("draft.compare")}
-                      </button>
-                      {!picks && current?.agent !== "gemini" && draft.profile && (
-                        <CliSessions key={`${draft.profile}:${draft.repo}`} draftId={id} profile={draft.profile} repo={draft.repo} busy={draft.busy} />
-                      )}
-                    </>
-                  )}
-                </div>
+                    <SelectValue>
+                      <span className="flex items-center gap-1.5">
+                        <StartModeIcon mode={startKind} />
+                        {t(`draft.mode${startKind[0].toUpperCase()}${startKind.slice(1)}` as MessageKey)}
+                      </span>
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent
+                    ref={modeMenu.ref as React.Ref<HTMLDivElement>}
+                    style={modeMenu.style}
+                    position="popper"
+                    side="top"
+                    align="start"
+                    className={cn("z-[58] min-w-52 p-1", modeMenu.moving && "opacity-0")}
+                  >
+                    {(["conversation", "coding", "parallel", "continue"] as const).map((value) => (
+                      <SelectItem key={value} value={value} className="h-8 text-xs">
+                        <StartModeIcon mode={value} />
+                        {t(`draft.mode${value[0].toUpperCase()}${value.slice(1)}` as MessageKey)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {startKind !== "conversation" && (
+                  <PopoverTrigger asChild>
+                    <button
+                      ref={liquidAnchor(repoAnchor)}
+                      type="button"
+                      aria-label={t("draft.repo")}
+                      title={draft.repo}
+                      className={cn("relative flex h-7 items-center gap-1.5 rounded-md px-2 hover:bg-accent", repoRaised && "z-[57]")}
+                    >
+                      <FolderOpen className="size-3 text-muted-foreground" aria-hidden />
+                      <span className="font-mono">{repoName(draft.repo)}</span>
+                      <GitBranch className="size-3 text-muted-foreground" aria-hidden />
+                      <span className="text-muted-foreground">{draft.worktree || activePicks ? t("draft.worktree") : t("draft.inPlace")}</span>
+                    </button>
+                  </PopoverTrigger>
+                )}
+                {startKind === "conversation" && <span className="px-2 text-muted-foreground">{t("draft.chat")}</span>}
                 <span className="grow" />
+                {continueMode && current?.agent !== "gemini" && draft.profile && (
+                  <CliSessions
+                    key={`${draft.profile}:${draft.repo}`}
+                    draftId={id}
+                    profile={draft.profile}
+                    repo={draft.repo}
+                    busy={draft.busy}
+                    open={continueOpen}
+                    onOpenChange={setContinueOpen}
+                    onChoose={() => setContinueOpen(false)}
+                  />
+                )}
                 <ControlRow
                   scope={id}
                   agent={current?.agent ?? ""}
                   info={info}
                   onSet={choose}
-                  noMode={draft.chat}
+                  noMode={startKind === "conversation"}
+                  showContext={false}
                   empty={draft.profile ? t("draft.choicesAfterStart") : undefined}
                 />
               </div>
-
               <MentionMenu m={mention} boxRef={att.boxRef} />
               <SlashMenu m={slash} boxRef={att.boxRef} />
               <AttachBox att={att}>
@@ -338,7 +351,9 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
                   rows={1}
                   autoFocus
                   value={text}
-                  placeholder={draft.chat ? t("draft.chatPlaceholder") : t("draft.firstPromptPlaceholder")}
+                  placeholder={
+                    startKind === "conversation" ? t("draft.chatPlaceholder") : continueMode ? t("draft.chooseSession") : t("draft.firstPromptPlaceholder")
+                  }
                   onChange={(e) => {
                     setText(e.target.value);
                     mention.syncCaret();
@@ -361,8 +376,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
                   }}
                   className="min-h-0 grow resize-none bg-transparent py-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
                 />
-                {/* Into the queue instead of now: it starts when fewer than the set number of sessions are working */}
-                {!draft.chat && !picks && (
+                {!draft.chat && !activePicks && !continueMode && (
                   <button
                     type="button"
                     aria-label={t("draft.queue")}
@@ -391,24 +405,40 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
                 </button>
               </AttachBox>
             </div>
-          </PopoverAnchor>
-        </div>
+          </div>
+        </PopoverAnchor>
         <PopoverContent
           ref={repoMenu.ref as React.Ref<HTMLDivElement>}
           style={repoMenu.style}
           side="top"
           align="start"
           sideOffset={6}
-          // Don't span the full pane width (if wide, the body seems to fly far out before returning)
           className={cn("z-[58] w-[min(32rem,var(--radix-popper-anchor-width))] p-1.5", repoMenu.moving && "opacity-0")}
         >
-          <RepoPicker
-            value={draft.repo}
-            onPick={(repo) => {
-              updateDraft(id, { repo });
-              toggleRepo(false);
-            }}
-          />
+          <div className="flex flex-col gap-1">
+            <RepoPicker value={draft.repo} onPick={(repo) => updateDraft(id, { repo })} />
+            {startKind !== "conversation" && (
+              <div className="flex items-center gap-2 border-t border-border pt-1">
+                <span className="px-2 text-xs text-muted-foreground">{t("draft.workspaceMode")}</span>
+                <button
+                  type="button"
+                  aria-pressed={draft.worktree}
+                  onClick={() => updateDraft(id, { worktree: true })}
+                  className={cn("h-7 rounded-md px-2 text-xs", draft.worktree ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent")}
+                >
+                  {t("draft.worktree")}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={!draft.worktree}
+                  onClick={() => updateDraft(id, { worktree: false })}
+                  className={cn("h-7 rounded-md px-2 text-xs", !draft.worktree ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent")}
+                >
+                  {t("draft.inPlace")}
+                </button>
+              </div>
+            )}
+          </div>
         </PopoverContent>
       </Popover>
     </section>
@@ -416,9 +446,30 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
 }
 
 /** Conversations this CLI already has in the chosen repository. Gemini does not advertise session/list. */
-function CliSessions({ draftId, profile, repo, busy }: { draftId: string; profile: string; repo: string; busy: boolean }) {
+function CliSessions({
+  draftId,
+  profile,
+  repo,
+  busy,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  onChoose,
+}: {
+  draftId: string;
+  profile: string;
+  repo: string;
+  busy: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onChoose?: () => void;
+}) {
   const t = useT();
-  const [open, setOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const setOpen = (value: boolean) => {
+    if (controlledOnOpenChange) controlledOnOpenChange(value);
+    else setLocalOpen(value);
+  };
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<CliSession[]>([]);
@@ -485,6 +536,7 @@ function CliSessions({ draftId, profile, repo, busy }: { draftId: string; profil
               disabled={busy}
               onClick={() => {
                 toggle(false);
+                onChoose?.();
                 void useStore.getState().adoptCliSession(draftId, s.acp_session_id, s.title ?? "");
               }}
               className="flex h-7 items-center rounded-md px-2 text-left text-sm hover:bg-accent disabled:opacity-40"
