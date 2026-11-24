@@ -114,7 +114,7 @@ jobs:
         # WebKitGTK and friends for Tauri; libdbus for the Secret Service the keys are kept in
         run: |
           # Avoid slow downloads from the runner's regional EC2 mirror.
-          sudo sed -i -E 's|http://[^/]*ec2.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) -exec sed -i -E 's|https?://[^/]*ec2\.archive\.ubuntu\.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' {} +
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev pkg-config
 
