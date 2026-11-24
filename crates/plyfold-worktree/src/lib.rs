@@ -136,13 +136,10 @@ impl Worktrees {
     pub fn create(&self, repo: &Path, session_id: &str, base: Option<&str>) -> Result<Worktree, WorktreeError> {
         let repo = repo_root(repo)?;
         let base_expr = format!("{}^{{commit}}", base.unwrap_or("HEAD"));
-        let base = git(&repo, &["rev-parse", "--verify", &base_expr]).map_err(|e| {
-            if base.is_none() && head(&repo).is_none() {
-                WorktreeError::NoCommits
-            } else {
-                e
-            }
-        })?.trim().to_string();
+        let base = git(&repo, &["rev-parse", "--verify", &base_expr])
+            .map_err(|e| if base.is_none() && head(&repo).is_none() { WorktreeError::NoCommits } else { e })?
+            .trim()
+            .to_string();
         let name = repo.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "repo".into());
         let path = self.root.join(format!("{name}-{}", short_hash(&repo.display().to_string()))).join(session_id);
         std::fs::create_dir_all(path.parent().unwrap())?;

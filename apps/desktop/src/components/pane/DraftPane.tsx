@@ -329,7 +329,6 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
                     busy={draft.busy}
                     open={continueOpen}
                     onOpenChange={setContinueOpen}
-                    onChoose={() => setContinueOpen(false)}
                   />
                 )}
                 <ControlRow
@@ -417,7 +416,8 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
         >
           <div className="flex flex-col gap-1">
             <RepoPicker value={draft.repo} onPick={(repo) => updateDraft(id, { repo })} />
-            {startKind !== "conversation" && (
+            {startKind === "parallel" && <p className="border-t border-border px-2 py-1 text-xs text-muted-foreground">{t("draft.compareWorktree")}</p>}
+            {(startKind === "coding" || continueMode) && (
               <div className="flex items-center gap-2 border-t border-border pt-1">
                 <span className="px-2 text-xs text-muted-foreground">{t("draft.workspaceMode")}</span>
                 <button
@@ -453,7 +453,6 @@ function CliSessions({
   busy,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
-  onChoose,
 }: {
   draftId: string;
   profile: string;
@@ -461,7 +460,6 @@ function CliSessions({
   busy: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  onChoose?: () => void;
 }) {
   const t = useT();
   const [localOpen, setLocalOpen] = useState(false);
@@ -470,34 +468,40 @@ function CliSessions({
     if (controlledOnOpenChange) controlledOnOpenChange(value);
     else setLocalOpen(value);
   };
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(open);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<CliSession[]>([]);
   const anchor = `${draftId}:cli`;
   const menu = useLiquidMenu(`menu:${anchor}`, anchor);
   const raised = useLiquidActiveAnchors().has(anchor);
-  // Listing launches an agent, so a slow reply must not replace a newer one
-  const request = useRef(0);
-  const toggle = (o: boolean) => {
-    menu.onOpenChange(o);
-    setOpen(o);
-    const current = ++request.current;
-    if (!o) return;
-    setLoading(true);
-    setError(null);
-    setItems([]);
+  useEffect(() => {
+    if (!open) return;
+    let current = true;
     void api.listCliSessions(profile, repo).then(
       (rows) => {
-        if (request.current !== current) return;
+        if (!current) return;
         setItems(rows);
         setLoading(false);
       },
       (e: unknown) => {
-        if (request.current !== current) return;
+        if (!current) return;
         setError(String(e));
         setLoading(false);
       },
     );
+    return () => {
+      current = false;
+    };
+  }, [open, profile, repo]);
+
+  const toggle = (value: boolean) => {
+    menu.onOpenChange(value);
+    if (value) {
+      setLoading(true);
+      setError(null);
+      setItems([]);
+    }
+    setOpen(value);
   };
   return (
     <Popover open={open} onOpenChange={toggle}>
@@ -536,7 +540,6 @@ function CliSessions({
               disabled={busy}
               onClick={() => {
                 toggle(false);
-                onChoose?.();
                 void useStore.getState().adoptCliSession(draftId, s.acp_session_id, s.title ?? "");
               }}
               className="flex h-7 items-center rounded-md px-2 text-left text-sm hover:bg-accent disabled:opacity-40"
