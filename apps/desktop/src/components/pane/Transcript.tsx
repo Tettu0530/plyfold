@@ -274,29 +274,37 @@ export function Transcript({
   };
 
   // Group consecutive tool calls into one frame. itemIndex is the index in `items`, which is what find matches use
-  const blocks: ((TranscriptItem & { itemIndex: number }) | { kind: "tools"; itemIndex: number; tools: { tool: ToolCall; itemIndex: number }[] })[] = [];
-  items.forEach((it, itemIndex) => {
-    const prev = blocks[blocks.length - 1];
-    if (it.kind === "tool") {
-      if (prev && prev.kind === "tools") prev.tools.push({ tool: it, itemIndex });
-      else blocks.push({ kind: "tools", itemIndex, tools: [{ tool: it, itemIndex }] });
-    } else blocks.push({ ...it, itemIndex });
-  });
+  const blocks = useMemo(() => {
+    const grouped: ((TranscriptItem & { itemIndex: number }) | { kind: "tools"; itemIndex: number; tools: { tool: ToolCall; itemIndex: number }[] })[] = [];
+    items.forEach((it, itemIndex) => {
+      const prev = grouped[grouped.length - 1];
+      if (it.kind === "tool") {
+        if (prev && prev.kind === "tools") prev.tools.push({ tool: it, itemIndex });
+        else grouped.push({ kind: "tools", itemIndex, tools: [{ tool: it, itemIndex }] });
+      } else grouped.push({ ...it, itemIndex });
+    });
+    return grouped;
+  }, [items]);
   // A turn's numbers go beside the buttons under its last answer (an error, or a turn with no answer, keeps its own row)
-  const statsOf = new Map<number, Extract<TranscriptItem, { kind: "stats" }>>();
-  const attached = new Set<number>();
-  blocks.forEach((b, j) => {
-    if (b.kind !== "stats" || b.error) return;
-    for (let k = j - 1; k >= 0; k--) {
-      const prev = blocks[k];
-      if (prev.kind === "user" || prev.kind === "stats") break;
-      if (prev.kind === "agent") {
-        statsOf.set(k, b);
-        attached.add(j);
-        break;
+  const { statsOf, attached } = useMemo(() => {
+    const statsOf = new Map<number, Extract<TranscriptItem, { kind: "stats" }>>();
+    const attached = new Set<number>();
+    let lastAgent: number | null = null;
+    blocks.forEach((block, index) => {
+      if (block.kind === "user") {
+        lastAgent = null;
+      } else if (block.kind === "agent") {
+        lastAgent = index;
+      } else if (block.kind === "stats") {
+        if (!block.error && lastAgent !== null) {
+          statsOf.set(lastAgent, block);
+          attached.add(index);
+        }
+        lastAgent = null;
       }
-    }
-  });
+    });
+    return { statsOf, attached };
+  }, [blocks]);
   // A local command (no tokens either way) has nothing to report; a stop or an error still shows
   const showStats = (b: Extract<TranscriptItem, { kind: "stats" }>) =>
     !!b.error || b.stopReason === "cancelled" || b.stopReason === INTERRUPTED || !usedNoTokens(b.stats);

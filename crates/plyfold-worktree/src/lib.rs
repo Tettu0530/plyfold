@@ -55,6 +55,15 @@ pub enum WorktreeError {
     NotARepo(PathBuf),
     #[error("{0}")]
     Op(String),
+    #[error(
+        "{}",
+        plyfold_i18n::tr!(
+            "このリポジトリにはコミットがないため worktree を作れません。worktree をオフにして、リポジトリで直接作業してください",
+            "This repository has no commits, so Plyfold cannot create a worktree. Turn off the worktree option to work directly in the repository",
+            "此仓库尚无提交记录，无法创建 worktree。请关闭 worktree 选项，直接在仓库中工作"
+        )
+    )]
+    NoCommits,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -126,7 +135,11 @@ impl Worktrees {
     /// Without `base`, branches off the current HEAD
     pub fn create(&self, repo: &Path, session_id: &str, base: Option<&str>) -> Result<Worktree, WorktreeError> {
         let repo = repo_root(repo)?;
-        let base = git(&repo, &["rev-parse", "--verify", &format!("{}^{{commit}}", base.unwrap_or("HEAD"))])?.trim().to_string();
+        let base_expr = format!("{}^{{commit}}", base.unwrap_or("HEAD"));
+        let base = git(&repo, &["rev-parse", "--verify", &base_expr])
+            .map_err(|e| if base.is_none() && head(&repo).is_none() { WorktreeError::NoCommits } else { e })?
+            .trim()
+            .to_string();
         let name = repo.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "repo".into());
         let path = self.root.join(format!("{name}-{}", short_hash(&repo.display().to_string()))).join(session_id);
         std::fs::create_dir_all(path.parent().unwrap())?;
@@ -321,6 +334,18 @@ mod tests {
         assert!(is_registered(&repo, &wt.path));
         git(&repo, &["worktree", "prune"]).unwrap();
         assert!(!is_registered(&repo, &wt.path));
+    }
+
+    #[test]
+    fn worktree_requires_a_commit() {
+        let base = tmp("empty-repo");
+        let repo = base.join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        let status = Command::new("git").args(["init", "-q", "-b", "main"]).current_dir(&repo).status().unwrap();
+        assert!(status.success());
+        let err = Worktrees::new(base.join("wts")).create(&repo, "s-empty", None).unwrap_err();
+        assert!(matches!(err, WorktreeError::NoCommits));
+        assert!(err.to_string().contains("worktree"));
     }
 
     #[test]

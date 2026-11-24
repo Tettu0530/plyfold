@@ -131,7 +131,7 @@ function SessionPane({ index }: { index: number }) {
         .catch(() => alive && setDiffStat(null));
     void refresh();
     window.addEventListener("focus", refresh);
-    const timer = busyNow ? setInterval(refresh, 5000) : undefined;
+    const timer = busyNow ? setInterval(refresh, 15_000) : undefined;
     return () => {
       alive = false;
       window.removeEventListener("focus", refresh);
