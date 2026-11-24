@@ -1,7 +1,7 @@
 // A tool call in the transcript. Click the row to reveal the command and its result (progressive disclosure)
 import { Check, ChevronRight, CircleX, FileText, Globe, Pencil, Search, SquareTerminal, Wrench } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 
 import { useT } from "@/i18n";
 import { seconds } from "@/lib/format";
@@ -51,8 +51,8 @@ function SearchHits({ hits }: { hits: SearchHit[] }) {
 /** Result lines shown at first. Click for the rest (no scrolling while collapsed) */
 const FIRST_LINES = 12;
 
-/** Re-render at a fixed interval only while running (to count elapsed time) */
-function useNow(active: boolean, ms = 100) {
+/** Re-render once a second only while running (to count elapsed time) */
+function useNow(active: boolean, ms = 1000) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!active) return;
@@ -210,7 +210,19 @@ function Detail({ t, query, active }: { t: ToolCall; query?: string; active?: nu
   );
 }
 
-function ToolRow({ t, first, itemIndex, query, active }: { t: ToolCall; first: boolean; itemIndex: number; query?: string; active: number | null }) {
+const ToolRow = memo(function ToolRow({
+  t,
+  first,
+  itemIndex,
+  query,
+  active,
+}: {
+  t: ToolCall;
+  first: boolean;
+  itemIndex: number;
+  query?: string;
+  active: number | null;
+}) {
   const tr = useT();
   const [open, setOpen] = useState(false);
   // The match may be in the command under the row, which is closed until then
@@ -263,7 +275,7 @@ function ToolRow({ t, first, itemIndex, query, active }: { t: ToolCall; first: b
       </AnimatePresence>
     </div>
   );
-}
+});
 
 /** Consecutive tool calls in one frame. `find` marks the command the in-pane find is on (`active` is that occurrence, or null) */
 export function ToolCalls({
