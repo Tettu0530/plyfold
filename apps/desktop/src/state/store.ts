@@ -91,7 +91,7 @@ export interface PreviewPage {
   anchor: string;
 }
 
-/** A pane listing the files a session read or edited, with the picked one's contents ("files:<session id>") */const LAST_REPO_KEY = "plyfold.lastRepo";
+/** A pane listing the files a session read or edited, with the picked one's contents ("files:<session id>") */ const LAST_REPO_KEY = "plyfold.lastRepo";
 function lastRepo(): string {
   try {
     return localStorage.getItem(LAST_REPO_KEY) ?? "~/projects";
@@ -133,6 +133,40 @@ export interface Queued {
   editing?: boolean;
 }
 let queueSeq = 0;
+
+const STREAM_FLUSH_MS = 40;
+let pendingStreamEvents: EngineEvent[] = [];
+let streamFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+function flushStreamEvents() {
+  if (streamFlushTimer !== null) clearTimeout(streamFlushTimer);
+  streamFlushTimer = null;
+  const events = pendingStreamEvents;
+  pendingStreamEvents = [];
+  if (!events.length) return;
+  useStore.setState((s) => {
+    let sessions = s.sessions;
+    for (const e of events) sessions = reduceEvent(sessions, e);
+    return sessions === s.sessions ? s : { sessions };
+  });
+}
+
+function scheduleStreamEvent(e: Extract<EngineEvent, { type: "update" }>) {
+  const update = e.update;
+  const tail = pendingStreamEvents[pendingStreamEvents.length - 1];
+  // Coalesce adjacent chunks of the same stream. Payloads have already been persisted by the engine.
+  if (tail?.type === "update" && tail.session_id === e.session_id && tail.update.sessionUpdate === update.sessionUpdate) {
+    const prevText = (tail.update.content as { text?: string } | undefined)?.text;
+    const nextText = (update.content as { text?: string } | undefined)?.text;
+    if (typeof prevText === "string" && typeof nextText === "string") {
+      pendingStreamEvents[pendingStreamEvents.length - 1] = {
+        ...tail,
+        update: { ...tail.update, content: { type: (update.content as { type?: string }).type, text: prevText + nextText } },
+      };
+    } else pendingStreamEvents.push(e);
+  } else pendingStreamEvents.push(e);
+  if (streamFlushTimer === null) streamFlushTimer = setTimeout(flushStreamEvents, STREAM_FLUSH_MS);
+}
 
 /** Engine event listener (only one per window, even if the store is reloaded during development) */
 const engineListener = ((globalThis as { __plyfoldEngineListener?: { current: Promise<() => void> | null } }).__plyfoldEngineListener ??= { current: null });
@@ -495,6 +529,11 @@ export const useStore = create<State>((set, get) => ({
           return { resumes };
         });
       }
+      if (e.type === "update") {
+        scheduleStreamEvent(e);
+        return;
+      }
+      flushStreamEvents();
       set((s) => {
         const sessions = reduceEvent(s.sessions, e);
         // Also post a macOS notification when the app isn't in focus
