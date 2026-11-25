@@ -8,6 +8,7 @@ export const diff: Record<keyof typeof source, string> = {
   badgeRenamed: "Renamed",
   dialogLabel: "Git and changes: {title}",
   backToFiles: "Files",
+  branchChanged: "The session's original branch is not checked out. Check the current branch",
   sessionGone: "This session no longer exists",
   noRepository: "This session uses no repository (a conversation folder is not a git repository)",
   resizeColumn: "Width of the left column",

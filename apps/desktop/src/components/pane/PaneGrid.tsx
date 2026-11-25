@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useIsPresent } from "motion/react";
-import { Fragment, useRef, useState } from "react";
+import { Fragment, memo, useRef, useState } from "react";
 
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
@@ -153,6 +153,8 @@ function Child({ size, ...props }: NodeProps & { size: number }) {
   );
 }
 
+const StablePane = memo(Pane);
+
 function Node({ node, path, dragging, setDragging, present }: NodeProps) {
   const ref = useRef<HTMLDivElement>(null);
   if (node.kind === "leaf")
@@ -163,7 +165,7 @@ function Node({ node, path, dragging, setDragging, present }: NodeProps) {
         className="relative flex min-h-0 min-w-0 grow overflow-hidden border-r border-b [&>div>section]:min-w-0 [&>div>section]:grow"
         style={{ contain: "layout paint" }}
       >
-        <Pane index={node.slot} />
+        <StablePane index={node.slot} />
       </div>
     );
   return (

@@ -133,6 +133,7 @@ export interface Queued {
   editing?: boolean;
 }
 let queueSeq = 0;
+const openingSideChats = new Map<string, Promise<SessionRecord>>();
 
 const STREAM_FLUSH_MS = 40;
 let pendingStreamEvents: EngineEvent[] = [];
@@ -326,9 +327,9 @@ interface State {
   sideChats: Record<string, SideChat>;
   /** Open (or show again) the side chat of a session */
   openSideChat: (mainId: string) => Promise<void>;
-  /** Close it: the fork is stopped and deleted */
+  /** Hide the side chat while keeping its conversation */
   closeSideChat: (mainId: string) => Promise<void>;
-  /** Start it again from the main conversation as it is now (the side conversation is dropped) */
+  /** Clear the side conversation and fork again from the main conversation */
   refreshSideChat: (mainId: string) => Promise<void>;
   /** Text to add to a session's input (an answer from its side chat); `n` makes each request distinct */
   composerInsert: { scope: string; text: string; n: number } | null;
@@ -811,46 +812,70 @@ export const useStore = create<State>((set, get) => ({
 
   openSideChat: async (mainId) => {
     if (get().sideChats[mainId]) return;
-    set((s) => ({ sideChats: { ...s.sideChats, [mainId]: { id: null, openedAt: Date.now(), error: null } } }));
+    const existing = Object.values(get().sessions).find((v) => v.record.side_of === mainId && !v.record.review);
+    const opening: SideChat = { id: null, openedAt: existing?.record.created_at ?? Date.now(), error: null };
+    set((s) => ({ sideChats: { ...s.sideChats, [mainId]: opening } }));
     try {
-      const rec = await api.openSideChat(mainId);
-      set((s) => {
-        // Closed while it was starting
-        if (!s.sideChats[mainId]) {
-          void api.closeSideChat(rec.id);
-          return s;
+      let rec = existing?.record;
+      let pending = openingSideChats.get(mainId);
+      if (!rec || pending) {
+        if (!pending) {
+          pending = api.openSideChat(mainId);
+          openingSideChats.set(mainId, pending);
+          void pending
+            .finally(() => {
+              if (openingSideChats.get(mainId) === pending) openingSideChats.delete(mainId);
+            })
+            .catch(() => {});
         }
-        const cur = s.sessions[rec.id] ?? { ...newView(rec), historyLoaded: true };
-        return {
-          sessions: { ...s.sessions, [rec.id]: { ...cur, record: rec } },
-          sideChats: { ...s.sideChats, [mainId]: { id: rec.id, openedAt: Date.now(), error: null } },
-        };
+        rec = await pending;
+      }
+      const sideRecord = rec;
+      set((s) => {
+        const cur = s.sessions[sideRecord.id] ?? { ...newView(sideRecord), historyLoaded: true };
+        const sessions = { ...s.sessions, [sideRecord.id]: { ...cur, record: sideRecord } };
+        return { sessions };
       });
+      await loadSession(sideRecord.id);
+      set((s) =>
+        s.sideChats[mainId] === opening ? { sideChats: { ...s.sideChats, [mainId]: { id: sideRecord.id, openedAt: sideRecord.created_at, error: null } } } : s,
+      );
     } catch (e) {
-      set((s) => (s.sideChats[mainId] ? { sideChats: { ...s.sideChats, [mainId]: { ...s.sideChats[mainId], error: String(e) } } } : s));
+      set((s) => (s.sideChats[mainId] === opening ? { sideChats: { ...s.sideChats, [mainId]: { ...opening, error: String(e) } } } : s));
     }
   },
 
   closeSideChat: async (mainId) => {
-    const side = get().sideChats[mainId];
-    if (!side) return;
     set((s) => {
+      if (!s.sideChats[mainId]) return s;
       const sideChats = { ...s.sideChats };
       delete sideChats[mainId];
-      const sessions = { ...s.sessions };
-      const queues = { ...s.queues };
-      if (side.id) {
-        delete sessions[side.id];
-        delete queues[side.id];
-      }
-      return { sideChats, sessions, queues };
+      return { sideChats };
     });
-    if (side.id) await api.closeSideChat(side.id).catch(() => {});
   },
 
   refreshSideChat: async (mainId) => {
-    await get().closeSideChat(mainId);
-    await get().openSideChat(mainId);
+    const side = get().sideChats[mainId];
+    if (!side) return;
+    if (side.id) {
+      try {
+        await api.closeSideChat(side.id);
+      } catch (e) {
+        set((s) => (s.sideChats[mainId] === side ? { sideChats: { ...s.sideChats, [mainId]: { ...side, error: String(e) } } } : s));
+        return;
+      }
+      set((s) => {
+        const sessions = { ...s.sessions };
+        const queues = { ...s.queues };
+        delete sessions[side.id!];
+        delete queues[side.id!];
+        return { sessions, queues };
+      });
+    }
+    if (get().sideChats[mainId] === side) {
+      await get().closeSideChat(mainId);
+      await get().openSideChat(mainId);
+    }
   },
 
   queues: {},

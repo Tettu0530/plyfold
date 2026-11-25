@@ -6,6 +6,7 @@ export const diff = {
   badgeRenamed: "名前の変更",
   dialogLabel: "Git と変更: {title}",
   backToFiles: "ファイル",
+  branchChanged: "セッションの元のブランチがチェックアウトされていません。現在のブランチを確認してください",
   sessionGone: "このセッションはもうありません",
   noRepository: "このセッションはリポジトリを使いません（会話のフォルダは Git リポジトリではありません）",
   resizeColumn: "左の列の幅",

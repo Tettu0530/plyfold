@@ -378,6 +378,7 @@ export function Transcript({
                 <div
                   key={i}
                   data-find-item={b.itemIndex}
+                  style={{ contentVisibility: "auto", containIntrinsicSize: "auto 100px" }}
                   className={cn("group flex flex-col items-end gap-1.5 self-end", editing === i ? "w-[78%]" : "max-w-[78%]")}
                 >
                   {b.attachments && <SentAttachments items={b.attachments} />}
@@ -422,7 +423,12 @@ export function Transcript({
               );
               const st = statsOf.get(i);
               return (
-                <div key={i} data-find-item={b.itemIndex} className="group flex flex-col gap-0.5">
+                <div
+                  key={i}
+                  data-find-item={b.itemIndex}
+                  style={{ contentVisibility: "auto", containIntrinsicSize: "auto 100px" }}
+                  className="group flex flex-col gap-0.5"
+                >
                   <Markdown
                     text={b.text}
                     streaming={streaming && i === blocks.length - 1}
@@ -443,7 +449,7 @@ export function Transcript({
               return <Thought key={i} text={b.text} />;
             case "tools":
               return (
-                <div key={i} className="flex flex-col gap-3">
+                <div key={i} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 100px" }} className="flex flex-col gap-3">
                   <ToolCalls
                     tools={b.tools}
                     find={finding ? { query: find.query, activeItem: current?.itemIndex ?? null, activeOccurrence: current?.occurrence ?? null } : undefined}

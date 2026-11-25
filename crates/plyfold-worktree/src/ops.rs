@@ -14,6 +14,7 @@ pub struct WtStatus {
     pub target: Option<String>,
     /// All commits made are already in the merge target
     pub merged: bool,
+    pub on_session_branch: bool,
 }
 
 fn fail(msg: impl Into<String>) -> WorktreeError {
@@ -23,13 +24,16 @@ fn fail(msg: impl Into<String>) -> WorktreeError {
 pub fn status(wt: &Worktree) -> Result<WtStatus, WorktreeError> {
     crate::verify(wt)?;
     let dirty = !git(&wt.path, &["status", "--porcelain"])?.trim().is_empty();
-    let commits = git(&wt.path, &["rev-list", "--count", &format!("{}..HEAD", wt.base)])?.trim().parse().unwrap_or(0);
     let target = git(&wt.repo, &["symbolic-ref", "--quiet", "--short", "HEAD"]).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
-    let merged = commits > 0
-        && target.as_ref().is_some_and(|t| {
-            crate::git_command().args(["merge-base", "--is-ancestor", &wt.branch, t]).current_dir(&wt.repo).status().is_ok_and(|s| s.success())
-        });
-    Ok(WtStatus { dirty, commits, target, merged })
+    let on_branch = crate::on_session_branch(wt);
+    let base = if on_branch { wt.base.as_str() } else { target.as_deref().unwrap_or(&wt.base) };
+    let commits = git(&wt.path, &["rev-list", "--count", &format!("{base}..HEAD")])?.trim().parse().unwrap_or(0);
+    let merged = on_branch
+        && commits > 0
+        && target
+            .as_ref()
+            .is_some_and(|t| crate::git_command().args(["merge-base", "--is-ancestor", "HEAD", t]).current_dir(&wt.path).status().is_ok_and(|s| s.success()));
+    Ok(WtStatus { dirty, commits, target, merged, on_session_branch: on_branch })
 }
 
 /// Commits all changes in the working tree. Returns the short hash
@@ -47,10 +51,22 @@ pub fn commit(wt: &Worktree, message: &str) -> Result<String, WorktreeError> {
     Ok(git(&wt.path, &["rev-parse", "--short", "HEAD"])?.trim().to_string())
 }
 
+fn require_session_branch(wt: &Worktree) -> Result<(), WorktreeError> {
+    if !crate::on_session_branch(wt) {
+        return Err(fail(plyfold_i18n::tr!(
+            "セッションの元のブランチがチェックアウトされていません。ブランチを確認してください",
+            "The session's original branch is not checked out. Check the current branch",
+            "当前未检出会话的原始分支。请检查当前分支"
+        )));
+    }
+    Ok(())
+}
+
 /// Merges the session branch into the branch currently checked out in the original repository. Returns the target's name.
 /// On a conflict, aborts the merge and restores the original repository to its previous state
 pub fn merge(wt: &Worktree) -> Result<String, WorktreeError> {
     crate::verify(wt)?;
+    require_session_branch(wt)?;
     let st = status(wt)?;
     if st.dirty {
         return Err(fail(plyfold_i18n::tr!(
@@ -91,6 +107,7 @@ fn has(cmd: &str) -> bool {
 /// Pushes the branch to origin and opens a GitHub PR (via gh). Returns the PR URL
 pub fn create_pr(wt: &Worktree, title: &str) -> Result<String, WorktreeError> {
     crate::verify(wt)?;
+    require_session_branch(wt)?;
     let st = status(wt)?;
     if st.dirty {
         return Err(fail(plyfold_i18n::tr!(
@@ -179,6 +196,7 @@ pub fn open_path_in_editor(path: &std::path::Path, prefer: &str) -> Result<Strin
 /// Resets to the base commit (drops commits, uncommitted changes and untracked files; ignored files are kept)
 pub fn discard(wt: &Worktree) -> Result<(), WorktreeError> {
     crate::verify(wt)?;
+    require_session_branch(wt)?;
     git(&wt.path, &["reset", "-q", "--hard", &wt.base])?;
     git(&wt.path, &["clean", "-fdq"])?;
     Ok(())
@@ -223,9 +241,28 @@ mod tests {
     }
 
     #[test]
+    fn detached_worktree_compares_current_head_and_rejects_session_actions() {
+        let (repo, wt) = setup("detached");
+        std::fs::write(repo.join("a.txt"), "changed on main\n").unwrap();
+        g(&repo, &["commit", "-qam", "main change"]);
+        g(&wt.path, &["checkout", "-q", "--detach", "main"]);
+
+        assert!(crate::diff(&wt).unwrap().files.is_empty());
+        assert_eq!(status(&wt).unwrap().commits, 0);
+        assert!(merge(&wt).is_err());
+        assert!(create_pr(&wt, "test").is_err());
+        assert!(discard(&wt).is_err());
+        std::fs::write(wt.path.join("a.txt"), "uncommitted\n").unwrap();
+        assert_eq!(crate::diff(&wt).unwrap().files.len(), 1);
+        assert!(status(&wt).unwrap().dirty);
+        assert!(discard(&wt).is_err());
+        assert_eq!(std::fs::read_to_string(wt.path.join("a.txt")).unwrap(), "uncommitted\n");
+    }
+
+    #[test]
     fn commit_then_merge() {
         let (repo, wt) = setup("merge");
-        assert_eq!(status(&wt).unwrap(), WtStatus { dirty: false, commits: 0, target: Some("main".into()), merged: false });
+        assert_eq!(status(&wt).unwrap(), WtStatus { dirty: false, commits: 0, target: Some("main".into()), merged: false, on_session_branch: true });
         assert!(commit(&wt, "x").is_err(), "nothing to commit");
         std::fs::write(wt.path.join("a.txt"), "one\ntwo\n").unwrap();
         std::fs::write(wt.path.join("new.txt"), "n\n").unwrap();

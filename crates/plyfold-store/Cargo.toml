@@ -1,13 +1,13 @@
 [package]
 name = "plyfold-store"
-version = "0.6.2"
+version = "0.6.3"
 edition = "2024"
 license.workspace = true
 repository.workspace = true
 publish = false
 
 [dependencies]
-plyfold-i18n = { version = "0.6.2", path = "../plyfold-i18n" }
+plyfold-i18n = { version = "0.6.3", path = "../plyfold-i18n" }
 rusqlite = { version = "0.43.0", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
 thiserror = "2.0.21"

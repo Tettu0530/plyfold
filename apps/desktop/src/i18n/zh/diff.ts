@@ -8,6 +8,7 @@ export const diff: Record<keyof typeof source, string> = {
   badgeRenamed: "重命名",
   dialogLabel: "Git 与更改：{title}",
   backToFiles: "文件",
+  branchChanged: "当前未检出会话的原始分支，请检查当前分支",
   sessionGone: "此会话已不存在",
   noRepository: "此会话不使用仓库（对话文件夹不是 git 仓库）",
   resizeColumn: "左栏宽度",

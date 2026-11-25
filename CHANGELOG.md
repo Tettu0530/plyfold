@@ -4,6 +4,17 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-11-25
+
+### Changed
+
+- Side chats keep their history when closed and across app restarts, and can be cleared and started again from the main conversation
+- Long transcripts avoid unnecessary rendering and layout work when resizing panes
+
+### Fixed
+
+- The Git view detects when a worktree has switched branches and compares its current contents with the original repository, while protecting session-specific actions
+
 ## [0.6.2] - 2026-11-24
 
 ### Changed
@@ -240,6 +251,7 @@ The first release, for macOS (Apple Silicon) and Windows 10/11 (x64; new, please
 - Settings for display size, reduced motion, notifications, defaults for new sessions and more
 - Spring-based motion modelled on SwiftUI, with a fade-only mode for Reduce motion
 
+[0.6.3]: https://github.com/Tettu0530/plyfold/releases/tag/v0.6.3
 [0.6.2]: https://github.com/Tettu0530/plyfold/releases/tag/v0.6.2
 [0.6.1]: https://github.com/Tettu0530/plyfold/releases/tag/v0.6.1
 [0.6.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.6.0

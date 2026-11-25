@@ -1,7 +1,7 @@
 // The side chat: a read-only fork of the session beside it, for questions that should not enter the main conversation.
 // It opens as a column at the pane's right edge (its width springs, so the main conversation reflows rather than scales)
 
-import { MessageCircleQuestionMark, RefreshCw, X } from "lucide-react";
+import { MessageCircleQuestionMark, Trash2, X } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -89,6 +89,8 @@ function SideChatBody({ mainId }: { mainId: string }) {
   const { closeSideChat, refreshSideChat, sendPrompt, cancel, setCategory, insertIntoComposer, enqueue, unqueue, sendQueued } = useStore.getState();
   const age = useAge(side?.openedAt ?? Date.now());
   const focused = useRef<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   // Put the cursor in the side chat's input once it is ready
   useEffect(() => {
@@ -110,18 +112,19 @@ function SideChatBody({ mainId }: { mainId: string }) {
         <span className="grow" />
         <button
           type="button"
-          aria-label={t("side.refresh")}
-          title={t("side.refresh")}
-          disabled={!side.id && !side.error}
-          onClick={() => void refreshSideChat(mainId)}
+          aria-label={t("side.clear")}
+          title={t("side.clear")}
+          disabled={!side.id || clearing}
+          onClick={() => setConfirmClear(true)}
           className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
         >
-          <RefreshCw className="size-3.5" aria-hidden />
+          <Trash2 className="size-3.5" aria-hidden />
         </button>
         <button
           type="button"
           aria-label={t("side.close")}
           title={t("side.close")}
+          disabled={clearing}
           onClick={() => void closeSideChat(mainId)}
           className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
         >
@@ -129,6 +132,28 @@ function SideChatBody({ mainId }: { mainId: string }) {
         </button>
       </div>
 
+      {confirmClear && (
+        <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 text-xs">
+          <span className="grow">{t("side.clearConfirm")}</span>
+          <button type="button" disabled={clearing} onClick={() => setConfirmClear(false)} className="rounded-md px-2 py-1 hover:bg-accent disabled:opacity-40">
+            {t("common.cancel")}
+          </button>
+          <button
+            type="button"
+            disabled={clearing}
+            onClick={() => {
+              setClearing(true);
+              void refreshSideChat(mainId).finally(() => {
+                setClearing(false);
+                setConfirmClear(false);
+              });
+            }}
+            className="rounded-md px-2 py-1 text-error hover:bg-error/10 disabled:opacity-40"
+          >
+            {t("side.clear")}
+          </button>
+        </div>
+      )}
       {side.error ? (
         <p className="m-3 text-xs whitespace-pre-wrap text-error">{side.error}</p>
       ) : !view || !r ? (
