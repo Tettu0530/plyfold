@@ -1,7 +1,7 @@
 import { ChevronRight, CircleArrowUp, KeyRound, ListTodo, Pencil, Play, Plus, RotateCcw, Search, Settings, Trash2, X } from "lucide-react";
 import { Spinner } from "./icons";
-import { motion } from "motion/react";
-import { useMemo, useRef, useState } from "react";
+import { motion, useReducedMotionConfig } from "motion/react";
+import { useId, useMemo, useRef, useState } from "react";
 
 import { age, repoName } from "@/lib/format";
 import { useT } from "@/i18n";
@@ -12,13 +12,14 @@ import type { SessionRecord } from "@/lib/types";
 import { Keys } from "./Keys";
 import { SessionMenu } from "./SessionMenu";
 import { liquidAnchor } from "./liquid/liquid";
-import { useLiquidActiveAnchors, useLiquidMovingAnchors } from "./liquid/stage";
+import { useLiquidActiveAnchors, useLiquidMenu, useLiquidMovingAnchors } from "./liquid/stage";
 import { smooth, snappy } from "./motion";
 import { isImeKey } from "@/lib/keys";
 import { startDrag } from "./pane/dnd";
 import { keysOf } from "@/lib/keymap";
 import { useBindings } from "@/state/keys";
 import { installUpdate, useUpdate } from "@/state/update";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
 /** Group key for everyday conversations (no repository name can contain a NUL) */
 const CHAT_GROUP = "\0chat";
@@ -227,11 +228,11 @@ export function Sidebar() {
             </div>
           );
         })}
-        {trashed.length > 0 && <TrashGroup items={trashed} />}
       </div>
 
       <div className="flex flex-col border-t p-2">
         <UpdateRow />
+        {trashed.length > 0 && <TrashGroup items={trashed} />}
         <motion.button
           ref={liquidAnchor("profiles")}
           type="button"
@@ -365,28 +366,27 @@ function UpdateRow() {
 }
 
 /**
- * Sessions moved to the trash, at the end of the list (closed until opened). Each can be restored as it was or
+ * Sessions moved to the trash, in the sidebar footer (closed until opened). Each can be restored as it was or
  * deleted for good; deleting asks whether its worktree and branch go too. Records left for 30 days are deleted at the
  * next start, without their worktrees
  */
 function TrashGroup({ items }: { items: SessionRecord[] }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  // What is being deleted for good: one session, or everything ("all")
   const [confirm, setConfirm] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { restoreSession, removeSession, emptyTrash } = useStore.getState();
+  const { restoreSession, removeSession } = useStore.getState();
   const run = (p: Promise<void>) => {
     setError(null);
     void p.then(() => setConfirm(null)).catch((e) => setError(String(e)));
   };
-  const anyWorktree = confirm === "all" ? items.some((r) => r.worktree_path) : !!items.find((r) => r.id === confirm)?.worktree_path;
+  const anyWorktree = !!items.find((r) => r.id === confirm)?.worktree_path;
   const choices = confirm && (
     <div className="flex flex-col gap-0.5 rounded-lg border p-1">
       {anyWorktree && (
         <button
           type="button"
-          onClick={() => run(confirm === "all" ? emptyTrash(true) : removeSession(confirm, true))}
+          onClick={() => run(removeSession(confirm, true))}
           className="flex h-7 items-center gap-2 rounded-md px-2 text-left text-xs text-error hover:bg-error/10"
         >
           <Trash2 className="size-3.5" aria-hidden />
@@ -395,7 +395,7 @@ function TrashGroup({ items }: { items: SessionRecord[] }) {
       )}
       <button
         type="button"
-        onClick={() => run(confirm === "all" ? emptyTrash(false) : removeSession(confirm, false))}
+        onClick={() => run(removeSession(confirm, false))}
         className="flex h-7 items-center gap-2 rounded-md px-2 text-left text-xs text-error hover:bg-error/10"
       >
         <Trash2 className="size-3.5" aria-hidden />
@@ -407,67 +407,158 @@ function TrashGroup({ items }: { items: SessionRecord[] }) {
     </div>
   );
   return (
-    <div className="mt-2 mb-2">
+    <div>
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="flex h-7 w-full items-center gap-1 rounded-md pr-2 pl-1 text-xs text-muted-foreground hover:text-foreground"
+        className="flex h-7 w-full items-center gap-2 rounded-lg px-2 text-muted-foreground hover:bg-accent hover:text-foreground"
       >
+        <Trash2 className="size-4" aria-hidden />
+        <span className="grow text-left">{t("sidebar.trash")}</span>
+        <span className="font-mono text-xs tabular">{items.length}</span>
         <motion.span animate={{ rotate: open ? 90 : 0 }} transition={snappy} className="flex">
           <ChevronRight className="size-3.5" aria-hidden />
         </motion.span>
-        <Trash2 className="size-3.5" aria-hidden />
-        <span className="grow text-left">{t("sidebar.trash")}</span>
-        <span className="font-mono tabular">{items.length}</span>
       </button>
       {open && (
-        <div className="flex flex-col gap-0.5">
-          {items.map((r) => (
-            <div key={r.id} className="flex flex-col gap-1">
-              <div className="group flex h-8 items-center gap-2 rounded-lg pr-1 pl-2 hover:bg-accent">
-                <ProviderLogo agent={r.agent} className="text-muted-foreground" />
-                <span className="min-w-0 grow truncate text-muted-foreground" title={r.title}>
-                  {r.title}
-                </span>
-                <button
-                  type="button"
-                  aria-label={t("sidebar.restore", { title: r.title })}
-                  title={t("sidebar.restore", { title: r.title })}
-                  onClick={() => run(restoreSession(r.id))}
-                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-background hover:text-foreground focus-visible:opacity-100"
-                >
-                  <RotateCcw className="size-3.5" aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  aria-label={t("sidebar.deleteForGood", { title: r.title })}
-                  title={t("sidebar.deleteForGood", { title: r.title })}
-                  onClick={() => setConfirm(r.id)}
-                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-background hover:text-error focus-visible:opacity-100"
-                >
-                  <Trash2 className="size-3.5" aria-hidden />
-                </button>
+        <div className="flex flex-col gap-0.5 pb-2">
+          <div className="max-h-[min(35dvh,20rem)] overflow-y-auto overscroll-contain">
+            {items.map((r) => (
+              <div key={r.id} className="flex flex-col gap-1">
+                <div className="group flex h-8 items-center gap-2 rounded-lg pr-1 pl-2 hover:bg-accent">
+                  <ProviderLogo agent={r.agent} className="text-muted-foreground" />
+                  <span className="min-w-0 grow truncate text-muted-foreground" title={r.title}>
+                    {r.title}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={t("sidebar.restore", { title: r.title })}
+                    title={t("sidebar.restore", { title: r.title })}
+                    onClick={() => run(restoreSession(r.id))}
+                    className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-background hover:text-foreground focus-visible:opacity-100"
+                  >
+                    <RotateCcw className="size-3.5" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("sidebar.deleteForGood", { title: r.title })}
+                    title={t("sidebar.deleteForGood", { title: r.title })}
+                    onClick={() => setConfirm(r.id)}
+                    className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-background hover:text-error focus-visible:opacity-100"
+                  >
+                    <Trash2 className="size-3.5" aria-hidden />
+                  </button>
+                </div>
+                {confirm === r.id && choices}
               </div>
-              {confirm === r.id && choices}
-            </div>
-          ))}
-          {confirm === "all" ? (
-            choices
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirm("all")}
-              className="flex h-7 items-center gap-2 rounded-lg px-2 text-left text-xs text-muted-foreground hover:bg-accent hover:text-error"
-            >
-              {t("sidebar.emptyTrash")}
-            </button>
-          )}
+            ))}
+          </div>
+          <EmptyTrashButton count={items.length} hasWorktrees={items.some((r) => !!r.worktree_path)} />
           <p className="px-2 pt-0.5 text-xs leading-relaxed text-muted-foreground">{t("sidebar.trashNote")}</p>
           {error && <p className="px-2 text-xs whitespace-pre-wrap text-error">{error}</p>}
         </div>
       )}
     </div>
+  );
+}
+
+function EmptyTrashButton({ count, hasWorktrees }: { count: number; hasWorktrees: boolean }) {
+  const t = useT();
+  const description = useId();
+  const reduced = useReducedMotionConfig();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const anchor = "sidebar-empty-trash";
+  const menu = useLiquidMenu(`menu:${anchor}`, anchor, { hold: false });
+  const raised = useLiquidActiveAnchors().has(anchor);
+  const changeOpen = (next: boolean) => {
+    if (!reduced) menu.onOpenChange(next);
+    setOpen(next);
+    if (next) setError(null);
+  };
+  const empty = async (removeWorktrees: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await useStore.getState().emptyTrash(removeWorktrees);
+      changeOpen(false);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={(next) => !busy && changeOpen(next)}>
+      <PopoverTrigger asChild>
+        <motion.button
+          ref={liquidAnchor(anchor)}
+          type="button"
+          whileTap={{ scale: 1.06 }}
+          transition={snappy}
+          className={cn(
+            "relative flex h-7 items-center gap-2 rounded-lg px-2 text-left text-xs text-muted-foreground hover:bg-accent hover:text-error data-[state=open]:bg-accent",
+            raised && "z-[57]",
+          )}
+        >
+          {t("sidebar.emptyTrash")}
+        </motion.button>
+      </PopoverTrigger>
+      <PopoverContent
+        ref={menu.ref as React.Ref<HTMLDivElement>}
+        style={reduced ? undefined : menu.style}
+        side="right"
+        align="end"
+        sideOffset={8}
+        aria-label={t("sidebar.emptyTrash")}
+        aria-describedby={description}
+        aria-busy={busy}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          cancel.current?.focus();
+        }}
+        className={cn(
+          "z-[58] flex w-64 flex-col gap-0.5 p-1.5 text-xs",
+          menu.moving && "opacity-0",
+          reduced &&
+            "duration-150 data-[side=bottom]:slide-in-from-top-0 data-[side=left]:slide-in-from-right-0 data-[side=right]:slide-in-from-left-0 data-[side=top]:slide-in-from-bottom-0 data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100",
+        )}
+      >
+        <p id={description} className="px-2 py-1.5 text-muted-foreground">
+          {t("sidebar.emptyTrashConfirm", { count })}
+        </p>
+        {(hasWorktrees ? [false, true] : [false]).map((removeWorktrees) => (
+          <button
+            key={String(removeWorktrees)}
+            type="button"
+            disabled={busy}
+            onClick={() => void empty(removeWorktrees)}
+            className="flex min-h-7 items-center gap-2 rounded-md px-2 py-1 text-left text-error hover:bg-error/10 disabled:opacity-50"
+          >
+            <Trash2 className="size-3.5 shrink-0" aria-hidden />
+            {t(removeWorktrees ? "sidebar.emptyTrashWithWorktrees" : hasWorktrees ? "sidebar.emptyTrashKeepWorktrees" : "sidebar.emptyTrash")}
+          </button>
+        ))}
+        {error && (
+          <p role="alert" className="px-2 py-1 whitespace-pre-wrap text-error">
+            {error}
+          </p>
+        )}
+        <button
+          ref={cancel}
+          type="button"
+          disabled={busy}
+          onClick={() => changeOpen(false)}
+          className="flex h-7 items-center rounded-md px-2 text-left hover:bg-accent disabled:opacity-50"
+        >
+          {t("sessionMenu.cancel")}
+        </button>
+      </PopoverContent>
+    </Popover>
   );
 }
 

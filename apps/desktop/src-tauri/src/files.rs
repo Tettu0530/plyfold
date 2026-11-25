@@ -20,10 +20,67 @@ const SKIP_DIRS: &[&str] = &["node_modules", "target", "dist", "build", ".git", 
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct FileHit {
-    /// Path relative to the root, with `/` separators
+    /// Path as displayed in the mention
     pub path: String,
     /// Absolute path (what gets attached)
     pub abs: String,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub directory: bool,
+}
+
+/// Resolve a file named explicitly, including ignored files and paths outside the index.
+fn absolute_path(root: Option<&Path>, path: &Path) -> Option<PathBuf> {
+    let path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        // A rooted or drive-relative Windows path does not resolve against the session folder.
+        if path.has_root() || matches!(path.components().next(), Some(std::path::Component::Prefix(_))) {
+            return None;
+        }
+        let root = root?;
+        if !root.is_dir() {
+            return None;
+        }
+        std::path::absolute(root.join(path)).ok()?
+    };
+    Some(path)
+}
+
+pub fn path_candidates(root: Option<&Path>, path: &Path, display: &str, complete: bool, limit: usize) -> Vec<FileHit> {
+    let Some(path) = absolute_path(root, path) else { return Vec::new() };
+    if path.is_file() {
+        return vec![FileHit { path: display.to_owned(), abs: path.to_string_lossy().into_owned(), directory: false }];
+    }
+    let separator = |ch: char| ch == '/' || (cfg!(windows) && ch == '\\');
+    let (directory, display_prefix, needle) = if path.is_dir() {
+        let prefix = if display.ends_with(separator) { display.to_owned() } else { format!("{display}/") };
+        (path.as_path(), prefix, String::new())
+    } else if complete {
+        let Some(parent) = path.parent() else { return Vec::new() };
+        let Some(name) = path.file_name() else { return Vec::new() };
+        let prefix = display.rfind(separator).map_or("", |i| &display[..=i]);
+        (parent, prefix.to_owned(), name.to_string_lossy().to_lowercase())
+    } else {
+        return Vec::new();
+    };
+
+    let Ok(entries) = std::fs::read_dir(directory) else { return Vec::new() };
+    let mut hits = Vec::new();
+    for entry in entries.filter_map(Result::ok).take(WALK_LIMIT) {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !name.to_lowercase().starts_with(&needle) || (name.starts_with('.') && !needle.starts_with('.')) {
+            continue;
+        }
+        let path = entry.path();
+        let Ok(metadata) = std::fs::metadata(&path) else { continue };
+        let directory = metadata.is_dir();
+        if directory || metadata.is_file() {
+            hits.push(FileHit { path: format!("{display_prefix}{name}"), abs: path.to_string_lossy().into_owned(), directory });
+        }
+    }
+    hits.sort_by(|a, b| b.directory.cmp(&a.directory).then(a.path.cmp(&b.path)));
+    hits.truncate(limit);
+    hits
 }
 
 /// A directory's file list and when it was read
@@ -45,7 +102,7 @@ impl FileIndex {
         scored
             .into_iter()
             .take(limit) // The relative path uses `/`; the absolute one uses the OS's separator (`\` on Windows)
-            .map(|(_, p)| FileHit { path: p.clone(), abs: root.join(p.split('/').collect::<PathBuf>()).to_string_lossy().into_owned() })
+            .map(|(_, p)| FileHit { path: p.clone(), abs: root.join(p.split('/').collect::<PathBuf>()).to_string_lossy().into_owned(), directory: false })
             .collect()
     }
 
@@ -185,6 +242,20 @@ mod tests {
         assert!(hits.iter().take(4).all(|h| h.path.to_lowercase().contains("composer")), "{hits:?}");
         // Ignored build output never shows up
         assert!(FileIndex::default().search(&root, "target/debug", 50).iter().all(|h| !h.path.starts_with("target/")));
+    }
+
+    #[test]
+    fn resolves_literal_paths_without_the_index() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let path = Path::new("../Cargo.toml");
+        let hit = path_candidates(Some(&root), path, "../Cargo.toml", false, 50).pop().unwrap();
+        assert_eq!(hit.path, "../Cargo.toml");
+        assert!(Path::new(&hit.abs).is_absolute());
+        assert_eq!(path_candidates(None, Path::new(&hit.abs), &hit.abs, true, 50).len(), 1);
+        assert!(path_candidates(None, path, "../Cargo.toml", true, 50).is_empty());
+        let hits = path_candidates(Some(&root), Path::new(".."), "..", true, 50);
+        assert!(hits.iter().any(|hit| hit.directory && hit.path == "../src"));
+        assert!(hits.iter().any(|hit| !hit.directory && hit.path == "../Cargo.toml"));
     }
 
     #[test]

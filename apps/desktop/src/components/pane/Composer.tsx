@@ -1,4 +1,4 @@
-import { ArrowUp, CornerDownRight, ListOrdered, ListPlus, Paperclip, Pencil, Square, X } from "lucide-react";
+import { ArrowUp, CornerDownRight, Minimize2, ListOrdered, ListPlus, Paperclip, Pencil, Square, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { isDangerMode, ModeIcon, modeLabel } from "../icons";
 import { Keys } from "../Keys";
 import { SplitFlap } from "../SplitFlap";
-import { CHIP_TRIGGER } from "./chip";
+import { CHIP_TRIGGER, COMPOSER_PRIMARY_BUTTON } from "./chip";
 import { smooth } from "../motion";
 import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidActiveAnchors, useLiquidMenu } from "../liquid/stage";
@@ -39,7 +39,19 @@ function modeChoices(info: SessionInfo | null): string[] {
 }
 
 /** Context usage. Click to show the breakdown */
-function ContextMeter({ info, pct, scope }: { info: SessionInfo; pct: number; scope: string }) {
+function ContextMeter({
+  info,
+  pct,
+  scope,
+  onCompact,
+  compactDisabled,
+}: {
+  info: SessionInfo;
+  pct: number;
+  scope: string;
+  onCompact?: () => void;
+  compactDisabled?: boolean;
+}) {
   const anchor = `${scope}:ctx`;
   const menu = useLiquidMenu(`menu:${anchor}`, anchor);
   const raised = useLiquidActiveAnchors().has(anchor);
@@ -105,6 +117,17 @@ function ContextMeter({ info, pct, scope }: { info: SessionInfo; pct: number; sc
             {t("composer.reportedModel")} <span className="font-mono text-foreground">{info.reported_model}</span>
           </p>
         )}
+        {onCompact && (
+          <button
+            type="button"
+            disabled={compactDisabled}
+            onClick={onCompact}
+            className="flex items-center justify-center gap-1.5 rounded-md border border-input px-2 py-1.5 hover:bg-accent disabled:opacity-40"
+          >
+            <Minimize2 className="size-3.5" aria-hidden />
+            {t("composer.compactContext")}
+          </button>
+        )}
       </PopoverContent>
     </Popover>
   );
@@ -120,6 +143,8 @@ export function ControlRow({
   noPickers = false,
   noMode = false,
   showContext = true,
+  onCompact,
+  compactDisabled,
 }: {
   agent: string;
   info: SessionInfo | null;
@@ -134,6 +159,8 @@ export function ControlRow({
   noMode?: boolean;
   /** Hide context usage while composing a new session */
   showContext?: boolean;
+  onCompact?: () => void;
+  compactDisabled?: boolean;
 }) {
   const t = useT();
   const raised = useLiquidActiveAnchors();
@@ -146,7 +173,7 @@ export function ControlRow({
   const ctxPct = info?.context_used != null && info.context_size ? Math.round((info.context_used / info.context_size) * 100) : null;
 
   return (
-    <div className="flex items-center gap-0.5 text-xs">
+    <div data-composer-controls className="flex items-center gap-0.5 text-xs">
       {/* Model and effort: one chip, one menu (effort in a submenu) */}
       <ModelMenu scope={scope} agent={agent} model={model} effort={effort} onSet={onSet} />
       {/* Mode: a picker like model and effort; ⇧⇥ in the input still cycles through the modes (the label flips) */}
@@ -195,7 +222,7 @@ export function ControlRow({
       )}
       {empty && !model && !effort && modes.length === 0 && <span className="px-1.5 text-muted-foreground">{empty}</span>}
       <span className="grow" />
-      {showContext && ctxPct != null && info && <ContextMeter info={info} pct={ctxPct} scope={scope} />}
+      {showContext && ctxPct != null && info && <ContextMeter info={info} pct={ctxPct} scope={scope} onCompact={onCompact} compactDisabled={compactDisabled} />}
     </div>
   );
 }
@@ -222,6 +249,7 @@ function QueueList({
       {items.length > 0 && (
         <motion.div
           key="queue"
+          data-composer-queue
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: "auto", opacity: 1 }}
           exit={{ height: 0, opacity: 0 }}
@@ -408,6 +436,7 @@ export function Composer({
   const mention = useMention({ root, text, setText, textRef, boxRef: att.boxRef, scope, onPick: (h) => att.addMention(h.abs, h.path) });
   // "/" at the start lists the agent's slash commands
   const cmds = commands ?? info?.commands ?? [];
+  const supportsCompaction = cmds.some((command) => command.name === "compact");
   const models = option(info, "model")?.choices.map((c) => c.value) ?? [];
   const slash = useSlash({ commands: cmds, models, text, setText, textRef, boxRef: att.boxRef, scope });
   // A whole command at the start is shown in blue, and its input hint faintly after "/name " (see CommandLayer)
@@ -439,9 +468,18 @@ export function Composer({
 
   return (
     // Same width as the conversation above in a wide pane (its edges line up with the messages, as in a narrow one)
-    <div className="flex shrink-0 flex-col gap-1 px-[max(0.75rem,calc((100%_-_53rem)/2))] pb-3">
+    <div data-session-composer className="flex shrink-0 flex-col gap-1 px-[max(0.75rem,calc((100%_-_53rem)/2))] pb-3">
       <QueueList scope={scope} items={queue} busy={busy} onRemove={(k) => onUnqueue?.(k)} onSendNow={() => onSendQueued?.()} />
-      <ControlRow scope={scope} agent={agent} info={info} onSet={onSet} noPickers={noPickers} noMode={noMode} />
+      <ControlRow
+        scope={scope}
+        agent={agent}
+        info={info}
+        onSet={onSet}
+        noPickers={noPickers}
+        noMode={noMode}
+        onCompact={supportsCompaction ? () => onSend("/compact", []) : undefined}
+        compactDisabled={disabled || busy}
+      />
       <MentionMenu m={mention} boxRef={att.boxRef} />
       <SlashMenu m={slash} boxRef={att.boxRef} />
       <AttachBox att={att}>
@@ -490,13 +528,7 @@ export function Composer({
           />
         </div>
         {stopMode ? (
-          <button
-            type="button"
-            aria-label={t("composer.stopEsc")}
-            title={t("composer.stopEsc")}
-            onClick={onStop}
-            className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
-          >
+          <button type="button" aria-label={t("composer.stopEsc")} title={t("composer.stopEsc")} onClick={onStop} className={COMPOSER_PRIMARY_BUTTON}>
             <Square className="size-3 fill-current" aria-hidden />
           </button>
         ) : (
@@ -506,7 +538,7 @@ export function Composer({
             title={busy ? t("composer.addToQueueHint") : undefined}
             disabled={!canSend}
             onClick={send}
-            className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground hover:bg-accent disabled:opacity-40"
+            className={COMPOSER_PRIMARY_BUTTON}
           >
             {busy ? <ListPlus className="size-3.5" aria-hidden /> : <ArrowUp className="size-3.5" aria-hidden />}
           </button>

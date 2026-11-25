@@ -157,3 +157,69 @@ describe("side chat", () => {
     info.mockRestore();
   });
 });
+
+describe("saved effort", () => {
+  it("keeps a session's choice when another session changes the profile default", async () => {
+    const saved = useStore.getState().effort;
+    const session = { ...record, status: "idle" as const };
+    const other = { ...session, id: "s2" };
+    useStore.setState({
+      sessions: reduceEvent(reduceEvent({}, { type: "session_created", session }), { type: "session_created", session: other }),
+      effort: { profiles: {}, sessions: {} },
+    });
+    const change = vi.spyOn(api, "setByCategory").mockResolvedValue();
+    const reopen = vi.spyOn(api, "reopenSession").mockResolvedValue();
+    const sessionInfo = vi.spyOn(api, "sessionInfo").mockResolvedValue({
+      ...info(0),
+      config: [{ id: "effort", category: "thought_level", name: "Effort", current: "low", choices: [{ value: "high", name: "High" }] }],
+    });
+    try {
+      const store = useStore.getState();
+      await store.setCategory("s1", "thought_level", "high");
+      await store.setCategory("s2", "thought_level", "low");
+      expect(useStore.getState().effort.profiles.mock).toBe("low");
+      change.mockClear();
+      await store.reopen("s1");
+      expect(change).toHaveBeenCalledWith("s1", "thought_level", "high");
+    } finally {
+      change.mockRestore();
+      reopen.mockRestore();
+      sessionInfo.mockRestore();
+      useStore.setState({ effort: saved });
+    }
+  });
+});
+
+it("opens the new session pane while the agent is still starting", async () => {
+  const draftId = "draft:early-start";
+  const recordStarting = { ...record, id: "early" };
+  const original = useStore.getState();
+  useStore.setState({
+    panes: [draftId, null],
+    drafts: { [draftId]: { profile: "mock", repo: "/repo", chat: false, worktree: false, choices: {}, busy: false, error: null } },
+    sessions: {},
+    effort: { profiles: {}, sessions: {} },
+  });
+  let finish!: (record: SessionRecord) => void;
+  const start = vi.spyOn(api, "startSession").mockImplementation((_args, created) => {
+    created?.(recordStarting);
+    return new Promise((resolve) => {
+      finish = resolve;
+    });
+  });
+  const prompt = vi.spyOn(api, "prompt").mockResolvedValue();
+  try {
+    const opening = useStore.getState().startDraft(draftId, "Hello");
+    expect(useStore.getState().panes[0]).toBe("early");
+    expect(useStore.getState().sessions.early.sendingFirstPrompt).toBe(true);
+    expect(prompt).not.toHaveBeenCalled();
+    finish({ ...recordStarting, status: "idle" });
+    await opening;
+    expect(prompt).toHaveBeenCalledWith("early", "Hello", []);
+    expect(useStore.getState().sessions.early.sendingFirstPrompt).toBe(false);
+  } finally {
+    prompt.mockRestore();
+    start.mockRestore();
+    useStore.setState({ panes: original.panes, drafts: original.drafts, sessions: original.sessions, effort: original.effort });
+  }
+});

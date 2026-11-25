@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import type { AttachmentWire } from "./attachments";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
@@ -13,6 +13,8 @@ import type {
   EngineEvent,
   EventRecord,
   FileHit,
+  GitCheckout,
+  GitHistory,
   GitInfo,
   ProfileDetail,
   ProfileForm,
@@ -39,8 +41,10 @@ export const api = {
   removeRegistryAgent: (id: string) => invoke<void>("remove_registry_agent", { id }),
   listSessions: () => invoke<SessionRecord[]>("list_sessions"),
   sessionHistory: (id: string) => invoke<EventRecord[]>("session_history", { id }),
-  startSession: (args: { profile: string; repo: string; title: string; worktree: boolean }) => invoke<SessionRecord>("start_session", args),
-  startChat: (profile: string, title: string) => invoke<SessionRecord>("start_chat", { profile, title }),
+  startSession: (args: { profile: string; repo: string; title: string; worktree: boolean }, created?: (record: SessionRecord) => void) =>
+    invoke<SessionRecord>("start_session", { ...args, created: new Channel(created) }),
+  startChat: (profile: string, title: string, created?: (record: SessionRecord) => void) =>
+    invoke<SessionRecord>("start_chat", { profile, title, created: new Channel(created) }),
   reopenSession: (id: string) => invoke<void>("reopen_session", { id }),
   forkSession: (id: string, newWorktree: boolean) => invoke<SessionRecord>("fork_session", { id, newWorktree }),
   openSideChat: (id: string) => invoke<SessionRecord>("open_side_chat", { id }),
@@ -75,7 +79,7 @@ export const api = {
   openUrl: (url: string) => invoke<void>("open_url", { url }),
   appInfo: () => invoke<AppInfo>("app_info"),
   readImage: (path: string) => invoke<string>("read_image", { path }),
-  searchFiles: (root: string, query: string) => invoke<FileHit[]>("search_files", { root, query }),
+  searchFiles: (root: string | null, query: string, exact: boolean) => invoke<FileHit[]>("search_files", { root, query, exact }),
   completeDirs: (input: string) => invoke<DirCandidate[]>("complete_dirs", { input }),
   usageSummary: (days: number) => invoke<ProfileUsage[]>("usage_summary", { days }),
   prompt: (id: string, text: string, attachments: AttachmentWire[] = []) => invoke<void>("prompt", { id, text, attachments }),
@@ -92,6 +96,8 @@ export const api = {
   revealPath: (which: "config" | "data") => invoke<void>("reveal_path", { which }),
   createPr: (id: string) => invoke<string>("create_pr", { id }),
   gitInfo: (id: string) => invoke<GitInfo>("git_info", { id }),
+  gitHistory: (id: string) => invoke<GitHistory>("git_history", { id }),
+  gitCheckout: (id: string, target: GitCheckout) => invoke<void>("git_checkout", { id, target }),
   gitFetch: (id: string) => invoke<void>("git_fetch", { id }),
   gitPush: (id: string) => invoke<string>("git_push", { id }),
   gitPull: (id: string) => invoke<void>("git_pull", { id }),

@@ -6,6 +6,7 @@ mod platform;
 mod registry;
 mod shell_path;
 mod tasks;
+mod terminal;
 
 pub use shell_path::adopt_login_path;
 
@@ -27,6 +28,7 @@ const KEYCHAIN_SERVICE: &str = "plyfold";
 
 struct AppState {
     engine: Engine,
+    terminals: terminal::Terminals,
     /// Where sessions (and the task queue) are kept: see data_dir
     data_dir: PathBuf,
     config: RwLock<Config>,
@@ -361,9 +363,22 @@ fn session_history(state: State<'_, AppState>, id: String) -> CmdResult<Vec<Even
 }
 
 #[tauri::command]
-async fn start_session(state: State<'_, AppState>, profile: String, repo: String, title: String, worktree: bool) -> CmdResult<SessionRecord> {
+async fn start_session(
+    state: State<'_, AppState>,
+    profile: String,
+    repo: String,
+    title: String,
+    worktree: bool,
+    created: tauri::ipc::Channel<SessionRecord>,
+) -> CmdResult<SessionRecord> {
     let repo = PathBuf::from(expand_home(&repo));
-    state.engine.start_session(StartSession { profile, title, repo, worktree }).await.map_err(err)
+    state
+        .engine
+        .start_session_with_created(StartSession { profile, title, repo, worktree }, |record| {
+            let _ = created.send(record.clone());
+        })
+        .await
+        .map_err(err)
 }
 
 #[tauri::command]
@@ -377,8 +392,14 @@ async fn fork_session(state: State<'_, AppState>, id: String, new_worktree: bool
 }
 
 #[tauri::command]
-async fn start_chat(state: State<'_, AppState>, profile: String, title: String) -> CmdResult<SessionRecord> {
-    state.engine.start_chat(&profile, &title).await.map_err(err)
+async fn start_chat(state: State<'_, AppState>, profile: String, title: String, created: tauri::ipc::Channel<SessionRecord>) -> CmdResult<SessionRecord> {
+    state
+        .engine
+        .start_chat_with_created(&profile, &title, |record| {
+            let _ = created.send(record.clone());
+        })
+        .await
+        .map_err(err)
 }
 
 #[tauri::command]
@@ -617,13 +638,25 @@ fn open_file_in_editor(state: State<'_, AppState>, path: String) -> CmdResult<St
 
 /// Files for @-mentions in the composer (files.rs). `root` is the session's worktree or repository
 #[tauri::command]
-async fn search_files(root: String, query: String) -> Vec<files::FileHit> {
+async fn search_files(root: Option<String>, query: String, exact: bool) -> Vec<files::FileHit> {
     static INDEX: std::sync::LazyLock<files::FileIndex> = std::sync::LazyLock::new(files::FileIndex::default);
-    let root = std::path::PathBuf::from(expand_home(&root));
-    if !root.is_dir() {
-        return Vec::new();
-    }
-    INDEX.search(&root, &query, 50)
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = root.as_deref().map(expand_home).map(PathBuf::from);
+        let path = PathBuf::from(expand_home(&query));
+        let complete = exact || query.contains('/') || cfg!(windows) && query.contains('\\');
+        if !query.is_empty() {
+            let hits = files::path_candidates(root.as_deref(), &path, &query, complete, 50);
+            if exact || !hits.is_empty() {
+                return hits;
+            }
+        }
+        match root {
+            Some(root) if root.is_dir() => INDEX.search(&root, &query, 50),
+            _ => Vec::new(),
+        }
+    })
+    .await
+    .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -634,7 +667,7 @@ async fn complete_dirs(input: String) -> Vec<dirs::DirCandidate> {
 
 fn expand_home(p: &str) -> String {
     match p.strip_prefix("~/") {
-        Some(rest) => format!("{}/{rest}", std::env::var("HOME").unwrap_or_default()),
+        Some(rest) => std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).map_or_else(|_| p.to_owned(), |home| format!("{home}/{rest}")),
         None => p.to_string(),
     }
 }
@@ -850,6 +883,16 @@ async fn git_info(state: State<'_, AppState>, id: String) -> CmdResult<plyfold_w
 }
 
 #[tauri::command]
+async fn git_history(state: State<'_, AppState>, id: String) -> CmdResult<plyfold_worktree::history::History> {
+    blocking(&state, move |e| e.git_history(&id)).await
+}
+
+#[tauri::command]
+async fn git_checkout(state: State<'_, AppState>, id: String, target: plyfold_worktree::history::Checkout) -> CmdResult<()> {
+    blocking(&state, move |e| e.git_checkout(&id, target)).await
+}
+
+#[tauri::command]
 async fn git_fetch(state: State<'_, AppState>, id: String) -> CmdResult<()> {
     blocking(&state, move |e| e.git_fetch(&id)).await
 }
@@ -971,6 +1014,7 @@ pub fn run() {
 
             app.manage(AppState {
                 engine,
+                terminals: terminal::Terminals::default(),
                 data_dir: data_dir(&state_dir),
                 config: RwLock::new(config),
                 config_path,
@@ -981,6 +1025,10 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            terminal::start_terminal,
+            terminal::write_terminal,
+            terminal::resize_terminal,
+            terminal::stop_terminal,
             list_profiles,
             list_sessions,
             session_history,
@@ -1040,6 +1088,8 @@ pub fn run() {
             discard_session_changes,
             create_pr,
             git_info,
+            git_history,
+            git_checkout,
             git_fetch,
             git_push,
             git_pull,

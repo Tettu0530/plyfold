@@ -7,6 +7,7 @@ export const composer: Record<keyof typeof source, string> = {
   outputTotal: "输出（累计）",
   costTotal: "费用（累计）",
   contextDetails: "上下文详情",
+  compactContext: "压缩上下文",
   contextUsage: "上下文用量",
   context: "上下文",
   reportedModel: "响应模型",

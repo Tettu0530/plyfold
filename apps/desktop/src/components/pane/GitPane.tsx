@@ -11,6 +11,7 @@ import { gitSessionOf, useStore } from "@/state/store";
 import { Num, ROW, Unified } from "../PatchLines";
 import { Segmented } from "../Segmented";
 import { GitPanel, useGitInfo } from "./GitMenu";
+import { GitHistoryView } from "./GitHistory";
 import { startDrag } from "./dnd";
 import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
 
@@ -156,6 +157,7 @@ export function GitPane({ index, id }: { index: number; id: string }) {
   // Narrow: whether a file's diff replaces the list
   const [reading, setReading] = useState(false);
   const [mode, setMode] = useState<View>("unified");
+  const [tab, setTab] = useState<"changes" | "history">("changes");
   const [wt, setWt] = useState<WtStatus | null>(null);
   const status = view?.record.status;
   const busy = status === "working" || status === "awaiting_permission" || status === "starting" || status === "stalled";
@@ -163,7 +165,7 @@ export function GitPane({ index, id }: { index: number; id: string }) {
   const [columnWidth, setColumnWidth] = useColumnWidth();
   const [gitHeight, setGitHeight] = useStoredSize(SECTION_KEY, SECTION_DEFAULT);
   const listBox = useRef<HTMLDivElement>(null);
-  const listHeight = useHeight(listBox, `${narrow}:${reading}`);
+  const listHeight = useHeight(listBox, `${narrow}:${reading}:${tab}`);
   // Keep room for a few files below, however the pane is sized
   const sectionHeight = Math.round(Math.max(SECTION_MIN, Math.min(gitHeight, listHeight - 120)));
 
@@ -183,6 +185,7 @@ export function GitPane({ index, id }: { index: number; id: string }) {
   // On open, after worktree actions and status changes, when the window comes back, and every few seconds while the
   // agent works (it edits files mid-turn)
   useEffect(() => {
+    if (tab !== "changes") return;
     void reload();
     window.addEventListener("focus", reload);
     const timer = busy ? setInterval(reload, 5000) : undefined;
@@ -191,7 +194,7 @@ export function GitPane({ index, id }: { index: number; id: string }) {
       if (timer) clearInterval(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sid, status, busy, diffVersion]);
+  }, [sid, status, busy, diffVersion, tab]);
 
   const files: FileRow[] = useMemo(() => {
     if (!data) return [];
@@ -271,7 +274,7 @@ export function GitPane({ index, id }: { index: number; id: string }) {
           <span className="truncate font-medium">{r.title}</span>
           {git.info?.branch && <span className="hidden truncate font-mono text-xs text-muted-foreground @[26rem]:inline">{git.info.branch}</span>}
           <span className="grow" />
-          {data && total.add + total.del > 0 && (
+          {tab === "changes" && data && total.add + total.del > 0 && (
             <span className="shrink-0 font-mono text-xs tabular">
               <span className="text-working">+{total.add}</span> <span className="text-error">−{total.del}</span>
             </span>
@@ -287,7 +290,29 @@ export function GitPane({ index, id }: { index: number; id: string }) {
         </div>
       </PaneMenu>
 
-      {narrow ? (
+      <div className="flex shrink-0 border-b px-3 py-1.5">
+        <Segmented
+          label={t("diff.viewLabel")}
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: "changes", label: t("diff.gitChanges") },
+            { value: "history", label: t("diff.gitHistory") },
+          ]}
+        />
+      </div>
+
+      {tab === "history" ? (
+        <GitHistoryView
+          key={sid}
+          id={sid}
+          workspace={r.worktree_path ?? r.repo_path}
+          sessionBranch={r.worktree_path ? r.branch : null}
+          busy={busy}
+          hasRemote={!!git.info?.remote_url}
+          onChanged={bumpDiff}
+        />
+      ) : narrow ? (
         // One column: the list, or the picked file's diff in its place
         reading && current ? (
           <FileDiff file={current} mode="unified" onBack={() => setReading(false)} />
@@ -310,7 +335,7 @@ export function GitPane({ index, id }: { index: number; id: string }) {
         </div>
       )}
 
-      {wt && (
+      {tab === "changes" && wt && (
         <Actions
           key={sid}
           id={sid}

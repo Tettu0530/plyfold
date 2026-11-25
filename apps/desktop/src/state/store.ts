@@ -43,6 +43,7 @@ export interface SessionView {
   /** Whether the conversation has been loaded from the log */
   historyLoaded: boolean;
   lastError: string | null;
+  sendingFirstPrompt?: boolean;
   /** model / effort / mode chosen while the agent wasn't running (applied right after the next start) */
   pending: Partial<Record<Category, string>>;
   /** Slash commands from the session's log (used while the agent isn't running) */
@@ -60,6 +61,7 @@ export interface Draft {
   choices: Partial<Record<Category, string>>;
   /** Comparing: the profiles that each get the same prompt in a worktree of their own (null: one session) */
   compare?: string[] | null;
+  retryInput?: { text: string; attachments: Attached[] };
   busy: boolean;
   error: string | null;
 }
@@ -84,6 +86,10 @@ export const COMPARE_MAX = 4;
 export const isFiles = (id: string | null | undefined): id is string => !!id && id.startsWith("files:");
 export const filesSessionOf = (id: string) => id.slice("files:".length);
 export const filesPaneOf = (sessionId: string) => `files:${sessionId}`;
+
+export const isTerminal = (id: string | null | undefined): id is string => !!id && id.startsWith("terminal:");
+export const terminalPaneOf = (sessionId: string) => `terminal:${sessionId}`;
+export const terminalSessionOf = (id: string) => id.slice("terminal:".length);
 
 export interface PreviewPage {
   url: string;
@@ -205,7 +211,9 @@ export function restoreLayout(saved: unknown, exists: (id: string) => boolean): 
   const size = Math.max(4, ...leaves(layout).map((i) => i + 1));
   const panes = Array.from({ length: size }, (_, i) => {
     const id = o.panes![i];
-    return typeof id === "string" && !isDraft(id) && !isPreview(id) && !isGit(id) && !isFiles(id) && !isCompare(id) && exists(id) ? id : null;
+    return typeof id === "string" && !isDraft(id) && !isPreview(id) && !isGit(id) && !isFiles(id) && !isTerminal(id) && !isCompare(id) && exists(id)
+      ? id
+      : null;
   });
   const visible = leaves(layout);
   const focusedPane = typeof o.focusedPane === "number" && visible.includes(o.focusedPane) ? o.focusedPane : visible[0];
@@ -282,6 +290,7 @@ interface State {
   openDiff: (id: string) => void;
   /** The files the session read or edited, as a pane beside it */
   openFiles: (id: string) => void;
+  openTerminal: (id: string) => void;
   /** The comparison a session belongs to, as a pane beside it (it grows out of that session's compare button) */
   openCompare: (group: string, from: string) => void;
   /** Start one session per chosen profile, each in a worktree of its own, with the same prompt, side by side */
@@ -294,6 +303,7 @@ interface State {
   settingsView: { closing: boolean } | null;
   /** Per-profile config options from the last session (used by drafts) */
   infoCache: InfoCache;
+  effort: EffortPreferences;
   /** Sessions whose turn finished while unseen (cleared when opened in a pane). Value is the finish time */
   unread: Record<string, { at: number; error: boolean }>;
   openSettings: () => void;
@@ -389,18 +399,68 @@ const newView = (record: SessionRecord): SessionView => ({
   pending: {},
 });
 
+type EffortPreferences = { profiles: Record<string, string>; sessions: Record<string, string> };
+const EFFORT_KEY = "plyfold.effort.v1";
+
+function loadEffort(): EffortPreferences {
+  try {
+    const saved = JSON.parse(localStorage.getItem(EFFORT_KEY) ?? "{}") as Partial<EffortPreferences> | null;
+    return { profiles: saved?.profiles ?? {}, sessions: saved?.sessions ?? {} };
+  } catch {
+    return { profiles: {}, sessions: {} };
+  }
+}
+
+function rememberEffort(record: SessionRecord, value: string, updateDefault: boolean) {
+  useStore.setState((state) => {
+    const effort = {
+      profiles: updateDefault ? { ...state.effort.profiles, [record.profile]: value } : state.effort.profiles,
+      sessions: { ...state.effort.sessions, [record.id]: value },
+    };
+    try {
+      localStorage.setItem(EFFORT_KEY, JSON.stringify(effort));
+    } catch {
+      // The choice is still available for this run.
+    }
+    return { effort };
+  });
+}
+
+async function applyStartingChoices(record: SessionRecord, choices: Partial<Record<Category, string>> = {}) {
+  const effort = choices.thought_level ?? useStore.getState().effort.profiles[record.profile];
+  return applyChoices(record.id, effort === undefined ? choices : { ...choices, thought_level: effort }, record, choices.thought_level !== undefined);
+}
+
+async function reopenWithChoices(id: string) {
+  await api.reopenSession(id);
+  const s = useStore.getState();
+  const pending = s.sessions[id]?.pending ?? {};
+  const effort = s.effort.sessions[id];
+  await applyChoices(id, effort === undefined ? pending : { ...pending, thought_level: effort });
+  useStore.setState((state) => (state.sessions[id] ? { sessions: { ...state.sessions, [id]: { ...state.sessions[id], pending: {} } } } : state));
+}
+
 /** Right after start, apply the preselected model / effort / mode (skipped if unchanged) */
-async function applyChoices(id: string, choices: Partial<Record<Category, string>>) {
-  const wanted = Object.entries(choices) as [Category, string][];
+async function applyChoices(id: string, choices: Partial<Record<Category, string>>, record?: SessionRecord, updateEffortDefault = false) {
+  const { thought_level: effort, ...otherChoices } = choices;
+  const wanted = Object.entries(otherChoices) as [Category, string][];
+  if (effort !== undefined) wanted.push(["thought_level", effort]);
   if (wanted.length === 0) return;
-  const info = await api.sessionInfo(id);
+  let info = await api.sessionInfo(id);
   for (const [cat, value] of wanted) {
     const opt = info?.config.find((o) => o.category === cat);
     const cur = cat === "mode" ? (opt?.current ?? info?.current_mode) : opt?.current;
-    if (cur === value) continue;
-    await api.setByCategory(id, cat, value).catch(() => {
-      // If the options changed, start with the agent's defaults
-    });
+    if (cat === "thought_level" && !opt?.choices.some((choice) => choice.value === value) && cur !== value) continue;
+    try {
+      if (cur !== value) {
+        await api.setByCategory(id, cat, value);
+        // The selected model may expose a different set of effort values.
+        if (cat === "model" && effort !== undefined) info = await api.sessionInfo(id);
+      }
+      if (cat === "thought_level" && record) rememberEffort(record, value, updateEffortDefault);
+    } catch {
+      // If the options changed, start with the agent's defaults.
+    }
   }
 }
 
@@ -413,6 +473,7 @@ export function reduceEvent(sessions: Record<string, SessionView>, e: EngineEven
     return v ? { ...sessions, [e.session.id]: { ...v, record: e.session } } : sessions;
   }
   if (e.type === "session_created") {
+    if (sessions[e.session.id]?.sendingFirstPrompt) return sessions;
     return { ...sessions, [e.session.id]: { ...newView(e.session), historyLoaded: true } };
   }
   const id = e.session_id;
@@ -487,6 +548,7 @@ export const useStore = create<State>((set, get) => ({
   profilesView: null,
   settingsView: null,
   infoCache: loadInfoCache(),
+  effort: loadEffort(),
   unread: {},
   settings: {
     editor: "auto",
@@ -648,7 +710,7 @@ export const useStore = create<State>((set, get) => ({
       if (isPreview(displaced)) delete previews[displaced!];
       set({ panes, focusedPane: target, drafts, previews });
     }
-    if (isDraft(id) || isPreview(id) || isGit(id) || isFiles(id) || isCompare(id)) return;
+    if (isDraft(id) || isPreview(id) || isGit(id) || isFiles(id) || isTerminal(id) || isCompare(id)) return;
     await loadSession(id);
   },
 
@@ -696,6 +758,11 @@ export const useStore = create<State>((set, get) => ({
       const started = await Promise.allSettled(picks.map((profile) => api.startSession({ profile, repo: d.repo, title, worktree: true })));
       const recs: SessionRecord[] = [];
       for (const r of started) if (r.status === "fulfilled") recs.push(await api.setRunGroup(r.value.id, group));
+      await Promise.all(
+        recs.map((rec) =>
+          applyStartingChoices(rec, rec.profile === picks[0] && d.choices.thought_level !== undefined ? { thought_level: d.choices.thought_level } : {}),
+        ),
+      );
       const failed = started.find((r): r is PromiseRejectedResult => r.status === "rejected");
       if (recs.length === 0) throw failed?.reason ?? new Error("no session started");
       set((s) => {
@@ -733,6 +800,19 @@ export const useStore = create<State>((set, get) => ({
     const beside = leaves(s.layout).find((i) => s.panes[i] === id) ?? s.focusedPane;
     const slot = get().splitPane(beside, "right", null);
     void get().openInPane(pane, slot, `${id}:files`);
+  },
+
+  openTerminal: (id) => {
+    const s = get();
+    const pane = terminalPaneOf(id);
+    const slots = leaves(s.layout);
+    const shown = slots.find((slot) => s.panes[slot] === pane);
+    if (shown !== undefined) {
+      set({ focusedPane: shown });
+      return;
+    }
+    const beside = slots.find((slot) => s.panes[slot] === id) ?? s.focusedPane;
+    get().splitPane(beside, "right", pane, `${id}:shells`);
   },
 
   openProfiles: () => {
@@ -935,6 +1015,17 @@ export const useStore = create<State>((set, get) => ({
     const d = get().drafts[id];
     if (!d?.profile || d.busy) return;
     get().updateDraft(id, { busy: true, error: null });
+    let createdId: string | undefined;
+    const showSession = (record: SessionRecord) => {
+      createdId = record.id;
+      set((s) => {
+        const cur = s.sessions[record.id] ?? { ...newView(record), historyLoaded: true };
+        return {
+          panes: s.panes.map((pane) => (pane === id ? record.id : pane)),
+          sessions: { ...s.sessions, [record.id]: { ...cur, sendingFirstPrompt: true } },
+        };
+      });
+    };
     try {
       try {
         if (!d.chat) localStorage.setItem(LAST_REPO_KEY, d.repo);
@@ -943,10 +1034,13 @@ export const useStore = create<State>((set, get) => ({
         // Continue even if saving fails
       }
       const title = prompt.trim().split("\n")[0].slice(0, 40) || (d.chat ? t("store.newChatTitle") : t("store.newSessionTitle"));
-      const rec = d.chat ? await api.startChat(d.profile, title) : await api.startSession({ profile: d.profile, repo: d.repo, title, worktree: d.worktree });
+      const rec = d.chat
+        ? await api.startChat(d.profile, title, showSession)
+        : await api.startSession({ profile: d.profile, repo: d.repo, title, worktree: d.worktree }, showSession);
+      if (!createdId) showSession(rec);
       // Apply the model / effort / mode chosen in the draft before the first prompt (a conversation keeps its own mode)
       const { mode: _mode, ...rest } = d.choices;
-      await applyChoices(rec.id, d.chat ? rest : d.choices);
+      await applyStartingChoices(rec, d.chat ? rest : d.choices);
       set((s) => {
         const panes = s.panes.map((p) => (p === id ? rec.id : p));
         const drafts = { ...s.drafts };
@@ -958,7 +1052,28 @@ export const useStore = create<State>((set, get) => ({
       });
       if (prompt.trim() || attachments.length) await get().sendPrompt(rec.id, prompt, attachments);
     } catch (e) {
+      const session = createdId;
+      if (session) {
+        set((s) => {
+          const view = s.sessions[session];
+          if (!view) return s;
+          // Preserve the draft and allow a retry if workspace setup or startup failed.
+          return {
+            panes: s.panes.map((pane) => (pane === session ? id : pane)),
+            sessions: { ...s.sessions, [session]: { ...view, sendingFirstPrompt: false } },
+            drafts: { ...s.drafts, [id]: { ...d, busy: false, error: String(e), retryInput: { text: prompt, attachments } } },
+          };
+        });
+      }
       get().updateDraft(id, { busy: false, error: String(e) });
+    } finally {
+      const session = createdId;
+      if (session) {
+        set((s) => {
+          const view = s.sessions[session];
+          return view?.sendingFirstPrompt ? { sessions: { ...s.sessions, [session]: { ...view, sendingFirstPrompt: false } } } : s;
+        });
+      }
     }
   },
 
@@ -983,6 +1098,7 @@ export const useStore = create<State>((set, get) => ({
 
   startSession: async ({ prompt, ...args }) => {
     const rec = await api.startSession(args);
+    await applyStartingChoices(rec);
     await get().openInPane(rec.id);
     if (prompt?.trim()) await get().sendPrompt(rec.id, prompt);
   },
@@ -1030,14 +1146,9 @@ export const useStore = create<State>((set, get) => ({
       return { sessions: { ...s.sessions, [id]: { ...v, transcript: beginTurn(v.transcript, text, previews), lastError: null } } };
     });
     try {
-      // Reopen a stopped session before sending
+      // Reopen a stopped session and restore its selected effort before sending.
       const status = get().sessions[id]?.record.status;
-      if (status === "closed" || status === "error") {
-        await api.reopenSession(id);
-        const pending = get().sessions[id]?.pending ?? {};
-        await applyChoices(id, pending);
-        set((s) => (s.sessions[id] ? { sessions: { ...s.sessions, [id]: { ...s.sessions[id], pending: {} } } } : s));
-      }
+      if (status === "closed" || status === "error") await reopenWithChoices(id);
       await api.prompt(
         id,
         text,
@@ -1071,14 +1182,14 @@ export const useStore = create<State>((set, get) => ({
     // If not running, remember it and apply right after the next start
     if (v && !RUNNING.includes(v.record.status)) {
       set((s) => ({ sessions: { ...s.sessions, [id]: { ...s.sessions[id], pending: { ...s.sessions[id].pending, [category]: value } } } }));
+      if (category === "thought_level") rememberEffort(v.record, value, true);
       return;
     }
     await api.setByCategory(id, category, value);
+    if (category === "thought_level" && v) rememberEffort(v.record, value, true);
   },
 
-  reopen: async (id) => {
-    await api.reopenSession(id);
-  },
+  reopen: reopenWithChoices,
 
   renameSession: async (id, title) => {
     const t = title.trim();
@@ -1153,7 +1264,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   trashSession: async (id) => {
-    for (const pane of [id, gitPaneOf(id), filesPaneOf(id)]) {
+    for (const pane of [id, gitPaneOf(id), filesPaneOf(id), terminalPaneOf(id)]) {
       const slot = leaves(get().layout).find((i) => get().panes[i] === pane);
       if (slot !== undefined) get().closePane(slot);
     }
@@ -1181,12 +1292,10 @@ export const useStore = create<State>((set, get) => ({
 
   removeSession: async (id, removeWorktree) => {
     // Remove it from any open pane with a close animation
-    const pane = leaves(get().layout).find((i) => get().panes[i] === id);
-    if (pane !== undefined) get().closePane(pane);
-    const git = leaves(get().layout).find((i) => get().panes[i] === gitPaneOf(id));
-    if (git !== undefined) get().closePane(git);
-    const files = leaves(get().layout).find((i) => get().panes[i] === filesPaneOf(id));
-    if (files !== undefined) get().closePane(files);
+    for (const pane of [id, gitPaneOf(id), filesPaneOf(id), terminalPaneOf(id)]) {
+      const slot = leaves(get().layout).find((i) => get().panes[i] === pane);
+      if (slot !== undefined) get().closePane(slot);
+    }
     await api.deleteSession(id, removeWorktree);
     set((s) => {
       const sessions = { ...s.sessions };
@@ -1223,6 +1332,7 @@ async function runTask(queued: QueuedTask) {
     useStore.setState((s) => ({
       sessions: { ...s.sessions, [rec.id]: s.sessions[rec.id] ? { ...s.sessions[rec.id], record: rec } : { ...newView(rec), historyLoaded: true } },
     }));
+    await applyStartingChoices(rec);
     await useStore.getState().sendPrompt(rec.id, task.prompt);
   } catch (e) {
     // Back at the head of the queue with the reason, waiting to be started again by hand
@@ -1259,20 +1369,16 @@ async function loadSession(id: string) {
   }
 }
 
-// Persist the layout when it changes (drafts aren't kept)
-useStore.subscribe((st, prev) => {
-  if (
-    !st.ready ||
-    (st.panes === prev.panes &&
-      st.layout === prev.layout &&
-      st.focusedPane === prev.focusedPane &&
-      st.sidebarOpen === prev.sidebarOpen &&
-      st.sidebarWidth === prev.sidebarWidth)
-  )
-    return;
+// Coalesce layout saves so drag updates do not write synchronously on every frame.
+let layoutSaveTimer: ReturnType<typeof setTimeout> | undefined;
+function saveLayout() {
+  if (layoutSaveTimer === undefined) return;
+  clearTimeout(layoutSaveTimer);
+  layoutSaveTimer = undefined;
+  const st = useStore.getState();
   const layout: Layout = {
-    // Drafts, previews, Git and file panes are not restored on the next launch
-    panes: st.panes.map((p) => (isDraft(p) || isPreview(p) || isGit(p) || isFiles(p) || isCompare(p) ? null : p)),
+    // Only conversation panes are restored on the next launch
+    panes: st.panes.map((p) => (isDraft(p) || isPreview(p) || isGit(p) || isFiles(p) || isTerminal(p) || isCompare(p) ? null : p)),
     layout: st.layout,
     focusedPane: st.focusedPane,
     sidebarOpen: st.sidebarOpen,
@@ -1283,6 +1389,21 @@ useStore.subscribe((st, prev) => {
   } catch {
     // Failing to save doesn't affect behavior
   }
+}
+if (typeof window !== "undefined") window.addEventListener("pagehide", saveLayout);
+
+useStore.subscribe((st, prev) => {
+  if (
+    !st.ready ||
+    (st.panes === prev.panes &&
+      st.layout === prev.layout &&
+      st.focusedPane === prev.focusedPane &&
+      st.sidebarOpen === prev.sidebarOpen &&
+      st.sidebarWidth === prev.sidebarWidth)
+  )
+    return;
+  clearTimeout(layoutSaveTimer);
+  layoutSaveTimer = setTimeout(saveLayout, 250);
 });
 
 /**

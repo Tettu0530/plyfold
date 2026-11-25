@@ -1,8 +1,7 @@
-// @-mentions in the composer: typing "@" followed by part of a file name opens a list of files in the
-// session's working directory. Picking one replaces "@query" with "@relative/path" in the text and also
-// attaches the file (sent as an ACP resource_link), so agents that don't read "@" in text still get it.
+// @-mentions in the composer search the workspace or resolve a path directly. Picking a result
+// inserts the mention and attaches the file as an ACP resource_link.
 //   ↑↓ to choose, ⏎ or ⇥ to pick, esc to close. The list opens with the same liquid motion as other menus
-import { FileText } from "lucide-react";
+import { FileText, Folder } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
@@ -16,23 +15,33 @@ import { useLiquidMenu } from "../liquid/stage";
 
 /** The "@query" being typed right before the caret, or null */
 export function mentionAt(text: string, caret: number): { start: number; query: string } | null {
-  const m = /(^|\s)@([^\s@]*)$/.exec(text.slice(0, caret));
+  const m = /(^|\s)@("(?:[^"\r\n]|"")*"?|[^\s@"]*)$/.exec(text.slice(0, caret));
   if (!m) return null;
   return { start: caret - m[2].length - 1, query: m[2] };
 }
+
+// Quote paths with spaces or token delimiters. A doubled quote represents a literal quote.
+const mentionToken = (path: string) => (/[\s@"]/.test(path) ? `@"${path.replaceAll('"', '""')}"` : `@${path}`);
+
+function queryPath(query: string): string {
+  return query.startsWith('"') ? query.slice(1).replace(/"$/, "").replaceAll('""', '"') : query;
+}
+
+const explicitPath = (query: string) => /^(?:["/\\]|[a-z]:|~[/\\]|\.{1,2}[/\\])/i.test(query);
 
 /** Replace "@query" (from start to caret) with "@path" plus a space, and return the new text and the caret after the space */
 export function insertMention(text: string, start: number, caret: number, path: string): { text: string; caret: number } {
   const rest = text.slice(caret);
   // Add a space after the path unless one already follows
-  const token = /^\s/.test(rest) ? `@${path}` : `@${path} `;
+  const mention = mentionToken(path);
+  const token = /^\s/.test(rest) ? mention : `${mention} `;
   const caretAt = start + token.length + (token.endsWith(" ") ? 0 : 1);
   return { text: text.slice(0, start) + token + rest, caret: caretAt };
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** "@path" as a whole token: at the start or after whitespace, and followed by whitespace or the end */
-const mentionRe = (path: string, flags = "") => new RegExp(`(^|\\s)@${escapeRe(path)}(?=\\s|$)`, flags);
+const mentionRe = (path: string, flags = "") => new RegExp(`(^|\\s)${escapeRe(mentionToken(path))}(?=\\s|$)`, flags);
 
 /** Whether the text still mentions this path */
 export function hasMention(text: string, path: string): boolean {
@@ -64,13 +73,16 @@ interface Options {
 
 export function useMention({ root, text, setText, textRef, boxRef, scope, onPick }: Options) {
   const [caret, setCaret] = useState(0);
-  const [hits, setHits] = useState<FileHit[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [result, setResult] = useState<{ root: string | null; query: string; hits: FileHit[] } | null>(null);
   const [active, setActive] = useState(0);
   // A token the user dismissed with esc stays closed until they start a different one
   const [dismissed, setDismissed] = useState<number | null>(null);
-  const token = useMemo(() => (root ? mentionAt(text, caret) : null), [root, text, caret]);
-  const open = !!token && token.start !== dismissed;
+  const token = useMemo(() => mentionAt(text, caret), [text, caret]);
+  const query = token?.query ?? "";
+  const open = !!token && (!!root || explicitPath(query)) && token.start !== dismissed;
+  const current = result?.query === query && result.root === root ? result : null;
+  const hits = current?.hits ?? [];
+  const loaded = !inTauri || current !== null;
 
   // The composer box is the origin of the liquid animation
   const anchor = `${scope}:mention`;
@@ -89,24 +101,21 @@ export function useMention({ root, text, setText, textRef, boxRef, scope, onPick
 
   // Search while the token changes (a short delay so fast typing doesn't queue many searches)
   useEffect(() => {
-    if (!open || !root || !inTauri) {
-      setHits([]);
-      setLoaded(!inTauri);
-      return;
-    }
+    if (!open || !inTauri) return;
     let alive = true;
-    setLoaded(false);
+    const receive = (hits: FileHit[]) => {
+      if (!alive) return;
+      setResult({ root, query, hits });
+      setActive(0);
+    };
     const timer = setTimeout(() => {
-      void api
-        .searchFiles(root, token?.query ?? "")
-        .then((h) => alive && (setHits(h), setActive(0), setLoaded(true)))
-        .catch(() => alive && (setHits([]), setLoaded(true)));
+      void api.searchFiles(root, queryPath(query), explicitPath(query)).then(receive, () => receive([]));
     }, 60);
     return () => {
       alive = false;
       clearTimeout(timer);
     };
-  }, [open, root, token?.query]);
+  }, [open, root, query]);
 
   useEffect(() => {
     if (dismissed !== null && token?.start !== dismissed) setDismissed(null);
@@ -114,9 +123,13 @@ export function useMention({ root, text, setText, textRef, boxRef, scope, onPick
 
   const pick = (hit: FileHit) => {
     if (!token) return;
-    const next = insertMention(text, token.start, caret, hit.path);
+    const path = hit.directory ? `${hit.path}/` : hit.path;
+    const prefix = mentionToken(path);
+    const next = hit.directory
+      ? { text: text.slice(0, token.start) + prefix + text.slice(caret), caret: token.start + prefix.length - (prefix.startsWith('@"') ? 1 : 0) }
+      : insertMention(text, token.start, caret, path);
     setText(next.text);
-    onPick(hit);
+    if (!hit.directory) onPick(hit);
     // Put the caret after the inserted path once React has applied the new text
     requestAnimationFrame(() => {
       const el = textRef.current;
@@ -135,13 +148,20 @@ export function useMention({ root, text, setText, textRef, boxRef, scope, onPick
       setDismissed(token!.start);
       return true;
     }
-    if (hits.length === 0) return false;
+    const accept = (e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) || e.key === "Tab";
+    if (hits.length === 0) {
+      if (!loaded && explicitPath(query) && accept) {
+        e.preventDefault();
+        return true;
+      }
+      return false;
+    }
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       setActive((a) => (a + (e.key === "ArrowDown" ? 1 : hits.length - 1)) % hits.length);
       return true;
     }
-    if ((e.key === "Enter" && !e.shiftKey && !e.metaKey) || e.key === "Tab") {
+    if (accept) {
       e.preventDefault();
       pick(hits[Math.min(active, hits.length - 1)]);
       return true;
@@ -157,8 +177,9 @@ export function useMention({ root, text, setText, textRef, boxRef, scope, onPick
 
 export type MentionState = ReturnType<typeof useMention>;
 
-const dirOf = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
-const nameOf = (p: string) => p.slice(p.lastIndexOf("/") + 1);
+const separatorAt = (p: string) => Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+const dirOf = (p: string) => p.slice(0, Math.max(0, separatorAt(p)));
+const nameOf = (p: string) => p.slice(separatorAt(p) + 1);
 
 /** The list itself. Rendered next to the composer; anchored to the composer box */
 export function MentionMenu({ m, boxRef }: { m: MentionState; boxRef: React.RefObject<HTMLElement | null> }) {
@@ -183,24 +204,27 @@ export function MentionMenu({ m, boxRef }: { m: MentionState; boxRef: React.RefO
       >
         <div className="px-1.5 pt-0.5 pb-1 text-xs font-medium text-muted-foreground">{t("composer.mentionLabel")}</div>
         <div ref={listRef} role="listbox" aria-label={t("composer.mentionLabel")} className="max-h-64 overflow-y-auto">
-          {m.hits.map((h, i) => (
-            <button
-              key={h.path}
-              type="button"
-              role="option"
-              aria-selected={i === m.active}
-              data-row={i}
-              // mousedown keeps the focus in the composer
-              onMouseDown={(e) => e.preventDefault()}
-              onMouseMove={() => m.setActive(i)}
-              onClick={() => m.pick(h)}
-              className={cn("flex h-7 w-full items-center gap-2 rounded-md px-1.5 text-left", i === m.active && "bg-accent")}
-            >
-              <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-              <span className="shrink-0 font-mono text-xs">{nameOf(h.path)}</span>
-              <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{dirOf(h.path)}</span>
-            </button>
-          ))}
+          {m.hits.map((h, i) => {
+            const Icon = h.directory ? Folder : FileText;
+            return (
+              <button
+                key={h.path}
+                type="button"
+                role="option"
+                aria-selected={i === m.active}
+                data-row={i}
+                // mousedown keeps the focus in the composer
+                onMouseDown={(e) => e.preventDefault()}
+                onMouseMove={() => m.setActive(i)}
+                onClick={() => m.pick(h)}
+                className={cn("flex h-7 w-full items-center gap-2 rounded-md px-1.5 text-left", i === m.active && "bg-accent")}
+              >
+                <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="shrink-0 font-mono text-xs">{nameOf(h.path)}</span>
+                <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{dirOf(h.path)}</span>
+              </button>
+            );
+          })}
           {m.hits.length === 0 && (
             <p className="m-0 px-1.5 py-1 text-xs text-muted-foreground">{t(m.loaded ? "composer.mentionEmpty" : "composer.mentionLoading")}</p>
           )}

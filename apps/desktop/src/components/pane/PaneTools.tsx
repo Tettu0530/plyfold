@@ -6,6 +6,7 @@ import { createContext, useContext, useMemo, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useT, type MessageKey } from "@/i18n";
+import { inTauri } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { backgroundShells, currentPlan, touchedFiles, type BackgroundShell, type ShellState } from "@/state/paneData";
 import { localUrls } from "@/lib/urls";
@@ -69,6 +70,24 @@ function ToolButton({
         </PopoverContent>
       </Popover>
     </CloseMenu.Provider>
+  );
+}
+
+function OpenTerminalButton({ onOpen }: { onOpen: () => void }) {
+  const close = useContext(CloseMenu);
+  const t = useT();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        close();
+        onOpen();
+      }}
+      className="flex items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-xs hover:bg-accent"
+    >
+      <SquareTerminal className="size-3.5" aria-hidden />
+      {t("pane.openTerminal")}
+    </button>
   );
 }
 
@@ -194,6 +213,7 @@ export function PaneTools({ scope, items, alive }: { scope: string; items: Trans
         badge={shells.length ? (running > 0 ? running : shells.length) : null}
         width="w-96"
       >
+        {inTauri && <OpenTerminalButton onOpen={() => useStore.getState().openTerminal(scope)} />}
         {shells.length === 0 && <Empty>{t("pane.shellsEmpty")}</Empty>}
         {shells.map((s, i) => (
           <ShellRow key={s.id ?? i} s={s} anchor={`${scope}:shells`} />

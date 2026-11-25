@@ -51,14 +51,14 @@ function SearchHits({ hits }: { hits: SearchHit[] }) {
 /** Result lines shown at first. Click for the rest (no scrolling while collapsed) */
 const FIRST_LINES = 12;
 
-/** Re-render once a second only while running (to count elapsed time) */
-function useNow(active: boolean, ms = 1000) {
+/** Refresh the elapsed time at the displayed tenths-of-a-second precision while running. */
+function useNow(active: boolean) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!active) return;
-    const t = setInterval(() => setNow(Date.now()), ms);
+    const t = setInterval(() => setNow(Date.now()), 100);
     return () => clearInterval(t);
-  }, [active, ms]);
+  }, [active]);
   return now;
 }
 
@@ -67,7 +67,7 @@ const shortPath = (p: string) => p.split("/").slice(-3).join("/");
 function Status({ t }: { t: ToolCall }) {
   const tr = useT();
   const running = t.status === "pending" || t.status === "in_progress";
-  const now = useNow(running);
+  const now = useNow(running && t.startedAt != null);
   // Count elapsed time while running; show the duration once done
   const elapsed = t.startedAt != null ? (running ? now : (t.endedAt ?? t.startedAt)) - t.startedAt : null;
   const time = elapsed != null && (running || elapsed >= 100) ? <span className="font-mono tabular">{seconds(Math.max(0, elapsed))}</span> : null;
@@ -210,23 +210,12 @@ function Detail({ t, query, active }: { t: ToolCall; query?: string; active?: nu
   );
 }
 
-const ToolRow = memo(function ToolRow({
-  t,
-  first,
-  itemIndex,
-  query,
-  active,
-}: {
-  t: ToolCall;
-  first: boolean;
-  itemIndex: number;
-  query?: string;
-  active: number | null;
-}) {
+const ToolRow = memo(function ToolRow({ t, itemIndex, query, active }: { t: ToolCall; itemIndex: number; query?: string; active: number | null }) {
   const tr = useT();
-  const [open, setOpen] = useState(false);
+  const [expanded, setOpen] = useState(false);
   // The match may be in the command under the row, which is closed until then
   const current = active != null;
+  const open = expanded || current;
   useEffect(() => {
     if (current) setOpen(true);
   }, [current]);
@@ -238,7 +227,7 @@ const ToolRow = memo(function ToolRow({
   const showCommand = !!t.command && (t.command !== t.title || t.command.length > 60);
   const markTitle = !!query && !!t.command && !showCommand;
   return (
-    <div data-find-item={itemIndex} className={cn(!first && "border-t")}>
+    <div data-find-item={itemIndex}>
       <button
         type="button"
         aria-expanded={hasDetail ? open : undefined}
@@ -277,26 +266,59 @@ const ToolRow = memo(function ToolRow({
   );
 });
 
-/** Consecutive tool calls in one frame. `find` marks the command the in-pane find is on (`active` is that occurrence, or null) */
+/** A turn’s tool calls in one frame. `find` marks the command the in-pane find is on (`active` is that occurrence, or null) */
 export function ToolCalls({
   tools,
   find,
+  permissionTool,
 }: {
   tools: { tool: ToolCall; itemIndex: number }[];
+  permissionTool?: string;
   find?: { query: string; activeItem: number | null; activeOccurrence: number | null };
 }) {
+  const t = useT();
+  const [expanded, setExpanded] = useState(false);
+  const activeItem = find?.activeItem;
+  const open = expanded || (activeItem != null && tools.some((row) => row.itemIndex === activeItem));
+  const awaitingPermission = permissionTool !== undefined && tools.some(({ tool }) => tool.id === permissionTool);
+  let running = 0;
+  let pending = 0;
+  let failed = 0;
+  for (const { tool } of tools) {
+    if (tool.status === "failed" || (tool.exitCode != null && tool.exitCode !== 0)) failed++;
+    else if (tool.status === "in_progress") running++;
+    else if (tool.status === "pending") pending++;
+  }
+
   return (
     <div className="overflow-hidden rounded-[10px] border bg-card">
-      {tools.map((t, j) => (
-        <ToolRow
-          key={t.tool.id || j}
-          t={t.tool}
-          first={j === 0}
-          itemIndex={t.itemIndex}
-          query={find?.query}
-          active={find?.activeItem === t.itemIndex ? (find.activeOccurrence ?? null) : null}
-        />
-      ))}
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setExpanded(!open)}
+        className="flex w-full flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-2 text-left text-xs hover:bg-accent"
+      >
+        <ChevronRight className={cn("size-3.5 text-muted-foreground", open && "rotate-90")} aria-hidden />
+        {t("transcript.toolGroup", { count: tools.length })}
+        {running > 0 && <span className="text-working">{t("transcript.toolGroupRunning", { count: running })}</span>}
+        {pending > 0 && <span className="text-muted-foreground">{t("transcript.toolGroupPending", { count: pending })}</span>}
+        {awaitingPermission && <span className="text-foreground">{t("transcript.toolGroupPermission")}</span>}
+        {failed > 0 && <span className="text-error">{t("transcript.toolGroupFailed", { count: failed })}</span>}
+      </button>
+      {open && (
+        <div className="border-t">
+          {tools.map(({ tool, itemIndex }, index) => (
+            <div key={itemIndex} className={cn(index > 0 && "border-t")}>
+              <ToolRow t={tool} itemIndex={itemIndex} query={find?.query} active={activeItem === itemIndex ? (find?.activeOccurrence ?? null) : null} />
+              {tool.diffs.map((diff, k) => (
+                <div key={k} className="px-2 pb-2">
+                  <DiffBlock d={diff} />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

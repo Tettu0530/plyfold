@@ -231,7 +231,7 @@ const NO_ANIMATION: React.CSSProperties = { animation: "none" };
  * Usage: `const m = useLiquidMenu(id, anchorName)`, then `ref={liquidAnchor(anchorName)}` on the chip,
  * `onOpenChange={m.onOpenChange}` on Root, and `ref={m.ref}`, `style={m.style}`, z-[58] on Content
  */
-export function useLiquidMenu(id: string, anchor: string) {
+export function useLiquidMenu(id: string, anchor: string, { hold = true }: { hold?: boolean } = {}) {
   const ref = useRef<HTMLElement | null>(null);
   // Hide from the first frame while animating (useLiquidClip overwrites the fade every frame)
   const moving = useLiquidClip(id, ref);
@@ -257,8 +257,8 @@ export function useLiquidMenu(id: string, anchor: string) {
     // Match the anchor's corner radius to the real one (otherwise mismatched corners show when it's lowered midway)
     const el0 = liquidAnchorElement(anchor);
     const anchorRadius = (el0 && parseFloat(getComputedStyle(el0).borderTopLeftRadius)) || 6;
-    // hold: the blob stays as the frame after opening (no real background/border/shadow). With no swap, springs can't misalign them
-    const base = { anchor, radius: 8, anchorRadius, fromLook: CHIP_LOOK, toLook: MENU_LOOK, rise: true, hold: true };
+    // Holding lets the blob serve as the frame after opening. Otherwise the popover takes over once it settles.
+    const base = { anchor, radius: 8, anchorRadius, fromLook: CHIP_LOOK, toLook: MENU_LOOK, rise: true, hold };
     closeFrom.current = (rect) => {
       const ghost = { getBoundingClientRect: () => rect } as unknown as HTMLElement;
       liquidCloseFrom(id, { ...base, target: () => ghost });

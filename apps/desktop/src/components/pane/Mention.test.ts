@@ -23,6 +23,16 @@ describe("mentions", () => {
     expect(end.caret).toBe(end.text.length);
   });
 
+  it("keeps a quoted absolute path with spaces attached as one mention", () => {
+    const path = "/tmp/project notes/file.txt";
+    const input = `@"${path}"`;
+    expect(mentionAt(input, input.length)).toEqual({ start: 0, query: `"${path}"` });
+    const mention = insertMention("@tmp", 0, 4, path);
+    expect(mention.text).toBe(`${input} `);
+    expect(hasMention(mention.text, path)).toBe(true);
+    expect(removeMention(`see ${mention.text}please`, path)).toBe("see please");
+  });
+
   it("knows whether a path is still mentioned, as a whole token", () => {
     expect(hasMention("fix @src/a.ts now", "src/a.ts")).toBe(true);
     expect(hasMention("fix @src/a.ts", "src/a.ts")).toBe(true);

@@ -309,6 +309,8 @@ struct Inner {
     repos: repos::Repos,
     worktrees: Worktrees,
     live: Mutex<HashMap<String, Arc<Live>>>,
+    /// Workspaces changing branch. A prompt reserves its turn under the same lock.
+    checkouts: Mutex<HashSet<PathBuf>>,
     tx: broadcast::Sender<EngineEvent>,
     stall_after_ms: AtomicU64,
     perm_seq: AtomicU64,
@@ -418,6 +420,7 @@ impl Engine {
                 state_dir: opts.state_dir,
                 data_dir,
                 live: Mutex::new(HashMap::new()),
+                checkouts: Mutex::new(HashSet::new()),
                 tx: broadcast::channel(4096).0,
                 stall_after_ms: AtomicU64::new(opts.stall_after.as_millis() as u64),
                 perm_seq: AtomicU64::new(0),
@@ -453,10 +456,15 @@ impl Engine {
     }
 
     pub async fn start_session(&self, req: StartSession) -> Result<SessionRecord, CoreError> {
+        self.start_session_with_created(req, |_| {}).await
+    }
+
+    pub async fn start_session_with_created(&self, req: StartSession, created: impl FnOnce(&SessionRecord) + Send) -> Result<SessionRecord, CoreError> {
         let inner = &self.inner;
         let agent = inner.config.read().unwrap().profiles.get(&req.profile).map(|p| p.agent.clone()).unwrap_or_else(|| req.profile.clone());
         let rec = inner.store.create_session(NewSession { title: req.title, profile: req.profile.clone(), agent, ..Default::default() })?;
         inner.emit(EngineEvent::SessionCreated { session: rec.clone() });
+        created(&rec);
 
         let prepared: Result<PathBuf, CoreError> = (|| {
             if req.worktree {
@@ -564,6 +572,10 @@ impl Engine {
     /// An everyday conversation: no repository, but a folder of its own (agents need one to work in), under the state
     /// directory. The agent may search and read the web; edits and commands are declined
     pub async fn start_chat(&self, profile: &str, title: &str) -> Result<SessionRecord, CoreError> {
+        self.start_chat_with_created(profile, title, |_| {}).await
+    }
+
+    pub async fn start_chat_with_created(&self, profile: &str, title: &str, created: impl FnOnce(&SessionRecord) + Send) -> Result<SessionRecord, CoreError> {
         let inner = &self.inner;
         let agent = inner.config.read().unwrap().profiles.get(profile).map(|p| p.agent.clone()).unwrap_or_else(|| profile.to_string());
         let rec = inner.store.create_session(NewSession { title: title.to_string(), profile: profile.to_string(), agent, chat: true, ..Default::default() })?;
@@ -575,6 +587,7 @@ impl Engine {
         inner.store.set_workspace(&rec.id, Some(&dir.display().to_string()), None, None, None)?;
         let rec = inner.store.get_session(&rec.id)?;
         inner.emit(EngineEvent::SessionCreated { session: rec.clone() });
+        created(&rec);
         self.launch(&rec.id, profile, &dir, Resume::New).await?;
         // A mode in which the agent asks before acting (so Plyfold's policy answers) or only reads, rather than one that
         // acts on its own (Claude Code's auto, for example)
@@ -1194,6 +1207,13 @@ impl Engine {
         // For agents without image support, write images to the state dir and pass them as links
         let blocks = attach::prompt_blocks(text, attachments, live.client.supports_images(), &inner.data_dir.join("attachments"))
             .map_err(|e| CoreError::Attachment(e.to_string()))?;
+        let checkouts = inner.checkouts.lock().unwrap();
+        if !checkouts.is_empty() {
+            let record = inner.store.get_session(id)?;
+            if checkouts.iter().any(|root| session_in_workspace(&record, root)) {
+                return Err(CoreError::Busy(id.into()));
+            }
+        }
         if live.in_turn.swap(true, Ordering::SeqCst) {
             return Err(CoreError::Busy(id.into()));
         }
@@ -1203,6 +1223,7 @@ impl Engine {
         live.info.lock().unwrap().live = Some(LiveTurn::default());
         live.turn_text.lock().unwrap().clear();
         inner.set_status(id, SessionStatus::Working);
+        drop(checkouts);
         let id = id.to_string();
         let (text, attachments) = (text.to_string(), attachments.to_vec());
         tokio::spawn(async move {
@@ -1874,9 +1895,8 @@ impl Engine {
         worktree_of(&rec).ok_or_else(|| CoreError::NoWorkspace(id.into()))
     }
 
-    /// The directory a session works in (its worktree, or the repository itself) and the branch to compare it with:
-    /// the branch it will be merged into for a worktree, the remote's default branch otherwise
-    fn git_dir(&self, id: &str) -> Result<(PathBuf, Option<String>), CoreError> {
+    /// The session's working directory, verifying a managed worktree before running Git in it.
+    fn git_workspace(&self, id: &str) -> Result<(SessionRecord, PathBuf), CoreError> {
         let rec = self.reconcile_workspace(id)?;
         // As with diff: a conversation's folder is not a repository, and git would find the one around it
         if rec.chat || rec.side_of.is_some() {
@@ -1884,12 +1904,46 @@ impl Engine {
         }
         if let Some(wt) = worktree_of(&rec) {
             plyfold_worktree::verify(&wt)?;
-            let base = plyfold_worktree::ops::status(&wt).ok().and_then(|s| s.target);
-            return Ok((wt.path, base));
+            return Ok((rec, wt.path));
         }
-        let dir = PathBuf::from(rec.repo_path.ok_or_else(|| CoreError::NoWorkspace(id.into()))?);
-        let base = plyfold_worktree::remote::remote_default(&dir);
+        let dir = PathBuf::from(rec.repo_path.as_deref().ok_or_else(|| CoreError::NoWorkspace(id.into()))?);
+        Ok((rec, dir))
+    }
+
+    /// The working directory and its comparison branch.
+    fn git_dir(&self, id: &str) -> Result<(PathBuf, Option<String>), CoreError> {
+        let (rec, dir) = self.git_workspace(id)?;
+        let base = match worktree_of(&rec) {
+            Some(wt) => plyfold_worktree::ops::status(&wt).ok().and_then(|s| s.target),
+            None => plyfold_worktree::remote::remote_default(&dir),
+        };
         Ok((dir, base))
+    }
+
+    pub fn git_history(&self, id: &str) -> Result<plyfold_worktree::history::History, CoreError> {
+        let (_, dir) = self.git_workspace(id)?;
+        Ok(plyfold_worktree::history::history(&dir)?)
+    }
+
+    pub fn git_checkout(&self, id: &str, target: plyfold_worktree::history::Checkout) -> Result<(), CoreError> {
+        let (_, dir) = self.git_workspace(id)?;
+        let root = plyfold_worktree::repo_root(&dir)?;
+        let root = root.canonicalize().unwrap_or(root);
+        {
+            let mut checkouts = self.inner.checkouts.lock().unwrap();
+            if checkouts.contains(&root)
+                || self.inner.store.list_sessions()?.iter().any(|record| {
+                    matches!(record.status, SessionStatus::Starting | SessionStatus::Working | SessionStatus::AwaitingPermission | SessionStatus::Stalled)
+                        && session_in_workspace(record, &root)
+                })
+            {
+                return Err(CoreError::Busy(id.into()));
+            }
+            checkouts.insert(root.clone());
+        }
+        let result = plyfold_worktree::history::checkout(&dir, target);
+        self.inner.checkouts.lock().unwrap().remove(&root);
+        result.map_err(Into::into)
     }
 
     pub fn git_info(&self, id: &str) -> Result<plyfold_worktree::remote::GitInfo, CoreError> {
@@ -2163,6 +2217,17 @@ fn worktree_of(rec: &SessionRecord) -> Option<Worktree> {
         branch: rec.branch.clone()?,
         base: rec.base_ref.clone()?,
     })
+}
+
+fn session_in_workspace(rec: &SessionRecord, root: &Path) -> bool {
+    if rec.chat {
+        return false;
+    }
+    let Some(dir) = rec.worktree_path.as_deref().or(rec.repo_path.as_deref()) else { return false };
+    let Ok(canonical) = Path::new(dir).canonicalize() else { return false };
+    canonical == root
+        || (canonical.starts_with(root)
+            && plyfold_worktree::repo_root(Path::new(dir)).ok().and_then(|top| top.canonicalize().ok()).is_some_and(|top| top == root))
 }
 
 async fn pump(inner: Arc<Inner>, id: String, live: Arc<Live>, mut rx: mpsc::UnboundedReceiver<AgentMessage>) {

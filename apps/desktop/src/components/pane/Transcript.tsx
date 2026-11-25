@@ -14,7 +14,7 @@ import { resendable, type Attached } from "@/lib/attachments";
 import { SentAttachments } from "./Attachments";
 import { Markdown } from "./Markdown";
 import { ActionRow, CopyButton, EditBox, QuoteButton, UserActions, Working, workingLabel } from "./MessageActions";
-import { DiffBlock, ToolCalls } from "./ToolCall";
+import { ToolCalls } from "./ToolCall";
 import { bouncy, smooth } from "../motion";
 import { useStore } from "@/state/store";
 import { commandAt } from "./Slash";
@@ -52,8 +52,10 @@ export function TurnStatsRow({
   stopReason,
   endedAt,
   actions,
+  showMissingRate = false,
 }: {
   stats: TurnStats | null;
+  showMissingRate?: boolean;
   cost?: string;
   error?: string | null;
   stopReason?: string | null;
@@ -68,12 +70,11 @@ export function TurnStatsRow({
     <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground tabular">
       {actions}
       <span className="grow" />
-      {stats?.tokens_per_sec != null && (
-        <Stat icon={Gauge} title={stats.estimated ? t("transcript.tokPerSecEstimated") : t("transcript.tokPerSec")}>
-          {stats.estimated ? "~" : ""}
-          {Math.round(stats.tokens_per_sec)} tok/s
+      {stats?.tokens_per_sec != null || showMissingRate ? (
+        <Stat icon={Gauge} title={stats?.estimated && !showMissingRate ? t("transcript.tokPerSecEstimated") : t("transcript.tokPerSec")}>
+          {stats?.tokens_per_sec == null ? "-" : `${stats.estimated ? "~" : ""}${Math.round(stats.tokens_per_sec)} tok/s`}
         </Stat>
-      )}
+      ) : null}
       {stats?.usage && (
         <>
           <Stat icon={ArrowUp} title={t("transcript.inputTokens")}>
@@ -214,7 +215,7 @@ export function Transcript({
   sessionId?: string;
 }) {
   const tr = useT();
-  // The user message being edited (index in blocks)
+  // The user message being edited (index in items)
   const [editing, setEditing] = useState<number | null>(null);
   const end = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -234,6 +235,7 @@ export function Transcript({
     if (bottom) setUnseen(false);
   };
   const find = useStore((s) => (sessionId && s.find?.sessionId === sessionId ? s.find : null));
+  const permissionTool = useStore((s) => (sessionId ? s.sessions[sessionId]?.permission?.toolCall.toolCallId : undefined));
   const setFindQuery = useStore((s) => s.setFindQuery);
   const stepFind = useStore((s) => s.stepFind);
   const closeFind = useStore((s) => s.closeFind);
@@ -273,29 +275,39 @@ export function Transcript({
     el.scrollTo({ top: el.scrollHeight, behavior: reduced ? "auto" : "smooth" });
   };
 
-  // Group consecutive tool calls into one frame. itemIndex is the index in `items`, which is what find matches use
+  // Keep a single summary at the first tool call in each turn.
   const blocks = useMemo(() => {
-    const grouped: ((TranscriptItem & { itemIndex: number }) | { kind: "tools"; itemIndex: number; tools: { tool: ToolCall; itemIndex: number }[] })[] = [];
-    items.forEach((it, itemIndex) => {
-      const prev = grouped[grouped.length - 1];
-      if (it.kind === "tool") {
-        if (prev && prev.kind === "tools") prev.tools.push({ tool: it, itemIndex });
-        else grouped.push({ kind: "tools", itemIndex, tools: [{ tool: it, itemIndex }] });
-      } else grouped.push({ ...it, itemIndex });
+    type ToolGroup = { kind: "tools"; itemIndex: number; tools: { tool: ToolCall; itemIndex: number }[] };
+    const grouped: ((TranscriptItem & { itemIndex: number }) | ToolGroup)[] = [];
+    let group: ToolGroup | undefined;
+    items.forEach((item, itemIndex) => {
+      if (item.kind === "tool") {
+        if (!group) {
+          group = { kind: "tools", itemIndex, tools: [] };
+          grouped.push(group);
+        }
+        group.tools.push({ tool: item, itemIndex });
+      } else {
+        if (item.kind === "user" || item.kind === "stats") group = undefined;
+        grouped.push({ ...item, itemIndex });
+      }
     });
     return grouped;
   }, [items]);
-  // A turn's numbers go beside the buttons under its last answer (an error, or a turn with no answer, keeps its own row)
-  const { statsOf, attached } = useMemo(() => {
+  // Only the last answer of a finished turn gets actions and turn statistics.
+  const { statsOf, attached, finalAnswers } = useMemo(() => {
     const statsOf = new Map<number, Extract<TranscriptItem, { kind: "stats" }>>();
     const attached = new Set<number>();
+    const finalAnswers = new Set<number>();
     let lastAgent: number | null = null;
     blocks.forEach((block, index) => {
       if (block.kind === "user") {
+        if (lastAgent !== null) finalAnswers.add(lastAgent);
         lastAgent = null;
       } else if (block.kind === "agent") {
         lastAgent = index;
       } else if (block.kind === "stats") {
+        if (lastAgent !== null) finalAnswers.add(lastAgent);
         if (!block.error && lastAgent !== null) {
           statsOf.set(lastAgent, block);
           attached.add(index);
@@ -303,16 +315,19 @@ export function Transcript({
         lastAgent = null;
       }
     });
-    return { statsOf, attached };
-  }, [blocks]);
+    if (!busy && !streaming && lastAgent !== null) finalAnswers.add(lastAgent);
+    return { statsOf, attached, finalAnswers };
+  }, [blocks, busy, streaming]);
   // A local command (no tokens either way) has nothing to report; a stop or an error still shows
   const showStats = (b: Extract<TranscriptItem, { kind: "stats" }>) =>
     !!b.error || b.stopReason === "cancelled" || b.stopReason === INTERRUPTED || !usedNoTokens(b.stats);
 
+  const work = streaming ? workingLabel(items) : null;
+  const thinking = work === "message.thinking";
   const occurrenceIn = (itemIndex: number) => (current?.itemIndex === itemIndex ? current.occurrence : null);
 
   return (
-    <div className="relative flex min-h-0 grow flex-col">
+    <div data-transcript className="relative flex min-h-0 grow flex-col">
       {find && (
         <div className="flex h-9 shrink-0 items-center gap-1.5 border-b px-3">
           <input
@@ -367,6 +382,7 @@ export function Transcript({
         scrollbar stays at the pane's edge */}
       <div
         ref={scroller}
+        data-transcript-scroll
         onScroll={onScroll}
         className={cn("flex min-h-0 grow flex-col gap-3 overflow-y-auto pt-4 pb-2", compact ? "px-3" : "px-[max(1.25rem,calc((100%_-_52rem)/2))]")}
       >
@@ -376,13 +392,13 @@ export function Transcript({
             case "user":
               return (
                 <div
-                  key={i}
+                  key={b.itemIndex}
                   data-find-item={b.itemIndex}
                   style={{ contentVisibility: "auto", containIntrinsicSize: "auto 100px" }}
-                  className={cn("group flex flex-col items-end gap-1.5 self-end", editing === i ? "w-[78%]" : "max-w-[78%]")}
+                  className={cn("group flex flex-col items-end gap-1.5 self-end", editing === b.itemIndex ? "w-[78%]" : "max-w-[78%]")}
                 >
                   {b.attachments && <SentAttachments items={b.attachments} />}
-                  {editing === i ? (
+                  {editing === b.itemIndex ? (
                     <EditBox
                       initial={b.text}
                       onCancel={() => setEditing(null)}
@@ -406,7 +422,7 @@ export function Transcript({
                         <UserActions
                           text={b.text}
                           busy={busy}
-                          onEdit={() => setEditing(i)}
+                          onEdit={() => setEditing(b.itemIndex)}
                           onResend={() => onResend(b.text, resendable(b.attachments ?? []))}
                         />
                       )}
@@ -424,19 +440,19 @@ export function Transcript({
               const st = statsOf.get(i);
               return (
                 <div
-                  key={i}
+                  key={b.itemIndex}
                   data-find-item={b.itemIndex}
                   style={{ contentVisibility: "auto", containIntrinsicSize: "auto 100px" }}
                   className="group flex flex-col gap-0.5"
                 >
                   <Markdown
                     text={b.text}
-                    streaming={streaming && i === blocks.length - 1}
+                    streaming={streaming && b.itemIndex === items.length - 1}
                     base={base}
                     needle={finding ? find.query : undefined}
                     activeOccurrence={occurrenceIn(b.itemIndex)}
                   />
-                  {!(streaming && i === blocks.length - 1) &&
+                  {finalAnswers.has(i) &&
                     (st && showStats(st) ? (
                       <TurnStatsRow stats={st.stats} stopReason={st.stopReason} cost={undefined} endedAt={st.endedAt} actions={actions} />
                     ) : (
@@ -446,20 +462,20 @@ export function Transcript({
               );
             }
             case "thought":
-              return <Thought key={i} text={b.text} />;
+              return <Thought key={b.itemIndex} text={b.text} />;
             case "tools":
               return (
-                <div key={i} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 100px" }} className="flex flex-col gap-3">
+                <div key={b.itemIndex} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 100px" }} className="flex flex-col gap-3">
                   <ToolCalls
                     tools={b.tools}
+                    permissionTool={typeof permissionTool === "string" ? permissionTool : undefined}
                     find={finding ? { query: find.query, activeItem: current?.itemIndex ?? null, activeOccurrence: current?.occurrence ?? null } : undefined}
                   />
-                  {b.tools.flatMap((t) => t.tool.diffs.map((d, k) => <DiffBlock key={`${t.tool.id}-${k}`} d={d} />))}
                 </div>
               );
             case "plan":
               return (
-                <div key={i} className="rounded-[10px] border bg-card px-3 py-2">
+                <div key={b.itemIndex} className="rounded-[10px] border bg-card px-3 py-2">
                   <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
                     <ListChecks className="size-3.5" aria-hidden />
                     {tr("transcript.plan")}
@@ -473,7 +489,7 @@ export function Transcript({
               );
             case "stats":
               return (
-                <div key={i} className="flex flex-col gap-3">
+                <div key={b.itemIndex} className="flex flex-col gap-3">
                   {/* Shown under the answer when there is one (see statsOf) */}
                   {!attached.has(i) && showStats(b) && (
                     <TurnStatsRow stats={b.stats} error={b.error} stopReason={b.stopReason} cost={undefined} endedAt={b.endedAt} />
@@ -483,25 +499,30 @@ export function Transcript({
               );
             case "notice":
               return (
-                <p key={i} className="m-0 flex gap-2 text-xs whitespace-pre-wrap text-muted-foreground">
+                <p key={b.itemIndex} className="m-0 flex gap-2 text-xs whitespace-pre-wrap text-muted-foreground">
                   <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
                   {b.text}
                 </p>
               );
           }
         })}
-        {streaming && (
+        {work && (
           <div className="flex items-center gap-3">
-            <Working label={workingLabel(items)} />
-            {info?.live && (
+            <Working label={tr(work)} />
+            {(info?.live || thinking) && (
               <TurnStatsRow
-                stats={{
-                  usage: null,
-                  elapsed_ms: info.live.elapsed_ms,
-                  ttft_ms: info.live.ttft_ms,
-                  tokens_per_sec: info.live.est_tokens_per_sec,
-                  estimated: true,
-                }}
+                showMissingRate={thinking}
+                stats={
+                  info?.live
+                    ? {
+                        usage: null,
+                        elapsed_ms: info.live.elapsed_ms,
+                        ttft_ms: info.live.ttft_ms,
+                        tokens_per_sec: thinking ? null : info.live.est_tokens_per_sec,
+                        estimated: true,
+                      }
+                    : null
+                }
               />
             )}
           </div>
@@ -519,6 +540,7 @@ export function Transcript({
             animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
             exit={{ opacity: 0, scale: 0.6, filter: "blur(6px)" }}
             transition={smooth}
+            data-transcript-jump
             className="absolute bottom-3 left-1/2 -ml-4"
           >
             <ToBottomButton

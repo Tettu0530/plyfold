@@ -7,6 +7,7 @@ export const composer: Record<keyof typeof source, string> = {
   outputTotal: "Output (total)",
   costTotal: "Cost (total)",
   contextDetails: "Context details",
+  compactContext: "Compact context",
   contextUsage: "Context usage",
   context: "Context",
   reportedModel: "Reported model",

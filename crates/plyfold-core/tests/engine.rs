@@ -85,6 +85,34 @@ fn is_status(e: &EngineEvent, want: Status) -> bool {
 }
 
 #[tokio::test]
+async fn branch_switch_waits_for_other_sessions_using_the_same_repository() {
+    use plyfold_worktree::history::Checkout;
+
+    let base = tmp("checkout-busy");
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    git_repo(&repo);
+    let eng = engine(&base.join("state"), 60_000);
+    let mut rx = eng.subscribe();
+    let request = |title: &str| StartSession { profile: "mock".into(), title: title.into(), repo: repo.clone(), worktree: false };
+    let a = eng.start_session(request("one")).await.unwrap();
+    let b = eng.start_session(request("two")).await.unwrap();
+    let create = || eng.git_checkout(&b.id, Checkout::NewBranch { name: "topic".into() });
+
+    eng.prompt(&a.id, "write with permission").unwrap();
+    let EngineEvent::PermissionRequested { permission_id, .. } = wait_for(&mut rx, |event| matches!(event, EngineEvent::PermissionRequested { .. })).await
+    else {
+        unreachable!()
+    };
+    assert!(matches!(create(), Err(plyfold_core::CoreError::Busy(_))));
+    assert_eq!(eng.git_history(&b.id).unwrap().branch.as_deref(), Some("main"));
+    eng.respond_permission(&a.id, &permission_id, None).await.unwrap();
+    wait_for(&mut rx, |event| matches!(event, EngineEvent::TurnEnded { session_id, .. } if session_id == &a.id)).await;
+    create().unwrap();
+    assert_eq!(eng.git_history(&a.id).unwrap().branch.as_deref(), Some("topic"));
+}
+
+#[tokio::test]
 async fn worktree_session_with_permission_and_diff() {
     let base = tmp("perm");
     let repo = base.join("repo");

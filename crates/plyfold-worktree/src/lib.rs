@@ -3,6 +3,7 @@
 //! Each agent gets its own working directory, so agents touching the same repository do not collide.
 //! Diffs come from git rather than ACP diffs (Codex and OpenCode do not return diffs).
 
+pub mod history;
 pub mod ops;
 pub mod remote;
 
@@ -300,6 +301,60 @@ mod tests {
         std::fs::write(dir.join(".gitignore"), "/target\n").unwrap();
         g(&["add", "-A"]);
         g(&["commit", "-qm", "init"]);
+    }
+
+    #[test]
+    fn checkout_and_history_keep_the_workspace_and_remote_refs_distinct() {
+        use history::Checkout;
+
+        let base = tmp("checkout-history");
+        let repo = base.join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        init_repo(&repo);
+        let first = head(&repo).unwrap();
+        git(&repo, &["remote", "add", "origin", "."]).unwrap();
+        git(&repo, &["update-ref", "refs/remotes/origin/topic", &first]).unwrap();
+        git(&repo, &["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/topic"]).unwrap();
+        history::checkout(&repo, Checkout::Remote { name: "origin/topic".into() }).unwrap();
+        assert_eq!(git(&repo, &["rev-parse", "--abbrev-ref", "@{upstream}"]).unwrap().trim(), "origin/topic");
+
+        let wt = Worktrees::new(base.join("wts")).create(&repo, "session", None).unwrap();
+        assert!(history::checkout(&wt.path, Checkout::Local { name: "topic".into() }).is_err());
+        history::checkout(&wt.path, Checkout::Local { name: "main".into() }).unwrap();
+        assert_eq!(history::history(&repo).unwrap().branch.as_deref(), Some("topic"));
+        history::checkout(&wt.path, Checkout::NewBranch { name: "new-branch".into() }).unwrap();
+        assert_eq!(history::history(&wt.path).unwrap().branch.as_deref(), Some("new-branch"));
+
+        history::checkout(&wt.path, Checkout::Commit { sha: first }).unwrap();
+        git(&wt.path, &["-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "--allow-empty", "-qm", "detached commit"]).unwrap();
+        let log = history::history(&wt.path).unwrap();
+        assert!(log.branch.is_none());
+        assert!(log.branches.iter().any(|b| b.remote && b.name == "origin/topic"));
+        assert!(!log.branches.iter().any(|b| b.name == "origin/HEAD"));
+        assert!(log.rows.iter().filter_map(|r| r.commit.as_ref()).any(|c| Some(&c.sha) == log.head.as_ref() && c.subject == "detached commit"));
+    }
+
+    #[test]
+    fn checkout_preserves_modified_and_ignored_files() {
+        use history::Checkout;
+
+        let repo = tmp("checkout-local-files");
+        init_repo(&repo);
+        history::checkout(&repo, Checkout::NewBranch { name: "target-branch".into() }).unwrap();
+        std::fs::write(repo.join("target"), "tracked by target-branch").unwrap();
+        std::fs::write(repo.join("a.txt"), "changed by target-branch").unwrap();
+        git(&repo, &["add", "-f", "target", "a.txt"]).unwrap();
+        git(&repo, &["-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "changes"]).unwrap();
+        history::checkout(&repo, Checkout::Local { name: "main".into() }).unwrap();
+        let switch = || history::checkout(&repo, Checkout::Local { name: "target-branch".into() });
+        std::fs::write(repo.join("a.txt"), "working copy").unwrap();
+        assert!(switch().is_err());
+        assert_eq!(std::fs::read_to_string(repo.join("a.txt")).unwrap(), "working copy");
+        git(&repo, &["restore", "a.txt"]).unwrap();
+        std::fs::write(repo.join("target"), "ignored file").unwrap();
+        assert!(switch().is_err());
+        assert_eq!(std::fs::read_to_string(repo.join("target")).unwrap(), "ignored file");
+        assert_eq!(history::history(&repo).unwrap().branch.as_deref(), Some("main"));
     }
 
     /// What a repository's own config or a replaced .git could make Plyfold's git run

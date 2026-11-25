@@ -235,6 +235,17 @@ export interface GitInfo {
   fetched_at: number | null;
 }
 
+/** crates/plyfold-worktree/src/history.rs */
+export interface GitHistory {
+  branch: string | null;
+  head: string | null;
+  branches: { name: string; sha: string; remote: boolean }[];
+  rows: { graph: string; commit: { sha: string; short_sha: string; subject: string } | null }[];
+  truncated: boolean;
+}
+
+export type GitCheckout = { kind: "local" | "remote" | "new_branch"; name: string } | { kind: "commit"; sha: string };
+
 export interface PullRequest {
   number: number;
   url: string;
@@ -322,6 +333,7 @@ export interface RegistryAgent {
   repository: string | null;
   website: string | null;
   license: string | null;
+  icon_url: string | null;
   kind: "npx" | "uvx" | "binary";
   /** Can be added (not built in, and for a binary: a build for this system with a checksum) */
   addable: boolean;
@@ -386,6 +398,7 @@ export interface TextFile {
 }
 
 export interface FileHit {
+  directory?: boolean;
   /** Relative to the session's working directory */
   path: string;
   abs: string;
