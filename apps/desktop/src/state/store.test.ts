@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { api } from "@/lib/api";
 
 import type { SessionInfo, SessionRecord } from "@/lib/types";
 import { preset } from "./layout";
@@ -130,5 +131,29 @@ describe("queue", () => {
     expect(useStore.getState().queues.s1.map((q) => q.text)).toEqual(["second"]);
     const items = useStore.getState().sessions.s1.transcript.items;
     expect(items.some((i) => i.kind === "user" && i.text === "first, edited")).toBe(true);
+  });
+});
+
+describe("side chat", () => {
+  it("keeps the conversation when hidden and reopens it", async () => {
+    const sideRecord = { ...record, id: "side", side_of: "main", review: false, status: "idle" as const };
+    const side = reduceEvent({}, { type: "session_created", session: sideRecord }).side;
+    side.transcript = { ...side.transcript, items: [{ kind: "user", text: "question" }] };
+    useStore.setState({ sessions: { side }, sideChats: { main: { id: "side", openedAt: 1, error: null } }, queues: {} });
+    const open = vi.spyOn(api, "openSideChat");
+    const close = vi.spyOn(api, "closeSideChat");
+    const info = vi.spyOn(api, "sessionInfo").mockResolvedValue(null);
+
+    await useStore.getState().closeSideChat("main");
+    expect(useStore.getState().sessions.side.transcript.items).toHaveLength(1);
+    expect(close).not.toHaveBeenCalled();
+    await useStore.getState().openSideChat("main");
+    expect(useStore.getState().sideChats.main.id).toBe("side");
+    expect(useStore.getState().sessions.side.transcript.items).toHaveLength(1);
+    expect(open).not.toHaveBeenCalled();
+
+    open.mockRestore();
+    close.mockRestore();
+    info.mockRestore();
   });
 });

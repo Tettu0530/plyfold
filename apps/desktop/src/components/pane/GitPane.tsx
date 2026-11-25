@@ -218,7 +218,9 @@ export function GitPane({ index, id }: { index: number; id: string }) {
   const current = files[Math.min(sel, files.length - 1)];
   const empty =
     data && files.length === 0 ? (
-      <p className="p-4 text-xs text-muted-foreground">{r.base_ref ? t("diff.noChangesSince", { base: r.base_ref.slice(0, 7) }) : t("diff.noChanges")}</p>
+      <p className="p-4 text-xs text-muted-foreground">
+        {r.base_ref && git.info?.branch === r.branch ? t("diff.noChangesSince", { base: r.base_ref.slice(0, 7) }) : t("diff.noChanges")}
+      </p>
     ) : null;
 
   // The Git section above, the changed files below, each scrolling on its own; the divider between them moves
@@ -546,13 +548,15 @@ function Actions({ id, title, status, busy, onDone }: { id: string; title: strin
       return t("diff.discarded");
     });
 
-  const summary = status.dirty
-    ? t("diff.uncommitted")
-    : status.merged
-      ? t("diff.alreadyMerged", { target })
-      : status.commits > 0
-        ? t("diff.commitsNotMerged", { count: status.commits, target })
-        : t("diff.noChanges");
+  const summary = !status.on_session_branch
+    ? t("diff.branchChanged")
+    : status.dirty
+      ? t("diff.uncommitted")
+      : status.merged
+        ? t("diff.alreadyMerged", { target })
+        : status.commits > 0
+          ? t("diff.commitsNotMerged", { count: status.commits, target })
+          : t("diff.noChanges");
 
   return (
     <div className="flex shrink-0 flex-col gap-2 border-t px-4 py-3">
@@ -589,7 +593,8 @@ function Actions({ id, title, status, busy, onDone }: { id: string; title: strin
             <ExternalLink className="size-3.5" aria-hidden />
             {t("diff.openInEditor")}
           </button>
-          {!status.dirty &&
+          {status.on_session_branch &&
+            !status.dirty &&
             status.commits > 0 &&
             (confirmPr ? (
               <button
@@ -617,7 +622,8 @@ function Actions({ id, title, status, busy, onDone }: { id: string; title: strin
             {busy ? t("diff.busyDuringTurn") : summary}
           </span>
           <span className="grow" />
-          {!nothing &&
+          {status.on_session_branch &&
+            !nothing &&
             (confirmDiscard ? (
               <button
                 type="button"
@@ -639,31 +645,32 @@ function Actions({ id, title, status, busy, onDone }: { id: string; title: strin
                 {t("diff.discard")}
               </button>
             ))}
-          {status.dirty ? (
-            <button
-              type="button"
-              disabled={running || busy}
-              onClick={() => setComposing(true)}
-              className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
-            >
-              <GitCommitHorizontal className="size-3.5" aria-hidden />
-              {t("diff.commitEllipsis")}
-            </button>
-          ) : (
-            status.commits > 0 &&
-            !status.merged && (
+          {status.on_session_branch &&
+            (status.dirty ? (
               <button
                 type="button"
-                disabled={running || busy || !status.target}
-                title={status.target ? undefined : t("diff.noTargetBranch")}
-                onClick={() => void merge()}
+                disabled={running || busy}
+                onClick={() => setComposing(true)}
                 className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
               >
-                <GitMerge className="size-3.5" aria-hidden />
-                {t("diff.mergeInto", { target })}
+                <GitCommitHorizontal className="size-3.5" aria-hidden />
+                {t("diff.commitEllipsis")}
               </button>
-            )
-          )}
+            ) : (
+              status.commits > 0 &&
+              !status.merged && (
+                <button
+                  type="button"
+                  disabled={running || busy || !status.target}
+                  title={status.target ? undefined : t("diff.noTargetBranch")}
+                  onClick={() => void merge()}
+                  className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
+                >
+                  <GitMerge className="size-3.5" aria-hidden />
+                  {t("diff.mergeInto", { target })}
+                </button>
+              )
+            ))}
         </div>
       )}
       {done && !error && <p className="text-xs text-muted-foreground select-text">{done}</p>}

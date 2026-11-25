@@ -215,18 +215,28 @@ pub fn is_registered(repo: &Path, path: &Path) -> bool {
     list.lines().filter_map(|l| l.strip_prefix("worktree ")).any(|p| key(Path::new(p)) == want)
 }
 
+/// Whether the worktree still has the branch assigned when the session started.
+pub fn on_session_branch(wt: &Worktree) -> bool {
+    git(&wt.path, &["symbolic-ref", "--quiet", "--short", "HEAD"]).is_ok_and(|branch| branch.trim() == wt.branch)
+}
+
 /// Diff from the base commit to the current working tree (committed, uncommitted and untracked)
 pub fn diff(wt: &Worktree) -> Result<Diff, WorktreeError> {
     verify(wt)?;
     let dir = &wt.path;
+    let comparison = if !wt.branch.is_empty() && !on_session_branch(wt) {
+        git(&wt.repo, &["rev-parse", "--verify", "HEAD"]).ok().map(|value| value.trim().to_string()).unwrap_or_else(|| wt.base.clone())
+    } else {
+        wt.base.clone()
+    };
     let mut out = Diff::default();
 
-    for line in git(dir, &["diff", "--no-ext-diff", "--no-textconv", "--numstat", &wt.base, "--"])?.lines() {
+    for line in git(dir, &["diff", "--no-ext-diff", "--no-textconv", "--numstat", &comparison, "--"])?.lines() {
         let mut parts = line.splitn(3, '\t');
         let (a, r, p) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""), parts.next().unwrap_or(""));
         out.files.push(FileStat { path: p.to_string(), added: a.parse().unwrap_or(0), removed: r.parse().unwrap_or(0), untracked: false, binary: a == "-" });
     }
-    out.patch = git(dir, &["diff", "--no-ext-diff", "--no-textconv", &wt.base, "--"])?;
+    out.patch = git(dir, &["diff", "--no-ext-diff", "--no-textconv", &comparison, "--"])?;
 
     let untracked = git(dir, &["ls-files", "--others", "--exclude-standard", "-z"])?;
     for p in untracked.split('\0').filter(|s| !s.is_empty()) {

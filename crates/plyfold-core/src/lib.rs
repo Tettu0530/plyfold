@@ -391,8 +391,8 @@ impl Engine {
         let store = Store::open(&data_dir.join("plyfold.db"))?;
         // Sessions that were running in the previous launch no longer have a process, so mark them Closed
         for s in store.list_sessions()? {
-            // Side chats do not outlive the app
-            if s.side_of.is_some() {
+            // Reviewers are recreated as needed. Side conversations are kept across launches.
+            if s.review && s.side_of.is_some() {
                 if let Some(acp) = &s.acp_session_id {
                     store.dismiss_conversation(acp)?;
                 }
@@ -618,7 +618,13 @@ impl Engine {
             Some(session_id) => Resume::Load { session_id, adopted: false },
             None => Resume::New,
         };
-        self.launch(id, &rec.profile, Path::new(&cwd), resume).await
+        self.launch(id, &rec.profile, Path::new(&cwd), resume).await?;
+        if rec.side_of.is_some()
+            && let Some(mode) = self.session_info(id).and_then(|info| read_only_mode(&info))
+        {
+            let _ = self.set_category(id, Category::Mode, &mode).await;
+        }
+        Ok(())
     }
 
     /// A new session with the source conversation.
@@ -1733,7 +1739,11 @@ impl Engine {
     /// stay, so restore_session puts it back as it was
     pub async fn trash_session(&self, id: &str) -> Result<SessionRecord, CoreError> {
         for side in self.inner.store.list_sessions()?.into_iter().filter(|s| s.side_of.as_deref() == Some(id)) {
-            self.close_side_chat(&side.id).await?;
+            if side.review {
+                self.close_side_chat(&side.id).await?;
+            } else {
+                self.close_session(&side.id).await?;
+            }
         }
         self.close_session(id).await?;
         self.inner.store.set_trashed(id, Some(plyfold_store::now_ms()))?;

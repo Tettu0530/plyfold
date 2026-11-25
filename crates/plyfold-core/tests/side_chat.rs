@@ -131,7 +131,7 @@ async fn side_chat_reads_beside_a_working_session_and_leaves_no_trace() {
 }
 
 #[tokio::test]
-async fn side_chats_do_not_outlive_the_app() {
+async fn side_chats_survive_app_restart() {
     let base = tmp("restart");
     let repo = base.join("repo");
     std::fs::create_dir_all(&repo).unwrap();
@@ -152,7 +152,16 @@ async fn side_chats_do_not_outlive_the_app() {
         side
     };
     let eng = engine(&base.join("state"));
+    let saved = eng.store().get_session(&side.id).unwrap();
+    assert_eq!(saved.status, Status::Closed);
+    assert_eq!(saved.side_of, side.side_of);
+    assert!(!eng.store().dismissed_conversations().unwrap().contains(side.acp_session_id.as_ref().unwrap()));
+    assert_eq!(eng.store().list_sessions().unwrap().len(), 2);
+    let mut rx = eng.subscribe();
+    eng.reopen_session(&side.id).await.unwrap();
+    eng.prompt(&side.id, "permission please").unwrap();
+    wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { session_id, .. } if session_id == &side.id)).await;
+    assert!(eng.store().events(&side.id, None, 10_000).unwrap().iter().any(|e| e.payload.contains("permission rejected")));
+    eng.close_side_chat(&side.id).await.unwrap();
     assert!(eng.store().get_session(&side.id).is_err());
-    assert!(eng.store().dismissed_conversations().unwrap().contains(side.acp_session_id.as_ref().unwrap()));
-    assert_eq!(eng.store().list_sessions().unwrap().len(), 1);
 }

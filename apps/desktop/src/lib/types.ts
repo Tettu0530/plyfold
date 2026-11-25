@@ -206,6 +206,7 @@ export interface WtStatus {
   commits: number;
   target: string | null;
   merged: boolean;
+  on_session_branch: boolean;
 }
 
 /** crates/plyfold-worktree/src/remote.rs */
