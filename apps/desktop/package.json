@@ -1,7 +1,7 @@
 {
   "name": "plyfold-desktop",
   "private": true,
-  "version": "0.6.3",
+  "version": "0.6.4",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -21,6 +21,8 @@
     "@tauri-apps/plugin-notification": "^2.8.1",
     "@tauri-apps/plugin-process": "^2.4.0",
     "@tauri-apps/plugin-updater": "^2.14.1",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "katex": "^0.19.1",

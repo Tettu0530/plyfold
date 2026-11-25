@@ -9,7 +9,7 @@ import type { TranscriptItem } from "@/state/transcript";
 import { Keys } from "../Keys";
 import { isSendKey, sendKeys } from "@/lib/keys";
 import { useStore } from "@/state/store";
-import { t as translate, useT } from "@/i18n";
+import { useT } from "@/i18n";
 
 const ICON_BUTTON =
   "flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40";
@@ -140,19 +140,19 @@ export function EditBox({ initial, onSend, onCancel }: { initial: string; onSend
 }
 
 /** Label for the generating indicator: what's happening now, based on the last thing received */
-export function workingLabel(items: TranscriptItem[]): string {
+export function workingLabel(items: TranscriptItem[]) {
   // If a tool is running in this turn, show "running" whatever arrived last
   for (let i = items.length - 1; i >= 0 && items[i].kind !== "user"; i--) {
     const it = items[i];
-    if (it.kind === "tool" && (it.status === "pending" || it.status === "in_progress")) return translate("message.running");
+    if (it.kind === "tool" && (it.status === "pending" || it.status === "in_progress")) return "message.running";
   }
   const last = items[items.length - 1];
-  if (!last || last.kind === "user") return translate("message.thinking");
-  if (last.kind === "thought") return translate("message.thinking");
-  if (last.kind === "tool") return last.status === "pending" || last.status === "in_progress" ? translate("message.running") : translate("message.thinking");
-  if (last.kind === "agent") return translate("message.writing");
-  if (last.kind === "plan") return translate("message.planning");
-  return translate("message.thinking");
+  if (!last || last.kind === "user") return "message.thinking";
+  if (last.kind === "thought") return "message.thinking";
+  if (last.kind === "tool") return last.status === "pending" || last.status === "in_progress" ? "message.running" : "message.thinking";
+  if (last.kind === "agent") return "message.writing";
+  if (last.kind === "plan") return "message.planning";
+  return "message.thinking";
 }
 
 export function Working({ label }: { label: string }) {

@@ -1,12 +1,48 @@
 import { AnimatePresence, motion, useIsPresent } from "motion/react";
-import { Fragment, memo, useRef, useState } from "react";
+import { Fragment, lazy, memo, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { leaves, type LayoutNode } from "@/state/layout";
-import { useStore } from "@/state/store";
+import { isTerminal, useStore } from "@/state/store";
 import { smooth } from "../motion";
 import { Pane } from "./Pane";
+
+const TerminalPane = memo(lazy(() => import("./TerminalPane")));
+
+/** Keep tabs and PTYs mounted when a terminal slot moves to a different parent in the layout tree. */
+function TerminalPanePortal({ index, id, layout }: { index: number; id: string; layout: LayoutNode }) {
+  const [container] = useState(() => {
+    const element = document.createElement("div");
+    element.className = "flex min-h-0 min-w-0 grow";
+    return element;
+  });
+
+  useLayoutEffect(() => {
+    const selector = `[data-terminal-pane-host="${index}"]`;
+    const current = container.parentElement;
+    if (current?.isConnected && current.matches(selector)) return;
+    document.querySelector(selector)?.appendChild(container);
+  }, [container, index, layout]);
+
+  useLayoutEffect(() => () => container.remove(), [container]);
+
+  return createPortal(
+    <Suspense fallback={null}>
+      <TerminalPane index={index} id={id} />
+    </Suspense>,
+    container,
+  );
+}
+
+function TerminalPanes({ layout }: { layout: LayoutNode }) {
+  const panes = useStore((s) => s.panes);
+  return leaves(layout).map((index) => {
+    const id = panes[index];
+    return isTerminal(id) ? <TerminalPanePortal key={`${index}:${id}`} index={index} id={id} layout={layout} /> : null;
+  });
+}
 
 /** Panes never get narrower or shorter than this while dragging a divider (px) */
 const MIN_WIDTH = 240;
@@ -37,8 +73,7 @@ function Divider({
   const t = useT();
   const setSplitSizes = useStore((s) => s.setSplitSizes);
   const [active, setActive] = useState(false);
-  // A ref so a move right after the press sees it (state only updates on the next render)
-  const dragging = useRef(false);
+  const drag = useRef<{ pointer: number; origin: number; size: number; before: number; min: number; position: number; frame: number | null } | null>(null);
   const vertical = axis === "row";
   const pair = sizes[index - 1] + sizes[index];
   const setFirst = (first: number) => {
@@ -47,26 +82,35 @@ function Divider({
     next[index] = pair - first;
     setSplitSizes(path, next);
   };
-  const minFraction = () => {
-    const r = container.current?.getBoundingClientRect();
-    const size = r ? (vertical ? r.width : r.height) : 1000;
-    return Math.min(pair / 2, (vertical ? MIN_WIDTH : MIN_HEIGHT) / size);
+  const applyPosition = (current: NonNullable<typeof drag.current>) => {
+    const first = (current.position - current.origin) / current.size - current.before;
+    setFirst(Math.min(pair - current.min, Math.max(current.min, first)));
   };
-  const ratioAt = (e: React.PointerEvent) => {
-    const r = container.current?.getBoundingClientRect();
-    if (!r) return sizes[index - 1];
-    const size = vertical ? r.width : r.height;
-    const before = sizes.slice(0, index - 1).reduce((a, b) => a + b, 0);
-    const v = (vertical ? e.clientX - r.left : e.clientY - r.top) / size - before;
-    const min = minFraction();
-    return Math.min(pair - min, Math.max(min, v));
-  };
-  const end = () => {
-    dragging.current = false;
+  const end = (e: React.PointerEvent) => {
+    const current = drag.current;
+    if (!current || current.pointer !== e.pointerId) return;
+    if (current.frame !== null) cancelAnimationFrame(current.frame);
+    const position = e.type === "pointerup" ? (vertical ? e.clientX : e.clientY) : current.position;
+    if (current.frame !== null || position !== current.position) {
+      current.position = position;
+      applyPosition(current);
+    }
+    drag.current = null;
     document.body.classList.remove("resizing");
     setActive(false);
     onDragging(false);
   };
+  useEffect(
+    () => () => {
+      const current = drag.current;
+      if (!current) return;
+      if (current.frame !== null) cancelAnimationFrame(current.frame);
+      drag.current = null;
+      document.body.classList.remove("resizing");
+      onDragging(false);
+    },
+    [onDragging],
+  );
   return (
     <div className={cn("relative z-10 shrink-0", vertical ? "w-0" : "h-0")}>
       <div
@@ -80,22 +124,42 @@ function Divider({
         tabIndex={0}
         onPointerDown={(e) => {
           // Don't start a text selection (it would select the panes' text while dragging)
+          if (drag.current || e.button !== 0) return;
+          const rect = container.current?.getBoundingClientRect();
+          const size = rect && (vertical ? rect.width : rect.height);
+          if (!rect || !size) return;
           e.preventDefault();
           try {
             e.currentTarget.setPointerCapture(e.pointerId);
           } catch {
             // Synthetic events have no capturable pointer
           }
-          dragging.current = true;
+          drag.current = {
+            pointer: e.pointerId,
+            origin: vertical ? rect.left : rect.top,
+            size,
+            before: sizes.slice(0, index - 1).reduce((sum, value) => sum + value, 0),
+            min: Math.min(pair / 2, (vertical ? MIN_WIDTH : MIN_HEIGHT) / size),
+            position: vertical ? e.clientX : e.clientY,
+            frame: null,
+          };
           document.body.classList.add("resizing");
           setActive(true);
           onDragging(true);
         }}
         onPointerMove={(e) => {
-          if (dragging.current) setFirst(ratioAt(e));
+          const current = drag.current;
+          if (!current || current.pointer !== e.pointerId) return;
+          current.position = vertical ? e.clientX : e.clientY;
+          if (current.frame !== null) return;
+          current.frame = requestAnimationFrame(() => {
+            current.frame = null;
+            applyPosition(current);
+          });
         }}
         onPointerUp={end}
         onPointerCancel={end}
+        onLostPointerCapture={end}
         onDoubleClick={() => setFirst(pair / 2)}
         onKeyDown={(e) => {
           const step = (e.shiftKey ? 0.1 : 0.02) * pair;
@@ -103,7 +167,9 @@ function Divider({
           const d = dir[e.key];
           if (d) {
             e.preventDefault();
-            const min = minFraction();
+            const rect = container.current?.getBoundingClientRect();
+            const size = rect ? (vertical ? rect.width : rect.height) : 1000;
+            const min = Math.min(pair / 2, (vertical ? MIN_WIDTH : MIN_HEIGHT) / size);
             setFirst(Math.min(pair - min, Math.max(min, sizes[index - 1] + d * step)));
           } else if (e.key === "Enter") setFirst(pair / 2);
         }}
@@ -165,7 +231,7 @@ function Node({ node, path, dragging, setDragging, present }: NodeProps) {
         className="relative flex min-h-0 min-w-0 grow overflow-hidden border-r border-b [&>div>section]:min-w-0 [&>div>section]:grow"
         style={{ contain: "layout paint" }}
       >
-        <StablePane index={node.slot} />
+        <StablePane index={node.slot} present={present} />
       </div>
     );
   return (
@@ -197,6 +263,7 @@ export function PaneGrid() {
         setDragging={setDragging}
         present
       />
+      <TerminalPanes layout={layout} />
     </main>
   );
 }

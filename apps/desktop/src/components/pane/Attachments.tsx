@@ -24,9 +24,13 @@ import { currentBindings, useKeys } from "@/state/keys";
  * onMentionRemoved: called with the path when a chip that came from an @-mention is removed, so the caller can
  * delete "@path" from the text too
  */
-export function useAttachments({ onMentionRemoved, scope }: { onMentionRemoved?: (path: string) => void; scope?: string } = {}) {
+export function useAttachments({
+  onMentionRemoved,
+  scope,
+  initialItems,
+}: { onMentionRemoved?: (path: string) => void; scope?: string; initialItems?: Attached[] } = {}) {
   const t = useT();
-  const [items, setItems] = useState<Attached[]>([]);
+  const [items, setItems] = useState<Attached[]>(initialItems ?? []);
   const itemsRef = useRef(items);
   itemsRef.current = items;
   const [over, setOver] = useState(false);
@@ -213,7 +217,10 @@ export function AttachBox({ att, children }: { att: AttachmentsState; children: 
     <div
       ref={att.boxRef}
       onPaste={att.onPaste}
-      className={cn("flex flex-col rounded-xl border border-input bg-card transition-colors focus-within:border-ring", att.over && "border-ring bg-accent")}
+      className={cn(
+        "flex flex-col rounded-[calc(var(--radius-lg)+var(--composer-padding)+1px)] border border-input bg-card transition-colors [--composer-padding:calc(var(--spacing)*1.5)] focus-within:border-ring",
+        att.over && "border-ring bg-accent",
+      )}
     >
       <AnimatePresence initial={false}>
         {att.items.length > 0 && (
@@ -247,7 +254,7 @@ export function AttachBox({ att, children }: { att: AttachmentsState; children: 
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="flex items-end gap-1.5 py-1.5 pr-1.5 pl-1.5">
+      <div className="flex items-end gap-1.5 p-[var(--composer-padding)]">
         <AddMenu att={att} />
         {children}
       </div>

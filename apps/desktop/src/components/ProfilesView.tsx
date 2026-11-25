@@ -163,6 +163,7 @@ export function ProfilesView() {
                 {rows.map((p) => {
                   const c = checks[p.name];
                   const on = p.name === selected;
+                  const name = p.name === p.agent ? "default" : p.label;
                   return (
                     <button
                       key={p.name}
@@ -176,9 +177,12 @@ export function ProfilesView() {
                       )}
                     >
                       <span className="flex items-center gap-2">
-                        <span className="font-medium">{p.name === p.agent ? "default" : p.label}</span>
-                        <span className="text-xs text-muted-foreground">{t(AUTH_LABEL[summaryAuth(p)])}</span>
-                        <span className="grow" />
+                        <span className="flex min-w-0 grow items-center gap-2">
+                          <span className="min-w-0 truncate font-medium" title={name}>
+                            {name}
+                          </span>
+                          <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">{t(AUTH_LABEL[summaryAuth(p)])}</span>
+                        </span>
                         <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">
                           {t("profiles.sessionCount", { count: sessionCount(p.name) })}
                         </span>

@@ -6,7 +6,7 @@ import { useT } from "@/i18n";
 import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/keys";
 import { cn } from "@/lib/utils";
-import { comparePaneOf, gitPaneOf, isCompare, isDraft, isFiles, isGit, isListed, isPreview, leavesShowing, useStore } from "@/state/store";
+import { comparePaneOf, gitPaneOf, isCompare, isDraft, isFiles, isGit, isListed, isPreview, isTerminal, leavesShowing, useStore } from "@/state/store";
 import { ComparePane } from "./ComparePane";
 import { FilesPane } from "./FilesPane";
 import { liquidAnchor } from "../liquid/liquid";
@@ -76,12 +76,17 @@ function EmptyPane({ index }: { index: number }) {
 }
 
 /** Hide the content while the separation animation opens it (appears once fully expanded) */
-export function Pane({ index }: { index: number }) {
+export function Pane({ index, present }: { index: number; present: boolean }) {
   const revealed = useLiquidRevealed(`pane-${index}`);
   const id = useStore((s) => s.panes[index]);
+  const terminal = isTerminal(id);
   return (
-    <div className="flex min-w-0 grow transition-opacity duration-150" style={{ opacity: revealed ? 1 : 0 }}>
-      {isDraft(id) ? (
+    <div
+      data-terminal-pane-host={terminal && present ? index : undefined}
+      className="flex min-w-0 grow transition-opacity duration-150"
+      style={{ opacity: revealed ? 1 : 0 }}
+    >
+      {terminal ? null : isDraft(id) ? (
         <DraftPane index={index} id={id} />
       ) : isPreview(id) ? (
         <PreviewPane index={index} id={id} />
@@ -110,6 +115,7 @@ function SessionPane({ index }: { index: number }) {
   const diffActive = useLiquidActiveAnchors().has(`diff:${id}`);
   const diffOpen = useStore((s) => !!id && leavesShowing(s, gitPaneOf(id)));
   const diffVersion = useStore((s) => s.diffVersion);
+  const savedEffort = useStore((s) => (id ? s.effort.sessions[id] : undefined));
   const cached = useStore((s) => (view ? s.infoCache[view.record.profile] : undefined));
   const paneRef = useRef<HTMLElement>(null);
 
@@ -254,7 +260,7 @@ function SessionPane({ index }: { index: number }) {
             sessionId={id}
           />
 
-          <div className="px-5">
+          <div data-composer-notice className="px-5">
             <AnimatePresence>
               {view.permission && (
                 <PermissionCard
@@ -276,9 +282,11 @@ function SessionPane({ index }: { index: number }) {
             info={(() => {
               // While not running, show the last known values (remembered for this profile) with the chosen values applied on top
               const base = r.status === "closed" || r.status === "error" || r.status === "starting" ? (view.info ?? cached ?? null) : view.info;
-              return base && Object.keys(view.pending).length > 0 ? withChoices(base, view.pending) : base;
+              const stopped = r.status === "closed" || r.status === "error";
+              const choices = stopped && savedEffort !== undefined ? { ...view.pending, thought_level: savedEffort } : view.pending;
+              return base && Object.keys(choices).length > 0 ? withChoices(base, choices) : base;
             })()}
-            disabled={r.status === "starting"}
+            disabled={r.status === "starting" || !!view.sendingFirstPrompt}
             busy={view.transcript.inTurn}
             placeholder={
               r.status === "closed" || r.status === "error"

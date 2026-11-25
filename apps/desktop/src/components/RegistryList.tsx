@@ -1,5 +1,4 @@
-// Agents from the ACP Registry, on the profiles screen: search them, add the ones started through npx or uvx (or update
-// them to the registry's version), and take them off again. Binary-only agents are listed but cannot be added yet.
+// Find, add, update or remove ACP Registry agents from the profiles screen.
 import { ExternalLink, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -11,6 +10,27 @@ import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { agentName, ProviderLogo, Spinner } from "./icons";
 import { openLink } from "./pane/Markdown";
+
+function RegistryLogo({ agent }: { agent: RegistryAgent }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const url = agent.icon_url;
+  const size = "mt-0.5 size-4 shrink-0";
+  if (agent.built_in || !url || failedUrl === url) {
+    return <ProviderLogo agent={agent.built_in ?? agent.id} className={cn(size, "text-muted-foreground")} />;
+  }
+  return (
+    <img
+      src={url}
+      alt=""
+      aria-hidden
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      onError={() => setFailedUrl(url)}
+      className={cn(size, "object-contain brightness-0 invert-65")}
+    />
+  );
+}
 
 export function RegistryList({ onAdded }: { onAdded: (id: string) => void }) {
   const t = useT();
@@ -85,7 +105,7 @@ export function RegistryList({ onAdded }: { onAdded: (id: string) => void }) {
           const update = a.added !== null && a.added !== a.version;
           return (
             <li key={a.id} className="flex items-start gap-3 rounded-lg px-3 py-2.5 hover:bg-accent/40">
-              <ProviderLogo agent={a.built_in ?? a.id} className="mt-0.5 size-4 text-muted-foreground" />
+              <RegistryLogo agent={a} />
               <div className="flex min-w-0 grow flex-col gap-0.5">
                 <div className="flex min-w-0 items-baseline gap-2">
                   <span className="truncate font-medium">{a.built_in ? agentName(a.built_in) : a.name}</span>

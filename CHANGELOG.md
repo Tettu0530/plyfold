@@ -4,6 +4,29 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-11-25
+
+### Added
+
+- Git has a history graph with local and remote branches, the current HEAD, and recent merges. Switch branches, create a branch, track a remote branch, or check out a commit from the pane
+- Session terminals open in their own pane, with tabs for independent interactive shells. Tabs and shells stay open when the pane moves
+- The context usage popover can compact the conversation when the agent exposes the `/compact` command
+- File mentions accept relative and absolute paths, including paths starting with `~/`. Select a folder to browse its contents
+
+### Changed
+
+- Pane dividers follow the pointer without a spring during resizing. Tool calls share a collapsible group within each turn
+- Effort selections are remembered per profile and session, and the Default choice has its own indicator
+- The ACP Registry shows agent logos before installation, and the profile list keeps names, authentication and session counts on one line
+- The trash sits above Profiles and opens a confirmation menu before permanently deleting sessions. Worktrees can be kept
+- The composer uses the same send button styling before and after a session starts, and conversation text can scroll between the controls above it
+
+### Fixed
+
+- Sending the first prompt opens the new session as soon as its record is created
+- In-progress tool calls update their fractional elapsed seconds, and the token rate is shown as unavailable while the agent is thinking
+- Text between tool calls keeps its place in the turn. Answer actions appear on the final response
+
 ## [0.6.3] - 2026-11-25
 
 ### Changed
@@ -251,6 +274,7 @@ The first release, for macOS (Apple Silicon) and Windows 10/11 (x64; new, please
 - Settings for display size, reduced motion, notifications, defaults for new sessions and more
 - Spring-based motion modelled on SwiftUI, with a fade-only mode for Reduce motion
 
+[0.6.4]: https://github.com/Tettu0530/plyfold/releases/tag/v0.6.4
 [0.6.3]: https://github.com/Tettu0530/plyfold/releases/tag/v0.6.3
 [0.6.2]: https://github.com/Tettu0530/plyfold/releases/tag/v0.6.2
 [0.6.1]: https://github.com/Tettu0530/plyfold/releases/tag/v0.6.1

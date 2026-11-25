@@ -79,6 +79,8 @@ pub struct Listed {
     pub repository: Option<String>,
     pub website: Option<String>,
     pub license: Option<String>,
+    /// The Registry CDN's icon, available before the agent has been added
+    pub icon_url: Option<String>,
     /// How it is started: "npx", "uvx" or "binary"
     pub kind: &'static str,
     /// Can be added from here
@@ -168,6 +170,7 @@ pub fn list(state_dir: &Path, agents: &BTreeMap<String, AgentDef>) -> Result<Vec
                 repository: e.repository,
                 website: e.website,
                 license: e.license,
+                icon_url: e.icon.filter(|url| url.starts_with(ICON_PREFIX)),
                 kind,
                 addable: unavailable.is_none() && built_in.is_none(),
                 unavailable,

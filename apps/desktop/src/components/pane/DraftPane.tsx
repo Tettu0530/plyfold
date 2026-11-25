@@ -21,7 +21,7 @@ import type { CliSession } from "@/lib/types";
 import { isSendKey } from "@/lib/keys";
 import { useT, type MessageKey } from "@/i18n";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CHIP_TRIGGER } from "./chip";
+import { CHIP_TRIGGER, COMPOSER_PRIMARY_BUTTON } from "./chip";
 import { startDrag } from "./dnd";
 import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
 
@@ -124,9 +124,13 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const waiting = useStore((s) => s.tasks.length);
   // Shown for a moment after a prompt went into the queue
   const [queued, setQueued] = useState(false);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(draft?.retryInput?.text ?? "");
   // A chip added with @ and its "@path" in the text are kept together: removing either removes the other
-  const att = useAttachments({ scope: id, onMentionRemoved: (path) => setText((cur) => removeMention(cur, path)) });
+  const att = useAttachments({
+    scope: id,
+    initialItems: draft?.retryInput?.attachments,
+    onMentionRemoved: (path) => setText((cur) => removeMention(cur, path)),
+  });
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
   const textRef = useAutoGrow(text);
   // @-mentions search the repository the session will start in
@@ -157,6 +161,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
     setRepoOpen(o);
   };
   const cached = useStore((s) => (draft?.profile ? s.infoCache[draft.profile] : undefined));
+  const savedEffort = useStore((s) => (draft?.profile ? s.effort.profiles[draft.profile] : undefined));
   const usage = useStore((s) => s.usage);
   useEffect(() => {
     void useStore.getState().loadUsage();
@@ -166,7 +171,9 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   if (!draft) return null;
   const sorted = [...profiles].sort((a, b) => Number(a.name === a.agent) - Number(b.name === b.agent) || a.name.localeCompare(b.name));
   const current = profiles.find((p) => p.name === draft.profile);
-  const info = cached && draft ? withChoices(cached, draft.choices) : null;
+  const preferredEffort = draft.choices.thought_level ?? savedEffort;
+  const hasEffort = cached?.config.some((option) => option.category === "thought_level" && option.choices.some((choice) => choice.value === preferredEffort));
+  const info = cached ? withChoices(cached, hasEffort ? { ...draft.choices, thought_level: preferredEffort } : draft.choices) : null;
   const choose = (c: Category, v: string) => updateDraft(id, { choices: { ...draft!.choices, [c]: v } });
   const modes = info ? (info.config.find((o) => o.category === "mode")?.choices.map((c) => c.value) ?? info.modes.map((m) => m.value)) : [];
   const mode = info ? (info.config.find((o) => o.category === "mode")?.current ?? info.current_mode) : null;
@@ -393,13 +400,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
                     {queued ? <Check className="size-3.5" aria-hidden /> : <ListPlus className="size-3.5" aria-hidden />}
                   </button>
                 )}
-                <button
-                  type="button"
-                  aria-label={t("draft.start")}
-                  disabled={!canStart}
-                  onClick={send}
-                  className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
-                >
+                <button type="button" aria-label={t("draft.start")} disabled={!canStart} onClick={send} className={COMPOSER_PRIMARY_BUTTON}>
                   <ArrowUp className="size-3.5" aria-hidden />
                 </button>
               </AttachBox>

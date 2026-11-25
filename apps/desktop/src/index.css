@@ -5,6 +5,33 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Let the transcript scroll beneath the 24px control row when there is no notice or queue between them. */
+[data-transcript]:has(~ [data-session-composer] > [data-composer-controls] > button):not(
+    :has(~ [data-composer-notice]:not(:empty), ~ [data-session-composer] > [data-composer-queue])
+  ) {
+  @apply -mb-6;
+
+  > [data-transcript-scroll] {
+    @apply pb-8 scroll-pb-6;
+  }
+
+  > [data-transcript-jump] {
+    @apply bottom-9;
+  }
+}
+
+[data-session-composer] > [data-composer-controls] {
+  @apply pointer-events-none;
+
+  > button {
+    @apply pointer-events-auto;
+
+    &:not(:hover, [data-state="open"]) {
+      @apply bg-background;
+    }
+  }
+}
+
 /* shadcn/ui neutral (dark) + Plyfold's status colors. Rules live in .claude/skills/no-ai-slop-ui */
 :root {
   --radius: 0.625rem;
