@@ -210,6 +210,17 @@ CREATE INDEX IF NOT EXISTS events_by_session ON events(session_id, id);
 CREATE TABLE IF NOT EXISTS dismissed_conversations (
     acp_session_id TEXT PRIMARY KEY
 );
+CREATE TABLE IF NOT EXISTS comparisons (
+    run_group TEXT PRIMARY KEY,
+    repo_path TEXT,
+    title TEXT NOT NULL,
+    instruction TEXT NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    taken_session TEXT,
+    verdict_session TEXT,
+    verdict_run TEXT,
+    runs TEXT NOT NULL
+);
 ";
 
 const SESSION_COLS: &str = "id, title, profile, agent, repo_path, worktree_path, branch, base_ref, acp_session_id, status, created_at, updated_at, side_of, chat, trashed_at, port, run_group, reviewer, review";
@@ -558,7 +569,91 @@ pub struct UsageEvent {
     pub payload: String,
 }
 
+/// One run of a recorded comparison: a snapshot of its numbers, kept after its session is deleted
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ComparisonRun {
+    pub session_id: String,
+    pub profile: String,
+    pub agent: String,
+    pub branch: String,
+    pub elapsed_ms: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cost_amount: Option<f64>,
+    pub cost_currency: Option<String>,
+    pub files: i64,
+    pub added: i64,
+    pub removed: i64,
+}
+
+/// A comparison (sessions started together from one prompt) once one of its runs was taken
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ComparisonRecord {
+    pub run_group: String,
+    pub repo_path: Option<String>,
+    pub title: String,
+    /// What every run was asked
+    pub instruction: String,
+    /// When it was recorded (0 on the way in: the store fills in the time)
+    pub recorded_at: i64,
+    /// The session id of the run that was taken
+    pub taken_session: Option<String>,
+    /// The session that judged it, and the session id of the run it named
+    pub verdict_session: Option<String>,
+    pub verdict_run: Option<String>,
+    pub runs: Vec<ComparisonRun>,
+}
+
 impl Store {
+    /// Keep (or update) the record of a comparison. The first time it is recorded sets its time
+    pub fn save_comparison(&self, rec: &ComparisonRecord) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let earlier: Option<i64> =
+            conn.query_row("SELECT recorded_at FROM comparisons WHERE run_group = ?1", params![rec.run_group], |r| r.get(0)).optional()?;
+        let at = earlier.unwrap_or(if rec.recorded_at > 0 { rec.recorded_at } else { now_ms() });
+        let runs = serde_json::to_string(&rec.runs).expect("runs serialize");
+        conn.execute(
+            "INSERT OR REPLACE INTO comparisons (run_group, repo_path, title, instruction, recorded_at, taken_session, verdict_session, verdict_run, runs)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![rec.run_group, rec.repo_path, rec.title, rec.instruction, at, rec.taken_session, rec.verdict_session, rec.verdict_run, runs],
+        )?;
+        Ok(())
+    }
+
+    /// Recorded comparisons, newest first. With `repo`, only that repository's
+    pub fn list_comparisons(&self, repo: Option<&str>, limit: usize) -> Result<Vec<ComparisonRecord>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT run_group, repo_path, title, instruction, recorded_at, taken_session, verdict_session, verdict_run, runs FROM comparisons
+             WHERE (?1 IS NULL OR repo_path = ?1) ORDER BY recorded_at DESC, run_group LIMIT ?2",
+        )?;
+        let rows = stmt
+            .query_map(params![repo, limit as i64], |r| {
+                let runs: String = r.get(8)?;
+                Ok(ComparisonRecord {
+                    run_group: r.get(0)?,
+                    repo_path: r.get(1)?,
+                    title: r.get(2)?,
+                    instruction: r.get(3)?,
+                    recorded_at: r.get(4)?,
+                    taken_session: r.get(5)?,
+                    verdict_session: r.get(6)?,
+                    verdict_run: r.get(7)?,
+                    // A record from a newer version with a shape this one cannot read shows without its runs
+                    runs: serde_json::from_str(&runs).unwrap_or_default(),
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    pub fn delete_comparison(&self, run_group: &str) -> Result<(), StoreError> {
+        self.conn.lock().unwrap().execute("DELETE FROM comparisons WHERE run_group = ?1", params![run_group])?;
+        Ok(())
+    }
+
     /// Prompt, turn-result and usage-update events of sessions updated since `since`, oldest first.
     /// Costs arrive as running totals, so earlier events are returned too, to allow taking differences
     pub fn usage_events(&self, since: i64) -> Result<Vec<UsageEvent>, StoreError> {
@@ -592,6 +687,41 @@ mod tests {
 
     fn new(store: &Store, title: &str) -> SessionRecord {
         store.create_session(NewSession { title: title.into(), profile: "p".into(), agent: "mock".into(), ..Default::default() }).unwrap()
+    }
+
+    #[test]
+    fn comparisons_are_kept_listed_and_updated() {
+        let store = Store::open_in_memory().unwrap();
+        let run =
+            |id: &str, ms: i64| ComparisonRun { session_id: id.into(), profile: "p".into(), elapsed_ms: ms, cost_amount: Some(0.5), ..Default::default() };
+        let rec = |group: &str, repo: &str, taken: Option<&str>, at: i64| ComparisonRecord {
+            run_group: group.into(),
+            repo_path: Some(repo.into()),
+            title: "t".into(),
+            instruction: "do it".into(),
+            recorded_at: at,
+            taken_session: taken.map(Into::into),
+            runs: vec![run("a", 10), run("b", 20)],
+            ..Default::default()
+        };
+        store.save_comparison(&rec("g1", "/r1", Some("a"), 100)).unwrap();
+        store.save_comparison(&rec("g2", "/r2", None, 200)).unwrap();
+        // Newest first, and filtered by repository
+        assert_eq!(store.list_comparisons(None, 10).unwrap().iter().map(|c| c.run_group.as_str()).collect::<Vec<_>>(), ["g2", "g1"]);
+        let only = store.list_comparisons(Some("/r1"), 10).unwrap();
+        assert_eq!(only.len(), 1);
+        assert_eq!(only[0].runs, vec![run("a", 10), run("b", 20)]);
+        assert_eq!(only[0].taken_session.as_deref(), Some("a"));
+        // Recording again updates the record and keeps its first time
+        store.save_comparison(&rec("g1", "/r1", Some("b"), 999)).unwrap();
+        let again = &store.list_comparisons(Some("/r1"), 10).unwrap()[0];
+        assert_eq!((again.taken_session.as_deref(), again.recorded_at), (Some("b"), 100));
+        // A time of 0 means now
+        store.save_comparison(&rec("g3", "/r1", None, 0)).unwrap();
+        assert!(store.list_comparisons(Some("/r1"), 10).unwrap().iter().any(|c| c.run_group == "g3" && c.recorded_at > 0));
+        store.delete_comparison("g2").unwrap();
+        assert_eq!(store.list_comparisons(None, 10).unwrap().len(), 2);
+        assert_eq!(store.list_comparisons(None, 1).unwrap().len(), 1);
     }
 
     #[test]

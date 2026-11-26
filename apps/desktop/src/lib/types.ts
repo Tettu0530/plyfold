@@ -401,6 +401,36 @@ export interface TextFile {
   truncated: boolean;
 }
 
+/** One run of a recorded comparison: its numbers as they were when it was taken */
+export interface ComparisonRun {
+  session_id: string;
+  profile: string;
+  agent: string;
+  branch: string;
+  elapsed_ms: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_amount: number | null;
+  cost_currency: string | null;
+  files: number;
+  added: number;
+  removed: number;
+}
+
+/** A comparison once one of its runs was taken (kept in the database, apart from the sessions) */
+export interface ComparisonRecord {
+  run_group: string;
+  repo_path: string | null;
+  title: string;
+  instruction: string;
+  /** 0 when sending: the backend fills in the time */
+  recorded_at: number;
+  taken_session: string | null;
+  verdict_session: string | null;
+  verdict_run: string | null;
+  runs: ComparisonRun[];
+}
+
 /** Events of a `!command` run */
 export type ShellEvent = { kind: "output"; data: string } | { kind: "exit"; code: number | null; truncated: boolean };
 

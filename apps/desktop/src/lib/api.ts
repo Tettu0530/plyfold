@@ -7,6 +7,7 @@ import type {
   AppSettings,
   Category,
   CheckResult,
+  ComparisonRecord,
   CliSession,
   Diff,
   DirCandidate,
@@ -59,6 +60,9 @@ export const api = {
   listCliSessions: (profile: string, repo: string) => invoke<CliSession[]>("list_cli_sessions", { profile, repo }),
   adoptCliSession: (profile: string, repo: string, acpSessionId: string, title: string, worktree: boolean, created?: (record: SessionRecord) => void) =>
     invoke<SessionRecord>("adopt_cli_session", { profile, repo, acpSessionId, title, worktree, created: new Channel(created) }),
+  recordComparison: (record: ComparisonRecord) => invoke<void>("record_comparison", { record }),
+  listComparisons: (repo: string | null) => invoke<ComparisonRecord[]>("list_comparisons", { repo }),
+  deleteComparison: (runGroup: string) => invoke<void>("delete_comparison", { runGroup }),
   compareVerdict: (group: string, profile: string, instruction: string, facts: [string, string][]) =>
     invoke<string>("compare_verdict", { group, profile, instruction, facts }),
   renameSession: (id: string, title: string) => invoke<void>("rename_session", { id, title }),

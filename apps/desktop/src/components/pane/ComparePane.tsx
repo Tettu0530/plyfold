@@ -1,12 +1,12 @@
 // The sessions started together from one prompt, side by side in numbers: how each did (state, time, tokens, cost,
 // diff), and a way to take the one you want into the repository and put the rest in the trash
-import { Check, Columns3, ExternalLink, GitBranch, GitMerge, Scale, Trash2, X } from "lucide-react";
+import { Check, ChevronRight, Columns3, ExternalLink, GitBranch, GitMerge, History, Scale, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { useT } from "@/i18n";
 import { api, inTauri } from "@/lib/api";
-import { money, seconds, tokens } from "@/lib/format";
-import type { SessionRecord } from "@/lib/types";
+import { age, money, seconds, tokens } from "@/lib/format";
+import type { ComparisonRecord, SessionRecord } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { verdictChoice } from "@/lib/verdict";
 import { compareGroupOf, isListed, useStore, type SessionView } from "@/state/store";
@@ -82,6 +82,45 @@ export function ComparePane({ index, id }: { index: number; id: string }) {
   const choice = useMemo(() => (answer ? verdictChoice(answer, members.map((m) => m.record)) : null), [answer, members]);
   // After one is merged: which, and where it went
   const [merged, setMerged] = useState<{ id: string; target: string } | null>(null);
+  // Bumped when this comparison was recorded, so the list of past comparisons reads again
+  const [recorded, setRecorded] = useState(0);
+
+  // Keep the comparison once a run is taken: the numbers are copied, so they stay after the sessions are deleted
+  const record = async (taken: string) => {
+    const runs = await Promise.all(
+      members.map(async (m) => {
+        const sum = totals(m);
+        const diff = await api.sessionDiff(m.record.id).catch(() => null);
+        return {
+          session_id: m.record.id,
+          profile: m.record.profile,
+          agent: m.record.agent,
+          branch: m.record.branch ?? "",
+          elapsed_ms: Math.round(sum.ms),
+          input_tokens: sum.input,
+          output_tokens: sum.output,
+          cost_amount: m.info?.cost?.amount ?? null,
+          cost_currency: m.info?.cost?.currency ?? null,
+          files: diff?.files.length ?? 0,
+          added: diff?.files.reduce((n, f) => n + f.added, 0) ?? 0,
+          removed: diff?.files.reduce((n, f) => n + f.removed, 0) ?? 0,
+        };
+      }),
+    );
+    const first = members[0].transcript.items.find((it) => it.kind === "user");
+    await api.recordComparison({
+      run_group: group,
+      repo_path: members[0].record.repo_path,
+      title: members[0].record.title,
+      instruction: first?.kind === "user" ? first.text : "",
+      recorded_at: 0,
+      taken_session: taken,
+      verdict_session: verdictId ?? null,
+      verdict_run: choice,
+      runs,
+    });
+    setRecorded((n) => n + 1);
+  };
   const title = members[0]?.record.title ?? t("compare.title");
 
   return (
@@ -121,10 +160,92 @@ export function ComparePane({ index, id }: { index: number; id: string }) {
           />
         )}
         {members.map((v) => (
-          <Row key={v.record.id} v={v} merged={merged} recommended={choice === v.record.id} onMerged={(target) => setMerged({ id: v.record.id, target })} />
+          <Row
+            key={v.record.id}
+            v={v}
+            merged={merged}
+            recommended={choice === v.record.id}
+            onMerged={(target) => {
+              setMerged({ id: v.record.id, target });
+              void record(v.record.id).catch(() => {});
+            }}
+          />
         ))}
+        {members.length > 0 && <ComparisonHistory repo={members[0].record.repo_path} current={group} reload={recorded} />}
         {merged && members.length > 1 && <TrashOthers keep={merged.id} others={members.filter((m) => m.record.id !== merged.id).map((m) => m.record)} />}
       </div>
+    </section>
+  );
+}
+
+/** Comparisons recorded for this repository before: which run was taken, and each run's time, tokens and cost */
+function ComparisonHistory({ repo, current, reload }: { repo: string | null; current: string; reload: number }) {
+  const t = useT();
+  const [items, setItems] = useState<ComparisonRecord[]>([]);
+  const [open, setOpen] = useState(false);
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    if (!inTauri || !repo) return;
+    let alive = true;
+    void api.listComparisons(repo).then(
+      (list) => alive && setItems(list.filter((c) => c.run_group !== current)),
+      () => alive && setItems([]),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [repo, current, reload, version]);
+  if (items.length === 0) return null;
+  return (
+    <section aria-label={t("compare.history")} className="flex flex-col gap-2 rounded-[10px] border p-3">
+      <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="flex items-center gap-2 text-left text-xs">
+        <ChevronRight className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} aria-hidden />
+        <History className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        <span className="font-medium">{t("compare.history")}</span>
+        <span className="text-muted-foreground">{t("compare.historyCount", { count: items.length })}</span>
+      </button>
+      {open &&
+        items.map((c) => (
+          <div key={c.run_group} className="flex flex-col gap-1.5 border-t pt-2 text-xs">
+            <div className="flex min-w-0 items-start gap-2">
+              <span className="min-w-0 grow truncate text-muted-foreground" title={c.instruction}>
+                {c.instruction.split("\n")[0] || c.title}
+              </span>
+              <span className="shrink-0 text-muted-foreground">{age(c.recorded_at)}</span>
+              <button
+                type="button"
+                aria-label={t("compare.historyDelete")}
+                title={t("compare.historyDelete")}
+                onClick={() => void api.deleteComparison(c.run_group).then(() => setVersion((n) => n + 1))}
+                className="flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <X className="size-3" aria-hidden />
+              </button>
+            </div>
+            <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+              {c.runs.map((r) => {
+                const taken = r.session_id === c.taken_session;
+                return (
+                  <li key={r.session_id} className={cn("grid grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] items-center gap-x-3 rounded-md px-1.5 py-1 font-mono tabular", taken && "bg-working/10")}>
+                    <span className="flex min-w-0 items-center gap-1.5 font-sans">
+                      {taken ? <Check className="size-3 shrink-0 text-working" aria-label={t("compare.historyTaken")} /> : <span className="size-3 shrink-0" />}
+                      <span className="truncate">{r.profile === r.agent ? agentName(r.agent) : r.profile}</span>
+                    </span>
+                    <span>{r.elapsed_ms > 0 ? seconds(r.elapsed_ms) : "—"}</span>
+                    <span>{`↑${tokens(r.input_tokens)} ↓${tokens(r.output_tokens)}`}</span>
+                    <span>{r.cost_amount !== null ? money(r.cost_amount, r.cost_currency ?? "USD") : "—"}</span>
+                    <span>
+                      <span className="text-working">+{r.added}</span> <span className="text-error">−{r.removed}</span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+            {c.verdict_run && c.verdict_run !== c.taken_session && (
+              <span className="text-muted-foreground">{t("compare.verdictChose", { run: c.runs.find((r) => r.session_id === c.verdict_run)?.profile ?? "" })}</span>
+            )}
+          </div>
+        ))}
     </section>
   );
 }
