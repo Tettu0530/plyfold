@@ -5,8 +5,8 @@ export const notifications = {
   stoppedWithError: "エラーで止まりました",
   turnEndedWithError: "ターンがエラーで終わりました",
   turnEnded: "ターンが終わりました",
-  urgentLabel: "手を貸す必要があるセッション {count} 件",
+  urgentLabel: "対応が必要なセッション {count} 件",
   newLabel: "新しい通知 {count} 件",
   title: "通知",
-  empty: "新しい通知はありません",
+  empty: "通知はありません。",
 } satisfies Record<string, string>;

@@ -20,7 +20,7 @@ export const draft: Record<keyof typeof source, string> = {
   startMode: "Start mode",
   modeConversation: "Conversation",
   modeCoding: "Coding",
-  modeParallel: "Parallel coding",
+  modeParallel: "Parallel compare",
   modeContinue: "Continue session",
   chooseSession: "Choose a conversation to continue",
   repositoryWork: "Work in repository",

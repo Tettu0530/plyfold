@@ -5,7 +5,7 @@ export const sidebar: Record<keyof typeof source, string> = {
   label: "Sessions",
   newSession: "New session",
   search: "Search",
-  empty: "No sessions yet",
+  empty: "No sessions.",
   renameLabel: "Session name",
   unread: "Has unread notifications",
   profiles: "Profiles",

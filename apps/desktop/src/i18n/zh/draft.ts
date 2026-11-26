@@ -20,7 +20,7 @@ export const draft: Record<keyof typeof source, string> = {
   startMode: "启动方式",
   modeConversation: "对话",
   modeCoding: "编程",
-  modeParallel: "并行编程",
+  modeParallel: "并行比较",
   modeContinue: "继续会话",
   chooseSession: "选择要继续的会话",
   repositoryWork: "在仓库中工作",

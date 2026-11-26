@@ -27,7 +27,7 @@ export const compare: Record<keyof typeof source, string> = {
   verdictBadge: "Verdict: take this",
   history: "Past comparisons",
   historyCount: "{count}",
-  historyTaken: "Taken",
+  historyTaken: "Merged",
   historyDelete: "Delete this record",
   mergeNothing: "No changes to merge",
   mergedInto: "Merged into {target}",

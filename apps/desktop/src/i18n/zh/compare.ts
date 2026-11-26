@@ -27,7 +27,7 @@ export const compare: Record<keyof typeof source, string> = {
   verdictBadge: "判定：采用",
   history: "过去的比较",
   historyCount: "{count} 条",
-  historyTaken: "已采用",
+  historyTaken: "已合并",
   historyDelete: "删除此记录",
   mergeNothing: "没有可合并的更改",
   mergedInto: "已合并到 {target}",

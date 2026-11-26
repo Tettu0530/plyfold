@@ -12,7 +12,7 @@ export const transcript: Record<keyof typeof source, string> = {
   interrupted: "Interrupted",
   endedAt: "Finished at",
   thought: "Thoughts",
-  empty: "No messages yet",
+  empty: "No messages.",
   plan: "Plan",
   sessionCost: "Session cost {cost}",
   toolGroup: "Tool calls ({count})",
