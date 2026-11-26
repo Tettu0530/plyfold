@@ -468,15 +468,35 @@ export function useColumnWidth(key = COLUMN_KEY): [number, (w: number) => void] 
   return [w, set];
 }
 
-/** The left column's right edge: drag to resize, double-click or Enter for the default width, arrow keys to nudge */
-export function ColumnResizer({ width, onChange }: { width: number; onChange: (w: number) => void }) {
+/**
+ * A column's edge: drag to resize, double-click or Enter for the default width, arrow keys to nudge. `edge` is the
+ * side of the column it sits on: "right" for a column at the left of a pane, "left" for one at its right
+ */
+export function ColumnResizer({
+  width,
+  onChange,
+  edge = "right",
+  min = COLUMN_MIN,
+  onReset,
+  onActiveChange,
+}: {
+  width: number;
+  onChange: (w: number) => void;
+  edge?: "left" | "right";
+  min?: number;
+  /** What double-click and Enter do (the default: the default width) */
+  onReset?: () => void;
+  /** Told when a drag starts and ends (a caller that animates the width should not while dragging) */
+  onActiveChange?: (active: boolean) => void;
+}) {
   const t = useT();
-  const drag = useRef<{ left: number } | null>(null);
+  const drag = useRef<{ origin: number } | null>(null);
   const [active, setActive] = useState(false);
   const end = () => {
     drag.current = null;
     document.body.classList.remove("resizing");
     setActive(false);
+    onActiveChange?.(false);
   };
   return (
     <div
@@ -484,7 +504,7 @@ export function ColumnResizer({ width, onChange }: { width: number; onChange: (w
       aria-orientation="vertical"
       aria-label={t("diff.resizeColumn")}
       aria-valuenow={width}
-      aria-valuemin={COLUMN_MIN}
+      aria-valuemin={min}
       title={t("diff.resizeColumnHint")}
       tabIndex={0}
       onPointerDown={(e) => {
@@ -494,22 +514,29 @@ export function ColumnResizer({ width, onChange }: { width: number; onChange: (w
         } catch {
           // Synthetic events have no capturable pointer
         }
-        drag.current = { left: e.currentTarget.parentElement?.getBoundingClientRect().left ?? 0 };
+        const box = e.currentTarget.parentElement?.getBoundingClientRect();
+        drag.current = { origin: (edge === "right" ? box?.left : box?.right) ?? 0 };
         document.body.classList.add("resizing");
         setActive(true);
+        onActiveChange?.(true);
       }}
-      onPointerMove={(e) => drag.current && onChange(e.clientX - drag.current.left)}
+      onPointerMove={(e) => drag.current && onChange(edge === "right" ? e.clientX - drag.current.origin : drag.current.origin - e.clientX)}
       onPointerUp={end}
       onPointerCancel={end}
-      onDoubleClick={() => onChange(COLUMN_DEFAULT)}
+      onDoubleClick={() => (onReset ? onReset() : onChange(COLUMN_DEFAULT))}
       onKeyDown={(e) => {
         const step = e.shiftKey ? 40 : 8;
         if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
           e.preventDefault();
-          onChange(width + (e.key === "ArrowLeft" ? -step : step));
-        } else if (e.key === "Enter") onChange(COLUMN_DEFAULT);
+          // Dragging the right edge to the right widens the column; the left edge widens it to the left
+          const grow = (e.key === "ArrowRight") === (edge === "right");
+          onChange(width + (grow ? step : -step));
+        } else if (e.key === "Enter") {
+          if (onReset) onReset();
+          else onChange(COLUMN_DEFAULT);
+        }
       }}
-      className="group absolute top-0 -right-1 bottom-0 z-10 flex w-2 cursor-col-resize justify-center outline-none"
+      className={cn("group absolute top-0 bottom-0 z-10 flex w-2 cursor-col-resize justify-center outline-none", edge === "right" ? "-right-1" : "left-0")}
     >
       <span
         aria-hidden
