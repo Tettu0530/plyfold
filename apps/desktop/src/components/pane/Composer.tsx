@@ -432,22 +432,24 @@ export function Composer({
 }) {
   const t = useT();
   const [text, setText] = useState("");
+  // Shell mode: typing "!" into an empty input turns it into a command line. The "!" itself is not kept
+  const [shell, setShell] = useState(false);
+  const shellMode = shell && !!onShell;
   // A chip added with @ and its "@path" in the text are kept together: removing either removes the other
   const att = useAttachments({ scope: scope, onMentionRemoved: (path) => setText((cur) => removeMention(cur, path)) });
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
   const textRef = useAutoGrow(text);
-  const mention = useMention({ root, text, setText, textRef, boxRef: att.boxRef, scope, onPick: (h) => att.addMention(h.abs, h.path) });
+  const mention = useMention({ root, text: shellMode ? "" : text, setText, textRef, boxRef: att.boxRef, scope, onPick: (h) => att.addMention(h.abs, h.path) });
   // "/" at the start lists the agent's slash commands
   const cmds = commands ?? info?.commands ?? [];
   const supportsCompaction = cmds.some((command) => command.name === "compact");
   const models = option(info, "model")?.choices.map((c) => c.value) ?? [];
-  const slash = useSlash({ commands: cmds, models, text, setText, textRef, boxRef: att.boxRef, scope });
+  const slash = useSlash({ commands: cmds, models, text: shellMode ? "" : text, setText, textRef, boxRef: att.boxRef, scope });
   // A whole command at the start is shown in blue, and its input hint faintly after "/name " (see CommandLayer)
-  const command = commandAt(text, cmds);
-  // "!" at the start is shell mode: the "!" and the command's name are coloured the same way
-  const shellMode = !!onShell && !command && text.startsWith("!") && att.items.length === 0;
-  const head = command ? command.name.length + 1 : shellMode ? (/^!\s*\S*/.exec(text)?.[0].length ?? 1) : 0;
-  const ghost = ghostHint(text, slash.caret, cmds);
+  const command = shellMode ? null : commandAt(text, cmds);
+  // In shell mode the command's name is coloured the same way
+  const head = command ? command.name.length + 1 : shellMode ? (/^\s*\S*/.exec(text)?.[0].length ?? 0) : 0;
+  const ghost = shellMode ? null : ghostHint(text, slash.caret, cmds);
   useEffect(() => {
     att.syncMentions(text);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -460,15 +462,15 @@ export function Composer({
     textRef.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [insert?.n]);
-  const canSend = !disabled && (!!text.trim() || att.items.length > 0);
+  const canSend = !disabled && (shellMode ? !!text.trim() : !!text.trim() || att.items.length > 0);
   // Mid-turn with empty text, the send button becomes stop
-  const stopMode = busy && !text.trim() && att.items.length === 0 && !!onStop;
+  const stopMode = !shellMode && busy && !text.trim() && att.items.length === 0 && !!onStop;
   const send = () => {
     if (!canSend) return;
-    const command = onShell && att.items.length === 0 && text.startsWith("!") ? text.slice(1).trim() : "";
-    if (command) {
-      onShell?.(command);
+    if (shellMode) {
+      onShell?.(text.trim());
       setText("");
+      setShell(false);
       return;
     }
     onSend(text.trim(), att.items);
@@ -494,13 +496,26 @@ export function Composer({
       />
       <MentionMenu m={mention} boxRef={att.boxRef} />
       <SlashMenu m={slash} boxRef={att.boxRef} />
-      <AttachBox att={att}>
-        {shellMode && (
-          <span title={t("composer.shellModeHint")} className="flex h-7 shrink-0 items-center gap-1 px-1 text-xs text-command">
-            <Terminal className="size-3.5" aria-hidden />
-            <span className="hidden @[24rem]:inline">{t("composer.shellMode")}</span>
-          </span>
-        )}
+      <AttachBox
+        att={att}
+        lead={
+          shellMode ? (
+            <button
+              type="button"
+              aria-label={t("composer.shellMode")}
+              title={t("composer.shellModeHint")}
+              onClick={() => {
+                setShell(false);
+                textRef.current?.focus();
+              }}
+              className="flex h-7 shrink-0 items-center gap-1 rounded-lg px-1.5 text-xs text-command hover:bg-accent"
+            >
+              <Terminal className="size-4" aria-hidden />
+              <span className="hidden @[24rem]:inline">{t("composer.shellMode")}</span>
+            </button>
+          ) : undefined
+        }
+      >
         <div className="relative flex min-h-0 grow">
           {(command || shellMode) && <CommandLayer text={text} head={head} ghost={command ? ghost : null} textRef={textRef} />}
           <textarea
@@ -508,9 +523,13 @@ export function Composer({
             aria-label={t("composer.message")}
             rows={1}
             value={text}
-            placeholder={placeholder}
+            placeholder={shellMode ? t("composer.shellPlaceholder") : placeholder}
             onChange={(e) => {
-              setText(e.target.value);
+              const value = e.target.value;
+              if (onShell && !shell && text === "" && value.startsWith("!")) {
+                setShell(true);
+                setText(value.slice(1));
+              } else setText(value);
               mention.syncCaret();
               slash.syncCaret();
             }}
@@ -521,7 +540,11 @@ export function Composer({
             onKeyDown={(e) => {
               // The @-mention list takes ↑↓, ⏎, ⇥ and esc while it is open
               if (mention.onKeyDown(e) || slash.onKeyDown(e)) return;
-              if (isSendKey(e, sendKey)) {
+              if (shellMode && !isImeKey(e) && (e.key === "Escape" || (e.key === "Backspace" && text === ""))) {
+                // Back to a normal message
+                e.preventDefault();
+                setShell(false);
+              } else if (isSendKey(e, sendKey)) {
                 e.preventDefault();
                 send();
               } else if (e.key === "Escape" && busy && onStop && !isImeKey(e)) {

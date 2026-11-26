@@ -212,7 +212,8 @@ function AddMenu({ att }: { att: AttachmentsState }) {
 }
 
 /** The input's frame. Lists attachments above it and highlights when a file is dragged over */
-export function AttachBox({ att, children }: { att: AttachmentsState; children: React.ReactNode }) {
+/** lead: replaces the add button (shell mode puts its own marker there) */
+export function AttachBox({ att, lead, children }: { att: AttachmentsState; lead?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div
       ref={att.boxRef}
@@ -255,7 +256,7 @@ export function AttachBox({ att, children }: { att: AttachmentsState; children: 
         )}
       </AnimatePresence>
       <div className="flex items-end gap-1.5 p-[var(--composer-padding)]">
-        <AddMenu att={att} />
+        {lead ?? <AddMenu att={att} />}
         {children}
       </div>
     </div>
