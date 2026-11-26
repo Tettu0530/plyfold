@@ -11,6 +11,8 @@ export const side: Record<keyof typeof source, string> = {
   starting: "Copying the main conversation",
   hint: "A fork of the main conversation. Questions and answers here stay out of it. Edits and commands are declined",
   quote: "Add to the main input",
+  sendBack: "Send to the session as an instruction",
+  sendBackPrompt: "A reviewer read your changes and reported the following. Check each point and fix what is valid.\n\n{review}",
   placeholder: "Ask about the main session",
   review: "Review",
   reviewBy: "{profile} reviews the diff after each turn",

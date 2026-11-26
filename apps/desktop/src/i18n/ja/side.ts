@@ -10,6 +10,8 @@ export const side = {
   starting: "本筋の会話を写しています",
   hint: "本筋の会話を受け継いだ分岐です。ここでの質問と答えは本筋に入りません。ファイルの編集とコマンドは断ります",
   quote: "本筋の入力欄へ",
+  sendBack: "指示としてセッションへ送る",
+  sendBackPrompt: "レビュー担当が変更を読み、次の指摘がありました。各点を確かめ、妥当なものは直してください。\n\n{review}",
   placeholder: "本筋について質問",
   review: "レビュー",
   reviewBy: "{profile} が毎ターンの差分をレビュー",

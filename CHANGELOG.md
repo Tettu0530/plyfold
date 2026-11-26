@@ -4,6 +4,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Added
+
+- A review finding can be sent back to the reviewed session as an instruction with one click. It is queued when the session is mid-turn
+
 ## [0.6.4] - 2026-11-25
 
 ### Added

@@ -108,6 +108,13 @@ function ReviewBody({ mainId }: { mainId: string }) {
   // The prompts that carry the diff are long; the answers are what matters here
   const items = view?.transcript.items.filter((i) => !(i.kind === "user" && i.text.includes("~~~~diff"))) ?? [];
 
+  // A finding goes to the reviewed session as its next instruction (queued while it is mid-turn)
+  const sendBack = (review: string) => {
+    const text = t("side.sendBackPrompt", { review });
+    if (useStore.getState().sessions[mainId]?.transcript.inTurn) enqueue(mainId, text, []);
+    else void sendPrompt(mainId, text);
+  };
+
   const reviewNow = () => {
     setError(null);
     api.reviewNow(mainId).then(
@@ -158,6 +165,7 @@ function ReviewBody({ mainId }: { mainId: string }) {
             commands={view.info?.commands ?? []}
             base={r.worktree_path ?? r.repo_path ?? undefined}
             onQuote={{ label: t("side.quote"), run: (text) => insertIntoComposer(mainId, text) }}
+            onSendBack={{ label: t("side.sendBack"), run: sendBack }}
           />
           <Composer
             scope={r.id}
