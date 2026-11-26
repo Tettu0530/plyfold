@@ -6,6 +6,8 @@ export const composer = {
   costTotal: "費用（累計）",
   contextDetails: "コンテキストの詳細",
   compactContext: "コンテキストを圧縮",
+  shellMode: "シェルモード",
+  shellModeHint: "Enter で作業フォルダでコマンドを実行します。エージェントには送られません",
   contextUsage: "コンテキストの使用量",
   context: "コンテキスト",
   reportedModel: "応答モデル",

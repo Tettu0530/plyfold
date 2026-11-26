@@ -8,6 +8,8 @@ export const composer: Record<keyof typeof source, string> = {
   costTotal: "费用（累计）",
   contextDetails: "上下文详情",
   compactContext: "压缩上下文",
+  shellMode: "Shell 模式",
+  shellModeHint: "按 Enter 在会话文件夹中运行命令，不会发送给代理",
   contextUsage: "上下文用量",
   context: "上下文",
   reportedModel: "响应模型",

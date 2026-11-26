@@ -1,4 +1,4 @@
-import { ArrowUp, CornerDownRight, Minimize2, ListOrdered, ListPlus, Paperclip, Pencil, Square, X } from "lucide-react";
+import { ArrowUp, CornerDownRight, Minimize2, ListOrdered, ListPlus, Paperclip, Pencil, Square, Terminal, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
@@ -495,6 +495,12 @@ export function Composer({
       <MentionMenu m={mention} boxRef={att.boxRef} />
       <SlashMenu m={slash} boxRef={att.boxRef} />
       <AttachBox att={att}>
+        {shellMode && (
+          <span title={t("composer.shellModeHint")} className="flex h-7 shrink-0 items-center gap-1 px-1 text-xs text-command">
+            <Terminal className="size-3.5" aria-hidden />
+            <span className="hidden @[24rem]:inline">{t("composer.shellMode")}</span>
+          </span>
+        )}
         <div className="relative flex min-h-0 grow">
           {(command || shellMode) && <CommandLayer text={text} head={head} ghost={command ? ghost : null} textRef={textRef} />}
           <textarea

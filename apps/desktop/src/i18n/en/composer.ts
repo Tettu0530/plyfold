@@ -8,6 +8,8 @@ export const composer: Record<keyof typeof source, string> = {
   costTotal: "Cost (total)",
   contextDetails: "Context details",
   compactContext: "Compact context",
+  shellMode: "Shell mode",
+  shellModeHint: "Enter runs the command in the session folder. It is not sent to the agent",
   contextUsage: "Context usage",
   context: "Context",
   reportedModel: "Reported model",
