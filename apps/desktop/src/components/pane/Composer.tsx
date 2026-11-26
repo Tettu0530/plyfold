@@ -400,6 +400,7 @@ export function Composer({
   queue = [],
   onUnqueue,
   onSendQueued,
+  onShell,
   root = null,
   commands,
   noPickers = false,
@@ -418,6 +419,8 @@ export function Composer({
   queue?: Queued[];
   onUnqueue?: (key: string) => void;
   onSendQueued?: () => void;
+  /** `!command` in the input runs the command instead of sending it to the agent */
+  onShell?: (command: string) => void;
   /** Working directory for @-mentions (the session's worktree or repository) */
   root?: string | null;
   /** Slash commands to complete after "/" */
@@ -459,6 +462,12 @@ export function Composer({
   const stopMode = busy && !text.trim() && att.items.length === 0 && !!onStop;
   const send = () => {
     if (!canSend) return;
+    const command = onShell && att.items.length === 0 && text.startsWith("!") ? text.slice(1).trim() : "";
+    if (command) {
+      onShell?.(command);
+      setText("");
+      return;
+    }
     onSend(text.trim(), att.items);
     setText("");
     att.clear();

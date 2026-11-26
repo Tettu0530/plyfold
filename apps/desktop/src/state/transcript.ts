@@ -16,7 +16,20 @@ export type TranscriptItem =
   | ToolCall
   | { kind: "plan"; entries: { content: string; status: string }[] }
   | { kind: "stats"; stats: TurnStats | null; stopReason: string | null; error: string | null; endedAt: number | null }
-  | { kind: "notice"; text: string };
+  | { kind: "notice"; text: string }
+  | ShellRun;
+
+/** A `!command` run from the composer: local to the app, never sent to the agent unless the user sends it on */
+export interface ShellRun {
+  kind: "shell";
+  /** Backend run id, to stop it */
+  run: number;
+  command: string;
+  output: string;
+  status: "running" | "done";
+  code: number | null;
+  truncated: boolean;
+}
 
 /** A tool call. Agents report these differently, so keep only what we display */
 export interface ToolCall {
@@ -244,6 +257,19 @@ export function endTurn(
 
 export function addNotice(t: Transcript, message: string): Transcript {
   return { ...t, items: [...t.items, { kind: "notice", text: message }] };
+}
+
+export function addShell(t: Transcript, run: number, command: string): Transcript {
+  return { ...t, items: [...t.items, { kind: "shell", run, command, output: "", status: "running", code: null, truncated: false }] };
+}
+
+/** Change one shell run (output arriving, or its end) */
+export function updateShell(t: Transcript, run: number, change: (s: ShellRun) => ShellRun): Transcript {
+  const at = t.items.findIndex((it) => it.kind === "shell" && it.run === run);
+  if (at < 0) return t;
+  const items = [...t.items];
+  items[at] = change(items[at] as ShellRun);
+  return { ...t, items };
 }
 
 /** Stop reason for a turn cut off by the agent stopping (the app quit or crashed, or the agent exited) */

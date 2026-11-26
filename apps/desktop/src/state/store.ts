@@ -11,8 +11,8 @@ import { notify } from "@/lib/notify";
 import { loadInfoCache, saveInfoCache, snapshot, type InfoCache } from "./infoCache";
 import { commandsFromHistory } from "@/lib/commands";
 import type { SlashCommand } from "@/lib/types";
-import type { AppSettings, Category, SessionStatus, EngineEvent, ProfileSummary, ProfileUsage, QueuedTask, SessionInfo, SessionRecord } from "@/lib/types";
-import { addNotice, applyUpdate, beginTurn, emptyTranscript, endTurn, fromHistory, type PendingPermission, type Transcript } from "./transcript";
+import type { AppSettings, Category, SessionStatus, EngineEvent, ProfileSummary, ProfileUsage, QueuedTask, SessionInfo, SessionRecord, ShellEvent } from "@/lib/types";
+import { addNotice, addShell, applyUpdate, beginTurn, emptyTranscript, endTurn, fromHistory, type PendingPermission, type Transcript, updateShell } from "./transcript";
 
 export interface SideChat {
   /** The fork's session id, once it has started */
@@ -347,6 +347,11 @@ interface State {
   /** Open a conversation the CLI already has. The draft pane is replaced by the new session */
   adoptCliSession: (draftId: string, acpSessionId: string, title: string) => Promise<void>;
   sendPrompt: (id: string, text: string, attachments?: Attached[]) => Promise<void>;
+  /** Run `!command` in the session's folder. The output stays in the conversation view only */
+  runShell: (id: string, command: string) => Promise<void>;
+  stopShell: (run: number) => void;
+  /** Send a finished shell run to the agent as the next instruction (queued mid-turn) */
+  sendShellOn: (id: string, run: number) => void;
   /** Instructions sent mid-turn (sent in order once the turn ends) */
   queues: Record<string, Queued[]>;
   enqueue: (id: string, text: string, attachments: Attached[]) => void;
@@ -888,6 +893,41 @@ export const useStore = create<State>((set, get) => ({
 
   sideChats: {},
   composerInsert: null,
+  runShell: async (id, command) => {
+    const change = (f: (t: Transcript) => Transcript) =>
+      set((s) => {
+        const v = s.sessions[id];
+        return v ? { sessions: { ...s.sessions, [id]: { ...v, transcript: f(v.transcript) } } } : {};
+      });
+    // Events can arrive before the run id does
+    const early: ShellEvent[] = [];
+    let run: number | null = null;
+    const apply = (r: number, e: ShellEvent) =>
+      change((t) =>
+        updateShell(t, r, (item) =>
+          e.kind === "output" ? { ...item, output: item.output + e.data } : { ...item, status: "done", code: e.code, truncated: e.truncated },
+        ),
+      );
+    try {
+      run = await api.startShell(id, command, (e) => (run === null ? early.push(e) : apply(run, e)));
+    } catch (error) {
+      change((t) => addNotice(t, String(error)));
+      return;
+    }
+    const started = run;
+    change((t) => addShell(t, started, command));
+    for (const e of early) apply(started, e);
+  },
+  stopShell: (run) => void api.stopShell(run),
+  sendShellOn: (id, run) => {
+    const v = get().sessions[id];
+    const item = v?.transcript.items.find((it) => it.kind === "shell" && it.run === run);
+    if (!v || !item || item.kind !== "shell") return;
+    const code = item.code === null ? "" : ` (exit ${item.code})`;
+    const text = `I ran a command in the session folder${code}:\n\n~~~~\n$ ${item.command}\n${item.output.trimEnd()}\n~~~~`;
+    if (v.transcript.inTurn) get().enqueue(id, text, []);
+    else void get().sendPrompt(id, text);
+  },
   insertIntoComposer: (scope, text) => set((s) => ({ composerInsert: { scope, text, n: (s.composerInsert?.n ?? 0) + 1 } })),
 
   openSideChat: async (mainId) => {

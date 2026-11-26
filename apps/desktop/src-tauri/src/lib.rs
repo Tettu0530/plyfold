@@ -4,6 +4,7 @@ mod dirs;
 mod files;
 mod platform;
 mod registry;
+mod shell;
 mod shell_path;
 mod tasks;
 mod terminal;
@@ -29,6 +30,7 @@ const KEYCHAIN_SERVICE: &str = "plyfold";
 struct AppState {
     engine: Engine,
     terminals: terminal::Terminals,
+    shells: shell::Shells,
     /// Where sessions (and the task queue) are kept: see data_dir
     data_dir: PathBuf,
     config: RwLock<Config>,
@@ -1015,6 +1017,7 @@ pub fn run() {
             app.manage(AppState {
                 engine,
                 terminals: terminal::Terminals::default(),
+                shells: shell::Shells::default(),
                 data_dir: data_dir(&state_dir),
                 config: RwLock::new(config),
                 config_path,
@@ -1029,6 +1032,8 @@ pub fn run() {
             terminal::write_terminal,
             terminal::resize_terminal,
             terminal::stop_terminal,
+            shell::start_shell,
+            shell::stop_shell,
             list_profiles,
             list_sessions,
             session_history,

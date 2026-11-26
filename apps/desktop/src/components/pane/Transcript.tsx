@@ -13,6 +13,7 @@ import { Marked } from "./Marked";
 import { resendable, type Attached } from "@/lib/attachments";
 import { SentAttachments } from "./Attachments";
 import { Markdown } from "./Markdown";
+import { ShellBlock } from "./ShellBlock";
 import { ActionRow, CopyButton, EditBox, QuoteButton, SendBackButton, UserActions, Working, workingLabel } from "./MessageActions";
 import { ToolCalls } from "./ToolCall";
 import { bouncy, smooth } from "../motion";
@@ -499,6 +500,12 @@ export function Transcript({
                     <TurnStatsRow stats={b.stats} error={b.error} stopReason={b.stopReason} cost={undefined} endedAt={b.endedAt} />
                   )}
                   {i < blocks.length - 1 && <div className="h-px bg-border" />}
+                </div>
+              );
+            case "shell":
+              return (
+                <div key={b.itemIndex} data-find-item={b.itemIndex}>
+                  <ShellBlock item={b} sessionId={sessionId} />
                 </div>
               );
             case "notice":

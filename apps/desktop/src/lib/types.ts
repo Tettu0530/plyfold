@@ -397,6 +397,9 @@ export interface TextFile {
   truncated: boolean;
 }
 
+/** Events of a `!command` run */
+export type ShellEvent = { kind: "output"; data: string } | { kind: "exit"; code: number | null; truncated: boolean };
+
 export interface FileHit {
   directory?: boolean;
   /** Relative to the session's working directory */

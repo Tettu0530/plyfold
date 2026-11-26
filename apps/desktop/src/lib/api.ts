@@ -31,6 +31,7 @@ import type {
   RepoSettings,
   QueuedTask,
   McpServerForm,
+  ShellEvent,
 } from "./types";
 
 // Thin wrappers around the Tauri commands (src-tauri/src/lib.rs). Argument names follow the Rust side's camelCase conversion
@@ -45,6 +46,9 @@ export const api = {
     invoke<SessionRecord>("start_session", { ...args, created: new Channel(created) }),
   startChat: (profile: string, title: string, created?: (record: SessionRecord) => void) =>
     invoke<SessionRecord>("start_chat", { profile, title, created: new Channel(created) }),
+  startShell: (session: string, command: string, onEvent: (e: ShellEvent) => void) =>
+    invoke<number>("start_shell", { session, command, output: new Channel<ShellEvent>(onEvent) }),
+  stopShell: (run: number) => invoke<void>("stop_shell", { run }),
   reopenSession: (id: string) => invoke<void>("reopen_session", { id }),
   forkSession: (id: string, newWorktree: boolean) => invoke<SessionRecord>("fork_session", { id, newWorktree }),
   openSideChat: (id: string) => invoke<SessionRecord>("open_side_chat", { id }),

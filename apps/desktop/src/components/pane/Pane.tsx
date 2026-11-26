@@ -108,7 +108,7 @@ function SessionPane({ index }: { index: number }) {
   const id = useStore((s) => s.panes[index]);
   const view = useStore((s) => (id ? s.sessions[id] : undefined));
   const focused = useStore((s) => s.focusedPane === index);
-  const { focusPane, closePane, sendPrompt, cancel, respondPermission, setCategory, enqueue, unqueue, sendQueued } = useStore.getState();
+  const { focusPane, closePane, sendPrompt, cancel, respondPermission, setCategory, enqueue, unqueue, sendQueued, runShell } = useStore.getState();
   const queue = useStore((s) => (id ? s.queues[id] : undefined));
   const [diffStat, setDiffStat] = useState<{ added: number; removed: number } | null>(null);
   const openDiff = useStore((s) => s.openDiff);
@@ -303,6 +303,7 @@ function SessionPane({ index }: { index: number }) {
             queue={queue ?? []}
             onUnqueue={(k) => unqueue(id, k)}
             onSendQueued={() => sendQueued(id)}
+            onShell={(command) => void runShell(id, command)}
             root={r.worktree_path ?? r.repo_path}
             // The running agent's list, else the last one in this session's log, else the one remembered for the profile
             commands={view.info?.commands?.length ? view.info.commands : view.commands?.length ? view.commands : (cached?.commands ?? [])}

@@ -7,6 +7,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 ### Added
 
 - A review finding can be sent back to the reviewed session as an instruction with one click. It is queued when the session is mid-turn
+- Start the input with `!` to run a shell command in the session's folder. The output appears in the conversation, can be stopped while it runs, and is sent to the agent only when you choose to
 
 ## [0.6.4] - 2026-11-25
 
