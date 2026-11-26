@@ -88,7 +88,7 @@ function ReviewBody({ mainId }: { mainId: string }) {
   const view = useStore((s) => Object.values(s.sessions).find((v) => v.record.review && v.record.side_of === mainId));
   const queue = useStore((s) => (view ? s.queues[view.record.id] : undefined));
   const profile = useStore((s) => s.profiles.find((p) => p.name === reviewer));
-  const { sendPrompt, cancel, setCategory, enqueue, unqueue, sendQueued, insertIntoComposer } = useStore.getState();
+  const { sendPrompt, cancel, setCategory, enqueue, unqueue, sendQueuedNow, insertIntoComposer } = useStore.getState();
   const [error, setError] = useState<string | null>(null);
   const r = view?.record;
   // The prompts that carry the diff are long; the answers are what matters here
@@ -163,7 +163,7 @@ function ReviewBody({ mainId }: { mainId: string }) {
             onSend={(text, a) => (view.transcript.inTurn ? enqueue(r.id, text, a) : void sendPrompt(r.id, text, a))}
             queue={queue ?? []}
             onUnqueue={(k) => unqueue(r.id, k)}
-            onSendQueued={() => sendQueued(r.id)}
+            onSendQueued={(key) => sendQueuedNow(r.id, key)}
             onStop={() => void cancel(r.id)}
             root={r.worktree_path ?? r.repo_path}
             commands={view.info?.commands ?? []}

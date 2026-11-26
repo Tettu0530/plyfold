@@ -174,6 +174,8 @@ export interface AppSettings {
   restore_panes: boolean;
   /** Profile for new sessions ("" = the one used last) */
   default_profile: string;
+  /** Permission mode a new coding session starts in, when the agent has it ("" = the agent's own default) */
+  default_mode?: string;
   /** Name of the sidebar group for everyday conversations ("" = the default) */
   chat_group_name?: string;
   /** How many queued tasks may run at once */

@@ -257,9 +257,7 @@ function ComparisonHistory({ repo, current, reload }: { repo: string | null; cur
               })}
             </ul>
             {c.verdict_run && c.verdict_run !== c.taken_session && (
-              <span className="text-muted-foreground">
-                {t("compare.verdictChose", { run: c.runs.find((r) => r.session_id === c.verdict_run)?.profile ?? "" })}
-              </span>
+              <span className="text-muted-foreground">{t("compare.verdictChose", { run: runName(c.runs.find((r) => r.session_id === c.verdict_run)) })}</span>
             )}
           </div>
         ))}

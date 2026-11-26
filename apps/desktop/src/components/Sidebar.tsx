@@ -278,9 +278,15 @@ function SidebarResizer() {
   const width = useStore((s) => s.sidebarWidth);
   const dragging = useRef<{ left: number; from: number; collapse: boolean } | null>(null);
   const [active, setActive] = useState(false);
+  const frame = useRef<number | null>(null);
+  const pending = useRef<number | null>(null);
   const end = () => {
     const d = dragging.current;
     dragging.current = null;
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+    if (pending.current !== null && d && !d.collapse) useStore.getState().setSidebarWidth(pending.current);
+    pending.current = null;
     document.body.classList.remove("resizing");
     setActive(false);
     useStore.setState({ sidebarResizing: false });
@@ -318,7 +324,14 @@ function SidebarResizer() {
         if (!d) return;
         const w = e.clientX - d.left;
         d.collapse = w < SIDEBAR_MIN - 80;
-        useStore.getState().setSidebarWidth(w);
+        // At most one layout per frame, however fast the pointer reports
+        pending.current = w;
+        if (frame.current !== null) return;
+        frame.current = requestAnimationFrame(() => {
+          frame.current = null;
+          if (pending.current !== null) useStore.getState().setSidebarWidth(pending.current);
+          pending.current = null;
+        });
       }}
       onPointerUp={end}
       onPointerCancel={end}

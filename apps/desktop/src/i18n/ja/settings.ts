@@ -113,6 +113,10 @@ export const settings = {
   restorePanesOn: "終了時にペインで開いていたセッションを復元します",
   restorePanesOff: "ペインのレイアウトのみ復元し、内容は空で開始します",
   defaultProfile: "新規セッションのプロファイル",
+  defaultMode: "新規セッションの権限モード",
+  defaultModeDetail:
+    "コーディングセッションの開始時の権限モードです。エージェントにそのモードがなければエージェントの既定で開始します。会話は常に確認モードです",
+  defaultModeAgent: "エージェントの既定",
   defaultProfileLast: "前回使ったもの",
   defaultProfileDetailLast: "最後にセッションを開始したプロファイルを選択します",
   defaultProfileDetailFixed: "新規セッションはこのプロファイルで開始します。開始前に変更もできます",

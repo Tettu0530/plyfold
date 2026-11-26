@@ -3,7 +3,7 @@ import { api } from "@/lib/api";
 
 import type { SessionInfo, SessionRecord } from "@/lib/types";
 import { preset } from "./layout";
-import { defaultProfile, reduceEvent, restoreLayout, useStore, type SessionView } from "./store";
+import { defaultProfile, modeIds, reduceEvent, restoreLayout, useStore, type SessionView } from "./store";
 
 const record: SessionRecord = {
   id: "s1",
@@ -292,5 +292,16 @@ describe("rerunSession", () => {
     } finally {
       vi.restoreAllMocks();
     }
+  });
+});
+
+describe("modeIds", () => {
+  it("reads the mode option, else the legacy mode list", () => {
+    const choice = (value: string) => ({ value, name: value, description: null });
+    const withOption = { config: [{ category: "mode", choices: [choice("plan")] }], modes: [choice("old")] };
+    const legacy = { config: [], modes: [choice("default"), choice("plan")] };
+    expect(modeIds(withOption as never)).toEqual(["plan"]);
+    expect(modeIds(legacy as never)).toEqual(["default", "plan"]);
+    expect(modeIds(null)).toEqual([]);
   });
 });

@@ -3,10 +3,10 @@ import type { profiles as source } from "../ja/profiles";
 
 export const profiles: Record<keyof typeof source, string> = {
   authApi: "Official API",
-  authLogin: "Existing login",
+  authLogin: "CLI sign-in",
   authCustom: "Custom provider",
   authApiDetail: "Connects to the official API with an API key",
-  authLoginDetail: "Uses the login the CLI already has",
+  authLoginDetail: "Uses the account the CLI is signed in with (a subscription, for example)",
   authCustomDetail: "Connects to a custom provider with an API key",
   baseHintClaude: "Passed as ANTHROPIC_BASE_URL at launch",
   baseHintCodex: "Written as a provider to config.toml in the dedicated directory",
@@ -22,7 +22,7 @@ export const profiles: Record<keyof typeof source, string> = {
   replied: "Replied: {model}",
   noModelName: "Model not reported",
   cannotConnect: "Can't connect",
-  defaultDetail: "Uses the existing {agent} login and settings as they are. To use a separate API key or endpoint, add a profile.",
+  defaultDetail: "Uses the account {agent} is signed in with, and its settings, as they are. To use a separate API key or endpoint, add a profile.",
   keyPassedAs: "Passed as {var}",
   keyPassedAsKeychain: "Passed as {var} (Keychain: {account})",
   keyPassedAsKeychainShared: "Passed as {var} (Keychain: {account}, shared with {shared})",

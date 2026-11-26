@@ -115,6 +115,10 @@ export const settings: Record<keyof typeof source, string> = {
   restorePanesOn: "Reopens the sessions that were in panes when you quit",
   restorePanesOff: "Keeps the pane layout but starts with empty panes",
   defaultProfile: "Profile for new sessions",
+  defaultMode: "Permission mode for new sessions",
+  defaultModeDetail:
+    "The permission mode a coding session starts in. If the agent doesn't have it, the agent's own default is used. Conversations always use a mode that asks first",
+  defaultModeAgent: "Agent default",
   defaultProfileLast: "Last used",
   defaultProfileDetailLast: "Picks the profile you last started a session with",
   defaultProfileDetailFixed: "New sessions start with this profile. You can still pick another before starting",

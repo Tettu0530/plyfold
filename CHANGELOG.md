@@ -4,6 +4,22 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Added
+
+- Settings has a permission mode for new sessions (Settings → General). A new coding session, including each run of a comparison, starts in it when the agent has that mode; the mode chosen on the new session screen still wins, and conversations keep their own
+- Queued prompts are cards with the whole text and labelled buttons. "Send now" sends one first: when idle it goes out at once, mid-turn it stops the running turn and then sends it
+- A folder that is not a git repository can be used for coding sessions. The agent works in the folder itself; the new session screen says so, parallel compare is not offered, and the Git and review buttons and the Git view are left out
+
+### Changed
+
+- Only tool calls that follow one another share a summary. A message, thinking or a plan between them ends the group, so each summary sits where those calls happened
+- Default profiles are named by their agent everywhere (the new session list, Profiles, the fallback picker, tooltips and comparison results)
+- "Existing login" is now "CLI sign-in"
+
+### Fixed
+
+- Resizing the sidebar and the right-hand columns lays out at most once per frame, and the width is saved once the drag settles instead of on every move
+
 ## [0.7.0] - 2026-11-26
 
 ### Added

@@ -10,6 +10,7 @@ export const diff: Record<keyof typeof source, string> = {
   backToFiles: "Files",
   branchChanged: "The session's original branch is not checked out. Check the current branch",
   sessionGone: "This session no longer exists",
+  notGit: "This folder is not a git repository, so there is no Git view.",
   noRepository: "This session uses no repository (a conversation folder is not a git repository)",
   resizeColumn: "Column width",
   resizeColumnHint: "Drag to resize. Double-click for the default width",

@@ -1,6 +1,6 @@
 // The width of a column at a pane's right edge (the side chat, the review): about 40% of the pane until the user drags
 // its left edge, then that width, remembered on this machine
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 export const SIDE_MIN = 280;
 const SIDE_AUTO_MAX = 420;
@@ -17,6 +17,7 @@ function read(key: string): number | null {
 /** [width, set it (drag), back to the automatic width] */
 export function useSideColumnWidth(pane: React.RefObject<HTMLElement | null>, key: string): [number, (w: number) => void, () => void] {
   const [paneWidth, setPaneWidth] = useState(850);
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [stored, setStored] = useState<number | null>(() => read(key));
   useLayoutEffect(() => {
     const el = pane.current;
@@ -34,11 +35,15 @@ export function useSideColumnWidth(pane: React.RefObject<HTMLElement | null>, ke
   const set = (w: number) => {
     const next = Math.round(Math.min(Math.max(w, SIDE_MIN), max));
     setStored(next);
-    try {
-      localStorage.setItem(key, String(next));
-    } catch {
-      // Not remembered, still applied
-    }
+    // A drag reports many widths; write only the last one, once it settles
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      try {
+        localStorage.setItem(key, String(next));
+      } catch {
+        // Not remembered, still applied
+      }
+    }, 200);
   };
   const reset = () => {
     setStored(null);

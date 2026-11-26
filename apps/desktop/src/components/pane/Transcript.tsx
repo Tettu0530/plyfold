@@ -185,6 +185,29 @@ function ToBottomButton({ unseen, label, title, onClick }: { unseen: boolean; la
   );
 }
 
+/**
+ * Tool calls that follow one another share a summary; any other item (a message, thinking, a plan) ends the run, so each
+ * summary sits where those calls happened in the conversation.
+ */
+export type ToolGroup = { kind: "tools"; itemIndex: number; tools: { tool: ToolCall; itemIndex: number }[] };
+export function groupTools(items: TranscriptItem[]): ((TranscriptItem & { itemIndex: number }) | ToolGroup)[] {
+  const grouped: ((TranscriptItem & { itemIndex: number }) | ToolGroup)[] = [];
+  let group: ToolGroup | undefined;
+  items.forEach((item, itemIndex) => {
+    if (item.kind === "tool") {
+      if (!group) {
+        group = { kind: "tools", itemIndex, tools: [] };
+        grouped.push(group);
+      }
+      group.tools.push({ tool: item, itemIndex });
+    } else {
+      group = undefined;
+      grouped.push({ ...item, itemIndex });
+    }
+  });
+  return grouped;
+}
+
 export function Transcript({
   items,
   info,
@@ -279,25 +302,7 @@ export function Transcript({
     el.scrollTo({ top: el.scrollHeight, behavior: reduced ? "auto" : "smooth" });
   };
 
-  // Keep a single summary at the first tool call in each turn.
-  const blocks = useMemo(() => {
-    type ToolGroup = { kind: "tools"; itemIndex: number; tools: { tool: ToolCall; itemIndex: number }[] };
-    const grouped: ((TranscriptItem & { itemIndex: number }) | ToolGroup)[] = [];
-    let group: ToolGroup | undefined;
-    items.forEach((item, itemIndex) => {
-      if (item.kind === "tool") {
-        if (!group) {
-          group = { kind: "tools", itemIndex, tools: [] };
-          grouped.push(group);
-        }
-        group.tools.push({ tool: item, itemIndex });
-      } else {
-        if (item.kind === "user" || item.kind === "stats") group = undefined;
-        grouped.push({ ...item, itemIndex });
-      }
-    });
-    return grouped;
-  }, [items]);
+  const blocks = useMemo(() => groupTools(items), [items]);
   // Only the last answer of a finished turn gets actions and turn statistics.
   const { statsOf, attached, finalAnswers } = useMemo(() => {
     const statsOf = new Map<number, Extract<TranscriptItem, { kind: "stats" }>>();

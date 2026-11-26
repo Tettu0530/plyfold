@@ -74,6 +74,8 @@ struct AppSettings {
     restore_panes: bool,
     /// Profile for new sessions: "" uses the one used last
     default_profile: String,
+    /// Permission mode a new coding session starts in, when the agent has it ("" = the agent's own default)
+    default_mode: String,
     /// Name of the sidebar group for everyday conversations ("" = the default)
     chat_group_name: String,
     /// How many queued tasks may run at once
@@ -100,6 +102,7 @@ impl Default for AppSettings {
             thoughts_expanded: false,
             restore_panes: true,
             default_profile: String::new(),
+            default_mode: String::new(),
             chat_group_name: String::new(),
             max_parallel: 2,
             resume_after_limit: true,
@@ -202,6 +205,7 @@ fn save_settings(state: State<'_, AppState>, settings: AppSettings) -> CmdResult
     }
     if !["system", "reduce"].contains(&settings.reduce_motion.as_str())
         || settings.default_profile.len() > 128
+        || settings.default_mode.len() > 64
         || settings.chat_group_name.chars().count() > 80
         || !(1..=8).contains(&settings.max_parallel)
     {
@@ -622,6 +626,13 @@ async fn read_text_file(path: String) -> CmdResult<TextFile> {
 struct RepoEntry {
     path: String,
     settings: plyfold_core::repos::RepoSettings,
+}
+
+/// Whether a folder is inside a git repository (a folder that is not one has no worktree, Git view, review or comparison)
+#[tauri::command]
+async fn folder_is_git(path: String) -> bool {
+    let path = std::path::PathBuf::from(path);
+    tauri::async_runtime::spawn_blocking(move || plyfold_worktree::repo_root(&path).is_ok()).await.unwrap_or(false)
 }
 
 #[tauri::command]
@@ -1077,6 +1088,7 @@ pub fn run() {
             set_run_group,
             empty_trash,
             list_repos,
+            folder_is_git,
             list_tasks,
             scheduled_resumes,
             resume_now,

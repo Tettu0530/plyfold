@@ -10,7 +10,7 @@ import { seconds } from "@/lib/format";
 import type { AuthKind, CheckResult, McpServerForm, McpTransport, ProfileDetail, ProfileForm, ProfileSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useStore, isListed } from "@/state/store";
-import { agentName, ProviderLogo } from "./icons";
+import { agentName, ProfileOption, profileTitle, ProviderLogo } from "./icons";
 import { Keys } from "./Keys";
 import { liquidAnchor } from "./liquid/liquid";
 import { useLiquidClip, useLiquidMenu, useLiquidRevealed } from "./liquid/stage";
@@ -163,7 +163,7 @@ export function ProfilesView() {
                 {rows.map((p) => {
                   const c = checks[p.name];
                   const on = p.name === selected;
-                  const name = p.name === p.agent ? "default" : p.label;
+                  const name = profileTitle(p);
                   return (
                     <button
                       key={p.name}
@@ -366,7 +366,7 @@ function FallbackPicker({ agent, self, value, onChange }: { agent: string; self:
           <SelectItem value={NONE}>{t("profiles.fallbackOff")}</SelectItem>
           {others.map((p) => (
             <SelectItem key={p.name} value={p.name}>
-              {p.name}
+              <ProfileOption profile={p} />
             </SelectItem>
           ))}
           {value && !others.some((p) => p.name === value) && <SelectItem value={value}>{value}</SelectItem>}
@@ -501,7 +501,7 @@ function Editor({ agent, name, sessions, check, onCheck, onSaved, onDeleted }: E
   return (
     <div className="mx-auto flex max-w-[640px] flex-col gap-6 px-6 py-8">
       <div className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold">{name ?? t("profiles.newProfile")}</h2>
+        <h2 className="text-base font-semibold">{name === undefined || name === null ? t("profiles.newProfile") : name === agent ? agentName(agent) : name}</h2>
         <p className="text-muted-foreground">{t(AUTH_DETAIL[form.auth])}</p>
       </div>
 

@@ -4,7 +4,7 @@ import type { draft as source } from "../ja/draft";
 export const draft: Record<keyof typeof source, string> = {
   authCustom: "自定义提供商",
   authKeyed: "官方 API",
-  authLogin: "现有登录",
+  authLogin: "CLI 登录",
   turnsTitle: "{turns} 轮（{sessions} 个会话）",
   tokensTitle: "输入 {input}，输出 {output}",
   cost: "费用",
@@ -24,6 +24,7 @@ export const draft: Record<keyof typeof source, string> = {
   modeContinue: "继续会话",
   chooseSession: "选择要继续的会话",
   worktree: "worktree",
+  notGit: "此文件夹不是 git 仓库。代理将直接在该文件夹中工作，无法使用 Git、审查和并行比较",
   inPlace: "直接",
   choicesAfterStart: "启动后可选择模型和推理强度",
   firstPrompt: "初始提示词",

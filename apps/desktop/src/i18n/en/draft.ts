@@ -4,7 +4,7 @@ import type { draft as source } from "../ja/draft";
 export const draft: Record<keyof typeof source, string> = {
   authCustom: "Custom provider",
   authKeyed: "Official API",
-  authLogin: "Existing login",
+  authLogin: "CLI sign-in",
   turnsTitle: "{turns, plural, one {# turn} other {# turns}} ({sessions, plural, one {# session} other {# sessions}})",
   tokensTitle: "Input {input}, output {output}",
   cost: "Cost",
@@ -24,6 +24,7 @@ export const draft: Record<keyof typeof source, string> = {
   modeContinue: "Continue session",
   chooseSession: "Choose a session to continue",
   worktree: "worktree",
+  notGit: "This folder is not a git repository. The agent works in the folder itself, and Git, review and parallel compare are not available",
   inPlace: "In place",
   choicesAfterStart: "Choose model and effort after the agent starts",
   firstPrompt: "First prompt",
