@@ -1,4 +1,4 @@
-import { ArrowUp, CornerDownRight, Minimize2, ListOrdered, ListPlus, Paperclip, Pencil, Square, X } from "lucide-react";
+import { ArrowUp, CornerDownRight, Minimize2, ListOrdered, ListPlus, Paperclip, Pencil, Square, Terminal, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
@@ -363,12 +363,13 @@ function QueueEdit({ initial, onSave, onCancel }: { initial: string; onSave: (te
  */
 function CommandLayer({
   text,
-  name,
+  head,
   ghost,
   textRef,
 }: {
   text: string;
-  name: string;
+  /** How many leading characters are drawn in the command colour */
+  head: number;
   ghost: string | null;
   textRef: React.RefObject<HTMLTextAreaElement | null>;
 }) {
@@ -377,7 +378,6 @@ function CommandLayer({
   useEffect(() => {
     if (ref.current && textRef.current) ref.current.scrollTop = textRef.current.scrollTop;
   });
-  const head = name.length + 1;
   return (
     <div ref={ref} aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden py-1 text-sm leading-relaxed break-words whitespace-pre-wrap">
       <span className="text-command">{text.slice(0, head)}</span>
@@ -400,6 +400,7 @@ export function Composer({
   queue = [],
   onUnqueue,
   onSendQueued,
+  onShell,
   root = null,
   commands,
   noPickers = false,
@@ -418,6 +419,8 @@ export function Composer({
   queue?: Queued[];
   onUnqueue?: (key: string) => void;
   onSendQueued?: () => void;
+  /** `!command` in the input runs the command instead of sending it to the agent */
+  onShell?: (command: string) => void;
   /** Working directory for @-mentions (the session's worktree or repository) */
   root?: string | null;
   /** Slash commands to complete after "/" */
@@ -429,19 +432,24 @@ export function Composer({
 }) {
   const t = useT();
   const [text, setText] = useState("");
+  // Shell mode: typing "!" into an empty input turns it into a command line. The "!" itself is not kept
+  const [shell, setShell] = useState(false);
+  const shellMode = shell && !!onShell;
   // A chip added with @ and its "@path" in the text are kept together: removing either removes the other
   const att = useAttachments({ scope: scope, onMentionRemoved: (path) => setText((cur) => removeMention(cur, path)) });
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
   const textRef = useAutoGrow(text);
-  const mention = useMention({ root, text, setText, textRef, boxRef: att.boxRef, scope, onPick: (h) => att.addMention(h.abs, h.path) });
+  const mention = useMention({ root, text: shellMode ? "" : text, setText, textRef, boxRef: att.boxRef, scope, onPick: (h) => att.addMention(h.abs, h.path) });
   // "/" at the start lists the agent's slash commands
   const cmds = commands ?? info?.commands ?? [];
   const supportsCompaction = cmds.some((command) => command.name === "compact");
   const models = option(info, "model")?.choices.map((c) => c.value) ?? [];
-  const slash = useSlash({ commands: cmds, models, text, setText, textRef, boxRef: att.boxRef, scope });
+  const slash = useSlash({ commands: cmds, models, text: shellMode ? "" : text, setText, textRef, boxRef: att.boxRef, scope });
   // A whole command at the start is shown in blue, and its input hint faintly after "/name " (see CommandLayer)
-  const command = commandAt(text, cmds);
-  const ghost = ghostHint(text, slash.caret, cmds);
+  const command = shellMode ? null : commandAt(text, cmds);
+  // In shell mode the command's name is coloured the same way
+  const head = command ? command.name.length + 1 : shellMode ? (/^\s*\S*/.exec(text)?.[0].length ?? 0) : 0;
+  const ghost = shellMode ? null : ghostHint(text, slash.caret, cmds);
   useEffect(() => {
     att.syncMentions(text);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -454,11 +462,17 @@ export function Composer({
     textRef.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [insert?.n]);
-  const canSend = !disabled && (!!text.trim() || att.items.length > 0);
+  const canSend = !disabled && (shellMode ? !!text.trim() : !!text.trim() || att.items.length > 0);
   // Mid-turn with empty text, the send button becomes stop
-  const stopMode = busy && !text.trim() && att.items.length === 0 && !!onStop;
+  const stopMode = !shellMode && busy && !text.trim() && att.items.length === 0 && !!onStop;
   const send = () => {
     if (!canSend) return;
+    if (shellMode) {
+      onShell?.(text.trim());
+      setText("");
+      setShell(false);
+      return;
+    }
     onSend(text.trim(), att.items);
     setText("");
     att.clear();
@@ -482,17 +496,40 @@ export function Composer({
       />
       <MentionMenu m={mention} boxRef={att.boxRef} />
       <SlashMenu m={slash} boxRef={att.boxRef} />
-      <AttachBox att={att}>
+      <AttachBox
+        att={att}
+        lead={
+          shellMode ? (
+            <button
+              type="button"
+              aria-label={t("composer.shellMode")}
+              title={t("composer.shellModeHint")}
+              onClick={() => {
+                setShell(false);
+                textRef.current?.focus();
+              }}
+              className="flex h-7 shrink-0 items-center gap-1 rounded-lg px-1.5 text-xs text-command hover:bg-accent"
+            >
+              <Terminal className="size-4" aria-hidden />
+              <span className="hidden @[24rem]:inline">{t("composer.shellMode")}</span>
+            </button>
+          ) : undefined
+        }
+      >
         <div className="relative flex min-h-0 grow">
-          {command && <CommandLayer text={text} name={command.name} ghost={ghost} textRef={textRef} />}
+          {(command || shellMode) && <CommandLayer text={text} head={head} ghost={command ? ghost : null} textRef={textRef} />}
           <textarea
             ref={textRef}
             aria-label={t("composer.message")}
             rows={1}
             value={text}
-            placeholder={placeholder}
+            placeholder={shellMode ? t("composer.shellPlaceholder") : placeholder}
             onChange={(e) => {
-              setText(e.target.value);
+              const value = e.target.value;
+              if (onShell && !shell && text === "" && value.startsWith("!")) {
+                setShell(true);
+                setText(value.slice(1));
+              } else setText(value);
               mention.syncCaret();
               slash.syncCaret();
             }}
@@ -503,7 +540,11 @@ export function Composer({
             onKeyDown={(e) => {
               // The @-mention list takes ↑↓, ⏎, ⇥ and esc while it is open
               if (mention.onKeyDown(e) || slash.onKeyDown(e)) return;
-              if (isSendKey(e, sendKey)) {
+              if (shellMode && !isImeKey(e) && (e.key === "Escape" || (e.key === "Backspace" && text === ""))) {
+                // Back to a normal message
+                e.preventDefault();
+                setShell(false);
+              } else if (isSendKey(e, sendKey)) {
                 e.preventDefault();
                 send();
               } else if (e.key === "Escape" && busy && onStop && !isImeKey(e)) {
@@ -523,7 +564,7 @@ export function Composer({
             className={cn(
               "relative min-h-0 w-full grow resize-none bg-transparent py-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground",
               // The layer behind draws the text while a command is recognised; the caret and selection stay here
-              command && "text-transparent caret-foreground",
+              (command || shellMode) && "text-transparent caret-foreground",
             )}
           />
         </div>

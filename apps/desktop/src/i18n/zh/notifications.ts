@@ -10,5 +10,5 @@ export const notifications: Record<keyof typeof source, string> = {
   urgentLabel: "{count} 个会话需要处理",
   newLabel: "{count} 条新通知",
   title: "通知",
-  empty: "没有新通知",
+  empty: "没有通知",
 };

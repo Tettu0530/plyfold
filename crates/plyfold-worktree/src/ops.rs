@@ -76,23 +76,23 @@ pub fn merge(wt: &Worktree) -> Result<String, WorktreeError> {
         )));
     }
     if st.commits == 0 {
-        return Err(fail(plyfold_i18n::tr!("取り込むコミットがありません", "No commits to merge", "没有可合并的提交")));
+        return Err(fail(plyfold_i18n::tr!("マージするコミットがありません", "No commits to merge", "没有可合并的提交")));
     }
     let target = st.target.ok_or_else(|| {
         fail(plyfold_i18n::tr!(
-            "元のリポジトリの HEAD が枝を指していないので、取り込み先が決まりません",
+            "元のリポジトリの HEAD がブランチを指していないので、マージ先が決まりません",
             "The original repository's HEAD is not on a branch, so there is no merge target",
             "原仓库的 HEAD 不在分支上，无法确定合并目标"
         ))
     })?;
     if st.merged {
-        return Err(fail(plyfold_i18n::tr!("{target} にはもう取り込んであります", "Already merged into {target}", "已合并到 {target}")));
+        return Err(fail(plyfold_i18n::tr!("{target} にはすでにマージ済みです", "Already merged into {target}", "已合并到 {target}")));
     }
     let msg = format!("Merge {} (Plyfold)", wt.branch);
     if let Err(e) = git(&wt.repo, &["merge", "--no-ff", "--no-edit", "-m", &msg, &wt.branch]) {
         let _ = git(&wt.repo, &["merge", "--abort"]);
         return Err(fail(plyfold_i18n::tr!(
-            "{target} に取り込めませんでした。変更がぶつかったか、元のリポジトリに未コミットの変更があります。元のリポジトリは取り込む前の状態に戻しました。\n{e}",
+            "{target} にマージできませんでした。変更がぶつかったか、元のリポジトリに未コミットの変更があります。元のリポジトリはマージ前の状態に戻しました。\n{e}",
             "Could not merge into {target}. The changes conflict, or the original repository has uncommitted changes. The original repository was restored to its state before the merge.\n{e}",
             "无法合并到 {target}。更改存在冲突，或原仓库有未提交的更改。原仓库已恢复到合并前的状态。\n{e}"
         )));
@@ -138,7 +138,7 @@ pub fn create_pr(wt: &Worktree, title: &str) -> Result<String, WorktreeError> {
     let out = crate::command("gh").args(&args).current_dir(&wt.path).output()?;
     if !out.status.success() {
         return Err(fail(plyfold_i18n::tr!(
-            "PR を作れませんでした（枝は push 済みです）: {}",
+            "PR を作成できませんでした（ブランチは push 済みです）: {}",
             "Could not create the PR (the branch was pushed): {}",
             "无法创建 PR（分支已推送）：{}",
             String::from_utf8_lossy(&out.stderr).trim()

@@ -1,6 +1,6 @@
 [package]
 name = "plyfold-acp"
-version = "0.6.4"
+version = "0.7.0"
 edition = "2024"
 license.workspace = true
 repository.workspace = true
@@ -9,7 +9,7 @@ publish = false
 [dependencies]
 # session/fork is gated by this feature in schema 1.18 (no extra crates)
 agent-client-protocol-schema = { version = "1.18.0", default-features = false, features = ["unstable_session_fork"] }
-plyfold-i18n = { version = "0.6.4", path = "../plyfold-i18n" }
+plyfold-i18n = { version = "0.7.0", path = "../plyfold-i18n" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 thiserror = "2.0.21"

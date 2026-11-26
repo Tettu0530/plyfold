@@ -3,30 +3,17 @@
 
 import { MessageCircleQuestionMark, Trash2, X } from "lucide-react";
 import { motion } from "motion/react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { smooth } from "../motion";
 import { Composer } from "./Composer";
+import { ColumnResizer } from "./GitPane";
+import { SIDE_MIN, useSideColumnWidth } from "./sideColumn";
 import { Transcript } from "./Transcript";
 import { Spinner } from "../icons";
-
-/** The column's width: about 40% of the pane, between 280 and 420 px */
-function useColumnWidth(pane: React.RefObject<HTMLElement | null>) {
-  const [w, setW] = useState(340);
-  useLayoutEffect(() => {
-    const el = pane.current;
-    if (!el) return;
-    const measure = () => setW(Math.round(Math.min(420, Math.max(280, el.clientWidth * 0.4))));
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [pane]);
-  return w;
-}
 
 /** "Forked n min ago", refreshed every half minute */
 function useAge(since: number) {
@@ -64,17 +51,19 @@ export function SideChatButton({ mainId, className }: { mainId: string; classNam
 
 export function SideChatColumn({ mainId, pane }: { mainId: string; pane: React.RefObject<HTMLElement | null> }) {
   const side = useStore((s) => s.sideChats[mainId]);
-  const width = useColumnWidth(pane);
+  const [resizing, setResizing] = useState(false);
+  const [width, setWidth, resetWidth] = useSideColumnWidth(pane, "plyfold.sideChatWidth");
   return (
     <motion.div
       initial={false}
       animate={{ width: side ? width : 0 }}
-      transition={smooth}
+      transition={resizing ? { duration: 0 } : smooth}
       inert={!side}
       className={cn("flex shrink-0 overflow-hidden", side && "border-l")}
     >
       {/* Keeps its own width while the column opens and closes, so its text never reflows */}
-      <div style={{ width }} className="flex shrink-0 flex-col">
+      <div style={{ width }} className="relative flex shrink-0 flex-col">
+        {side && <ColumnResizer edge="left" width={width} min={SIDE_MIN} onChange={setWidth} onReset={resetWidth} onActiveChange={setResizing} />}
         {side && <SideChatBody mainId={mainId} />}
       </div>
     </motion.div>

@@ -4,6 +4,32 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-26
+
+### Added
+
+- A comparison can ask a reviewer which run to take. The reviewer reads every run's diff, time, tokens and cost, and answers in a session of its own. The comparison marks the run it names and offers it as the one to merge
+- Comparisons are recorded when a run is taken: what was asked, which run was taken, and each run's time, tokens, cost and changes. They stay after the sessions are deleted, and the comparison pane lists the repository's past comparisons
+- A finished session can be run again from its right-click menu with another profile, and another model where the profile offers several. The same first instruction runs in a new worktree, and the two open side by side in a comparison
+- Repositories can have review rules and a default reviewer (Settings → Repositories). The rules go along with every review request, and new sessions there are reviewed by that profile from the start
+- A review finding can be sent back to the reviewed session as an instruction with one click. It is queued when the session is mid-turn
+- Type `!` in an empty input to enter shell mode, which runs a command in the session's folder (Esc, or Backspace on an empty input, goes back). The output appears in the conversation, can be stopped while it runs, and is sent to the agent only when you choose to
+- The side chat and review columns can be resized by dragging their left edge. Double-click resets the width
+
+### Changed
+
+- Default profiles are named by their agent ("Claude Code", "Codex") instead of "default", with the agent's logo in the pickers
+- The Japanese text is rewritten in a more technical wording (merge, fork, prompt, queue). The English and Chinese text is made consistent in terms and punctuation
+- The start controls are grouped: the folder and the directory's sessions sit together on the left, the model and mode on the right. "Conversations in this CLI" is now "Sessions in this directory"
+- The folder picker selects nothing right after descending into a folder with Tab: Enter confirms that folder, and the arrow keys start selecting inside it
+
+### Fixed
+
+- Continuing a session from the directory's sessions opens the new session as soon as its record is created, as starting a new session does
+- Continuing a conversation that Claude Code is running in its background says so, with the `claude attach` and `claude stop` commands to use, instead of showing the raw RPC error
+- Deleting sessions together with their worktrees no longer fails when the repository was moved or deleted, or when the worktree folder or branch is already gone
+- Menus no longer show a stray scroll arrow while they open
+
 ## [0.6.4] - 2026-11-25
 
 ### Added
@@ -274,6 +300,7 @@ The first release, for macOS (Apple Silicon) and Windows 10/11 (x64; new, please
 - Settings for display size, reduced motion, notifications, defaults for new sessions and more
 - Spring-based motion modelled on SwiftUI, with a fade-only mode for Reduce motion
 
+[0.7.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.7.0
 [0.6.4]: https://github.com/Tettu0530/plyfold/releases/tag/v0.6.4
 [0.6.3]: https://github.com/Tettu0530/plyfold/releases/tag/v0.6.3
 [0.6.2]: https://github.com/Tettu0530/plyfold/releases/tag/v0.6.2

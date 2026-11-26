@@ -58,13 +58,13 @@ function SelectContent({ className, children, position = "item-aligned", align =
         align={align}
         {...props}
       >
-        <SelectScrollUpButton />
+        {position !== "popper" && <SelectScrollUpButton />}
         <SelectPrimitive.Viewport
           className={cn("p-1", position === "popper" && "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)] scroll-my-1")}
         >
           {children}
         </SelectPrimitive.Viewport>
-        <SelectScrollDownButton />
+        {position !== "popper" && <SelectScrollDownButton />}
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>
   );

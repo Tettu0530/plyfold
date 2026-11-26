@@ -4,9 +4,4 @@ import type { common as source } from "../ja/common";
 export const common: Record<keyof typeof source, string> = {
   close: "Close",
   cancel: "Cancel",
-  send: "Send",
-  copy: "Copy",
-  copied: "Copied",
-  stop: "Stop",
-  remove: "Remove",
 };

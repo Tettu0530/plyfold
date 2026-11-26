@@ -10,4 +10,6 @@ export const store: Record<keyof typeof source, string> = {
   skippedLines: "… {count, plural, one {# line} other {# lines}}",
   newChatTitle: "New conversation",
   compareStartFailed: "One of the sessions started side by side could not start: {error}",
+  rerunUnavailable: "This session has no worktree or first instruction, so it cannot be run again",
+  rerunFailed: "Could not start the run again: {error}",
 };

@@ -7,6 +7,7 @@ import type {
   AppSettings,
   Category,
   CheckResult,
+  ComparisonRecord,
   CliSession,
   Diff,
   DirCandidate,
@@ -31,6 +32,7 @@ import type {
   RepoSettings,
   QueuedTask,
   McpServerForm,
+  ShellEvent,
 } from "./types";
 
 // Thin wrappers around the Tauri commands (src-tauri/src/lib.rs). Argument names follow the Rust side's camelCase conversion
@@ -45,6 +47,9 @@ export const api = {
     invoke<SessionRecord>("start_session", { ...args, created: new Channel(created) }),
   startChat: (profile: string, title: string, created?: (record: SessionRecord) => void) =>
     invoke<SessionRecord>("start_chat", { profile, title, created: new Channel(created) }),
+  startShell: (session: string, command: string, onEvent: (e: ShellEvent) => void) =>
+    invoke<number>("start_shell", { session, command, output: new Channel<ShellEvent>(onEvent) }),
+  stopShell: (run: number) => invoke<void>("stop_shell", { run }),
   reopenSession: (id: string) => invoke<void>("reopen_session", { id }),
   forkSession: (id: string, newWorktree: boolean) => invoke<SessionRecord>("fork_session", { id, newWorktree }),
   openSideChat: (id: string) => invoke<SessionRecord>("open_side_chat", { id }),
@@ -53,8 +58,13 @@ export const api = {
   reviewNow: (id: string) => invoke<string | null>("review_now", { id }),
   handOver: (id: string, profile: string) => invoke<SessionRecord>("hand_over", { id, profile }),
   listCliSessions: (profile: string, repo: string) => invoke<CliSession[]>("list_cli_sessions", { profile, repo }),
-  adoptCliSession: (profile: string, repo: string, acpSessionId: string, title: string, worktree: boolean) =>
-    invoke<SessionRecord>("adopt_cli_session", { profile, repo, acpSessionId, title, worktree }),
+  adoptCliSession: (profile: string, repo: string, acpSessionId: string, title: string, worktree: boolean, created?: (record: SessionRecord) => void) =>
+    invoke<SessionRecord>("adopt_cli_session", { profile, repo, acpSessionId, title, worktree, created: new Channel(created) }),
+  recordComparison: (record: ComparisonRecord) => invoke<void>("record_comparison", { record }),
+  listComparisons: (repo: string | null) => invoke<ComparisonRecord[]>("list_comparisons", { repo }),
+  deleteComparison: (runGroup: string) => invoke<void>("delete_comparison", { runGroup }),
+  compareVerdict: (group: string, profile: string, instruction: string, facts: [string, string][]) =>
+    invoke<string>("compare_verdict", { group, profile, instruction, facts }),
   renameSession: (id: string, title: string) => invoke<void>("rename_session", { id, title }),
   closeSession: (id: string) => invoke<void>("close_session", { id }),
   deleteSession: (id: string, removeWorktree: boolean) => invoke<void>("delete_session", { id, removeWorktree }),

@@ -20,6 +20,7 @@ import { diff } from "./diff";
 import { settings } from "./settings";
 import { motionLab } from "./motionLab";
 import { store } from "./store";
+import { shell } from "./shell";
 import { side } from "./side";
 
 export const ja = {
@@ -44,5 +45,6 @@ export const ja = {
   settings,
   motionLab,
   store,
+  shell,
   side,
 };

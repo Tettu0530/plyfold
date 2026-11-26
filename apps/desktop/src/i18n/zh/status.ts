@@ -20,5 +20,5 @@ export const status: Record<keyof typeof source, string> = {
   modeAgent: "自动",
   modeAgentFullAccess: "完全访问",
   modeBuild: "构建",
-  agentMock: "模拟代理",
+  agentMock: "模拟智能体",
 };

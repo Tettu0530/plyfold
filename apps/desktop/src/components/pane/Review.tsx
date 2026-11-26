@@ -3,7 +3,7 @@
 
 import { ScanSearch, RefreshCw, X } from "lucide-react";
 import { motion } from "motion/react";
-import { useLayoutEffect, useState } from "react";
+import { useState } from "react";
 
 import { Select as SelectPrimitive } from "radix-ui";
 
@@ -12,11 +12,13 @@ import { useT } from "@/i18n";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
-import { ProviderLogo } from "../icons";
+import { ProfileOption, ProviderLogo, profileTitle } from "../icons";
 import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidMenu } from "../liquid/stage";
 import { smooth } from "../motion";
 import { Composer } from "./Composer";
+import { ColumnResizer } from "./GitPane";
+import { SIDE_MIN, useSideColumnWidth } from "./sideColumn";
 import { Transcript } from "./Transcript";
 
 const OFF = "__off__";
@@ -52,10 +54,7 @@ export function ReviewButton({ mainId }: { mainId: string }) {
         <SelectItem value={OFF}>{t("side.reviewOff")}</SelectItem>
         {profiles.map((p) => (
           <SelectItem key={p.name} value={p.name}>
-            <span className="flex items-center gap-1.5">
-              <ProviderLogo agent={p.agent} className="size-3 text-muted-foreground" />
-              {p.name === p.agent ? p.label : p.name}
-            </span>
+            <ProfileOption profile={p} />
           </SelectItem>
         ))}
       </SelectContent>
@@ -63,33 +62,20 @@ export function ReviewButton({ mainId }: { mainId: string }) {
   );
 }
 
-/** The column's width: about 40% of the pane, between 280 and 420 px (as the side chat) */
-function useColumnWidth(pane: React.RefObject<HTMLElement | null>) {
-  const [w, setW] = useState(340);
-  useLayoutEffect(() => {
-    const el = pane.current;
-    if (!el) return;
-    const measure = () => setW(Math.round(Math.min(420, Math.max(280, el.clientWidth * 0.4))));
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [pane]);
-  return w;
-}
-
 export function ReviewColumn({ mainId, pane }: { mainId: string; pane: React.RefObject<HTMLElement | null> }) {
   const on = useStore((s) => !!s.sessions[mainId]?.record.reviewer);
-  const width = useColumnWidth(pane);
+  const [resizing, setResizing] = useState(false);
+  const [width, setWidth, resetWidth] = useSideColumnWidth(pane, "plyfold.reviewWidth");
   return (
     <motion.div
       initial={false}
       animate={{ width: on ? width : 0 }}
-      transition={smooth}
+      transition={resizing ? { duration: 0 } : smooth}
       inert={!on}
       className={cn("flex shrink-0 overflow-hidden", on && "border-l")}
     >
-      <div style={{ width }} className="flex shrink-0 flex-col">
+      <div style={{ width }} className="relative flex shrink-0 flex-col">
+        {on && <ColumnResizer edge="left" width={width} min={SIDE_MIN} onChange={setWidth} onReset={resetWidth} onActiveChange={setResizing} />}
         {on && <ReviewBody mainId={mainId} />}
       </div>
     </motion.div>
@@ -108,6 +94,13 @@ function ReviewBody({ mainId }: { mainId: string }) {
   // The prompts that carry the diff are long; the answers are what matters here
   const items = view?.transcript.items.filter((i) => !(i.kind === "user" && i.text.includes("~~~~diff"))) ?? [];
 
+  // A finding goes to the reviewed session as its next instruction (queued while it is mid-turn)
+  const sendBack = (review: string) => {
+    const text = t("side.sendBackPrompt", { review });
+    if (useStore.getState().sessions[mainId]?.transcript.inTurn) enqueue(mainId, text, []);
+    else void sendPrompt(mainId, text);
+  };
+
   const reviewNow = () => {
     setError(null);
     api.reviewNow(mainId).then(
@@ -122,7 +115,7 @@ function ReviewBody({ mainId }: { mainId: string }) {
         <ScanSearch className="size-3.5 text-muted-foreground" aria-hidden />
         <span className="font-medium">{t("side.reviewTitle")}</span>
         {profile && <ProviderLogo agent={profile.agent} className="size-3 text-muted-foreground" />}
-        <span className="truncate text-xs text-muted-foreground">{profile && profile.name !== profile.agent ? profile.name : profile?.label}</span>
+        <span className="truncate text-xs text-muted-foreground">{profile && profileTitle(profile)}</span>
         <span className="grow" />
         <button
           type="button"
@@ -158,6 +151,7 @@ function ReviewBody({ mainId }: { mainId: string }) {
             commands={view.info?.commands ?? []}
             base={r.worktree_path ?? r.repo_path ?? undefined}
             onQuote={{ label: t("side.quote"), run: (text) => insertIntoComposer(mainId, text) }}
+            onSendBack={{ label: t("side.sendBack"), run: sendBack }}
           />
           <Composer
             scope={r.id}

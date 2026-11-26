@@ -30,7 +30,7 @@ import { ShortcutSettings } from "./ShortcutSettings";
 import { RepoSettings } from "./RepoSettings";
 import { SharedMcp } from "./SharedMcp";
 import { checkForUpdate, installUpdate, useUpdate } from "@/state/update";
-import { agentName, ProviderLogo } from "./icons";
+import { agentName, ProfileOption, ProviderLogo } from "./icons";
 import { useLiquidMenu } from "./liquid/stage";
 import { liquidAnchor } from "./liquid/liquid";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -467,10 +467,7 @@ function ProfilePicker({ value, onChange }: { value: string; onChange: (v: strin
         <SelectItem value={LAST}>{t("settings.defaultProfileLast")}</SelectItem>
         {profiles.map((p) => (
           <SelectItem key={p.name} value={p.name}>
-            <span className="flex items-center gap-1.5">
-              <ProviderLogo agent={p.agent} className="size-3 text-muted-foreground" />
-              {p.name === p.agent ? p.label : p.name}
-            </span>
+            <ProfileOption profile={p} />
           </SelectItem>
         ))}
       </SelectContent>

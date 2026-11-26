@@ -11,8 +11,30 @@ import { notify } from "@/lib/notify";
 import { loadInfoCache, saveInfoCache, snapshot, type InfoCache } from "./infoCache";
 import { commandsFromHistory } from "@/lib/commands";
 import type { SlashCommand } from "@/lib/types";
-import type { AppSettings, Category, SessionStatus, EngineEvent, ProfileSummary, ProfileUsage, QueuedTask, SessionInfo, SessionRecord } from "@/lib/types";
-import { addNotice, applyUpdate, beginTurn, emptyTranscript, endTurn, fromHistory, type PendingPermission, type Transcript } from "./transcript";
+import type {
+  AppSettings,
+  Category,
+  SessionStatus,
+  EngineEvent,
+  ProfileSummary,
+  ProfileUsage,
+  QueuedTask,
+  SessionInfo,
+  SessionRecord,
+  ShellEvent,
+} from "@/lib/types";
+import {
+  addNotice,
+  addShell,
+  applyUpdate,
+  beginTurn,
+  emptyTranscript,
+  endTurn,
+  fromHistory,
+  type PendingPermission,
+  type Transcript,
+  updateShell,
+} from "./transcript";
 
 export interface SideChat {
   /** The fork's session id, once it has started */
@@ -98,6 +120,15 @@ export interface PreviewPage {
 }
 
 /** A pane listing the files a session read or edited, with the picked one's contents ("files:<session id>") */ const LAST_REPO_KEY = "plyfold.lastRepo";
+const VERDICTS_KEY = "plyfold.verdicts";
+function readVerdicts(): Record<string, string> {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(VERDICTS_KEY) ?? "{}");
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
 function lastRepo(): string {
   try {
     return localStorage.getItem(LAST_REPO_KEY) ?? "~/projects";
@@ -234,6 +265,9 @@ interface State {
   sessions: Record<string, SessionView>;
   drafts: Record<string, Draft>;
   previews: Record<string, PreviewPage>;
+  /** The session that judged a comparison, by run group (kept on this machine, so the answer is found again) */
+  verdicts: Record<string, string>;
+  setVerdict: (group: string, session: string) => void;
   /** Open a web page in a pane (a free one, or one more pane), growing out of the given anchor */
   openPreview: (url: string, anchor: string) => void;
   setPreviewUrl: (id: string, url: string) => void;
@@ -295,6 +329,8 @@ interface State {
   openCompare: (group: string, from: string) => void;
   /** Start one session per chosen profile, each in a worktree of its own, with the same prompt, side by side */
   startCompare: (draftId: string, prompt: string, attachments?: Attached[]) => Promise<void>;
+  /** Run a finished session's first instruction again with another profile (and model) in a new worktree, side by side with it */
+  rerunSession: (id: string, profile: string, model?: string) => Promise<void>;
   /** Bumped after worktree operations (so panes refetch their diff counts) */
   diffVersion: number;
   bumpDiff: () => void;
@@ -347,6 +383,11 @@ interface State {
   /** Open a conversation the CLI already has. The draft pane is replaced by the new session */
   adoptCliSession: (draftId: string, acpSessionId: string, title: string) => Promise<void>;
   sendPrompt: (id: string, text: string, attachments?: Attached[]) => Promise<void>;
+  /** Run `!command` in the session's folder. The output stays in the conversation view only */
+  runShell: (id: string, command: string) => Promise<void>;
+  stopShell: (run: number) => void;
+  /** Send a finished shell run to the agent as the next instruction (queued mid-turn) */
+  sendShellOn: (id: string, run: number) => void;
   /** Instructions sent mid-turn (sent in order once the turn ends) */
   queues: Record<string, Queued[]>;
   enqueue: (id: string, text: string, attachments: Attached[]) => void;
@@ -514,6 +555,17 @@ export const useStore = create<State>((set, get) => ({
   sessions: {},
   drafts: {},
   previews: {},
+  verdicts: readVerdicts(),
+  setVerdict: (group, session) =>
+    set((s) => {
+      const verdicts = { ...s.verdicts, [group]: session };
+      try {
+        localStorage.setItem(VERDICTS_KEY, JSON.stringify(verdicts));
+      } catch {
+        // Not remembered, still applied
+      }
+      return { verdicts };
+    }),
   openPreview: (url, anchor) => {
     const s = get();
     const id = `preview:${Date.now()}`;
@@ -741,6 +793,32 @@ export const useStore = create<State>((set, get) => ({
     void get().openInPane(pane, slot, `compare:${group}`);
   },
 
+  rerunSession: async (id, profile, model) => {
+    if (!get().sessions[id]?.historyLoaded) await loadSession(id);
+    const src = get().sessions[id];
+    const first = src?.transcript.items.find((it) => it.kind === "user");
+    const repo = src?.record.repo_path;
+    if (!src || !repo || !src.record.worktree_path || first?.kind !== "user") throw new Error(t("store.rerunUnavailable"));
+    try {
+      // The session and its rerun share a run group, which is what a comparison pane lists
+      const group = src.record.run_group ?? crypto.randomUUID();
+      const srcRecord = src.record.run_group ? src.record : await api.setRunGroup(id, group);
+      const started = await api.startSession({ profile, repo, title: src.record.title, worktree: true });
+      const rec = await api.setRunGroup(started.id, group);
+      await applyStartingChoices(rec, model ? { model } : {});
+      set((s) => {
+        const sessions = { ...s.sessions };
+        sessions[id] = { ...sessions[id], record: srcRecord };
+        sessions[rec.id] = sessions[rec.id] ? { ...sessions[rec.id], record: rec } : { ...newView(rec), historyLoaded: true };
+        return { sessions };
+      });
+      get().openCompare(group, id);
+      await get().sendPrompt(rec.id, first.text);
+    } catch (e) {
+      throw new Error(t("store.rerunFailed", { error: String(e) }), { cause: e });
+    }
+  },
+
   startCompare: async (id, prompt, attachments = []) => {
     const d = get().drafts[id];
     const picks = d?.compare ?? [];
@@ -888,6 +966,41 @@ export const useStore = create<State>((set, get) => ({
 
   sideChats: {},
   composerInsert: null,
+  runShell: async (id, command) => {
+    const change = (f: (t: Transcript) => Transcript) =>
+      set((s) => {
+        const v = s.sessions[id];
+        return v ? { sessions: { ...s.sessions, [id]: { ...v, transcript: f(v.transcript) } } } : {};
+      });
+    // Events can arrive before the run id does
+    const early: ShellEvent[] = [];
+    let run: number | null = null;
+    const apply = (r: number, e: ShellEvent) =>
+      change((t) =>
+        updateShell(t, r, (item) =>
+          e.kind === "output" ? { ...item, output: item.output + e.data } : { ...item, status: "done", code: e.code, truncated: e.truncated },
+        ),
+      );
+    try {
+      run = await api.startShell(id, command, (e) => (run === null ? early.push(e) : apply(run, e)));
+    } catch (error) {
+      change((t) => addNotice(t, String(error)));
+      return;
+    }
+    const started = run;
+    change((t) => addShell(t, started, command));
+    for (const e of early) apply(started, e);
+  },
+  stopShell: (run) => void api.stopShell(run),
+  sendShellOn: (id, run) => {
+    const v = get().sessions[id];
+    const item = v?.transcript.items.find((it) => it.kind === "shell" && it.run === run);
+    if (!v || !item || item.kind !== "shell") return;
+    const code = item.code === null ? "" : ` (exit ${item.code})`;
+    const text = `I ran a command in the session folder${code}:\n\n~~~~\n$ ${item.command}\n${item.output.trimEnd()}\n~~~~`;
+    if (v.transcript.inTurn) get().enqueue(id, text, []);
+    else void get().sendPrompt(id, text);
+  },
   insertIntoComposer: (scope, text) => set((s) => ({ composerInsert: { scope, text, n: (s.composerInsert?.n ?? 0) + 1 } })),
 
   openSideChat: async (mainId) => {
@@ -1125,16 +1238,33 @@ export const useStore = create<State>((set, get) => ({
     const d = get().drafts[draftId];
     if (!d?.profile || d.busy) return;
     get().updateDraft(draftId, { busy: true, error: null });
+    // The session takes the draft's pane as soon as its record exists, and fills in while the agent loads it
+    let createdId: string | undefined;
+    const showSession = (record: SessionRecord) => {
+      createdId = record.id;
+      set((s) => {
+        const cur = s.sessions[record.id] ?? { ...newView(record), historyLoaded: true };
+        return { panes: s.panes.map((pane) => (pane === draftId ? record.id : pane)), sessions: { ...s.sessions, [record.id]: cur } };
+      });
+    };
     try {
-      const rec = await api.adoptCliSession(d.profile, d.repo, acpSessionId, title, d.worktree);
+      const rec = await api.adoptCliSession(d.profile, d.repo, acpSessionId, title, d.worktree, showSession);
       // The conversation is the history the agent resent, copied into the log after SessionCreated
       set((s) => {
         const cur = s.sessions[rec.id] ?? newView(rec);
-        return { sessions: { ...s.sessions, [rec.id]: { ...cur, record: rec, historyLoaded: false } } };
+        const drafts = { ...s.drafts };
+        delete drafts[draftId];
+        return { drafts, sessions: { ...s.sessions, [rec.id]: { ...cur, record: rec, historyLoaded: false } } };
       });
-      const pane = leaves(get().layout).find((i) => get().panes[i] === draftId);
-      await get().openInPane(rec.id, pane, `${draftId}:cli`);
+      if (createdId) await loadSession(rec.id);
+      else {
+        const pane = leaves(get().layout).find((i) => get().panes[i] === draftId);
+        await get().openInPane(rec.id, pane, `${draftId}:cli`);
+      }
     } catch (e) {
+      // Back to the draft with the reason, so another conversation can be picked
+      const session = createdId;
+      if (session) set((s) => ({ panes: s.panes.map((pane) => (pane === session ? draftId : pane)) }));
       get().updateDraft(draftId, { busy: false, error: String(e) });
     }
   },

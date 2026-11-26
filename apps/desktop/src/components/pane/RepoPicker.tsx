@@ -1,5 +1,6 @@
 // Repository picker: recent repositories plus completion of folders continuing the input
-//   ↑↓ to select, Tab to descend into that folder (keeps completing), ⏎ to confirm
+//   ↑↓ to select, Tab to descend into that folder (keeps completing), ⏎ to confirm.
+//   Right after descending nothing is selected: ⏎ confirms that folder itself, and ↑↓ start selecting inside it
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { Folder, FolderOpen, GitBranch } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -40,6 +41,8 @@ export function RepoPicker({ value, onPick }: { value: string; onPick: (path: st
   const [query, setQuery] = useState(value);
   const [dirs, setDirs] = useState<DirCandidate[]>([]);
   const [active, setActive] = useState(0);
+  // Just descended with Tab: no row is selected until ↑↓ is pressed or the text changes
+  const [descended, setDescended] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const recent = useRecent(value);
   const touched = query !== value;
@@ -70,7 +73,7 @@ export function RepoPicker({ value, onPick }: { value: string; onPick: (path: st
     ...recentShown.map((r) => ({ ...r, recent: true })),
     ...dirs.filter((d) => !recentShown.some((r) => r.path === d.path)).map((d) => ({ ...d, recent: false })),
   ];
-  const cur = Math.min(active, Math.max(0, rows.length - 1));
+  const cur = descended ? -1 : Math.min(active, Math.max(0, rows.length - 1));
 
   useEffect(() => setActive(0), [query]);
   useEffect(() => {
@@ -81,15 +84,22 @@ export function RepoPicker({ value, onPick }: { value: string; onPick: (path: st
     if (isImeKey(e)) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
-      if (rows.length) setActive((cur + (e.key === "ArrowDown" ? 1 : rows.length - 1)) % rows.length);
+      if (descended) {
+        setDescended(false);
+        setActive(e.key === "ArrowDown" ? 0 : Math.max(0, rows.length - 1));
+      } else if (rows.length) setActive((cur + (e.key === "ArrowDown" ? 1 : rows.length - 1)) % rows.length);
     } else if (e.key === "Tab" && !e.shiftKey && rows[cur]) {
       // Descend into that folder
       e.preventDefault();
+      setDescended(true);
       setQuery(`${rows[cur].path}/`);
+    } else if (e.key === "Tab" && !e.shiftKey && descended) {
+      // Nothing is selected, so there is nothing to descend into: stay in the input
+      e.preventDefault();
     } else if (e.key === "Enter") {
       e.preventDefault();
       // If no candidate was selected while typing, confirm with the typed value
-      const pick = touched && dirs.length === 0 && recentShown.length === 0 ? query : (rows[cur]?.path ?? query);
+      const pick = descended || (touched && dirs.length === 0 && recentShown.length === 0) ? query : (rows[cur]?.path ?? query);
       onPick(pick.replace(/\/+$/, "") || pick);
     }
   };
@@ -119,7 +129,10 @@ export function RepoPicker({ value, onPick }: { value: string; onPick: (path: st
           autoFocus
           spellCheck={false}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setDescended(false);
+            setQuery(e.target.value);
+          }}
           onFocus={(e) => e.currentTarget.select()}
           onKeyDown={onKeyDown}
           placeholder="~/projects/…"

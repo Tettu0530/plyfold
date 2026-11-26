@@ -11,6 +11,8 @@ export const side: Record<keyof typeof source, string> = {
   starting: "正在复制主对话",
   hint: "这是主对话的分叉。这里的问答不会进入主对话。编辑文件和执行命令会被拒绝",
   quote: "添加到主输入框",
+  sendBack: "作为指令发送到会话",
+  sendBackPrompt: "审查者阅读了你的改动并报告了以下问题。请逐条核实，并修复成立的问题。\n\n{review}",
   placeholder: "就主会话提问",
   review: "审查",
   reviewBy: "{profile} 在每轮结束后审查差异",
@@ -18,7 +20,7 @@ export const side: Record<keyof typeof source, string> = {
   reviewTitle: "审查",
   reviewNow: "重新审查当前差异",
   reviewStop: "停止审查",
-  reviewHint: "一轮结束且有差异时，所选代理会以只读方式审查，结果显示在这里",
+  reviewHint: "一轮结束且有差异时，所选智能体会以只读方式审查，结果显示在这里",
   reviewNothing: "没有可审查的差异",
   reviewPlaceholder: "就审查结果提问",
 };

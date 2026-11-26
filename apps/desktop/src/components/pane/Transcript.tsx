@@ -13,7 +13,8 @@ import { Marked } from "./Marked";
 import { resendable, type Attached } from "@/lib/attachments";
 import { SentAttachments } from "./Attachments";
 import { Markdown } from "./Markdown";
-import { ActionRow, CopyButton, EditBox, QuoteButton, UserActions, Working, workingLabel } from "./MessageActions";
+import { ShellBlock } from "./ShellBlock";
+import { ActionRow, CopyButton, EditBox, QuoteButton, SendBackButton, UserActions, Working, workingLabel } from "./MessageActions";
 import { ToolCalls } from "./ToolCall";
 import { bouncy, smooth } from "../motion";
 import { useStore } from "@/state/store";
@@ -191,6 +192,7 @@ export function Transcript({
   busy = streaming,
   onResend,
   onQuote,
+  onSendBack,
   compact = false,
   commands = [],
   base,
@@ -205,6 +207,8 @@ export function Transcript({
   onResend?: (text: string, attachments: Attached[]) => void;
   /** Put an answer into another input; shown as a button under each answer, with this label */
   onQuote?: { label: string; run: (text: string) => void };
+  /** Send an answer to another session as an instruction; shown next to the quote button */
+  onSendBack?: { label: string; run: (text: string) => void };
   /** A narrow column (the side chat): no centred reading width, tighter padding */
   compact?: boolean;
   /** The agent's slash commands: a message that starts with one shows it in blue, as the composer does */
@@ -435,6 +439,7 @@ export function Transcript({
                 <ActionRow align="start">
                   <CopyButton text={b.text} />
                   {onQuote && <QuoteButton text={b.text} label={onQuote.label} onQuote={onQuote.run} />}
+                  {onSendBack && <SendBackButton text={b.text} label={onSendBack.label} onSend={onSendBack.run} />}
                 </ActionRow>
               );
               const st = statsOf.get(i);
@@ -495,6 +500,12 @@ export function Transcript({
                     <TurnStatsRow stats={b.stats} error={b.error} stopReason={b.stopReason} cost={undefined} endedAt={b.endedAt} />
                   )}
                   {i < blocks.length - 1 && <div className="h-px bg-border" />}
+                </div>
+              );
+            case "shell":
+              return (
+                <div key={b.itemIndex} data-find-item={b.itemIndex}>
+                  <ShellBlock item={b} sessionId={sessionId} />
                 </div>
               );
             case "notice":

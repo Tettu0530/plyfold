@@ -223,3 +223,74 @@ it("opens the new session pane while the agent is still starting", async () => {
     useStore.setState({ panes: original.panes, drafts: original.drafts, sessions: original.sessions, effort: original.effort });
   }
 });
+
+describe("rerunSession", () => {
+  const source: SessionRecord = { ...record, id: "src", title: "Add a flag", repo_path: "/repo", worktree_path: "/wt/src", status: "idle", run_group: null };
+
+  const setup = (over: Partial<SessionRecord> = {}, items: SessionView["transcript"]["items"] = [{ kind: "user", text: "add a flag" }]) => {
+    const original = useStore.getState();
+    const view = { ...original.sessions.s1, record: { ...source, ...over }, transcript: { inTurn: false, items }, historyLoaded: true } as SessionView;
+    useStore.setState({ sessions: { src: view }, panes: ["src", null], effort: { profiles: {}, sessions: {} } });
+    return () => useStore.setState({ panes: original.panes, sessions: original.sessions, effort: original.effort, layout: original.layout });
+  };
+
+  it("runs the first instruction again in a new worktree, in a run group with the original", async () => {
+    const restore = setup();
+    const groups: [string, string | null][] = [];
+    vi.spyOn(api, "setRunGroup").mockImplementation(async (id, group) => {
+      groups.push([id, group]);
+      return { ...source, id, run_group: group };
+    });
+    const start = vi.spyOn(api, "startSession").mockResolvedValue({ ...source, id: "again", profile: "codex", status: "idle", worktree_path: "/wt/again" });
+    vi.spyOn(api, "sessionInfo").mockResolvedValue(null);
+    const prompt = vi.spyOn(api, "prompt").mockResolvedValue();
+    try {
+      await useStore.getState().rerunSession("src", "codex");
+      expect(start).toHaveBeenCalledWith({ profile: "codex", repo: "/repo", title: "Add a flag", worktree: true });
+      expect(prompt).toHaveBeenCalledWith("again", "add a flag", []);
+      // Both are in the same group, which is what the comparison pane lists
+      expect(groups.map(([id]) => id)).toEqual(["src", "again"]);
+      expect(groups[0][1]).toBe(groups[1][1]);
+      expect(groups[0][1]).toBeTruthy();
+      expect(useStore.getState().sessions.src.record.run_group).toBe(groups[0][1]);
+      expect(useStore.getState().panes.some((p) => p === `compare:${groups[0][1]}`)).toBe(true);
+    } finally {
+      vi.restoreAllMocks();
+      restore();
+    }
+  });
+
+  it("joins the run group the session already has", async () => {
+    const restore = setup({ run_group: "g" });
+    const groups: (string | null)[] = [];
+    vi.spyOn(api, "setRunGroup").mockImplementation(async (id, group) => {
+      groups.push(group);
+      return { ...source, id, run_group: group };
+    });
+    vi.spyOn(api, "startSession").mockResolvedValue({ ...source, id: "again", status: "idle" });
+    vi.spyOn(api, "sessionInfo").mockResolvedValue(null);
+    vi.spyOn(api, "prompt").mockResolvedValue();
+    try {
+      await useStore.getState().rerunSession("src", "codex");
+      expect(groups).toEqual(["g"]);
+    } finally {
+      vi.restoreAllMocks();
+      restore();
+    }
+  });
+
+  it("refuses a session without a worktree or a first instruction, starting nothing", async () => {
+    const start = vi.spyOn(api, "startSession").mockResolvedValue(source);
+    try {
+      let restore = setup({ worktree_path: null });
+      await expect(useStore.getState().rerunSession("src", "codex")).rejects.toThrow();
+      restore();
+      restore = setup({}, []);
+      await expect(useStore.getState().rerunSession("src", "codex")).rejects.toThrow();
+      restore();
+      expect(start).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+});

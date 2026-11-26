@@ -1,8 +1,9 @@
-// Settings → Repositories: per repository, what a new worktree gets (files copied in, a setup script) and which kinds
-// of tool calls are allowed without asking
+// Settings → Repositories: per repository, what a new worktree gets (files copied in, a setup script), which kinds of
+// tool calls are allowed without asking, and how its sessions are reviewed (rules, and a reviewer from the start)
 import { FolderGit2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +12,7 @@ import { useT, type MessageKey } from "@/i18n";
 import { api, inTauri } from "@/lib/api";
 import type { RepoEntry, RepoSettings as Settings } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { ProfileOption } from "./icons";
 
 const KINDS: { value: string; label: MessageKey }[] = [
   { value: "read", label: "settings.allowRead" },
@@ -19,6 +21,7 @@ const KINDS: { value: string; label: MessageKey }[] = [
   { value: "fetch", label: "settings.allowFetch" },
 ];
 
+const NO_REVIEWER = "__none__";
 const base = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p;
 
 export function RepoSettings({ onError }: { onError: (e: string | null) => void }) {
@@ -78,6 +81,8 @@ function RepoForm({ settings, onSave }: { settings: Settings; onSave: (s: Settin
   const [name, setName] = useState(settings.name ?? "");
   const [setup, setSetup] = useState(settings.setup);
   const [copy, setCopy] = useState(settings.copy.join("\n"));
+  const [review, setReview] = useState(settings.review ?? "");
+  const profiles = useStore((s) => s.profiles);
   const lines = (v: string) =>
     v
       .split("\n")
@@ -118,6 +123,31 @@ function RepoForm({ settings, onSave }: { settings: Settings; onSave: (s: Settin
           }}
           className="min-h-16 font-mono text-xs"
         />
+      </Field>
+      <Field id="repo-review" label={t("settings.repoReview")} detail={t("settings.repoReviewDetail")}>
+        <Textarea
+          id="repo-review"
+          value={review}
+          placeholder={t("settings.repoReviewPlaceholder")}
+          onChange={(e) => setReview(e.target.value)}
+          onBlur={() => review.trim() !== (settings.review ?? "").trim() && onSave({ ...settings, review: review.trim() })}
+          className="min-h-20 text-xs"
+        />
+      </Field>
+      <Field id="repo-reviewer" label={t("settings.repoReviewer")} detail={t("settings.repoReviewerDetail")}>
+        <Select value={settings.reviewer || NO_REVIEWER} onValueChange={(v) => onSave({ ...settings, reviewer: v === NO_REVIEWER ? "" : v })}>
+          <SelectTrigger id="repo-reviewer" className="w-full max-w-64">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" align="start">
+            <SelectItem value={NO_REVIEWER}>{t("settings.repoReviewerNone")}</SelectItem>
+            {profiles.map((p) => (
+              <SelectItem key={p.name} value={p.name}>
+                <ProfileOption profile={p} />
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </Field>
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-1">

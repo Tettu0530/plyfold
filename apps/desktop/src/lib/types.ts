@@ -368,6 +368,10 @@ export interface RepoSettings {
   copy: string[];
   /** "read" | "edit" | "execute" | "fetch" */
   allow: string[];
+  /** What a reviewer should look for here ("" = nothing extra) */
+  review: string;
+  /** The profile that reviews each new session here from the start ("" = none) */
+  reviewer: string;
 }
 
 export interface RepoEntry {
@@ -396,6 +400,39 @@ export interface TextFile {
   /** Only the first MiB was read */
   truncated: boolean;
 }
+
+/** One run of a recorded comparison: its numbers as they were when it was taken */
+export interface ComparisonRun {
+  session_id: string;
+  profile: string;
+  agent: string;
+  branch: string;
+  elapsed_ms: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_amount: number | null;
+  cost_currency: string | null;
+  files: number;
+  added: number;
+  removed: number;
+}
+
+/** A comparison once one of its runs was taken (kept in the database, apart from the sessions) */
+export interface ComparisonRecord {
+  run_group: string;
+  repo_path: string | null;
+  title: string;
+  instruction: string;
+  /** 0 when sending: the backend fills in the time */
+  recorded_at: number;
+  taken_session: string | null;
+  verdict_session: string | null;
+  verdict_run: string | null;
+  runs: ComparisonRun[];
+}
+
+/** Events of a `!command` run */
+export type ShellEvent = { kind: "output"; data: string } | { kind: "exit"; code: number | null; truncated: boolean };
 
 export interface FileHit {
   directory?: boolean;

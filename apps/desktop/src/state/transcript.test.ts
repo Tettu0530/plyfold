@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { EventRecord } from "@/lib/types";
-import { applyUpdate, beginTurn, emptyTranscript, endTurn, fromHistory, INTERRUPTED } from "./transcript";
+import { addShell, applyUpdate, beginTurn, emptyTranscript, endTurn, fromHistory, INTERRUPTED, updateShell } from "./transcript";
 
 const chunk = (sessionUpdate: string, text: string) => ({ sessionUpdate, content: { type: "text", text } });
 
@@ -234,5 +234,20 @@ describe("transcript", () => {
     const last = t.items[t.items.length - 1];
     expect(last.kind === "stats" && last.stopReason).toBe(INTERRUPTED);
     expect(t.items.some((i) => i.kind === "agent" && i.text === "half an ans")).toBe(true);
+  });
+
+  it("keeps a shell run apart from the turn and updates only that run", () => {
+    let t = beginTurn(emptyTranscript(), "hi");
+    t = addShell(t, 1, "ls");
+    t = addShell(t, 2, "pwd");
+    t = updateShell(t, 1, (r) => ({ ...r, output: r.output + "a\n" }));
+    t = updateShell(t, 1, (r) => ({ ...r, status: "done", code: 0 }));
+    t = updateShell(t, 9, (r) => ({ ...r, output: "ignored" }));
+    const runs = t.items.filter((i) => i.kind === "shell");
+    expect(runs).toMatchObject([
+      { run: 1, command: "ls", output: "a\n", status: "done", code: 0 },
+      { run: 2, command: "pwd", output: "", status: "running", code: null },
+    ]);
+    expect(t.inTurn).toBe(true);
   });
 });

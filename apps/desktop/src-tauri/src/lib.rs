@@ -4,6 +4,7 @@ mod dirs;
 mod files;
 mod platform;
 mod registry;
+mod shell;
 mod shell_path;
 mod tasks;
 mod terminal;
@@ -29,6 +30,7 @@ const KEYCHAIN_SERVICE: &str = "plyfold";
 struct AppState {
     engine: Engine,
     terminals: terminal::Terminals,
+    shells: shell::Shells,
     /// Where sessions (and the task queue) are kept: see data_dir
     data_dir: PathBuf,
     config: RwLock<Config>,
@@ -459,9 +461,39 @@ async fn adopt_cli_session(
     acp_session_id: String,
     title: String,
     worktree: bool,
+    created: tauri::ipc::Channel<SessionRecord>,
 ) -> CmdResult<SessionRecord> {
     let repo = PathBuf::from(expand_home(&repo));
-    state.engine.adopt_session(&profile, &repo, &acp_session_id, &title, worktree).await.map_err(err)
+    state
+        .engine
+        .adopt_session_with_created(&profile, &repo, &acp_session_id, &title, worktree, |record| {
+            let _ = created.send(record.clone());
+        })
+        .await
+        .map_err(err)
+}
+
+/// Ask a reviewer which run of a comparison to take. `facts` pairs a session id with a line of its numbers
+#[tauri::command]
+async fn compare_verdict(state: State<'_, AppState>, group: String, profile: String, instruction: String, facts: Vec<(String, String)>) -> CmdResult<String> {
+    let facts: std::collections::HashMap<String, String> = facts.into_iter().collect();
+    state.engine.compare_verdict(&group, &profile, &instruction, &facts).await.map_err(err)
+}
+
+/// Keep the record of a comparison once a run was taken (its runs' numbers are copied, so they outlive the sessions)
+#[tauri::command]
+fn record_comparison(state: State<'_, AppState>, record: plyfold_store::ComparisonRecord) -> CmdResult<()> {
+    state.engine.store().save_comparison(&record).map_err(err)
+}
+
+#[tauri::command]
+fn list_comparisons(state: State<'_, AppState>, repo: Option<String>) -> CmdResult<Vec<plyfold_store::ComparisonRecord>> {
+    state.engine.store().list_comparisons(repo.as_deref(), 50).map_err(err)
+}
+
+#[tauri::command]
+fn delete_comparison(state: State<'_, AppState>, run_group: String) -> CmdResult<()> {
+    state.engine.store().delete_comparison(&run_group).map_err(err)
 }
 
 #[tauri::command]
@@ -857,7 +889,7 @@ async fn merge_session(state: State<'_, AppState>, id: String) -> CmdResult<Merg
     let cleaned = if cleanup {
         state.engine.cleanup_worktree(&id).await.map_err(|e| {
             plyfold_i18n::tr!(
-                "{target} には取り込みましたが、片付けに失敗しました: {e}",
+                "{target} にはマージしましたが、後片付けに失敗しました: {e}",
                 "Merged into {target}, but cleanup failed: {e}",
                 "已合并到 {target}，但清理失败：{e}"
             )
@@ -1015,6 +1047,7 @@ pub fn run() {
             app.manage(AppState {
                 engine,
                 terminals: terminal::Terminals::default(),
+                shells: shell::Shells::default(),
                 data_dir: data_dir(&state_dir),
                 config: RwLock::new(config),
                 config_path,
@@ -1029,6 +1062,8 @@ pub fn run() {
             terminal::write_terminal,
             terminal::resize_terminal,
             terminal::stop_terminal,
+            shell::start_shell,
+            shell::stop_shell,
             list_profiles,
             list_sessions,
             session_history,
@@ -1064,6 +1099,10 @@ pub fn run() {
             open_side_chat,
             close_side_chat,
             list_cli_sessions,
+            compare_verdict,
+            record_comparison,
+            list_comparisons,
+            delete_comparison,
             registry_agents,
             add_registry_agent,
             remove_registry_agent,

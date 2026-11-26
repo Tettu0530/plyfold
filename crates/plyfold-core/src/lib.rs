@@ -63,6 +63,8 @@ pub enum CoreError {
     UnknownPermission(String),
     #[error("{}", plyfold_i18n::tr!("セッション {} には作業場所がありません", "Session {} has no workspace", "会话 {} 没有工作区", .0))]
     NoWorkspace(String),
+    #[error("{}", plyfold_i18n::tr!("比べられる実行が 2 つ以上ありません", "There are not two runs to compare", "没有两个可比较的运行"))]
+    NotEnoughRuns,
     #[error("{}", plyfold_i18n::tr!("このエージェントには {:?} の設定項目がありません", "This agent has no {:?} option", "此代理没有 {:?} 设置项", .0))]
     NoSuchOption(Category),
     #[error("{}", plyfold_i18n::tr!("添えたものを読めません: {}", "Cannot read the attachment: {}", "无法读取附件：{}", .0))]
@@ -101,6 +103,21 @@ pub enum CoreError {
     ConversationMissing,
     #[error("{}", plyfold_i18n::tr!("この会話はもう Plyfold にあります", "This conversation is already in Plyfold", "此对话已在 Plyfold 中"))]
     AlreadyInPlyfold,
+    /// Claude Code keeps the conversation running in its background, so a second process cannot take it over
+    #[error("{}", plyfold_i18n::tr!(
+        "この会話は、Claude Code のバックグラウンドで実行中のため引き継げません。`claude attach {0}` で開くか、`claude stop {0}` で止めてから、もう一度試してください",
+        "This conversation is running in Claude Code's background, so it cannot be continued here. Open it with `claude attach {0}` or stop it with `claude stop {0}`, then try again",
+        "此对话正在 Claude Code 的后台运行，无法在此继续。请用 `claude attach {0}` 打开，或用 `claude stop {0}` 停止后再试",
+        .0
+    ))]
+    ConversationRunning(String),
+}
+
+/// The id in "That session is running in the background (a2a3006e)", when the agent's error says so
+fn background_session(error: &str) -> Option<String> {
+    let rest = error.split("running in the background").nth(1)?;
+    let id = rest.trim_start().strip_prefix('(').and_then(|r| r.split(')').next()).unwrap_or_default();
+    Some(id.to_string())
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -497,8 +514,31 @@ impl Engine {
         {
             self.prepare_worktree(&rec.id, Path::new(&repo), &cwd).await;
         }
+        self.apply_default_reviewer(&rec.id).await;
         self.launch(&rec.id, &req.profile, &cwd, Resume::New).await?;
         Ok(inner.store.get_session(&rec.id)?)
+    }
+
+    /// A repository can name the profile that reviews its sessions from the start (Settings → Repositories)
+    async fn apply_default_reviewer(&self, id: &str) {
+        let inner = &self.inner;
+        let Ok(rec) = inner.store.get_session(id) else { return };
+        let Some(repo) = rec.repo_path.as_deref() else { return };
+        let reviewer = inner.repos.get(repo).reviewer;
+        let reviewer = reviewer.trim();
+        if reviewer.is_empty() || rec.chat || rec.review || rec.side_of.is_some() {
+            return;
+        }
+        if let Err(e) = self.set_reviewer(id, Some(reviewer)).await {
+            inner.notice(
+                id,
+                plyfold_i18n::tr!(
+                    "このリポジトリの既定のレビュー担当を設定できません: {e}",
+                    "Cannot set this repository's default reviewer: {e}",
+                    "无法设置此仓库的默认审阅者：{e}"
+                ),
+            );
+        }
     }
 
     /// A new worktree gets the repository's untracked files it needs and runs its setup script, before the agent
@@ -944,6 +984,20 @@ impl Engine {
     /// With `worktree`, the conversation continues in a worktree of its own; without it, or when `repo` is not a git
     /// repository, in the folder itself
     pub async fn adopt_session(&self, profile: &str, repo: &Path, acp_session_id: &str, title: &str, worktree: bool) -> Result<SessionRecord, CoreError> {
+        self.adopt_session_with_created(profile, repo, acp_session_id, title, worktree, |_| {}).await
+    }
+
+    /// `created` is called as soon as the session's record exists, before its folder is prepared and the agent loads
+    /// the conversation, so a caller can show the session while that happens
+    pub async fn adopt_session_with_created(
+        &self,
+        profile: &str,
+        repo: &Path,
+        acp_session_id: &str,
+        title: &str,
+        worktree: bool,
+        created: impl FnOnce(&SessionRecord) + Send,
+    ) -> Result<SessionRecord, CoreError> {
         let inner = &self.inner;
         if acp_session_id.is_empty() {
             return Err(CoreError::NoConversation(String::new()));
@@ -955,6 +1009,7 @@ impl Engine {
         let title = if title.trim().is_empty() { plyfold_i18n::tr!("（無題）", "(untitled)", "（无标题）") } else { title.to_string() };
         let rec = inner.store.create_session(NewSession { title, profile: profile.to_string(), agent, ..Default::default() })?;
         inner.emit(EngineEvent::SessionCreated { session: rec.clone() });
+        created(&rec);
         let in_git = plyfold_worktree::repo_root(repo).is_ok();
         let prepared = if worktree && in_git {
             inner.worktrees.create(repo, &rec.id, None).map_err(CoreError::from)
@@ -1118,7 +1173,12 @@ impl Engine {
                             }
                             // Adopting a missing conversation must not silently start a blank one
                             Err(AcpError::Rpc { code: -32002, .. }) if *adopted => return Err(CoreError::ConversationMissing),
-                            Err(e) if *adopted => return Err(e.into()),
+                            Err(e) if *adopted => {
+                                return Err(match background_session(&e.to_string()) {
+                                    Some(id) => CoreError::ConversationRunning(id),
+                                    None => e.into(),
+                                });
+                            }
                             // The agent has no record of the conversation (e.g. it exited before saving). Continue in a new session
                             Err(AcpError::Rpc { code: -32002, .. }) => {
                                 fallback = Some(plyfold_i18n::tr!(
@@ -1368,9 +1428,59 @@ impl Engine {
             inner.reviews.lock().unwrap().entry(id.to_string()).or_default().pending = true;
             return Ok(Some(reviewer));
         }
-        self.prompt(&reviewer, &review_prompt(&diff, instruction.as_deref()))?;
+        let rules = rec.repo_path.as_deref().map(|repo| inner.repos.get(repo).review).unwrap_or_default();
+        self.prompt(&reviewer, &review_prompt(&diff, instruction.as_deref(), Some(&rules)))?;
         inner.reviews.lock().unwrap().entry(id.to_string()).or_default().last = Some(hash);
         Ok(Some(reviewer))
+    }
+
+    /// Ask a reviewer which of the runs started together from one prompt to take. It reads every run's diff and the
+    /// numbers given in `facts` (session id → a line such as time, tokens and cost), and answers in a session of its
+    /// own at the repository. Returns that session's id
+    pub async fn compare_verdict(&self, group: &str, profile: &str, instruction: &str, facts: &HashMap<String, String>) -> Result<String, CoreError> {
+        let inner = &self.inner;
+        {
+            let config = inner.config.read().unwrap();
+            if !config.profiles.contains_key(profile) && !config.agents.contains_key(profile) {
+                return Err(ProfileError::UnknownTarget(profile.into()).into());
+            }
+        }
+        let mut members: Vec<SessionRecord> = inner
+            .store
+            .list_sessions()?
+            .into_iter()
+            .filter(|s| s.run_group.as_deref() == Some(group) && s.trashed_at.is_none() && s.side_of.is_none() && !s.review && s.worktree_path.is_some())
+            .collect();
+        members.sort_by_key(|s| s.created_at);
+        if members.len() < 2 {
+            return Err(CoreError::NotEnoughRuns);
+        }
+        let repo = members[0].repo_path.clone().ok_or_else(|| CoreError::NoWorkspace(members[0].id.clone()))?;
+        let mut runs = Vec::new();
+        for m in &members {
+            let diff = self.diff(&m.id)?;
+            runs.push(VerdictRun {
+                label: if m.profile == m.agent { m.agent.clone() } else { m.profile.clone() },
+                branch: m.branch.clone().unwrap_or_default(),
+                facts: facts.get(&m.id).cloned().unwrap_or_default(),
+                diff,
+            });
+        }
+        let rules = inner.repos.get(&repo).review;
+        let prompt = verdict_prompt(instruction, &runs, Some(&rules));
+
+        let agent = inner.config.read().unwrap().profiles.get(profile).map(|p| p.agent.clone()).unwrap_or_else(|| profile.to_string());
+        let first = members[0].title.clone();
+        let title = plyfold_i18n::tr!("判定: {first}", "Verdict: {first}", "判定：{first}");
+        let rec = inner.store.create_session(NewSession { title, profile: profile.to_string(), agent, repo_path: Some(repo.clone()), ..Default::default() })?;
+        inner.emit(EngineEvent::SessionCreated { session: rec.clone() });
+        self.launch(&rec.id, profile, Path::new(&repo), Resume::New).await?;
+        // The verdict only reads: ask the agent for its read-only mode where it has one
+        if let Some(mode) = self.session_info(&rec.id).and_then(|info| read_only_mode(&info)) {
+            let _ = self.set_category(&rec.id, Category::Mode, &mode).await;
+        }
+        self.prompt(&rec.id, &prompt)?;
+        Ok(rec.id)
     }
 
     async fn start_reviewer(&self, rec: &SessionRecord, profile: &str) -> Result<String, CoreError> {
@@ -1813,7 +1923,7 @@ impl Engine {
                 self.inner.worktrees.remove(&wt, true)?;
             } else {
                 let note = plyfold_i18n::tr!(
-                    "同じ worktree のセッションを消しました。このセッションが使っているので、worktree と枝は残してあります",
+                    "同じ worktree のセッションを消しました。このセッションが使っているので、worktree とブランチは保持しています",
                     "A session that shared this worktree was deleted. The worktree and branch were kept, because this session still uses them",
                     "已删除一个共用此 worktree 的会话。此会话仍在使用，因此保留了 worktree 和分支"
                 );
@@ -1971,7 +2081,7 @@ impl Engine {
         }
         let (dir, _) = self.git_dir(id)?;
         plyfold_worktree::remote::pull(&dir)?;
-        self.inner.notice(id, plyfold_i18n::tr!("リモートの新しいコミットを取り込みました", "Pulled the new commits from the remote", "已拉取远程的新提交"));
+        self.inner.notice(id, plyfold_i18n::tr!("リモートの新しいコミットを pull しました", "Pulled the new commits from the remote", "已拉取远程的新提交"));
         Ok(())
     }
 
@@ -1999,7 +2109,7 @@ impl Engine {
     pub fn merge(&self, id: &str) -> Result<String, CoreError> {
         let wt = self.idle_worktree(id)?;
         let target = plyfold_worktree::ops::merge(&wt)?;
-        self.inner.notice(id, plyfold_i18n::tr!("{} を {target} に取り込みました", "Merged {} into {target}", "已将 {} 合并到 {target}", wt.branch));
+        self.inner.notice(id, plyfold_i18n::tr!("{} を {target} にマージしました", "Merged {} into {target}", "已将 {} 合并到 {target}", wt.branch));
         Ok(target)
     }
 
@@ -2029,7 +2139,7 @@ impl Engine {
             self.inner.notice(
                 id,
                 plyfold_i18n::tr!(
-                    "別のセッションが同じ worktree を使っているので、worktree と枝は残しました",
+                    "別のセッションが同じ worktree を使っているので、worktree とブランチは保持しました",
                     "Kept the worktree and branch, because another session still uses them",
                     "另一个会话仍在使用同一 worktree，因此保留了 worktree 和分支"
                 ),
@@ -2038,8 +2148,10 @@ impl Engine {
         }
         self.inner.worktrees.remove(&wt, true)?;
         self.inner.store.set_workspace(id, rec.repo_path.as_deref(), None, None, None)?;
-        self.inner
-            .notice(id, plyfold_i18n::tr!("worktree と枝 {} を片付けました", "Removed the worktree and branch {}", "已清理 worktree 和分支 {}", wt.branch));
+        self.inner.notice(
+            id,
+            plyfold_i18n::tr!("worktree とブランチ {} を削除しました", "Removed the worktree and branch {}", "已清理 worktree 和分支 {}", wt.branch),
+        );
         Ok(true)
     }
 
@@ -2492,8 +2604,68 @@ fn hit_limit(text: &str, answer: bool) -> bool {
 /// The longest diff sent to a reviewer (it reads files itself for the rest)
 const REVIEW_DIFF_MAX: usize = 120_000;
 
+/// One run in a comparison, as the verdict reviewer sees it
+struct VerdictRun {
+    label: String,
+    branch: String,
+    facts: String,
+    diff: Diff,
+}
+
+/// What the verdict reviewer is asked: the shared instruction, then each run's numbers and diff, and the shape of the answer
+fn verdict_prompt(instruction: &str, runs: &[VerdictRun], rules: Option<&str>) -> String {
+    // Every run gets an equal share of what one review may carry
+    let share = (REVIEW_DIFF_MAX / runs.len().max(1)).max(8_000);
+    let instruction = Some(instruction.trim()).filter(|i| !i.is_empty()).unwrap_or("—");
+    let mut text = plyfold_i18n::tr!(
+        "同じ指示を複数のエージェントに並べて実行させました。それぞれの結果を比べ、どれをマージすべきかを判断してください。ファイルの編集や、何かを変えるコマンドの実行はしないでください（ファイルを読むのは構いません）。\n\n共通の指示:\n{instruction}",
+        "The same instruction was run side by side on several agents. Compare the results and decide which one to take. Do not edit files or run commands that change anything (reading files is fine).\n\nThe shared instruction:\n{instruction}",
+        "同一条指令被并行交给多个代理执行。请比较各自的结果，判断应采用哪一个。不要编辑文件，也不要运行会更改任何内容的命令（可以读取文件）。\n\n共同的指令：\n{instruction}"
+    );
+    if let Some(rules) = rules.map(str::trim).filter(|r| !r.is_empty()) {
+        text += &plyfold_i18n::tr!(
+            "\n\nこのリポジトリのレビュー方針（判断に使ってください）:\n{rules}",
+            "\n\nReview rules for this repository (use them in your judgment):\n{rules}",
+            "\n\n此仓库的审查规则（请用于判断）：\n{rules}"
+        );
+    }
+    for (i, run) in runs.iter().enumerate() {
+        let files = run.diff.files.iter().map(|f| format!("- {} (+{} -{})", f.path, f.added, f.removed)).collect::<Vec<_>>().join("\n");
+        let mut patch = run.diff.patch.as_str();
+        let cut = patch.len() > share;
+        if cut {
+            let mut end = share;
+            while !patch.is_char_boundary(end) {
+                end -= 1;
+            }
+            patch = &patch[..end];
+        }
+        text += &format!("\n\n## {} {}: {}", plyfold_i18n::tr!("実行", "Run", "运行"), i + 1, run.label);
+        if !run.branch.is_empty() {
+            text += &format!(" ({})", run.branch);
+        }
+        if !run.facts.is_empty() {
+            text += &format!("\n{}", run.facts);
+        }
+        text += &format!("\n\n{files}\n\n~~~~diff\n{patch}\n~~~~");
+        if cut {
+            text += &plyfold_i18n::tr!(
+                "\n（差分が長いので途中で切りました。残りは作業フォルダのファイルを読んで確かめてください）",
+                "\n(The diff is long and was cut here; read the files in the worktree for the rest)",
+                "\n（差异过长，已在此截断；其余部分请读取工作文件夹中的文件）"
+            );
+        }
+    }
+    text += &plyfold_i18n::tr!(
+        "\n\n最初の行に「採用: <実行の名前>」と書き、続けて理由を、正しさ、指示への沿い方、変更の小ささ、リスクの順に短く述べてください。他の実行でマージする価値のある部分や、どれも採用できない場合はその理由も添えてください。",
+        "\n\nStart with `Take: <the run's name>`, then give the reasons briefly: correctness, how well it follows the instruction, how small the change is, and risks. Mention anything worth taking from the others, or say why none should be taken.",
+        "\n\n第一行写「采用：<运行名称>」，然后简要说明理由：正确性、对指令的贴合度、改动是否精简、风险。如果其他运行中有值得采纳的部分，或都不应采用，请一并说明。"
+    );
+    text
+}
+
 /// What a reviewer is asked: the instruction behind the turn, the files changed and the diff, and the shape of the answer
-fn review_prompt(diff: &Diff, instruction: Option<&str>) -> String {
+fn review_prompt(diff: &Diff, instruction: Option<&str>, rules: Option<&str>) -> String {
     let files = diff.files.iter().map(|f| format!("- {} (+{} -{})", f.path, f.added, f.removed)).collect::<Vec<_>>().join("\n");
     let mut patch = diff.patch.as_str();
     let cut = patch.len() > REVIEW_DIFF_MAX;
@@ -2515,6 +2687,13 @@ fn review_prompt(diff: &Diff, instruction: Option<&str>) -> String {
             "\n\n（差分が長いので途中で切りました。残りはファイルを読んで確かめてください）",
             "\n\n(The diff is long and was cut here; read the files for the rest)",
             "\n\n（差异过长，已在此截断；其余部分请直接读取文件）"
+        );
+    }
+    if let Some(rules) = rules.map(str::trim).filter(|r| !r.is_empty()) {
+        text += &plyfold_i18n::tr!(
+            "\n\nこのリポジトリのレビュー方針（これに沿って確かめてください）:\n{rules}",
+            "\n\nReview rules for this repository (check against these):\n{rules}",
+            "\n\n此仓库的审查规则（请据此检查）：\n{rules}"
         );
     }
     text += &plyfold_i18n::tr!(
@@ -2653,5 +2832,41 @@ mod limit_tests {
             copy_conversation(&from, &to, sid).unwrap();
             assert!(!to.join("linked").exists(), "a linked directory is not followed");
         }
+    }
+}
+
+#[cfg(test)]
+mod background_tests {
+    use super::{VerdictRun, background_session, review_prompt, verdict_prompt};
+    use plyfold_worktree::Diff;
+
+    #[test]
+    fn the_verdict_request_carries_every_run() {
+        let run = |label: &str, patch: &str| VerdictRun {
+            label: label.into(),
+            branch: format!("plyfold/{label}"),
+            facts: "time 3s".into(),
+            diff: Diff { files: vec![], patch: patch.into() },
+        };
+        let text = verdict_prompt("add a flag", &[run("claude", "+a"), run("codex", "+b")], Some("Check tests"));
+        for needle in ["add a flag", "claude", "codex", "plyfold/codex", "time 3s", "+a", "+b", "Check tests"] {
+            assert!(text.contains(needle), "missing {needle}");
+        }
+    }
+
+    #[test]
+    fn repository_review_rules_go_into_the_review_request() {
+        let diff = Diff { files: vec![], patch: "+x".into() };
+        assert!(review_prompt(&diff, None, Some("Check SQL for injection")).contains("Check SQL for injection"));
+        assert!(!review_prompt(&diff, None, Some("  ")).contains("injection"));
+        assert_eq!(review_prompt(&diff, None, None), review_prompt(&diff, None, Some("")));
+    }
+
+    #[test]
+    fn reads_the_id_of_a_session_running_in_the_background() {
+        let msg = "Internal error: Error: That session is running in the background (a2a3006e). Run `claude attach a2a3006e` to open it";
+        assert_eq!(background_session(msg).as_deref(), Some("a2a3006e"));
+        assert_eq!(background_session("That session is running in the background").as_deref(), Some(""));
+        assert_eq!(background_session("Resource not found"), None);
     }
 }
