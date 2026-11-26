@@ -326,7 +326,6 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
                   </PopoverTrigger>
                 )}
                 {startKind === "conversation" && <span className="px-2 text-muted-foreground">{t("draft.chat")}</span>}
-                <span className="grow" />
                 {continueMode && current?.agent !== "gemini" && draft.profile && (
                   <CliSessions
                     key={`${draft.profile}:${draft.repo}`}
@@ -338,6 +337,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
                     onOpenChange={setContinueOpen}
                   />
                 )}
+                <span className="grow" />
                 <ControlRow
                   scope={id}
                   agent={current?.agent ?? ""}
