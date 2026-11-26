@@ -363,12 +363,13 @@ function QueueEdit({ initial, onSave, onCancel }: { initial: string; onSave: (te
  */
 function CommandLayer({
   text,
-  name,
+  head,
   ghost,
   textRef,
 }: {
   text: string;
-  name: string;
+  /** How many leading characters are drawn in the command colour */
+  head: number;
   ghost: string | null;
   textRef: React.RefObject<HTMLTextAreaElement | null>;
 }) {
@@ -377,7 +378,6 @@ function CommandLayer({
   useEffect(() => {
     if (ref.current && textRef.current) ref.current.scrollTop = textRef.current.scrollTop;
   });
-  const head = name.length + 1;
   return (
     <div ref={ref} aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden py-1 text-sm leading-relaxed break-words whitespace-pre-wrap">
       <span className="text-command">{text.slice(0, head)}</span>
@@ -444,6 +444,9 @@ export function Composer({
   const slash = useSlash({ commands: cmds, models, text, setText, textRef, boxRef: att.boxRef, scope });
   // A whole command at the start is shown in blue, and its input hint faintly after "/name " (see CommandLayer)
   const command = commandAt(text, cmds);
+  // "!" at the start is shell mode: the "!" and the command's name are coloured the same way
+  const shellMode = !!onShell && !command && text.startsWith("!") && att.items.length === 0;
+  const head = command ? command.name.length + 1 : shellMode ? (/^!\s*\S*/.exec(text)?.[0].length ?? 1) : 0;
   const ghost = ghostHint(text, slash.caret, cmds);
   useEffect(() => {
     att.syncMentions(text);
@@ -493,7 +496,7 @@ export function Composer({
       <SlashMenu m={slash} boxRef={att.boxRef} />
       <AttachBox att={att}>
         <div className="relative flex min-h-0 grow">
-          {command && <CommandLayer text={text} name={command.name} ghost={ghost} textRef={textRef} />}
+          {(command || shellMode) && <CommandLayer text={text} head={head} ghost={command ? ghost : null} textRef={textRef} />}
           <textarea
             ref={textRef}
             aria-label={t("composer.message")}
@@ -532,7 +535,7 @@ export function Composer({
             className={cn(
               "relative min-h-0 w-full grow resize-none bg-transparent py-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground",
               // The layer behind draws the text while a command is recognised; the caret and selection stay here
-              command && "text-transparent caret-foreground",
+              (command || shellMode) && "text-transparent caret-foreground",
             )}
           />
         </div>
