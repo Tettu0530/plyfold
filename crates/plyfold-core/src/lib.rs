@@ -101,6 +101,21 @@ pub enum CoreError {
     ConversationMissing,
     #[error("{}", plyfold_i18n::tr!("この会話はもう Plyfold にあります", "This conversation is already in Plyfold", "此对话已在 Plyfold 中"))]
     AlreadyInPlyfold,
+    /// Claude Code keeps the conversation running in its background, so a second process cannot take it over
+    #[error("{}", plyfold_i18n::tr!(
+        "この会話は、Claude Code のバックグラウンドで実行中のため引き継げません。`claude attach {0}` で開くか、`claude stop {0}` で止めてから、もう一度試してください",
+        "This conversation is running in Claude Code's background, so it cannot be continued here. Open it with `claude attach {0}` or stop it with `claude stop {0}`, then try again",
+        "此对话正在 Claude Code 的后台运行，无法在此继续。请用 `claude attach {0}` 打开，或用 `claude stop {0}` 停止后再试",
+        .0
+    ))]
+    ConversationRunning(String),
+}
+
+/// The id in "That session is running in the background (a2a3006e)", when the agent's error says so
+fn background_session(error: &str) -> Option<String> {
+    let rest = error.split("running in the background").nth(1)?;
+    let id = rest.trim_start().strip_prefix('(').and_then(|r| r.split(')').next()).unwrap_or_default();
+    Some(id.to_string())
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1118,7 +1133,12 @@ impl Engine {
                             }
                             // Adopting a missing conversation must not silently start a blank one
                             Err(AcpError::Rpc { code: -32002, .. }) if *adopted => return Err(CoreError::ConversationMissing),
-                            Err(e) if *adopted => return Err(e.into()),
+                            Err(e) if *adopted => {
+                                return Err(match background_session(&e.to_string()) {
+                                    Some(id) => CoreError::ConversationRunning(id),
+                                    None => e.into(),
+                                });
+                            }
                             // The agent has no record of the conversation (e.g. it exited before saving). Continue in a new session
                             Err(AcpError::Rpc { code: -32002, .. }) => {
                                 fallback = Some(plyfold_i18n::tr!(
@@ -2653,5 +2673,18 @@ mod limit_tests {
             copy_conversation(&from, &to, sid).unwrap();
             assert!(!to.join("linked").exists(), "a linked directory is not followed");
         }
+    }
+}
+
+#[cfg(test)]
+mod background_tests {
+    use super::background_session;
+
+    #[test]
+    fn reads_the_id_of_a_session_running_in_the_background() {
+        let msg = "Internal error: Error: That session is running in the background (a2a3006e). Run `claude attach a2a3006e` to open it";
+        assert_eq!(background_session(msg).as_deref(), Some("a2a3006e"));
+        assert_eq!(background_session("That session is running in the background").as_deref(), Some(""));
+        assert_eq!(background_session("Resource not found"), None);
     }
 }

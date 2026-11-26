@@ -9,6 +9,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 - A review finding can be sent back to the reviewed session as an instruction with one click. It is queued when the session is mid-turn
 - Type `!` in an empty input to enter shell mode, which runs a command in the session's folder (Esc or Backspace on an empty input goes back). The output appears in the conversation, can be stopped while it runs, and is sent to the agent only when you choose to
 
+### Fixed
+
+- Continuing a conversation that Claude Code is running in its background now says so, with the `claude attach` and `claude stop` commands to use, instead of showing the raw RPC error
+
 ## [0.6.4] - 2026-11-25
 
 ### Added
