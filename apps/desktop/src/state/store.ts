@@ -11,8 +11,30 @@ import { notify } from "@/lib/notify";
 import { loadInfoCache, saveInfoCache, snapshot, type InfoCache } from "./infoCache";
 import { commandsFromHistory } from "@/lib/commands";
 import type { SlashCommand } from "@/lib/types";
-import type { AppSettings, Category, SessionStatus, EngineEvent, ProfileSummary, ProfileUsage, QueuedTask, SessionInfo, SessionRecord, ShellEvent } from "@/lib/types";
-import { addNotice, addShell, applyUpdate, beginTurn, emptyTranscript, endTurn, fromHistory, type PendingPermission, type Transcript, updateShell } from "./transcript";
+import type {
+  AppSettings,
+  Category,
+  SessionStatus,
+  EngineEvent,
+  ProfileSummary,
+  ProfileUsage,
+  QueuedTask,
+  SessionInfo,
+  SessionRecord,
+  ShellEvent,
+} from "@/lib/types";
+import {
+  addNotice,
+  addShell,
+  applyUpdate,
+  beginTurn,
+  emptyTranscript,
+  endTurn,
+  fromHistory,
+  type PendingPermission,
+  type Transcript,
+  updateShell,
+} from "./transcript";
 
 export interface SideChat {
   /** The fork's session id, once it has started */

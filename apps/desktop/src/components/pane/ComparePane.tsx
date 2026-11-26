@@ -79,7 +79,16 @@ export function ComparePane({ index, id }: { index: number; id: string }) {
   const answer = useMemo(() => (verdictView?.transcript.items ?? []).flatMap((it) => (it.kind === "agent" ? [it.text] : [])).join("\n"), [verdictView]);
   // Not answered yet; a conversation that is not loaded (after a restart) is opened from the button instead
   const verdictPending = !!verdictView && (verdictView.transcript.inTurn || (answer === "" && verdictView.historyLoaded));
-  const choice = useMemo(() => (answer ? verdictChoice(answer, members.map((m) => m.record)) : null), [answer, members]);
+  const choice = useMemo(
+    () =>
+      answer
+        ? verdictChoice(
+            answer,
+            members.map((m) => m.record),
+          )
+        : null,
+    [answer, members],
+  );
   // After one is merged: which, and where it went
   const [merged, setMerged] = useState<{ id: string; target: string } | null>(null);
   // Bumped when this comparison was recorded, so the list of past comparisons reads again
@@ -226,7 +235,13 @@ function ComparisonHistory({ repo, current, reload }: { repo: string | null; cur
               {c.runs.map((r) => {
                 const taken = r.session_id === c.taken_session;
                 return (
-                  <li key={r.session_id} className={cn("grid grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] items-center gap-x-3 rounded-md px-1.5 py-1 font-mono tabular", taken && "bg-working/10")}>
+                  <li
+                    key={r.session_id}
+                    className={cn(
+                      "grid grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] items-center gap-x-3 rounded-md px-1.5 py-1 font-mono tabular",
+                      taken && "bg-working/10",
+                    )}
+                  >
                     <span className="flex min-w-0 items-center gap-1.5 font-sans">
                       {taken ? <Check className="size-3 shrink-0 text-working" aria-label={t("compare.historyTaken")} /> : <span className="size-3 shrink-0" />}
                       <span className="truncate">{r.profile === r.agent ? agentName(r.agent) : r.profile}</span>
@@ -242,7 +257,9 @@ function ComparisonHistory({ repo, current, reload }: { repo: string | null; cur
               })}
             </ul>
             {c.verdict_run && c.verdict_run !== c.taken_session && (
-              <span className="text-muted-foreground">{t("compare.verdictChose", { run: c.runs.find((r) => r.session_id === c.verdict_run)?.profile ?? "" })}</span>
+              <span className="text-muted-foreground">
+                {t("compare.verdictChose", { run: c.runs.find((r) => r.session_id === c.verdict_run)?.profile ?? "" })}
+              </span>
             )}
           </div>
         ))}
