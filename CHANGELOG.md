@@ -11,6 +11,8 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 - Repositories can have review rules and a default reviewer (Settings → Repositories). The rules go along with every review request, and new sessions there are reviewed by that profile from the start
 
+- A comparison can ask a reviewer which run to take. The reviewer reads every run's diff, time, tokens and cost, and answers in a session of its own
+
 ### Fixed
 
 - Continuing a conversation from the directory's sessions opens the new session as soon as its record is created, as starting a new session does

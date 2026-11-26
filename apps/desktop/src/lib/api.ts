@@ -59,6 +59,8 @@ export const api = {
   listCliSessions: (profile: string, repo: string) => invoke<CliSession[]>("list_cli_sessions", { profile, repo }),
   adoptCliSession: (profile: string, repo: string, acpSessionId: string, title: string, worktree: boolean, created?: (record: SessionRecord) => void) =>
     invoke<SessionRecord>("adopt_cli_session", { profile, repo, acpSessionId, title, worktree, created: new Channel(created) }),
+  compareVerdict: (group: string, profile: string, instruction: string, facts: [string, string][]) =>
+    invoke<string>("compare_verdict", { group, profile, instruction, facts }),
   renameSession: (id: string, title: string) => invoke<void>("rename_session", { id, title }),
   closeSession: (id: string) => invoke<void>("close_session", { id }),
   deleteSession: (id: string, removeWorktree: boolean) => invoke<void>("delete_session", { id, removeWorktree }),

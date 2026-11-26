@@ -1,6 +1,6 @@
 // The sessions started together from one prompt, side by side in numbers: how each did (state, time, tokens, cost,
 // diff), and a way to take the one you want into the repository and put the rest in the trash
-import { Check, Columns3, ExternalLink, GitBranch, GitMerge, Trash2, X } from "lucide-react";
+import { Check, Columns3, ExternalLink, GitBranch, GitMerge, Scale, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { useT } from "@/i18n";
@@ -9,7 +9,8 @@ import { money, seconds, tokens } from "@/lib/format";
 import type { SessionRecord } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { compareGroupOf, isListed, useStore, type SessionView } from "@/state/store";
-import { agentName, ProviderLogo, STATUS, StatusIcon } from "../icons";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { agentName, ProviderLogo, Spinner, STATUS, StatusIcon } from "../icons";
 import { startDrag } from "./dnd";
 import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
 
@@ -104,12 +105,78 @@ export function ComparePane({ index, id }: { index: number; id: string }) {
 
       <div className="flex min-h-0 grow flex-col gap-2 overflow-y-auto p-3">
         {members.length === 0 && <p className="p-1 text-xs text-muted-foreground">{t("compare.empty")}</p>}
+        {members.length >= 2 && <VerdictBar group={group} members={members} />}
         {members.map((v) => (
           <Row key={v.record.id} v={v} merged={merged} onMerged={(target) => setMerged({ id: v.record.id, target })} />
         ))}
         {merged && members.length > 1 && <TrashOthers keep={merged.id} others={members.filter((m) => m.record.id !== merged.id).map((m) => m.record)} />}
       </div>
     </section>
+  );
+}
+
+/** Ask a reviewer which run to take: it reads every run's diff and numbers, and answers in a session of its own */
+function VerdictBar({ group, members }: { group: string; members: SessionView[] }) {
+  const t = useT();
+  const profiles = useStore((s) => s.profiles);
+  const names = profiles.map((p) => p.name);
+  // A reviewer apart from the runs judges more fairly: start from a profile none of them used
+  const [choice, setChoice] = useState<string | null>(null);
+  const used = new Set(members.map((m) => m.record.profile));
+  const profile = choice && names.includes(choice) ? choice : (names.find((n) => !used.has(n)) ?? names[0] ?? "");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const busy = members.some((m) => BUSY.has(m.record.status));
+
+  const ask = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      const first = members[0].transcript.items.find((it) => it.kind === "user");
+      const facts: [string, string][] = members.map((m) => {
+        const sum = totals(m);
+        const cost = m.info?.cost ? money(m.info.cost.amount, m.info.cost.currency) : "—";
+        return [m.record.id, `time ${sum.ms > 0 ? seconds(sum.ms) : "—"} · tokens ↑${tokens(sum.input)} ↓${tokens(sum.output)} · cost ${cost}`];
+      });
+      const id = await api.compareVerdict(group, profile, first?.kind === "user" ? first.text : "", facts);
+      await useStore.getState().openInPane(id);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5 rounded-[10px] border p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Scale className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        <span className="text-xs text-muted-foreground">{t("compare.verdictBy")}</span>
+        <Select value={profile} onValueChange={setChoice} disabled={pending}>
+          <SelectTrigger size="sm" aria-label={t("compare.verdictBy")} className="min-w-0 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" align="start">
+            {profiles.map((p) => (
+              <SelectItem key={p.name} value={p.name}>
+                {p.name === p.agent ? p.label : p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <span className="grow" />
+        <Action
+          icon={pending ? <Spinner className="size-3.5" /> : <Scale className="size-3.5" aria-hidden />}
+          onClick={() => void ask()}
+          disabled={busy || pending || !profile}
+          title={busy ? t("compare.verdictBusy") : undefined}
+        >
+          {t("compare.verdict")}
+        </Action>
+      </div>
+      <p className="m-0 text-xs leading-relaxed text-muted-foreground">{t("compare.verdictHint")}</p>
+      {error && <p className="m-0 text-xs whitespace-pre-wrap text-error">{error}</p>}
+    </div>
   );
 }
 

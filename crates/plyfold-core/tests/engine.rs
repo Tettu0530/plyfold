@@ -113,6 +113,36 @@ async fn branch_switch_waits_for_other_sessions_using_the_same_repository() {
 }
 
 #[tokio::test]
+async fn verdict_session_is_asked_with_every_run() {
+    use std::collections::HashMap;
+
+    let base = tmp("verdict");
+    let repo = base.join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    git_repo(&repo);
+    let eng = engine(&base.join("state"), 60_000);
+    let mut rx = eng.subscribe();
+    let request = |title: &str| StartSession { profile: "mock".into(), title: title.into(), repo: repo.clone(), worktree: true };
+    let a = eng.start_session(request("one")).await.unwrap();
+    // One run is not a comparison
+    eng.set_run_group(&a.id, Some("g")).unwrap();
+    let no_facts = HashMap::new();
+    assert!(matches!(eng.compare_verdict("g", "mock", "do it", &no_facts).await, Err(plyfold_core::CoreError::NotEnoughRuns)));
+
+    let b = eng.start_session(request("two")).await.unwrap();
+    eng.set_run_group(&b.id, Some("g")).unwrap();
+    let facts = HashMap::from([(a.id.clone(), "time 1s".to_string())]);
+    let verdict = eng.compare_verdict("g", "mock", "do it", &facts).await.unwrap();
+    wait_for(&mut rx, |e| matches!(e, EngineEvent::TurnEnded { session_id, .. } if session_id == &verdict)).await;
+    let record = eng.store().get_session(&verdict).unwrap();
+    // A session of its own at the repository, kept out of the comparison
+    assert_eq!(record.run_group, None);
+    assert_eq!(record.repo_path.as_deref(), Some(repo.to_str().unwrap()));
+    let sent = eng.store().events(&verdict, None, 2000).unwrap().into_iter().map(|e| e.payload).collect::<Vec<_>>().join("\n");
+    assert!(sent.contains("do it") && sent.contains("time 1s"), "the request is missing the instruction or numbers");
+}
+
+#[tokio::test]
 async fn worktree_session_with_permission_and_diff() {
     let base = tmp("perm");
     let repo = base.join("repo");

@@ -473,6 +473,13 @@ async fn adopt_cli_session(
         .map_err(err)
 }
 
+/// Ask a reviewer which run of a comparison to take. `facts` pairs a session id with a line of its numbers
+#[tauri::command]
+async fn compare_verdict(state: State<'_, AppState>, group: String, profile: String, instruction: String, facts: Vec<(String, String)>) -> CmdResult<String> {
+    let facts: std::collections::HashMap<String, String> = facts.into_iter().collect();
+    state.engine.compare_verdict(&group, &profile, &instruction, &facts).await.map_err(err)
+}
+
 #[tauri::command]
 async fn close_session(state: State<'_, AppState>, id: String) -> CmdResult<()> {
     state.engine.close_session(&id).await.map_err(err)
@@ -1076,6 +1083,7 @@ pub fn run() {
             open_side_chat,
             close_side_chat,
             list_cli_sessions,
+            compare_verdict,
             registry_agents,
             add_registry_agent,
             remove_registry_agent,

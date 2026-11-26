@@ -63,6 +63,8 @@ pub enum CoreError {
     UnknownPermission(String),
     #[error("{}", plyfold_i18n::tr!("セッション {} には作業場所がありません", "Session {} has no workspace", "会话 {} 没有工作区", .0))]
     NoWorkspace(String),
+    #[error("{}", plyfold_i18n::tr!("比べられる実行が 2 つ以上ありません", "There are not two runs to compare", "没有两个可比较的运行"))]
+    NotEnoughRuns,
     #[error("{}", plyfold_i18n::tr!("このエージェントには {:?} の設定項目がありません", "This agent has no {:?} option", "此代理没有 {:?} 设置项", .0))]
     NoSuchOption(Category),
     #[error("{}", plyfold_i18n::tr!("添えたものを読めません: {}", "Cannot read the attachment: {}", "无法读取附件：{}", .0))]
@@ -1432,6 +1434,55 @@ impl Engine {
         Ok(Some(reviewer))
     }
 
+    /// Ask a reviewer which of the runs started together from one prompt to take. It reads every run's diff and the
+    /// numbers given in `facts` (session id → a line such as time, tokens and cost), and answers in a session of its
+    /// own at the repository. Returns that session's id
+    pub async fn compare_verdict(&self, group: &str, profile: &str, instruction: &str, facts: &HashMap<String, String>) -> Result<String, CoreError> {
+        let inner = &self.inner;
+        {
+            let config = inner.config.read().unwrap();
+            if !config.profiles.contains_key(profile) && !config.agents.contains_key(profile) {
+                return Err(ProfileError::UnknownTarget(profile.into()).into());
+            }
+        }
+        let mut members: Vec<SessionRecord> = inner
+            .store
+            .list_sessions()?
+            .into_iter()
+            .filter(|s| s.run_group.as_deref() == Some(group) && s.trashed_at.is_none() && s.side_of.is_none() && !s.review && s.worktree_path.is_some())
+            .collect();
+        members.sort_by_key(|s| s.created_at);
+        if members.len() < 2 {
+            return Err(CoreError::NotEnoughRuns);
+        }
+        let repo = members[0].repo_path.clone().ok_or_else(|| CoreError::NoWorkspace(members[0].id.clone()))?;
+        let mut runs = Vec::new();
+        for m in &members {
+            let diff = self.diff(&m.id)?;
+            runs.push(VerdictRun {
+                label: if m.profile == m.agent { m.agent.clone() } else { m.profile.clone() },
+                branch: m.branch.clone().unwrap_or_default(),
+                facts: facts.get(&m.id).cloned().unwrap_or_default(),
+                diff,
+            });
+        }
+        let rules = inner.repos.get(&repo).review;
+        let prompt = verdict_prompt(instruction, &runs, Some(&rules));
+
+        let agent = inner.config.read().unwrap().profiles.get(profile).map(|p| p.agent.clone()).unwrap_or_else(|| profile.to_string());
+        let first = members[0].title.clone();
+        let title = plyfold_i18n::tr!("判定: {first}", "Verdict: {first}", "判定：{first}");
+        let rec = inner.store.create_session(NewSession { title, profile: profile.to_string(), agent, repo_path: Some(repo.clone()), ..Default::default() })?;
+        inner.emit(EngineEvent::SessionCreated { session: rec.clone() });
+        self.launch(&rec.id, profile, Path::new(&repo), Resume::New).await?;
+        // The verdict only reads: ask the agent for its read-only mode where it has one
+        if let Some(mode) = self.session_info(&rec.id).and_then(|info| read_only_mode(&info)) {
+            let _ = self.set_category(&rec.id, Category::Mode, &mode).await;
+        }
+        self.prompt(&rec.id, &prompt)?;
+        Ok(rec.id)
+    }
+
     async fn start_reviewer(&self, rec: &SessionRecord, profile: &str) -> Result<String, CoreError> {
         let inner = &self.inner;
         let cwd = rec.worktree_path.clone().or(rec.repo_path.clone()).ok_or_else(|| CoreError::NoWorkspace(rec.id.clone()))?;
@@ -2551,6 +2602,66 @@ fn hit_limit(text: &str, answer: bool) -> bool {
 /// The longest diff sent to a reviewer (it reads files itself for the rest)
 const REVIEW_DIFF_MAX: usize = 120_000;
 
+/// One run in a comparison, as the verdict reviewer sees it
+struct VerdictRun {
+    label: String,
+    branch: String,
+    facts: String,
+    diff: Diff,
+}
+
+/// What the verdict reviewer is asked: the shared instruction, then each run's numbers and diff, and the shape of the answer
+fn verdict_prompt(instruction: &str, runs: &[VerdictRun], rules: Option<&str>) -> String {
+    // Every run gets an equal share of what one review may carry
+    let share = (REVIEW_DIFF_MAX / runs.len().max(1)).max(8_000);
+    let instruction = Some(instruction.trim()).filter(|i| !i.is_empty()).unwrap_or("—");
+    let mut text = plyfold_i18n::tr!(
+        "同じ指示を複数のエージェントに並べて実行させました。それぞれの結果を比べ、どれを取り込むべきかを判断してください。ファイルの編集や、何かを変えるコマンドの実行はしないでください（ファイルを読むのは構いません）。\n\n共通の指示:\n{instruction}",
+        "The same instruction was run side by side on several agents. Compare the results and decide which one to take. Do not edit files or run commands that change anything (reading files is fine).\n\nThe shared instruction:\n{instruction}",
+        "同一条指令被并行交给多个代理执行。请比较各自的结果，判断应采用哪一个。不要编辑文件，也不要运行会更改任何内容的命令（可以读取文件）。\n\n共同的指令：\n{instruction}"
+    );
+    if let Some(rules) = rules.map(str::trim).filter(|r| !r.is_empty()) {
+        text += &plyfold_i18n::tr!(
+            "\n\nこのリポジトリのレビュー方針（判断に使ってください）:\n{rules}",
+            "\n\nReview rules for this repository (use them in your judgment):\n{rules}",
+            "\n\n此仓库的审查规则（请用于判断）：\n{rules}"
+        );
+    }
+    for (i, run) in runs.iter().enumerate() {
+        let files = run.diff.files.iter().map(|f| format!("- {} (+{} -{})", f.path, f.added, f.removed)).collect::<Vec<_>>().join("\n");
+        let mut patch = run.diff.patch.as_str();
+        let cut = patch.len() > share;
+        if cut {
+            let mut end = share;
+            while !patch.is_char_boundary(end) {
+                end -= 1;
+            }
+            patch = &patch[..end];
+        }
+        text += &format!("\n\n## {} {}: {}", plyfold_i18n::tr!("実行", "Run", "运行"), i + 1, run.label);
+        if !run.branch.is_empty() {
+            text += &format!(" ({})", run.branch);
+        }
+        if !run.facts.is_empty() {
+            text += &format!("\n{}", run.facts);
+        }
+        text += &format!("\n\n{files}\n\n~~~~diff\n{patch}\n~~~~");
+        if cut {
+            text += &plyfold_i18n::tr!(
+                "\n（差分が長いので途中で切りました。残りは作業フォルダのファイルを読んで確かめてください）",
+                "\n(The diff is long and was cut here; read the files in the worktree for the rest)",
+                "\n（差异过长，已在此截断；其余部分请读取工作文件夹中的文件）"
+            );
+        }
+    }
+    text += &plyfold_i18n::tr!(
+        "\n\n最初の行に「採用: <実行の名前>」と書き、続けて理由を、正しさ、指示への沿い方、変更の小ささ、リスクの順に短く述べてください。他の実行で取り込む価値のある部分や、どれも採用できない場合はその理由も添えてください。",
+        "\n\nStart with `Take: <the run's name>`, then give the reasons briefly: correctness, how well it follows the instruction, how small the change is, and risks. Mention anything worth taking from the others, or say why none should be taken.",
+        "\n\n第一行写「采用：<运行名称>」，然后简要说明理由：正确性、对指令的贴合度、改动是否精简、风险。如果其他运行中有值得采纳的部分，或都不应采用，请一并说明。"
+    );
+    text
+}
+
 /// What a reviewer is asked: the instruction behind the turn, the files changed and the diff, and the shape of the answer
 fn review_prompt(diff: &Diff, instruction: Option<&str>, rules: Option<&str>) -> String {
     let files = diff.files.iter().map(|f| format!("- {} (+{} -{})", f.path, f.added, f.removed)).collect::<Vec<_>>().join("\n");
@@ -2724,8 +2835,22 @@ mod limit_tests {
 
 #[cfg(test)]
 mod background_tests {
-    use super::{background_session, review_prompt};
+    use super::{VerdictRun, background_session, review_prompt, verdict_prompt};
     use plyfold_worktree::Diff;
+
+    #[test]
+    fn the_verdict_request_carries_every_run() {
+        let run = |label: &str, patch: &str| VerdictRun {
+            label: label.into(),
+            branch: format!("plyfold/{label}"),
+            facts: "time 3s".into(),
+            diff: Diff { files: vec![], patch: patch.into() },
+        };
+        let text = verdict_prompt("add a flag", &[run("claude", "+a"), run("codex", "+b")], Some("Check tests"));
+        for needle in ["add a flag", "claude", "codex", "plyfold/codex", "time 3s", "+a", "+b", "Check tests"] {
+            assert!(text.contains(needle), "missing {needle}");
+        }
+    }
 
     #[test]
     fn repository_review_rules_go_into_the_review_request() {
