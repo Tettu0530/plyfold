@@ -15,7 +15,7 @@ import { DraftPane } from "./DraftPane";
 import { PreviewPane } from "./PreviewPane";
 import { GitPane } from "./GitPane";
 import { withChoices } from "@/state/infoCache";
-import { ProviderLogo, StatusIcon } from "../icons";
+import { agentName, ProviderLogo, StatusIcon } from "../icons";
 import { Keys } from "../Keys";
 import { Composer } from "./Composer";
 import { PermissionCard } from "./PermissionCard";
@@ -175,7 +175,7 @@ function SessionPane({ index }: { index: number }) {
             className="hidden items-center gap-1 text-xs whitespace-nowrap text-muted-foreground @[22rem]:flex"
           >
             <ProviderLogo agent={r.agent} className="size-3" />
-            {r.profile === r.agent ? "default" : r.profile}
+            {r.profile === r.agent ? agentName(r.agent) : r.profile}
           </span>
           {mismatch && (
             <span

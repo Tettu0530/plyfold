@@ -10,7 +10,7 @@ import type { SessionRecord } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { compareGroupOf, isListed, useStore, type SessionView } from "@/state/store";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { agentName, ProviderLogo, Spinner, STATUS, StatusIcon } from "../icons";
+import { agentName, ProfileOption, ProviderLogo, Spinner, STATUS, StatusIcon } from "../icons";
 import { startDrag } from "./dnd";
 import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
 
@@ -159,7 +159,7 @@ function VerdictBar({ group, members }: { group: string; members: SessionView[] 
           <SelectContent position="popper" align="start">
             {profiles.map((p) => (
               <SelectItem key={p.name} value={p.name}>
-                {p.name === p.agent ? p.label : p.name}
+                <ProfileOption profile={p} />
               </SelectItem>
             ))}
           </SelectContent>

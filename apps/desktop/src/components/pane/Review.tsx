@@ -12,7 +12,7 @@ import { useT } from "@/i18n";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
-import { ProviderLogo } from "../icons";
+import { ProfileOption, ProviderLogo, profileTitle } from "../icons";
 import { liquidAnchor } from "../liquid/liquid";
 import { useLiquidMenu } from "../liquid/stage";
 import { smooth } from "../motion";
@@ -52,10 +52,7 @@ export function ReviewButton({ mainId }: { mainId: string }) {
         <SelectItem value={OFF}>{t("side.reviewOff")}</SelectItem>
         {profiles.map((p) => (
           <SelectItem key={p.name} value={p.name}>
-            <span className="flex items-center gap-1.5">
-              <ProviderLogo agent={p.agent} className="size-3 text-muted-foreground" />
-              {p.name === p.agent ? p.label : p.name}
-            </span>
+            <ProfileOption profile={p} />
           </SelectItem>
         ))}
       </SelectContent>
@@ -129,7 +126,7 @@ function ReviewBody({ mainId }: { mainId: string }) {
         <ScanSearch className="size-3.5 text-muted-foreground" aria-hidden />
         <span className="font-medium">{t("side.reviewTitle")}</span>
         {profile && <ProviderLogo agent={profile.agent} className="size-3 text-muted-foreground" />}
-        <span className="truncate text-xs text-muted-foreground">{profile && profile.name !== profile.agent ? profile.name : profile?.label}</span>
+        <span className="truncate text-xs text-muted-foreground">{profile && profileTitle(profile)}</span>
         <span className="grow" />
         <button
           type="button"

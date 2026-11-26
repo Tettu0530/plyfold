@@ -7,7 +7,7 @@ import { age, repoName } from "@/lib/format";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { SIDEBAR_DEFAULT, SIDEBAR_MIN, useStore, visibleSessions, isListed, isTrashed } from "@/state/store";
-import { ProviderLogo, STATUS, StatusIcon, statusLabelKey } from "./icons";
+import { agentName, ProviderLogo, STATUS, StatusIcon, statusLabelKey } from "./icons";
 import type { SessionRecord } from "@/lib/types";
 import { Keys } from "./Keys";
 import { SessionMenu } from "./SessionMenu";
@@ -158,7 +158,7 @@ export function Sidebar() {
                         aria-current={open.has(r.id) ? "true" : undefined}
                         title={
                           compact
-                            ? t("sidebar.rowTitle", { title: r.title, profile: r.profile === r.agent ? "default" : r.profile, age: age(r.updated_at) })
+                            ? t("sidebar.rowTitle", { title: r.title, profile: r.profile === r.agent ? agentName(r.agent) : r.profile, age: age(r.updated_at) })
                             : undefined
                         }
                         onClick={(e) => {
@@ -217,7 +217,7 @@ export function Sidebar() {
                         </span>
                         {!compact && (
                           <span className="flex items-center gap-2 pl-[22px] text-xs text-muted-foreground">
-                            <span className="min-w-0 grow truncate">{r.profile === r.agent ? "default" : r.profile}</span>
+                            <span className="min-w-0 grow truncate">{r.profile === r.agent ? agentName(r.agent) : r.profile}</span>
                             <span className="font-mono tabular">{age(r.updated_at)}</span>
                           </span>
                         )}
@@ -680,7 +680,7 @@ function TaskQueue() {
                 </span>
               </span>
               <span className="flex min-w-0 items-center gap-2 pl-[22px] text-xs text-muted-foreground">
-                <span className="shrink-0">{task.profile === agent ? "default" : task.profile}</span>
+                <span className="shrink-0">{task.profile === agent ? agentName(agent) : task.profile}</span>
                 <span className="min-w-0 grow truncate">{repoName(task.repo)}</span>
                 <button
                   type="button"

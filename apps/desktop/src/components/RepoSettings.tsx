@@ -12,6 +12,7 @@ import { useT, type MessageKey } from "@/i18n";
 import { api, inTauri } from "@/lib/api";
 import type { RepoEntry, RepoSettings as Settings } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { ProfileOption } from "./icons";
 
 const KINDS: { value: string; label: MessageKey }[] = [
   { value: "read", label: "settings.allowRead" },
@@ -142,7 +143,7 @@ function RepoForm({ settings, onSave }: { settings: Settings; onSave: (s: Settin
             <SelectItem value={NO_REVIEWER}>{t("settings.repoReviewerNone")}</SelectItem>
             {profiles.map((p) => (
               <SelectItem key={p.name} value={p.name}>
-                {p.name === p.agent ? p.label : p.name}
+                <ProfileOption profile={p} />
               </SelectItem>
             ))}
           </SelectContent>

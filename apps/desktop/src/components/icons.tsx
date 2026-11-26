@@ -48,6 +48,21 @@ export function agentName(agent: string): string {
   return AGENT_NAMES[agent] ?? useStore.getState().profiles.find((p) => p.agent === agent && p.agent_name)?.agent_name ?? agent;
 }
 
+/** A profile's name for pickers: a default profile is named by its agent ("Claude Code"), not "default" */
+export function profileTitle(p: { name: string; agent: string; label: string }): string {
+  return p.name === p.agent ? agentName(p.agent) : p.label || p.name;
+}
+
+/** A profile as one picker row: its agent's logo and its name */
+export function ProfileOption({ profile, className }: { profile: { name: string; agent: string; label: string }; className?: string }) {
+  return (
+    <span className={cn("flex min-w-0 items-center gap-1.5", className)}>
+      <ProviderLogo agent={profile.agent} className="size-3 shrink-0 text-muted-foreground" />
+      <span className="truncate">{profileTitle(profile)}</span>
+    </span>
+  );
+}
+
 export function ProviderLogo({ agent, className }: { agent: string; className?: string }) {
   const logo = PROVIDER_LOGOS.get(agent);
   const icon = useStore((s) => (logo ? null : (s.profiles.find((p) => p.agent === agent && p.agent_icon)?.agent_icon ?? null)));

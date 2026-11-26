@@ -6,7 +6,7 @@ import { useT } from "@/i18n";
 import type { SessionRecord } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
-import { ProviderLogo } from "./icons";
+import { ProfileOption } from "./icons";
 import { Keys } from "./Keys";
 import { useLiquidMenu } from "./liquid/stage";
 
@@ -172,8 +172,7 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
                 .map((p) => (
                   // Fire and forget: the old agent's note can take minutes; a failure is told on the session
                   <ContextMenu.Item key={p.name} className={MENU_ITEM} onSelect={() => void handOver(record.id, p.name).catch(() => {})}>
-                    <ProviderLogo agent={p.agent} className="size-3.5 text-muted-foreground" />
-                    {p.name === p.agent ? p.label : p.name}
+                    <ProfileOption profile={p} />
                   </ContextMenu.Item>
                 ))}
               <ContextMenu.Item
