@@ -11,6 +11,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ### Fixed
 
+- Continuing a conversation from the directory's sessions opens the new session as soon as its record is created, as starting a new session does
 - Continuing a conversation that Claude Code is running in its background now says so, with the `claude attach` and `claude stop` commands to use, instead of showing the raw RPC error
 
 ## [0.6.4] - 2026-11-25

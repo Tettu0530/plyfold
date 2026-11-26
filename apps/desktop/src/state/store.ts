@@ -1165,16 +1165,33 @@ export const useStore = create<State>((set, get) => ({
     const d = get().drafts[draftId];
     if (!d?.profile || d.busy) return;
     get().updateDraft(draftId, { busy: true, error: null });
+    // The session takes the draft's pane as soon as its record exists, and fills in while the agent loads it
+    let createdId: string | undefined;
+    const showSession = (record: SessionRecord) => {
+      createdId = record.id;
+      set((s) => {
+        const cur = s.sessions[record.id] ?? { ...newView(record), historyLoaded: true };
+        return { panes: s.panes.map((pane) => (pane === draftId ? record.id : pane)), sessions: { ...s.sessions, [record.id]: cur } };
+      });
+    };
     try {
-      const rec = await api.adoptCliSession(d.profile, d.repo, acpSessionId, title, d.worktree);
+      const rec = await api.adoptCliSession(d.profile, d.repo, acpSessionId, title, d.worktree, showSession);
       // The conversation is the history the agent resent, copied into the log after SessionCreated
       set((s) => {
         const cur = s.sessions[rec.id] ?? newView(rec);
-        return { sessions: { ...s.sessions, [rec.id]: { ...cur, record: rec, historyLoaded: false } } };
+        const drafts = { ...s.drafts };
+        delete drafts[draftId];
+        return { drafts, sessions: { ...s.sessions, [rec.id]: { ...cur, record: rec, historyLoaded: false } } };
       });
-      const pane = leaves(get().layout).find((i) => get().panes[i] === draftId);
-      await get().openInPane(rec.id, pane, `${draftId}:cli`);
+      if (createdId) await loadSession(rec.id);
+      else {
+        const pane = leaves(get().layout).find((i) => get().panes[i] === draftId);
+        await get().openInPane(rec.id, pane, `${draftId}:cli`);
+      }
     } catch (e) {
+      // Back to the draft with the reason, so another conversation can be picked
+      const session = createdId;
+      if (session) set((s) => ({ panes: s.panes.map((pane) => (pane === session ? draftId : pane)) }));
       get().updateDraft(draftId, { busy: false, error: String(e) });
     }
   },

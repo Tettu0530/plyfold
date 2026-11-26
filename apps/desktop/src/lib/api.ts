@@ -57,8 +57,8 @@ export const api = {
   reviewNow: (id: string) => invoke<string | null>("review_now", { id }),
   handOver: (id: string, profile: string) => invoke<SessionRecord>("hand_over", { id, profile }),
   listCliSessions: (profile: string, repo: string) => invoke<CliSession[]>("list_cli_sessions", { profile, repo }),
-  adoptCliSession: (profile: string, repo: string, acpSessionId: string, title: string, worktree: boolean) =>
-    invoke<SessionRecord>("adopt_cli_session", { profile, repo, acpSessionId, title, worktree }),
+  adoptCliSession: (profile: string, repo: string, acpSessionId: string, title: string, worktree: boolean, created?: (record: SessionRecord) => void) =>
+    invoke<SessionRecord>("adopt_cli_session", { profile, repo, acpSessionId, title, worktree, created: new Channel(created) }),
   renameSession: (id: string, title: string) => invoke<void>("rename_session", { id, title }),
   closeSession: (id: string) => invoke<void>("close_session", { id }),
   deleteSession: (id: string, removeWorktree: boolean) => invoke<void>("delete_session", { id, removeWorktree }),

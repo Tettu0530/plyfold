@@ -959,6 +959,20 @@ impl Engine {
     /// With `worktree`, the conversation continues in a worktree of its own; without it, or when `repo` is not a git
     /// repository, in the folder itself
     pub async fn adopt_session(&self, profile: &str, repo: &Path, acp_session_id: &str, title: &str, worktree: bool) -> Result<SessionRecord, CoreError> {
+        self.adopt_session_with_created(profile, repo, acp_session_id, title, worktree, |_| {}).await
+    }
+
+    /// `created` is called as soon as the session's record exists, before its folder is prepared and the agent loads
+    /// the conversation, so a caller can show the session while that happens
+    pub async fn adopt_session_with_created(
+        &self,
+        profile: &str,
+        repo: &Path,
+        acp_session_id: &str,
+        title: &str,
+        worktree: bool,
+        created: impl FnOnce(&SessionRecord) + Send,
+    ) -> Result<SessionRecord, CoreError> {
         let inner = &self.inner;
         if acp_session_id.is_empty() {
             return Err(CoreError::NoConversation(String::new()));
@@ -970,6 +984,7 @@ impl Engine {
         let title = if title.trim().is_empty() { plyfold_i18n::tr!("（無題）", "(untitled)", "（无标题）") } else { title.to_string() };
         let rec = inner.store.create_session(NewSession { title, profile: profile.to_string(), agent, ..Default::default() })?;
         inner.emit(EngineEvent::SessionCreated { session: rec.clone() });
+        created(&rec);
         let in_git = plyfold_worktree::repo_root(repo).is_ok();
         let prepared = if worktree && in_git {
             inner.worktrees.create(repo, &rec.id, None).map_err(CoreError::from)

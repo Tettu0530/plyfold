@@ -461,9 +461,16 @@ async fn adopt_cli_session(
     acp_session_id: String,
     title: String,
     worktree: bool,
+    created: tauri::ipc::Channel<SessionRecord>,
 ) -> CmdResult<SessionRecord> {
     let repo = PathBuf::from(expand_home(&repo));
-    state.engine.adopt_session(&profile, &repo, &acp_session_id, &title, worktree).await.map_err(err)
+    state
+        .engine
+        .adopt_session_with_created(&profile, &repo, &acp_session_id, &title, worktree, |record| {
+            let _ = created.send(record.clone());
+        })
+        .await
+        .map_err(err)
 }
 
 #[tauri::command]
