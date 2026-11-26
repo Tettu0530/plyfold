@@ -20,11 +20,20 @@ pub struct RepoSettings {
     pub copy: Vec<String>,
     /// Kinds of tool calls answered with "allow" without asking: "read", "edit", "execute", "fetch"
     pub allow: Vec<String>,
+    /// What a reviewer should look for in this repository, added to every review request ("" = nothing extra)
+    pub review: String,
+    /// The profile that reviews each new session here from the start ("" = no reviewer until one is picked)
+    pub reviewer: String,
 }
 
 impl RepoSettings {
     pub fn is_empty(&self) -> bool {
-        self.name.trim().is_empty() && self.setup.trim().is_empty() && self.copy.is_empty() && self.allow.is_empty()
+        self.name.trim().is_empty()
+            && self.setup.trim().is_empty()
+            && self.copy.is_empty()
+            && self.allow.is_empty()
+            && self.review.trim().is_empty()
+            && self.reviewer.trim().is_empty()
     }
 
     /// Whether a permission request for this tool kind is allowed without asking
@@ -203,6 +212,18 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn review_settings_are_kept_and_count_as_settings() {
+        let d = tmp("review");
+        let repos = Repos::new(&d);
+        let s = RepoSettings { review: "Check SQL for injection".into(), reviewer: "codex".into(), ..Default::default() };
+        assert!(!s.is_empty());
+        repos.set("/r", s.clone()).unwrap();
+        assert_eq!(repos.get("/r"), s);
+        // Settings saved before these fields existed still load
+        assert_eq!(serde_json::from_str::<RepoSettings>(r#"{"setup":"make"}"#).unwrap().reviewer, "");
     }
 
     #[test]

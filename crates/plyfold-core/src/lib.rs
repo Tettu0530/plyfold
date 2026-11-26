@@ -512,8 +512,31 @@ impl Engine {
         {
             self.prepare_worktree(&rec.id, Path::new(&repo), &cwd).await;
         }
+        self.apply_default_reviewer(&rec.id).await;
         self.launch(&rec.id, &req.profile, &cwd, Resume::New).await?;
         Ok(inner.store.get_session(&rec.id)?)
+    }
+
+    /// A repository can name the profile that reviews its sessions from the start (Settings → Repositories)
+    async fn apply_default_reviewer(&self, id: &str) {
+        let inner = &self.inner;
+        let Ok(rec) = inner.store.get_session(id) else { return };
+        let Some(repo) = rec.repo_path.as_deref() else { return };
+        let reviewer = inner.repos.get(repo).reviewer;
+        let reviewer = reviewer.trim();
+        if reviewer.is_empty() || rec.chat || rec.review || rec.side_of.is_some() {
+            return;
+        }
+        if let Err(e) = self.set_reviewer(id, Some(reviewer)).await {
+            inner.notice(
+                id,
+                plyfold_i18n::tr!(
+                    "このリポジトリの既定のレビュー担当を設定できません: {e}",
+                    "Cannot set this repository's default reviewer: {e}",
+                    "无法设置此仓库的默认审阅者：{e}"
+                ),
+            );
+        }
     }
 
     /// A new worktree gets the repository's untracked files it needs and runs its setup script, before the agent
@@ -1403,7 +1426,8 @@ impl Engine {
             inner.reviews.lock().unwrap().entry(id.to_string()).or_default().pending = true;
             return Ok(Some(reviewer));
         }
-        self.prompt(&reviewer, &review_prompt(&diff, instruction.as_deref()))?;
+        let rules = rec.repo_path.as_deref().map(|repo| inner.repos.get(repo).review).unwrap_or_default();
+        self.prompt(&reviewer, &review_prompt(&diff, instruction.as_deref(), Some(&rules)))?;
         inner.reviews.lock().unwrap().entry(id.to_string()).or_default().last = Some(hash);
         Ok(Some(reviewer))
     }
@@ -2528,7 +2552,7 @@ fn hit_limit(text: &str, answer: bool) -> bool {
 const REVIEW_DIFF_MAX: usize = 120_000;
 
 /// What a reviewer is asked: the instruction behind the turn, the files changed and the diff, and the shape of the answer
-fn review_prompt(diff: &Diff, instruction: Option<&str>) -> String {
+fn review_prompt(diff: &Diff, instruction: Option<&str>, rules: Option<&str>) -> String {
     let files = diff.files.iter().map(|f| format!("- {} (+{} -{})", f.path, f.added, f.removed)).collect::<Vec<_>>().join("\n");
     let mut patch = diff.patch.as_str();
     let cut = patch.len() > REVIEW_DIFF_MAX;
@@ -2550,6 +2574,13 @@ fn review_prompt(diff: &Diff, instruction: Option<&str>) -> String {
             "\n\n（差分が長いので途中で切りました。残りはファイルを読んで確かめてください）",
             "\n\n(The diff is long and was cut here; read the files for the rest)",
             "\n\n（差异过长，已在此截断；其余部分请直接读取文件）"
+        );
+    }
+    if let Some(rules) = rules.map(str::trim).filter(|r| !r.is_empty()) {
+        text += &plyfold_i18n::tr!(
+            "\n\nこのリポジトリのレビュー方針（これに沿って確かめてください）:\n{rules}",
+            "\n\nReview rules for this repository (check against these):\n{rules}",
+            "\n\n此仓库的审查规则（请据此检查）：\n{rules}"
         );
     }
     text += &plyfold_i18n::tr!(
@@ -2693,7 +2724,16 @@ mod limit_tests {
 
 #[cfg(test)]
 mod background_tests {
-    use super::background_session;
+    use super::{background_session, review_prompt};
+    use plyfold_worktree::Diff;
+
+    #[test]
+    fn repository_review_rules_go_into_the_review_request() {
+        let diff = Diff { files: vec![], patch: "+x".into() };
+        assert!(review_prompt(&diff, None, Some("Check SQL for injection")).contains("Check SQL for injection"));
+        assert!(!review_prompt(&diff, None, Some("  ")).contains("injection"));
+        assert_eq!(review_prompt(&diff, None, None), review_prompt(&diff, None, Some("")));
+    }
 
     #[test]
     fn reads_the_id_of_a_session_running_in_the_background() {

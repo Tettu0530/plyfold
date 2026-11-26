@@ -9,6 +9,8 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 - A review finding can be sent back to the reviewed session as an instruction with one click. It is queued when the session is mid-turn
 - Type `!` in an empty input to enter shell mode, which runs a command in the session's folder (Esc or Backspace on an empty input goes back). The output appears in the conversation, can be stopped while it runs, and is sent to the agent only when you choose to
 
+- Repositories can have review rules and a default reviewer (Settings → Repositories). The rules go along with every review request, and new sessions there are reviewed by that profile from the start
+
 ### Fixed
 
 - Continuing a conversation from the directory's sessions opens the new session as soon as its record is created, as starting a new session does

@@ -368,6 +368,10 @@ export interface RepoSettings {
   copy: string[];
   /** "read" | "edit" | "execute" | "fetch" */
   allow: string[];
+  /** What a reviewer should look for here ("" = nothing extra) */
+  review: string;
+  /** The profile that reviews each new session here from the start ("" = none) */
+  reviewer: string;
 }
 
 export interface RepoEntry {
