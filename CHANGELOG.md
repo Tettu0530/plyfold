@@ -13,6 +13,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 - A comparison can ask a reviewer which run to take. The reviewer reads every run's diff, time, tokens and cost, and answers in a session of its own. The comparison marks the run it names and offers it as the one to merge
 - Comparisons are recorded when a run is taken: what was asked, which run was taken, and each run's time, tokens, cost and changes. They stay after the sessions are deleted, and the comparison pane lists the repository's past comparisons
+- A finished session can be run again from its right-click menu with another profile, and another model where the profile offers several. The same first instruction runs in a new worktree, and the two open side by side in a comparison
 
 ### Fixed
 
