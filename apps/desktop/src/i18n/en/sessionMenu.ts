@@ -19,4 +19,8 @@ export const sessionMenu: Record<keyof typeof source, string> = {
   cancel: "Cancel",
   handOver: "Hand over…",
   handOverTitle: "Hand “{title}” over to another agent. The current agent writes a handover note and stops, and a new session carries on in the same workspace",
+  rerun: "Run again…",
+  rerunTitle: "Run the same instruction as “{title}” with another profile in a new worktree, and compare them side by side",
+  rerunModelTitle: "Choose a model for “{profile}”",
+  rerunDefaultModel: "Default model",
 };

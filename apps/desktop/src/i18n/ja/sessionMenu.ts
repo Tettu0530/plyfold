@@ -17,4 +17,8 @@ export const sessionMenu = {
   cancel: "やめる",
   handOver: "引き継ぐ…",
   handOverTitle: "「{title}」を別のエージェントに引き継ぎます。今のエージェントに引き継ぎのメモを書かせてから止め、同じ作業場所で新しいセッションが続けます",
+  rerun: "もう一度実行…",
+  rerunTitle: "「{title}」と同じ指示を、別のプロファイルで新しい worktree に実行し、並べて比べます",
+  rerunModelTitle: "「{profile}」のモデルを選びます",
+  rerunDefaultModel: "既定のモデル",
 } satisfies Record<string, string>;

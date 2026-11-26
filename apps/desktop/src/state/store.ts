@@ -307,6 +307,8 @@ interface State {
   openCompare: (group: string, from: string) => void;
   /** Start one session per chosen profile, each in a worktree of its own, with the same prompt, side by side */
   startCompare: (draftId: string, prompt: string, attachments?: Attached[]) => Promise<void>;
+  /** Run a finished session's first instruction again with another profile (and model) in a new worktree, side by side with it */
+  rerunSession: (id: string, profile: string, model?: string) => Promise<void>;
   /** Bumped after worktree operations (so panes refetch their diff counts) */
   diffVersion: number;
   bumpDiff: () => void;
@@ -767,6 +769,32 @@ export const useStore = create<State>((set, get) => ({
     const beside = leaves(s.layout).find((i) => s.panes[i] === from) ?? s.focusedPane;
     const slot = get().splitPane(beside, "right", null);
     void get().openInPane(pane, slot, `compare:${group}`);
+  },
+
+  rerunSession: async (id, profile, model) => {
+    if (!get().sessions[id]?.historyLoaded) await loadSession(id);
+    const src = get().sessions[id];
+    const first = src?.transcript.items.find((it) => it.kind === "user");
+    const repo = src?.record.repo_path;
+    if (!src || !repo || !src.record.worktree_path || first?.kind !== "user") throw new Error(t("store.rerunUnavailable"));
+    try {
+      // The session and its rerun share a run group, which is what a comparison pane lists
+      const group = src.record.run_group ?? crypto.randomUUID();
+      const srcRecord = src.record.run_group ? src.record : await api.setRunGroup(id, group);
+      const started = await api.startSession({ profile, repo, title: src.record.title, worktree: true });
+      const rec = await api.setRunGroup(started.id, group);
+      await applyStartingChoices(rec, model ? { model } : {});
+      set((s) => {
+        const sessions = { ...s.sessions };
+        sessions[id] = { ...sessions[id], record: srcRecord };
+        sessions[rec.id] = sessions[rec.id] ? { ...sessions[rec.id], record: rec } : { ...newView(rec), historyLoaded: true };
+        return { sessions };
+      });
+      get().openCompare(group, id);
+      await get().sendPrompt(rec.id, first.text);
+    } catch (e) {
+      throw new Error(t("store.rerunFailed", { error: String(e) }), { cause: e });
+    }
   },
 
   startCompare: async (id, prompt, attachments = []) => {

@@ -19,4 +19,8 @@ export const sessionMenu: Record<keyof typeof source, string> = {
   cancel: "取消",
   handOver: "交接…",
   handOverTitle: "将「{title}」交给另一个代理。当前代理会先写一份交接说明再停止，新会话将在同一工作区继续",
+  rerun: "再运行一次…",
+  rerunTitle: "用另一个配置文件在新 worktree 中运行与「{title}」相同的指令，并并排比较",
+  rerunModelTitle: "为「{profile}」选择模型",
+  rerunDefaultModel: "默认模型",
 };

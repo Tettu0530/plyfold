@@ -1,4 +1,4 @@
-import { ArrowRightLeft, GitFork, Pencil, Square, Trash2 } from "lucide-react";
+import { ArrowRightLeft, GitFork, Pencil, Repeat2, Square, Trash2 } from "lucide-react";
 import { ContextMenu } from "radix-ui";
 import { useState } from "react";
 
@@ -34,9 +34,11 @@ export function pickByKey(e: React.KeyboardEvent<HTMLDivElement>) {
 /** Context menu for sidebar rows: rename, stop, delete (with a choice to keep the worktree) */
 export function SessionMenu({ record, onRename, children }: { record: SessionRecord; onRename: () => void; children: React.ReactNode }) {
   const t = useT();
-  const { stopSession, trashSession, forkSession, handOver } = useStore.getState();
+  const { stopSession, trashSession, forkSession, handOver, rerunSession } = useStore.getState();
   const profiles = useStore((s) => s.profiles);
-  const [view, setView] = useState<"main" | "fork" | "hand">("main");
+  const [view, setView] = useState<"main" | "fork" | "hand" | "rerun" | "model">("main");
+  // The profile picked in "Run again", while its model is being chosen
+  const [rerunProfile, setRerunProfile] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const running = record.status !== "closed" && record.status !== "error";
   const inTurn = record.status === "starting" || record.status === "working" || record.status === "awaiting_permission" || record.status === "stalled";
@@ -44,6 +46,11 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
   const forkHint = !record.acp_session_id ? t("sessionMenu.forkNeedsConversation") : inTurn ? t("sessionMenu.forkBusy") : undefined;
   // Handing over takes the work, so it needs a workspace; a turn in progress has to end first
   const canHand = !!record.repo_path && !record.chat && !inTurn;
+  // Running again needs a worktree to compare against (and a finished turn)
+  const canRerun = !!record.worktree_path && !record.chat && !record.review && !record.side_of && !inTurn;
+  const rerun = (profile: string, model?: string) => run(() => rerunSession(record.id, profile, model));
+  // The models a profile offered last time it ran (nothing to choose when it has not run yet)
+  const models = useStore((s) => (rerunProfile ? s.infoCache[rerunProfile]?.config.find((o) => o.category === "model")?.choices : undefined)) ?? [];
   // The menu expands out of the right-clicked row and shrinks back into it on close
   const menu = useLiquidMenu(`menu:session:${record.id}`, `session:${record.id}`);
 
@@ -114,6 +121,20 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
                 {t("sessionMenu.handOver")}
                 <Shortcut k="h" />
               </ContextMenu.Item>
+              <ContextMenu.Item
+                data-key="a"
+                className={MENU_ITEM}
+                disabled={!canRerun}
+                title={inTurn ? t("sessionMenu.forkBusy") : undefined}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setView("rerun");
+                }}
+              >
+                <Repeat2 className="size-3.5 text-muted-foreground" aria-hidden />
+                {t("sessionMenu.rerun")}
+                <Shortcut k="a" />
+              </ContextMenu.Item>
               <ContextMenu.Separator className="my-0.5 h-px bg-border" />
               <ContextMenu.Item
                 data-key="d"
@@ -180,6 +201,63 @@ export function SessionMenu({ record, onRename, children }: { record: SessionRec
                 onSelect={(e) => {
                   e.preventDefault();
                   setView("main");
+                }}
+              >
+                {t("sessionMenu.cancel")}
+                <Shortcut k="esc" />
+              </ContextMenu.Item>
+            </>
+          ) : view === "rerun" ? (
+            <>
+              <ContextMenu.Label className="max-w-64 px-2 pt-1 pb-1.5 text-xs leading-relaxed text-muted-foreground">
+                {t("sessionMenu.rerunTitle", { title: record.title })}
+              </ContextMenu.Label>
+              {profiles.map((p) => (
+                <ContextMenu.Item
+                  key={p.name}
+                  className={MENU_ITEM}
+                  onSelect={(e) => {
+                    // A profile that offers several models asks which one next; the others start right away
+                    const offered = useStore.getState().infoCache[p.name]?.config.find((o) => o.category === "model")?.choices ?? [];
+                    if (offered.length > 1) {
+                      e.preventDefault();
+                      setRerunProfile(p.name);
+                      setView("model");
+                    } else rerun(p.name);
+                  }}
+                >
+                  <ProfileOption profile={p} />
+                </ContextMenu.Item>
+              ))}
+              <ContextMenu.Item
+                className={MENU_ITEM}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setView("main");
+                }}
+              >
+                {t("sessionMenu.cancel")}
+                <Shortcut k="esc" />
+              </ContextMenu.Item>
+            </>
+          ) : view === "model" && rerunProfile ? (
+            <>
+              <ContextMenu.Label className="max-w-64 px-2 pt-1 pb-1.5 text-xs leading-relaxed text-muted-foreground">
+                {t("sessionMenu.rerunModelTitle", { profile: rerunProfile })}
+              </ContextMenu.Label>
+              <ContextMenu.Item className={MENU_ITEM} onSelect={() => rerun(rerunProfile)}>
+                {t("sessionMenu.rerunDefaultModel")}
+              </ContextMenu.Item>
+              {models.map((m) => (
+                <ContextMenu.Item key={m.value} className={MENU_ITEM} onSelect={() => rerun(rerunProfile, m.value)}>
+                  {m.name}
+                </ContextMenu.Item>
+              ))}
+              <ContextMenu.Item
+                className={MENU_ITEM}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setView("rerun");
                 }}
               >
                 {t("sessionMenu.cancel")}
