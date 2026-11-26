@@ -98,6 +98,15 @@ export interface PreviewPage {
 }
 
 /** A pane listing the files a session read or edited, with the picked one's contents ("files:<session id>") */ const LAST_REPO_KEY = "plyfold.lastRepo";
+const VERDICTS_KEY = "plyfold.verdicts";
+function readVerdicts(): Record<string, string> {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(VERDICTS_KEY) ?? "{}");
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
 function lastRepo(): string {
   try {
     return localStorage.getItem(LAST_REPO_KEY) ?? "~/projects";
@@ -234,6 +243,9 @@ interface State {
   sessions: Record<string, SessionView>;
   drafts: Record<string, Draft>;
   previews: Record<string, PreviewPage>;
+  /** The session that judged a comparison, by run group (kept on this machine, so the answer is found again) */
+  verdicts: Record<string, string>;
+  setVerdict: (group: string, session: string) => void;
   /** Open a web page in a pane (a free one, or one more pane), growing out of the given anchor */
   openPreview: (url: string, anchor: string) => void;
   setPreviewUrl: (id: string, url: string) => void;
@@ -519,6 +531,17 @@ export const useStore = create<State>((set, get) => ({
   sessions: {},
   drafts: {},
   previews: {},
+  verdicts: readVerdicts(),
+  setVerdict: (group, session) =>
+    set((s) => {
+      const verdicts = { ...s.verdicts, [group]: session };
+      try {
+        localStorage.setItem(VERDICTS_KEY, JSON.stringify(verdicts));
+      } catch {
+        // Not remembered, still applied
+      }
+      return { verdicts };
+    }),
   openPreview: (url, anchor) => {
     const s = get();
     const id = `preview:${Date.now()}`;

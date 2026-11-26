@@ -8,6 +8,7 @@ import { api, inTauri } from "@/lib/api";
 import { money, seconds, tokens } from "@/lib/format";
 import type { SessionRecord } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { verdictChoice } from "@/lib/verdict";
 import { compareGroupOf, isListed, useStore, type SessionView } from "@/state/store";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { agentName, ProfileOption, ProviderLogo, Spinner, STATUS, StatusIcon } from "../icons";
@@ -72,6 +73,13 @@ export function ComparePane({ index, id }: { index: number; id: string }) {
         .sort((a, b) => a.record.created_at - b.record.created_at),
     [sessions, group],
   );
+  // The verdict on this comparison, if one was asked for: which run it names to take
+  const verdictId = useStore((s) => s.verdicts[group]);
+  const verdictView = useStore((s) => (verdictId ? s.sessions[verdictId] : undefined));
+  const answer = useMemo(() => (verdictView?.transcript.items ?? []).flatMap((it) => (it.kind === "agent" ? [it.text] : [])).join("\n"), [verdictView]);
+  // Not answered yet; a conversation that is not loaded (after a restart) is opened from the button instead
+  const verdictPending = !!verdictView && (verdictView.transcript.inTurn || (answer === "" && verdictView.historyLoaded));
+  const choice = useMemo(() => (answer ? verdictChoice(answer, members.map((m) => m.record)) : null), [answer, members]);
   // After one is merged: which, and where it went
   const [merged, setMerged] = useState<{ id: string; target: string } | null>(null);
   const title = members[0]?.record.title ?? t("compare.title");
@@ -105,9 +113,15 @@ export function ComparePane({ index, id }: { index: number; id: string }) {
 
       <div className="flex min-h-0 grow flex-col gap-2 overflow-y-auto p-3">
         {members.length === 0 && <p className="p-1 text-xs text-muted-foreground">{t("compare.empty")}</p>}
-        {members.length >= 2 && <VerdictBar group={group} members={members} />}
+        {members.length >= 2 && (
+          <VerdictBar
+            group={group}
+            members={members}
+            verdict={verdictView ? { id: verdictView.record.id, pending: verdictPending, choice, answered: answer !== "" } : null}
+          />
+        )}
         {members.map((v) => (
-          <Row key={v.record.id} v={v} merged={merged} onMerged={(target) => setMerged({ id: v.record.id, target })} />
+          <Row key={v.record.id} v={v} merged={merged} recommended={choice === v.record.id} onMerged={(target) => setMerged({ id: v.record.id, target })} />
         ))}
         {merged && members.length > 1 && <TrashOthers keep={merged.id} others={members.filter((m) => m.record.id !== merged.id).map((m) => m.record)} />}
       </div>
@@ -115,8 +129,19 @@ export function ComparePane({ index, id }: { index: number; id: string }) {
   );
 }
 
+/** A run's name as shown to people: a default profile by its agent */
+const runName = (r?: { profile: string; agent: string }) => (r ? (r.profile === r.agent ? agentName(r.agent) : r.profile) : "");
+
 /** Ask a reviewer which run to take: it reads every run's diff and numbers, and answers in a session of its own */
-function VerdictBar({ group, members }: { group: string; members: SessionView[] }) {
+function VerdictBar({
+  group,
+  members,
+  verdict,
+}: {
+  group: string;
+  members: SessionView[];
+  verdict: { id: string; pending: boolean; choice: string | null; answered: boolean } | null;
+}) {
   const t = useT();
   const profiles = useStore((s) => s.profiles);
   const names = profiles.map((p) => p.name);
@@ -139,6 +164,7 @@ function VerdictBar({ group, members }: { group: string; members: SessionView[] 
         return [m.record.id, `time ${sum.ms > 0 ? seconds(sum.ms) : "—"} · tokens ↑${tokens(sum.input)} ↓${tokens(sum.output)} · cost ${cost}`];
       });
       const id = await api.compareVerdict(group, profile, first?.kind === "user" ? first.text : "", facts);
+      useStore.getState().setVerdict(group, id);
       await useStore.getState().openInPane(id);
     } catch (e) {
       setError(String(e));
@@ -174,13 +200,46 @@ function VerdictBar({ group, members }: { group: string; members: SessionView[] 
           {t("compare.verdict")}
         </Action>
       </div>
-      <p className="m-0 text-xs leading-relaxed text-muted-foreground">{t("compare.verdictHint")}</p>
+      {verdict ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {verdict.pending ? (
+            <span className="flex items-center gap-1.5 text-muted-foreground">
+              <Spinner className="size-3.5" />
+              {t("compare.verdictRunning")}
+            </span>
+          ) : verdict.choice ? (
+            <span className="flex items-center gap-1.5 font-medium text-working">
+              <Check className="size-3.5" aria-hidden />
+              {t("compare.verdictChose", { run: runName(members.find((m) => m.record.id === verdict.choice)?.record) })}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">{t("compare.verdictUnclear")}</span>
+          )}
+          <span className="grow" />
+          <Action icon={<ExternalLink className="size-3.5" aria-hidden />} onClick={() => void useStore.getState().openInPane(verdict.id)}>
+            {t("compare.verdictOpen")}
+          </Action>
+        </div>
+      ) : (
+        <p className="m-0 text-xs leading-relaxed text-muted-foreground">{t("compare.verdictHint")}</p>
+      )}
       {error && <p className="m-0 text-xs whitespace-pre-wrap text-error">{error}</p>}
     </div>
   );
 }
 
-function Row({ v, merged, onMerged }: { v: SessionView; merged: { id: string; target: string } | null; onMerged: (target: string) => void }) {
+function Row({
+  v,
+  merged,
+  recommended,
+  onMerged,
+}: {
+  v: SessionView;
+  merged: { id: string; target: string } | null;
+  /** The verdict names this run to take */
+  recommended: boolean;
+  onMerged: (target: string) => void;
+}) {
   const t = useT();
   const r = v.record;
   const sum = totals(v);
@@ -213,7 +272,7 @@ function Row({ v, merged, onMerged }: { v: SessionView; merged: { id: string; ta
   };
 
   return (
-    <div className={cn("flex flex-col gap-2 rounded-[10px] border p-3", isMerged && "border-working/40")}>
+    <div className={cn("flex flex-col gap-2 rounded-[10px] border p-3", (isMerged || recommended) && "border-working/40")}>
       <div className="flex min-w-0 items-center gap-2">
         <ProviderLogo agent={r.agent} className="size-4 shrink-0 text-muted-foreground" />
         <span className="min-w-0 truncate font-medium">{profile}</span>
@@ -222,6 +281,12 @@ function Row({ v, merged, onMerged }: { v: SessionView; merged: { id: string; ta
           {st.label}
         </span>
         <span className="grow" />
+        {recommended && !isMerged && (
+          <span className="flex shrink-0 items-center gap-1 text-xs text-working">
+            <Scale className="size-3.5" aria-hidden />
+            {t("compare.verdictBadge")}
+          </span>
+        )}
         {isMerged && (
           <span className="flex shrink-0 items-center gap-1 text-xs text-working">
             <Check className="size-3.5" aria-hidden />
@@ -265,6 +330,7 @@ function Row({ v, merged, onMerged }: { v: SessionView; merged: { id: string; ta
             <Action
               icon={<GitMerge className="size-3.5" aria-hidden />}
               onClick={() => setConfirm(true)}
+              primary={recommended}
               disabled={busy || !diff || diff.files === 0}
               title={busy ? t("compare.mergeBusy") : !diff || diff.files === 0 ? t("compare.mergeNothing") : undefined}
             >
