@@ -137,7 +137,9 @@ async fn verdict_session_is_asked_with_every_run() {
     let record = eng.store().get_session(&verdict).unwrap();
     // A session of its own at the repository, kept out of the comparison
     assert_eq!(record.run_group, None);
-    assert_eq!(record.repo_path.as_deref(), Some(repo.to_str().unwrap()));
+    // Compare resolved paths: Windows may report the same folder with `/` or an 8.3 short name
+    let recorded = std::fs::canonicalize(record.repo_path.as_deref().unwrap()).unwrap();
+    assert_eq!(recorded, std::fs::canonicalize(&repo).unwrap());
     let sent = eng.store().events(&verdict, None, 2000).unwrap().into_iter().map(|e| e.payload).collect::<Vec<_>>().join("\n");
     assert!(sent.contains("do it") && sent.contains("time 1s"), "the request is missing the instruction or numbers");
 }
