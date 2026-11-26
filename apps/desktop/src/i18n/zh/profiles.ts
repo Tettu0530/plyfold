@@ -3,10 +3,10 @@ import type { profiles as source } from "../ja/profiles";
 
 export const profiles: Record<keyof typeof source, string> = {
   authApi: "官方 API",
-  authLogin: "现有登录",
+  authLogin: "CLI 登录",
   authCustom: "自定义提供商",
   authApiDetail: "使用 API 密钥连接官方 API",
-  authLoginDetail: "使用 CLI 中已有的登录",
+  authLoginDetail: "使用 CLI 已登录的账号（例如订阅账号）",
   authCustomDetail: "使用 API 密钥连接自定义提供商",
   baseHintClaude: "启动时作为 ANTHROPIC_BASE_URL 传入",
   baseHintCodex: "作为提供商写入专用目录中的 config.toml",
@@ -22,7 +22,7 @@ export const profiles: Record<keyof typeof source, string> = {
   replied: "已响应：{model}",
   noModelName: "未报告模型名",
   cannotConnect: "无法连接",
-  defaultDetail: "直接使用 {agent} 中已有的登录和设置。如需使用单独的 API 密钥或连接地址，请添加配置文件。",
+  defaultDetail: "直接使用 {agent} 已登录的账号和设置。如需使用单独的 API 密钥或连接地址，请添加配置文件。",
   keyPassedAs: "作为 {var} 传入",
   keyPassedAsKeychain: "作为 {var} 传入（钥匙串：{account}）",
   keyPassedAsKeychainShared: "作为 {var} 传入（钥匙串：{account}，与 {shared} 共用）",

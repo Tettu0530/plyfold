@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { money, repoName, tokens } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { COMPARE_MAX, useStore } from "@/state/store";
-import { agentName, ProviderLogo } from "../icons";
+import { COMPARE_MAX, modeIds, useIsGitFolder, useStore } from "@/state/store";
+import { agentName, profileTitle, ProviderLogo } from "../icons";
 import { ControlRow } from "./Composer";
 import { AttachBox, useAttachments } from "./Attachments";
 import { MentionMenu, removeMention, useMention } from "./Mention";
@@ -33,8 +33,6 @@ function StartModeIcon({ mode }: { mode: "conversation" | "coding" | "parallel" 
 function authLabel(p: { keyed: boolean; custom_provider: boolean }): MessageKey {
   return p.custom_provider ? "draft.authCustom" : p.keyed ? "draft.authKeyed" : "draft.authLogin";
 }
-
-const profileName = (p: ProfileSummary) => (p.name === p.agent ? "default" : p.label);
 
 function Num({ icon: Icon, title, children }: { icon: typeof Coins; title: string; children: React.ReactNode }) {
   return (
@@ -74,9 +72,9 @@ function ProfileRow({
     >
       <ProviderLogo agent={p.agent} className="size-4 shrink-0 text-muted-foreground" />
       <span className="flex min-w-0 grow flex-col">
-        <span className="truncate">{profileName(p)}</span>
+        <span className="truncate">{profileTitle(p)}</span>
         <span className="flex gap-2 overflow-hidden text-xs whitespace-nowrap text-muted-foreground">
-          <span>{agentName(p.agent)}</span>
+          {p.name !== p.agent && <span>{agentName(p.agent)}</span>}
           <span className="truncate">{t(authLabel(p))}</span>
         </span>
       </span>
@@ -150,6 +148,14 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const [repoOpen, setRepoOpen] = useState(false);
   const [continueOpen, setContinueOpen] = useState(false);
   const [startKind, setStartKind] = useState<"conversation" | "coding" | "parallel" | "continue">(draft?.chat ? "conversation" : "coding");
+  const isGit = useIsGitFolder(draft?.repo);
+  // A folder that is not a git repository has no worktree to work in, and nothing to compare runs in
+  useEffect(() => {
+    if (isGit || !draft) return;
+    if (draft.worktree || draft.compare) updateDraft(id, { worktree: false, compare: null });
+    if (startKind === "parallel") setStartKind("coding");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGit, draft?.worktree, draft?.compare, startKind]);
   const repoAnchor = `${id}:repo`;
   const repoMenu = useLiquidMenu(`menu:${repoAnchor}`, repoAnchor);
   const repoRaised = useLiquidActiveAnchors().has(repoAnchor);
@@ -163,6 +169,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const cached = useStore((s) => (draft?.profile ? s.infoCache[draft.profile] : undefined));
   const savedEffort = useStore((s) => (draft?.profile ? s.effort.profiles[draft.profile] : undefined));
   const usage = useStore((s) => s.usage);
+  const settingMode = useStore((s) => s.settings.default_mode);
   useEffect(() => {
     void useStore.getState().loadUsage();
   }, []);
@@ -173,7 +180,9 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const current = profiles.find((p) => p.name === draft.profile);
   const preferredEffort = draft.choices.thought_level ?? savedEffort;
   const hasEffort = cached?.config.some((option) => option.category === "thought_level" && option.choices.some((choice) => choice.value === preferredEffort));
-  const info = cached ? withChoices(cached, hasEffort ? { ...draft.choices, thought_level: preferredEffort } : draft.choices) : null;
+  // The mode from Settings shows here too (when this agent has it), so the chip says what the session will start in
+  const startMode = !draft.chat && draft.choices.mode === undefined && settingMode && modeIds(cached).includes(settingMode) ? { mode: settingMode } : {};
+  const info = cached ? withChoices(cached, { ...startMode, ...(hasEffort ? { ...draft.choices, thought_level: preferredEffort } : draft.choices) }) : null;
   const choose = (c: Category, v: string) => updateDraft(id, { choices: { ...draft!.choices, [c]: v } });
   const modes = info ? (info.config.find((o) => o.category === "mode")?.choices.map((c) => c.value) ?? info.modes.map((m) => m.value)) : [];
   const mode = info ? (info.config.find((o) => o.category === "mode")?.current ?? info.current_mode) : null;
@@ -302,7 +311,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
                     className={cn("z-[58] min-w-52 p-1", modeMenu.moving && "opacity-0")}
                   >
                     {(["conversation", "coding", "parallel", "continue"] as const).map((value) => (
-                      <SelectItem key={value} value={value} className="h-8 text-xs">
+                      <SelectItem key={value} value={value} disabled={value === "parallel" && !isGit} className="h-8 text-xs">
                         <StartModeIcon mode={value} />
                         {t(`draft.mode${value[0].toUpperCase()}${value.slice(1)}` as MessageKey)}
                       </SelectItem>
@@ -417,8 +426,9 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
         >
           <div className="flex flex-col gap-1">
             <RepoPicker value={draft.repo} onPick={(repo) => updateDraft(id, { repo })} />
+            {!isGit && <p className="border-t border-border px-2 py-1 text-xs text-muted-foreground">{t("draft.notGit")}</p>}
             {startKind === "parallel" && <p className="border-t border-border px-2 py-1 text-xs text-muted-foreground">{t("draft.compareWorktree")}</p>}
-            {(startKind === "coding" || continueMode) && (
+            {(startKind === "coding" || continueMode) && isGit && (
               <div className="flex items-center gap-2 border-t border-border pt-1">
                 <span className="px-2 text-xs text-muted-foreground">{t("draft.workspaceMode")}</span>
                 <button

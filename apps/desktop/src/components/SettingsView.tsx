@@ -30,7 +30,7 @@ import { ShortcutSettings } from "./ShortcutSettings";
 import { RepoSettings } from "./RepoSettings";
 import { SharedMcp } from "./SharedMcp";
 import { checkForUpdate, installUpdate, useUpdate } from "@/state/update";
-import { agentName, ProfileOption, ProviderLogo } from "./icons";
+import { agentName, ModeIcon, modeLabel, ProfileOption, ProviderLogo } from "./icons";
 import { useLiquidMenu } from "./liquid/stage";
 import { liquidAnchor } from "./liquid/liquid";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -278,6 +278,9 @@ export function SettingsView() {
                 >
                   <ProfilePicker value={settings.default_profile ?? ""} onChange={(v) => change({ default_profile: v })} />
                 </Row>
+                <Row label={t("settings.defaultMode")} detail={t("settings.defaultModeDetail")}>
+                  <ModePicker value={settings.default_mode ?? ""} onChange={(v) => change({ default_mode: v })} />
+                </Row>
                 <Row
                   label={t("settings.restorePanes")}
                   htmlFor="st-restore"
@@ -442,6 +445,41 @@ function PathRow({ label, path, onReveal }: { label: string; path?: string; onRe
         {t("settings.revealInFinder")}
       </button>
     </div>
+  );
+}
+
+/** Permission modes worth presetting (ids as the agents report them; the modes that skip every question are left out) */
+const START_MODES = ["default", "acceptEdits", "plan", "read-only", "workspace-write"] as const;
+
+/** Permission mode a new coding session starts in: the agent's own default, or one of the common modes */
+function ModePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const t = useT();
+  const menu = useLiquidMenu("menu:settings:mode", "settings:mode");
+  const AGENT = "__agent__";
+  return (
+    <Select value={value || AGENT} onValueChange={(v) => onChange(v === AGENT ? "" : v)} onOpenChange={menu.onOpenChange}>
+      <SelectTrigger ref={liquidAnchor("settings:mode")} aria-label={t("settings.defaultMode")} className="h-8 min-w-40">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent
+        ref={menu.ref as React.Ref<HTMLDivElement>}
+        style={menu.style}
+        position="popper"
+        align="end"
+        sideOffset={6}
+        className={cn("z-[58]", menu.moving && "opacity-0")}
+      >
+        <SelectItem value={AGENT}>{t("settings.defaultModeAgent")}</SelectItem>
+        {START_MODES.map((m) => (
+          <SelectItem key={m} value={m}>
+            <span className="flex items-center gap-1.5">
+              <ModeIcon mode={m} />
+              {modeLabel(m)}
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

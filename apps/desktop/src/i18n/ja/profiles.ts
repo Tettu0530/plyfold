@@ -1,10 +1,10 @@
 // ProfilesView.tsx (profiles screen)
 export const profiles = {
   authApi: "公式 API",
-  authLogin: "既存のログイン",
+  authLogin: "CLI のログイン",
   authCustom: "カスタムプロバイダー",
   authApiDetail: "API キーで公式 API に接続します。",
-  authLoginDetail: "CLI の既存のログインを使用します。",
+  authLoginDetail: "CLI にログイン済みのアカウント（サブスクリプションなど）を使用します。",
   authCustomDetail: "API キーでカスタムプロバイダーに接続します。",
   baseHintClaude: "起動時に ANTHROPIC_BASE_URL として渡します",
   baseHintCodex: "専用ディレクトリの config.toml にプロバイダーとして書き込みます",
@@ -20,7 +20,7 @@ export const profiles = {
   replied: "応答 {model}",
   noModelName: "モデル名なし",
   cannotConnect: "接続できません",
-  defaultDetail: "{agent} の既存のログインと設定をそのまま使用します。API キーやエンドポイントを分けるには、プロファイルを追加してください。",
+  defaultDetail: "{agent} にログイン済みのアカウントと設定をそのまま使用します。API キーやエンドポイントを分けるには、プロファイルを追加してください。",
   keyPassedAs: "{var} として渡します",
   keyPassedAsKeychain: "{var} として渡します（キーチェーン: {account}）",
   keyPassedAsKeychainShared: "{var} として渡します（キーチェーン: {account}、{shared} と共有）",

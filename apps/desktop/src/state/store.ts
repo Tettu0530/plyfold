@@ -1,5 +1,6 @@
 // UI state. Engine events are received here and turned into a per-session view model
 
+import { useEffect } from "react";
 import { create } from "zustand";
 
 import type { LiquidStyle } from "@/components/liquid/liquid";
@@ -88,6 +89,15 @@ export interface Draft {
   error: string | null;
 }
 
+/** Whether this folder is in a git repository: true until it is known not to be (so a repository's Git view never waits) */
+export function useIsGitFolder(path: string | null | undefined): boolean {
+  const known = useStore((st) => (path ? st.gitFolders[path] : undefined));
+  useEffect(() => {
+    if (path && known === undefined) void useStore.getState().checkGitFolder(path);
+  }, [path, known]);
+  return known !== false;
+}
+
 export const isDraft = (id: string | null | undefined): id is string => !!id && id.startsWith("draft:");
 /** A pane showing a web page (a dev server the agent started, or any URL) */
 export const isPreview = (id: string | null | undefined): id is string => !!id && id.startsWith("preview:");
@@ -168,6 +178,8 @@ export interface Queued {
   attachments: Attached[];
   /** Being edited: it is not sent (nor anything after it) until the edit is saved or cancelled */
   editing?: boolean;
+  /** "Send now" was chosen mid-turn: the turn is being stopped, and this goes out as soon as it has */
+  now?: boolean;
 }
 let queueSeq = 0;
 const openingSideChats = new Map<string, Promise<SessionRecord>>();
@@ -398,6 +410,11 @@ interface State {
   saveQueued: (id: string, key: string, text: string) => void;
   /** Send the head of the queue now (no-op mid-turn) */
   sendQueued: (id: string) => void;
+  /** Whether a folder is inside a git repository (checked once per folder; a missing entry is not known yet) */
+  gitFolders: Record<string, boolean>;
+  checkGitFolder: (path: string) => Promise<boolean>;
+  /** Send this queued message first, stopping the current turn if one is running */
+  sendQueuedNow: (id: string, key: string) => Promise<void>;
   cancel: (id: string) => Promise<void>;
   respondPermission: (id: string, optionId: string | null) => Promise<void>;
   setCategory: (id: string, category: Category, value: string) => Promise<void>;
@@ -467,9 +484,15 @@ function rememberEffort(record: SessionRecord, value: string, updateDefault: boo
   });
 }
 
-async function applyStartingChoices(record: SessionRecord, choices: Partial<Record<Category, string>> = {}) {
+/** The mode ids an agent offers (the mode option's choices, or the legacy mode list) */
+export function modeIds(info: Pick<SessionInfo, "config" | "modes"> | null | undefined): string[] {
+  if (!info) return [];
+  return info.config.find((o) => o.category === "mode")?.choices.map((c) => c.value) ?? info.modes.map((m) => m.value);
+}
+
+async function applyStartingChoices(record: SessionRecord, choices: Partial<Record<Category, string>> = {}, softMode?: string) {
   const effort = choices.thought_level ?? useStore.getState().effort.profiles[record.profile];
-  return applyChoices(record.id, effort === undefined ? choices : { ...choices, thought_level: effort }, record, choices.thought_level !== undefined);
+  return applyChoices(record.id, effort === undefined ? choices : { ...choices, thought_level: effort }, record, choices.thought_level !== undefined, softMode);
 }
 
 async function reopenWithChoices(id: string) {
@@ -482,12 +505,14 @@ async function reopenWithChoices(id: string) {
 }
 
 /** Right after start, apply the preselected model / effort / mode (skipped if unchanged) */
-async function applyChoices(id: string, choices: Partial<Record<Category, string>>, record?: SessionRecord, updateEffortDefault = false) {
+async function applyChoices(id: string, choices: Partial<Record<Category, string>>, record?: SessionRecord, updateEffortDefault = false, softMode?: string) {
   const { thought_level: effort, ...otherChoices } = choices;
   const wanted = Object.entries(otherChoices) as [Category, string][];
   if (effort !== undefined) wanted.push(["thought_level", effort]);
+  let info = wanted.length > 0 || softMode ? await api.sessionInfo(id) : null;
+  // The mode from Settings, only if the agent has it and none was chosen on the draft
+  if (softMode && choices.mode === undefined && modeIds(info).includes(softMode)) wanted.push(["mode", softMode]);
   if (wanted.length === 0) return;
-  let info = await api.sessionInfo(id);
   for (const [cat, value] of wanted) {
     const opt = info?.config.find((o) => o.category === cat);
     const cur = cat === "mode" ? (opt?.current ?? info?.current_mode) : opt?.current;
@@ -618,6 +643,7 @@ export const useStore = create<State>((set, get) => ({
     thoughts_expanded: false,
     restore_panes: true,
     default_profile: "",
+    default_mode: "",
   },
   liquidStyle: "pop",
   searchLayerActive: false,
@@ -633,7 +659,9 @@ export const useStore = create<State>((set, get) => ({
     const prev = engineListener.current;
     const next = onEngineEvent((e) => {
       // When a turn ends, send queued instructions (not after a cancel or error; they stay queued)
-      if (e.type === "turn_ended" && !e.error && e.stop_reason !== "cancelled") queueMicrotask(() => get().sendQueued(e.session_id));
+      // (a stop chosen by "send now" is the exception: the message that asked for it goes out)
+      if (e.type === "turn_ended" && !e.error && (e.stop_reason !== "cancelled" || get().queues[e.session_id]?.[0]?.now))
+        queueMicrotask(() => get().sendQueued(e.session_id));
       // A session that stops working may make room for a queued task
       if (e.type === "status") queueMicrotask(() => void get().pumpTasks());
       if (e.type === "resume_scheduled") {
@@ -838,7 +866,11 @@ export const useStore = create<State>((set, get) => ({
       for (const r of started) if (r.status === "fulfilled") recs.push(await api.setRunGroup(r.value.id, group));
       await Promise.all(
         recs.map((rec) =>
-          applyStartingChoices(rec, rec.profile === picks[0] && d.choices.thought_level !== undefined ? { thought_level: d.choices.thought_level } : {}),
+          applyStartingChoices(
+            rec,
+            rec.profile === picks[0] && d.choices.thought_level !== undefined ? { thought_level: d.choices.thought_level } : {},
+            get().settings.default_mode,
+          ),
         ),
       );
       const failed = started.find((r): r is PromiseRejectedResult => r.status === "rejected");
@@ -1071,6 +1103,20 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
+  gitFolders: {},
+  checkGitFolder: async (path) => {
+    const known = get().gitFolders[path];
+    if (known !== undefined) return known;
+    let git = true;
+    try {
+      git = inTauri ? await api.folderIsGit(path) : true;
+    } catch {
+      // Unknown: treat it as a repository, as before
+    }
+    set((st) => ({ gitFolders: { ...st.gitFolders, [path]: git } }));
+    return git;
+  },
+
   queues: {},
   enqueue: (id, text, attachments) => set((s) => ({ queues: { ...s.queues, [id]: [...(s.queues[id] ?? []), { key: `q${++queueSeq}`, text, attachments }] } })),
   unqueue: (id, key) => set((s) => ({ queues: { ...s.queues, [id]: (s.queues[id] ?? []).filter((q) => q.key !== key) } })),
@@ -1090,6 +1136,21 @@ export const useStore = create<State>((set, get) => ({
     if (!next || next.editing || s.sessions[id]?.transcript.inTurn) return;
     set({ queues: { ...s.queues, [id]: rest } });
     void get().sendPrompt(id, next.text, next.attachments);
+  },
+
+  sendQueuedNow: async (id, key) => {
+    const queue = get().queues[id] ?? [];
+    const picked = queue.find((q) => q.key === key);
+    if (!picked) return;
+    const busy = !!get().sessions[id]?.transcript.inTurn;
+    set({ queues: { ...get().queues, [id]: [{ ...picked, editing: false, now: busy }, ...queue.filter((q) => q.key !== key)] } });
+    if (!busy) return get().sendQueued(id);
+    try {
+      await api.cancel(id);
+    } catch {
+      // It stays first in the queue and goes out when the turn ends
+      set((s) => ({ queues: { ...s.queues, [id]: (s.queues[id] ?? []).map((q) => (q.key === key ? { ...q, now: false } : q)) } }));
+    }
   },
 
   usage: null,
@@ -1127,6 +1188,11 @@ export const useStore = create<State>((set, get) => ({
   startDraft: async (id, prompt, attachments = []) => {
     const d = get().drafts[id];
     if (!d?.profile || d.busy) return;
+    // A folder that is not a git repository has no worktree to start in
+    if (!d.chat && (d.worktree || d.compare) && !(await get().checkGitFolder(d.repo))) {
+      get().updateDraft(id, { worktree: false, compare: null, error: t("draft.notGit") });
+      return;
+    }
     get().updateDraft(id, { busy: true, error: null });
     let createdId: string | undefined;
     const showSession = (record: SessionRecord) => {
@@ -1153,7 +1219,7 @@ export const useStore = create<State>((set, get) => ({
       if (!createdId) showSession(rec);
       // Apply the model / effort / mode chosen in the draft before the first prompt (a conversation keeps its own mode)
       const { mode: _mode, ...rest } = d.choices;
-      await applyStartingChoices(rec, d.chat ? rest : d.choices);
+      await applyStartingChoices(rec, d.chat ? rest : d.choices, d.chat ? undefined : get().settings.default_mode);
       set((s) => {
         const panes = s.panes.map((p) => (p === id ? rec.id : p));
         const drafts = { ...s.drafts };

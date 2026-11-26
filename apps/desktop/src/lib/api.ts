@@ -75,6 +75,7 @@ export const api = {
   setUiLang: (lang: string) => invoke<void>("set_ui_lang", { lang }),
   revealFile: (path: string) => invoke<void>("reveal_file", { path }),
   readTextFile: (path: string) => invoke<TextFile>("read_text_file", { path }),
+  folderIsGit: (path: string) => invoke<boolean>("folder_is_git", { path }),
   listRepos: () => invoke<RepoEntry[]>("list_repos"),
   sharedMcp: () => invoke<McpServerForm[]>("shared_mcp"),
   saveSharedMcp: (servers: McpServerForm[]) => invoke<void>("save_shared_mcp", { servers }),

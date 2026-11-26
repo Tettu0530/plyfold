@@ -82,7 +82,7 @@ function useShortcuts() {
         openDiff: () => {
           const id = s.panes[s.focusedPane];
           const r = id ? s.sessions[id]?.record : undefined;
-          if (id && r && !r.chat && !r.side_of && r.repo_path) s.openDiff(id);
+          if (id && r && !r.chat && !r.side_of && r.repo_path && s.gitFolders[r.repo_path] !== false) s.openDiff(id);
         },
         // The focused session's side chat: open it, or put the cursor in it when it is open (closing clears it, so only the × button does)
         sideChat: () => {

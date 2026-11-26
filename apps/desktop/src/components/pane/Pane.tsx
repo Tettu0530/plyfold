@@ -6,7 +6,20 @@ import { useT } from "@/i18n";
 import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/keys";
 import { cn } from "@/lib/utils";
-import { comparePaneOf, gitPaneOf, isCompare, isDraft, isFiles, isGit, isListed, isPreview, isTerminal, leavesShowing, useStore } from "@/state/store";
+import {
+  comparePaneOf,
+  gitPaneOf,
+  isCompare,
+  isDraft,
+  isFiles,
+  isGit,
+  isListed,
+  isPreview,
+  isTerminal,
+  leavesShowing,
+  useIsGitFolder,
+  useStore,
+} from "@/state/store";
 import { ComparePane } from "./ComparePane";
 import { FilesPane } from "./FilesPane";
 import { liquidAnchor } from "../liquid/liquid";
@@ -108,7 +121,7 @@ function SessionPane({ index }: { index: number }) {
   const id = useStore((s) => s.panes[index]);
   const view = useStore((s) => (id ? s.sessions[id] : undefined));
   const focused = useStore((s) => s.focusedPane === index);
-  const { focusPane, closePane, sendPrompt, cancel, respondPermission, setCategory, enqueue, unqueue, sendQueued, runShell } = useStore.getState();
+  const { focusPane, closePane, sendPrompt, cancel, respondPermission, setCategory, enqueue, unqueue, sendQueuedNow, runShell } = useStore.getState();
   const queue = useStore((s) => (id ? s.queues[id] : undefined));
   const [diffStat, setDiffStat] = useState<{ added: number; removed: number } | null>(null);
   const openDiff = useStore((s) => s.openDiff);
@@ -123,7 +136,8 @@ function SessionPane({ index }: { index: number }) {
   // The worktree's change count: on every status change and after worktree actions, when the window comes back,
   // and every few seconds while the agent works (it edits files mid-turn)
   // An everyday conversation's folder is not a repository: no Git button, no change counts
-  const inRepo = !!view?.record.repo_path && !view?.record.chat;
+  const inGit = useIsGitFolder(view?.record.repo_path);
+  const inRepo = !!view?.record.repo_path && !view?.record.chat && inGit;
   const busyNow = status === "working" || status === "awaiting_permission" || status === "stalled";
   // Branch, upstream and commits (for the header button; the Git view loads its own)
   const git = useGitInfo(id && inRepo ? id : "", busyNow);
@@ -171,7 +185,7 @@ function SessionPane({ index }: { index: number }) {
           <StatusIcon status={r.status} chat={r.chat} />
           <PaneTitle id={id} title={r.title} />
           <span
-            title={t("pane.profileTitle", { agent: r.agent, profile: r.profile })}
+            title={t("pane.profileTitle", { agent: agentName(r.agent), profile: r.profile === r.agent ? agentName(r.agent) : r.profile })}
             className="hidden items-center gap-1 text-xs whitespace-nowrap text-muted-foreground @[22rem]:flex"
           >
             <ProviderLogo agent={r.agent} className="size-3" />
@@ -225,7 +239,7 @@ function SessionPane({ index }: { index: number }) {
           {/* Side chat: a read-only fork for questions that stay out of this conversation (Gemini CLI cannot fork) */}
           {r.acp_session_id && r.agent !== "gemini" && <SideChatButton mainId={id} />}
           {/* Review: another agent reads the diff after each turn (not for conversations, which have no diff) */}
-          {!r.chat && r.repo_path && <ReviewButton mainId={id} />}
+          {!r.chat && r.repo_path && inGit && <ReviewButton mainId={id} />}
           {working && (
             <button
               type="button"
@@ -302,7 +316,7 @@ function SessionPane({ index }: { index: number }) {
             onStop={() => void cancel(id)}
             queue={queue ?? []}
             onUnqueue={(k) => unqueue(id, k)}
-            onSendQueued={() => sendQueued(id)}
+            onSendQueued={(key) => sendQueuedNow(id, key)}
             onShell={(command) => void runShell(id, command)}
             root={r.worktree_path ?? r.repo_path}
             // The running agent's list, else the last one in this session's log, else the one remembered for the profile

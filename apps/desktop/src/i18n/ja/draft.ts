@@ -2,7 +2,7 @@
 export const draft = {
   authCustom: "カスタムプロバイダー",
   authKeyed: "公式 API",
-  authLogin: "既存のログイン",
+  authLogin: "CLI のログイン",
   turnsTitle: "ターン {turns}（セッション {sessions}）",
   tokensTitle: "入力 {input}、出力 {output}",
   cost: "費用",
@@ -22,6 +22,7 @@ export const draft = {
   modeContinue: "セッションの再開",
   chooseSession: "再開するセッションを選択",
   worktree: "worktree",
+  notGit: "Git リポジトリではないフォルダです。worktree は使われず、このフォルダで直接作業します。Git、レビュー、並列比較は使えません",
   inPlace: "直接",
   choicesAfterStart: "モデルとエフォートは起動後に選択できます",
   firstPrompt: "初期プロンプト",

@@ -60,7 +60,7 @@ Visual and motion rules follow `.claude/skills/no-ai-slop-ui/SKILL.md`.
 
 ## Profiles
 
-- Multiple profiles per agent (auth: existing login / official API key / custom provider (base URL + key))
+- Multiple profiles per agent (auth: CLI sign-in / official API key / custom provider (base URL + key))
 - Keys live in the Keychain. Only the last 4 characters are shown
 - A toggle for "use a dedicated config directory", with an explanation of what it means
 - Connection check: configured model, responding model, time to first token, amount of added input

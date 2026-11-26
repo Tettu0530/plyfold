@@ -10,6 +10,7 @@ export const diff: Record<keyof typeof source, string> = {
   backToFiles: "文件",
   branchChanged: "当前未检出会话的原始分支，请检查当前分支",
   sessionGone: "此会话已不存在",
+  notGit: "此文件夹不是 git 仓库，因此没有 Git 视图。",
   noRepository: "此会话不使用仓库（对话文件夹不是 git 仓库）",
   resizeColumn: "栏宽度",
   resizeColumnHint: "拖动以调整宽度。双击恢复默认宽度",

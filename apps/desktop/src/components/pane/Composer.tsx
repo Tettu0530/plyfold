@@ -239,7 +239,7 @@ function QueueList({
   items: Queued[];
   busy: boolean;
   onRemove: (key: string) => void;
-  onSendNow: () => void;
+  onSendNow: (key: string) => void;
 }) {
   const t = useT();
   const { editQueued, saveQueued } = useStore.getState();
@@ -256,17 +256,11 @@ function QueueList({
           transition={smooth}
           className="overflow-hidden"
         >
-          <div className="flex flex-col gap-0.5 pb-1">
-            <div className="flex items-center gap-1.5 px-1.5 text-xs text-muted-foreground">
+          <div className="mb-2 flex flex-col gap-2 rounded-xl border bg-card/60 p-2.5">
+            <div className="flex items-center gap-1.5 px-0.5 text-xs text-muted-foreground">
               <ListOrdered className="size-3.5" aria-hidden />
               {held ? t("composer.queueHeldWhileEditing") : busy ? t("composer.queueSendAfterTurn") : t("composer.queueUnsent")}
               <span className="font-mono tabular">{items.length}</span>
-              {!busy && !held && (
-                <button type="button" onClick={onSendNow} className="ml-auto flex h-6 items-center gap-1 rounded-md px-1.5 text-foreground hover:bg-accent">
-                  <ArrowUp className="size-3" aria-hidden />
-                  {t("composer.sendFirst")}
-                </button>
-              )}
             </div>
             <AnimatePresence initial={false}>
               {items.map((q) => (
@@ -277,38 +271,58 @@ function QueueList({
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, height: 0 }}
                   transition={smooth}
-                  className={cn("flex min-h-7 items-center gap-2 rounded-md bg-card pr-0.5 pl-2.5", q.editing && "outline outline-ring")}
+                  className={cn("flex flex-col gap-2 rounded-lg border bg-background px-3 py-2", q.editing && "outline outline-ring")}
                 >
-                  <CornerDownRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                  {q.editing ? (
-                    <QueueEdit initial={q.text} onSave={(text) => saveQueued(scope, q.key, text)} onCancel={() => editQueued(scope, q.key, false)} />
-                  ) : (
-                    <span className="min-w-0 grow cursor-text truncate" title={t("composer.editQueued")} onDoubleClick={() => editQueued(scope, q.key, true)}>
-                      {q.text || q.attachments.map((a) => a.preview.name).join(" ")}
-                    </span>
-                  )}
-                  {q.attachments.length > 0 && (
-                    <Paperclip className="size-3 shrink-0 text-muted-foreground" aria-label={t("composer.attachmentsCount", { count: q.attachments.length })} />
-                  )}
+                  <div className="flex items-start gap-2">
+                    <CornerDownRight className="mt-1 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                    {q.editing ? (
+                      <QueueEdit initial={q.text} onSave={(text) => saveQueued(scope, q.key, text)} onCancel={() => editQueued(scope, q.key, false)} />
+                    ) : (
+                      <span
+                        className="line-clamp-4 min-w-0 grow cursor-text leading-relaxed whitespace-pre-wrap select-text"
+                        title={t("composer.editQueued")}
+                        onDoubleClick={() => editQueued(scope, q.key, true)}
+                      >
+                        {q.text || q.attachments.map((a) => a.preview.name).join(" ")}
+                      </span>
+                    )}
+                  </div>
                   {!q.editing && (
-                    <button
-                      type="button"
-                      aria-label={t("composer.editQueued")}
-                      title={t("composer.editQueued")}
-                      onClick={() => editQueued(scope, q.key, true)}
-                      className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-                    >
-                      <Pencil className="size-3" aria-hidden />
-                    </button>
+                    <div className="flex items-center gap-1 text-xs">
+                      {q.attachments.length > 0 && (
+                        <span className="mr-1 flex items-center gap-1 text-muted-foreground">
+                          <Paperclip className="size-3" aria-hidden />
+                          {t("composer.attachmentsCount", { count: q.attachments.length })}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onSendNow(q.key)}
+                        disabled={q.now}
+                        title={busy ? t("composer.sendNowInterruptHint") : undefined}
+                        className="ml-auto flex h-7 items-center gap-1 rounded-md px-2 text-foreground hover:bg-accent disabled:opacity-50"
+                      >
+                        <ArrowUp className="size-3" aria-hidden />
+                        {busy ? t("composer.sendNowInterrupt") : t("composer.sendNow")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => editQueued(scope, q.key, true)}
+                        className="flex h-7 items-center gap-1 rounded-md px-2 text-muted-foreground hover:bg-accent hover:text-foreground"
+                      >
+                        <Pencil className="size-3" aria-hidden />
+                        {t("composer.editQueued")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onRemove(q.key)}
+                        className="flex h-7 items-center gap-1 rounded-md px-2 text-muted-foreground hover:bg-accent hover:text-foreground"
+                      >
+                        <X className="size-3" aria-hidden />
+                        {t("composer.removeFromQueue")}
+                      </button>
+                    </div>
                   )}
-                  <button
-                    type="button"
-                    aria-label={t("composer.removeFromQueue")}
-                    onClick={() => onRemove(q.key)}
-                    className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-                  >
-                    <X className="size-3" aria-hidden />
-                  </button>
                 </motion.div>
               ))}
             </AnimatePresence>
@@ -418,7 +432,7 @@ export function Composer({
   onStop?: () => void;
   queue?: Queued[];
   onUnqueue?: (key: string) => void;
-  onSendQueued?: () => void;
+  onSendQueued?: (key: string) => void;
   /** `!command` in the input runs the command instead of sending it to the agent */
   onShell?: (command: string) => void;
   /** Working directory for @-mentions (the session's worktree or repository) */
@@ -483,7 +497,7 @@ export function Composer({
   return (
     // Same width as the conversation above in a wide pane (its edges line up with the messages, as in a narrow one)
     <div data-session-composer className="flex shrink-0 flex-col gap-1 px-[max(0.75rem,calc((100%_-_53rem)/2))] pb-3">
-      <QueueList scope={scope} items={queue} busy={busy} onRemove={(k) => onUnqueue?.(k)} onSendNow={() => onSendQueued?.()} />
+      <QueueList scope={scope} items={queue} busy={busy} onRemove={(k) => onUnqueue?.(k)} onSendNow={(key) => onSendQueued?.(key)} />
       <ControlRow
         scope={scope}
         agent={agent}

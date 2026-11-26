@@ -7,7 +7,7 @@ import type { Diff, FileStat, WtStatus } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useT, type MessageKey } from "@/i18n";
-import { gitSessionOf, useStore } from "@/state/store";
+import { gitSessionOf, useIsGitFolder, useStore } from "@/state/store";
 import { Num, ROW, Unified } from "../PatchLines";
 import { Segmented } from "../Segmented";
 import { GitPanel, useGitInfo } from "./GitMenu";
@@ -206,11 +206,12 @@ export function GitPane({ index, id }: { index: number; id: string }) {
 
   // A conversation and a side chat have no repository, so there is no Git view for them. A pane opened before this
   // was checked (an older layout saved with one, say) says so rather than reading a folder that is not a repository
-  const noRepo = view && (view.record.chat || view.record.side_of);
+  const isGit = useIsGitFolder(view?.record.repo_path);
+  const noRepo = view && (view.record.chat || view.record.side_of || !isGit);
   if (!view || noRepo) {
     return (
       <section ref={pane} className="flex min-w-0 flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
-        <p>{view ? t("diff.noRepository") : t("diff.sessionGone")}</p>
+        <p>{view ? (isGit ? t("diff.noRepository") : t("diff.notGit")) : t("diff.sessionGone")}</p>
         <button type="button" onClick={() => closePane(index)} className="rounded-md px-2 py-1 hover:bg-accent hover:text-foreground">
           {t("pane.closePane")}
         </button>
@@ -448,6 +449,7 @@ const clampColumn = (w: number) => Math.round(Math.min(Math.max(w, COLUMN_MIN), 
 
 /** The left column's width, remembered on this machine (a viewer convenience, so local storage is enough) */
 export function useColumnWidth(key = COLUMN_KEY): [number, (w: number) => void] {
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [w, setW] = useState(() => {
     try {
       const v = Number(localStorage.getItem(key));
@@ -459,11 +461,15 @@ export function useColumnWidth(key = COLUMN_KEY): [number, (w: number) => void] 
   const set = (v: number) => {
     const c = clampColumn(v);
     setW(c);
-    try {
-      localStorage.setItem(key, String(c));
-    } catch {
-      // Not remembered, still applied
-    }
+    // A drag reports many widths; write only the last one, once it settles
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      try {
+        localStorage.setItem(key, String(c));
+      } catch {
+        // Not remembered, still applied
+      }
+    }, 200);
   };
   return [w, set];
 }
@@ -491,8 +497,14 @@ export function ColumnResizer({
 }) {
   const t = useT();
   const drag = useRef<{ origin: number } | null>(null);
+  const frame = useRef<number | null>(null);
+  const pending = useRef<number | null>(null);
   const [active, setActive] = useState(false);
   const end = () => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+    if (drag.current && pending.current !== null) onChange(pending.current);
+    pending.current = null;
     drag.current = null;
     document.body.classList.remove("resizing");
     setActive(false);
@@ -520,7 +532,18 @@ export function ColumnResizer({
         setActive(true);
         onActiveChange?.(true);
       }}
-      onPointerMove={(e) => drag.current && onChange(edge === "right" ? e.clientX - drag.current.origin : drag.current.origin - e.clientX)}
+      onPointerMove={(e) => {
+        const d = drag.current;
+        if (!d) return;
+        // At most one layout per frame, however fast the pointer reports
+        pending.current = edge === "right" ? e.clientX - d.origin : d.origin - e.clientX;
+        if (frame.current !== null) return;
+        frame.current = requestAnimationFrame(() => {
+          frame.current = null;
+          if (pending.current !== null) onChange(pending.current);
+          pending.current = null;
+        });
+      }}
       onPointerUp={end}
       onPointerCancel={end}
       onDoubleClick={() => (onReset ? onReset() : onChange(COLUMN_DEFAULT))}

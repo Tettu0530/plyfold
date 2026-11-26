@@ -75,7 +75,7 @@ function SideChatBody({ mainId }: { mainId: string }) {
   const side = useStore((s) => s.sideChats[mainId]);
   const view = useStore((s) => (side?.id ? s.sessions[side.id] : undefined));
   const queue = useStore((s) => (side?.id ? s.queues[side.id] : undefined));
-  const { closeSideChat, refreshSideChat, sendPrompt, cancel, setCategory, insertIntoComposer, enqueue, unqueue, sendQueued } = useStore.getState();
+  const { closeSideChat, refreshSideChat, sendPrompt, cancel, setCategory, insertIntoComposer, enqueue, unqueue, sendQueuedNow } = useStore.getState();
   const age = useAge(side?.openedAt ?? Date.now());
   const focused = useRef<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -174,7 +174,7 @@ function SideChatBody({ mainId }: { mainId: string }) {
             onSend={(text, a) => (view.transcript.inTurn ? enqueue(r.id, text, a) : void sendPrompt(r.id, text, a))}
             queue={queue ?? []}
             onUnqueue={(k) => unqueue(r.id, k)}
-            onSendQueued={() => sendQueued(r.id)}
+            onSendQueued={(key) => sendQueuedNow(r.id, key)}
             onStop={() => void cancel(r.id)}
             root={r.worktree_path ?? r.repo_path}
             commands={view.info?.commands ?? []}

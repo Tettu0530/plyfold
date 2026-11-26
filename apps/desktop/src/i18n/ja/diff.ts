@@ -8,6 +8,7 @@ export const diff = {
   backToFiles: "ファイル",
   branchChanged: "セッションの元のブランチはチェックアウトされていません。現在のブランチを確認してください。",
   sessionGone: "セッションが存在しません。",
+  notGit: "このフォルダは Git リポジトリではありません。Git ビューを使えません。",
   noRepository: "このセッションはリポジトリを使用しません（会話フォルダは Git リポジトリではありません）。",
   resizeColumn: "列の幅",
   resizeColumnHint: "ドラッグで幅を変更。ダブルクリックで既定の幅に戻します。",
