@@ -10,5 +10,5 @@ export const notifications: Record<keyof typeof source, string> = {
   urgentLabel: "{count, plural, one {# session needs attention} other {# sessions need attention}}",
   newLabel: "{count, plural, one {# new notification} other {# new notifications}}",
   title: "Notifications",
-  empty: "No notifications.",
+  empty: "No notifications",
 };

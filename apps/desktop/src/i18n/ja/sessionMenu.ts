@@ -10,7 +10,6 @@ export const sessionMenu = {
   forkBusy: "ターン実行中です",
   forkStopFirst: "先に停止してください",
   delete: "ゴミ箱に移動",
-  confirmDelete: "「{title}」を消します",
   deleteWithWorktree: "worktree とブランチも削除",
   deleteRecordOnly: "記録のみ削除（worktree は保持）",
   deleteRecord: "記録を削除",

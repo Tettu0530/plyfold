@@ -1923,7 +1923,7 @@ impl Engine {
                 self.inner.worktrees.remove(&wt, true)?;
             } else {
                 let note = plyfold_i18n::tr!(
-                    "同じ worktree のセッションを消しました。このセッションが使っているので、worktree と枝は残してあります",
+                    "同じ worktree のセッションを消しました。このセッションが使っているので、worktree とブランチは保持しています",
                     "A session that shared this worktree was deleted. The worktree and branch were kept, because this session still uses them",
                     "已删除一个共用此 worktree 的会话。此会话仍在使用，因此保留了 worktree 和分支"
                 );
@@ -2081,7 +2081,7 @@ impl Engine {
         }
         let (dir, _) = self.git_dir(id)?;
         plyfold_worktree::remote::pull(&dir)?;
-        self.inner.notice(id, plyfold_i18n::tr!("リモートの新しいコミットを取り込みました", "Pulled the new commits from the remote", "已拉取远程的新提交"));
+        self.inner.notice(id, plyfold_i18n::tr!("リモートの新しいコミットを pull しました", "Pulled the new commits from the remote", "已拉取远程的新提交"));
         Ok(())
     }
 
@@ -2109,7 +2109,7 @@ impl Engine {
     pub fn merge(&self, id: &str) -> Result<String, CoreError> {
         let wt = self.idle_worktree(id)?;
         let target = plyfold_worktree::ops::merge(&wt)?;
-        self.inner.notice(id, plyfold_i18n::tr!("{} を {target} に取り込みました", "Merged {} into {target}", "已将 {} 合并到 {target}", wt.branch));
+        self.inner.notice(id, plyfold_i18n::tr!("{} を {target} にマージしました", "Merged {} into {target}", "已将 {} 合并到 {target}", wt.branch));
         Ok(target)
     }
 
@@ -2139,7 +2139,7 @@ impl Engine {
             self.inner.notice(
                 id,
                 plyfold_i18n::tr!(
-                    "別のセッションが同じ worktree を使っているので、worktree と枝は残しました",
+                    "別のセッションが同じ worktree を使っているので、worktree とブランチは保持しました",
                     "Kept the worktree and branch, because another session still uses them",
                     "另一个会话仍在使用同一 worktree，因此保留了 worktree 和分支"
                 ),
@@ -2148,8 +2148,10 @@ impl Engine {
         }
         self.inner.worktrees.remove(&wt, true)?;
         self.inner.store.set_workspace(id, rec.repo_path.as_deref(), None, None, None)?;
-        self.inner
-            .notice(id, plyfold_i18n::tr!("worktree と枝 {} を片付けました", "Removed the worktree and branch {}", "已清理 worktree 和分支 {}", wt.branch));
+        self.inner.notice(
+            id,
+            plyfold_i18n::tr!("worktree とブランチ {} を削除しました", "Removed the worktree and branch {}", "已清理 worktree 和分支 {}", wt.branch),
+        );
         Ok(true)
     }
 
@@ -2616,7 +2618,7 @@ fn verdict_prompt(instruction: &str, runs: &[VerdictRun], rules: Option<&str>) -
     let share = (REVIEW_DIFF_MAX / runs.len().max(1)).max(8_000);
     let instruction = Some(instruction.trim()).filter(|i| !i.is_empty()).unwrap_or("—");
     let mut text = plyfold_i18n::tr!(
-        "同じ指示を複数のエージェントに並べて実行させました。それぞれの結果を比べ、どれを取り込むべきかを判断してください。ファイルの編集や、何かを変えるコマンドの実行はしないでください（ファイルを読むのは構いません）。\n\n共通の指示:\n{instruction}",
+        "同じ指示を複数のエージェントに並べて実行させました。それぞれの結果を比べ、どれをマージすべきかを判断してください。ファイルの編集や、何かを変えるコマンドの実行はしないでください（ファイルを読むのは構いません）。\n\n共通の指示:\n{instruction}",
         "The same instruction was run side by side on several agents. Compare the results and decide which one to take. Do not edit files or run commands that change anything (reading files is fine).\n\nThe shared instruction:\n{instruction}",
         "同一条指令被并行交给多个代理执行。请比较各自的结果，判断应采用哪一个。不要编辑文件，也不要运行会更改任何内容的命令（可以读取文件）。\n\n共同的指令：\n{instruction}"
     );
@@ -2655,7 +2657,7 @@ fn verdict_prompt(instruction: &str, runs: &[VerdictRun], rules: Option<&str>) -
         }
     }
     text += &plyfold_i18n::tr!(
-        "\n\n最初の行に「採用: <実行の名前>」と書き、続けて理由を、正しさ、指示への沿い方、変更の小ささ、リスクの順に短く述べてください。他の実行で取り込む価値のある部分や、どれも採用できない場合はその理由も添えてください。",
+        "\n\n最初の行に「採用: <実行の名前>」と書き、続けて理由を、正しさ、指示への沿い方、変更の小ささ、リスクの順に短く述べてください。他の実行でマージする価値のある部分や、どれも採用できない場合はその理由も添えてください。",
         "\n\nStart with `Take: <the run's name>`, then give the reasons briefly: correctness, how well it follows the instruction, how small the change is, and risks. Mention anything worth taking from the others, or say why none should be taken.",
         "\n\n第一行写「采用：<运行名称>」，然后简要说明理由：正确性、对指令的贴合度、改动是否精简、风险。如果其他运行中有值得采纳的部分，或都不应采用，请一并说明。"
     );

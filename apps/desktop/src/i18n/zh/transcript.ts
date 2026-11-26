@@ -12,7 +12,7 @@ export const transcript: Record<keyof typeof source, string> = {
   interrupted: "已中断",
   endedAt: "完成时间",
   thought: "思考内容",
-  empty: "没有消息。",
+  empty: "没有消息",
   plan: "计划",
   sessionCost: "会话费用 {cost}",
   toolGroup: "工具调用 {count} 项",

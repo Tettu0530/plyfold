@@ -12,7 +12,6 @@ export const sessionMenu: Record<keyof typeof source, string> = {
   forkBusy: "A turn is in progress",
   forkStopFirst: "Stop the agent first",
   delete: "Move to trash",
-  confirmDelete: "Delete “{title}”",
   deleteWithWorktree: "Delete worktree and branch too",
   deleteRecordOnly: "Delete session only (keep worktree)",
   deleteRecord: "Delete session",

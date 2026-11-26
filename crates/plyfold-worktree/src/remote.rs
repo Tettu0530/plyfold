@@ -269,7 +269,7 @@ pub fn pull(dir: &Path) -> Result<(), WorktreeError> {
     }
     run_network("git", dir, &["pull", "--quiet", "--ff-only"]).map(|_| ()).map_err(|e| {
         WorktreeError::Op(plyfold_i18n::tr!(
-            "早送りで取り込めませんでした。手元とリモートの両方に新しいコミットがあるか、変更がぶつかっています。\n{e}",
+            "fast-forward でマージできませんでした。手元とリモートの両方に新しいコミットがあるか、変更がぶつかっています。\n{e}",
             "Could not fast-forward. Both this branch and the remote have new commits, or the changes conflict.\n{e}",
             "无法快进合并。本地和远程都有新的提交，或更改存在冲突。\n{e}"
         ))

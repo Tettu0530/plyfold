@@ -889,7 +889,7 @@ async fn merge_session(state: State<'_, AppState>, id: String) -> CmdResult<Merg
     let cleaned = if cleanup {
         state.engine.cleanup_worktree(&id).await.map_err(|e| {
             plyfold_i18n::tr!(
-                "{target} には取り込みましたが、片付けに失敗しました: {e}",
+                "{target} にはマージしましたが、後片付けに失敗しました: {e}",
                 "Merged into {target}, but cleanup failed: {e}",
                 "已合并到 {target}，但清理失败：{e}"
             )

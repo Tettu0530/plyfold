@@ -151,8 +151,23 @@ impl Worktrees {
 
     /// Removes the worktree. With `delete_branch`, also deletes the branch (the work is lost)
     pub fn remove(&self, wt: &Worktree, delete_branch: bool) -> Result<(), WorktreeError> {
-        git(&wt.repo, &["worktree", "remove", "--force", &wt.path.display().to_string()])?;
-        if delete_branch {
+        let repo_alive = wt.repo.is_dir() && git(&wt.repo, &["rev-parse", "--git-dir"]).is_ok();
+        if !repo_alive {
+            // The repository was moved or deleted, so git cannot be asked: only the worktree's own folder is left.
+            // Only a folder under Plyfold's worktree root is removed, never the repository's path
+            if wt.path != wt.repo && wt.path.starts_with(&self.root) && wt.path.exists() {
+                std::fs::remove_dir_all(&wt.path)?;
+            }
+            return Ok(());
+        }
+        if wt.path.exists() {
+            git(&wt.repo, &["worktree", "remove", "--force", &wt.path.display().to_string()])?;
+        } else {
+            // The folder is already gone: drop git's record of it
+            let _ = git(&wt.repo, &["worktree", "prune"]);
+        }
+        // A branch that is already gone needs no deleting
+        if delete_branch && git(&wt.repo, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{}", wt.branch)]).is_ok() {
             git(&wt.repo, &["branch", "-D", &wt.branch])?;
         }
         Ok(())
@@ -332,6 +347,37 @@ mod tests {
         assert!(log.branches.iter().any(|b| b.remote && b.name == "origin/topic"));
         assert!(!log.branches.iter().any(|b| b.name == "origin/HEAD"));
         assert!(log.rows.iter().filter_map(|r| r.commit.as_ref()).any(|c| Some(&c.sha) == log.head.as_ref() && c.subject == "detached commit"));
+    }
+
+    #[test]
+    fn removing_a_worktree_works_when_the_repository_or_the_folder_is_gone() {
+        let base = tmp("remove-gone");
+        let repo = base.join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        init_repo(&repo);
+        let wts = Worktrees::new(base.join("wts"));
+
+        // The worktree's folder is already gone: git's record and the branch are still cleaned up
+        let a = wts.create(&repo, "a", None).unwrap();
+        std::fs::remove_dir_all(&a.path).unwrap();
+        wts.remove(&a, true).unwrap();
+        assert!(git(&repo, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{}", a.branch)]).is_err());
+        // Removing it again is harmless
+        wts.remove(&a, true).unwrap();
+
+        // The repository is gone: the worktree's folder under Plyfold's root is removed, nothing else
+        let b = wts.create(&repo, "b", None).unwrap();
+        std::fs::remove_dir_all(&repo).unwrap();
+        assert!(b.path.exists());
+        wts.remove(&b, true).unwrap();
+        assert!(!b.path.exists());
+
+        // A path outside the worktree root is never deleted
+        let outside = base.join("outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        let stray = Worktree { repo: repo.clone(), path: outside.clone(), branch: "x".into(), base: "main".into() };
+        wts.remove(&stray, true).unwrap();
+        assert!(outside.exists());
     }
 
     #[test]

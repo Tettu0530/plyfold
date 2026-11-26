@@ -137,7 +137,7 @@ async fn fork_keeps_the_conversation_and_leaves_uncommitted_files_behind() {
     assert_eq!(eng.store().get_session(&src.id).unwrap().worktree_path.as_deref(), src.worktree_path.as_deref());
     eng.delete_session(&src.id, true).await.unwrap();
     assert!(src_wt.exists());
-    assert!(eng.store().events(&shared.id, None, 100).unwrap().iter().any(|e| e.payload.contains("worktree と枝は残してあります")));
+    assert!(eng.store().events(&shared.id, None, 100).unwrap().iter().any(|e| e.payload.contains("worktree とブランチは保持しています")));
     eng.delete_session(&shared.id, true).await.unwrap();
     assert!(!src_wt.exists());
 

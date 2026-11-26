@@ -10,6 +10,6 @@ export const store: Record<keyof typeof source, string> = {
   skippedLines: "… {count} 行",
   newChatTitle: "新对话",
   compareStartFailed: "并排启动的会话中有一个无法启动：{error}",
-  rerunUnavailable: "此会话没有工作树或首条指令，无法重新运行",
+  rerunUnavailable: "此会话没有 worktree 或首条指令，无法重新运行",
   rerunFailed: "无法重新开始运行：{error}",
 };
