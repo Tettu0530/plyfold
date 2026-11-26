@@ -4,6 +4,8 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-26
+
 ### Added
 
 - Settings has a permission mode for new sessions (Settings → General). A new coding session, including each run of a comparison, starts in it when the agent has that mode; the mode chosen on the new session screen still wins, and conversations keep their own
@@ -316,6 +318,7 @@ The first release, for macOS (Apple Silicon) and Windows 10/11 (x64; new, please
 - Settings for display size, reduced motion, notifications, defaults for new sessions and more
 - Spring-based motion modelled on SwiftUI, with a fade-only mode for Reduce motion
 
+[0.7.1]: https://github.com/Tettu0530/plyfold/releases/tag/v0.7.1
 [0.7.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.7.0
 [0.6.4]: https://github.com/Tettu0530/plyfold/releases/tag/v0.6.4
 [0.6.3]: https://github.com/Tettu0530/plyfold/releases/tag/v0.6.3
