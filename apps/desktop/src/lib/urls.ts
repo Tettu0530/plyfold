@@ -19,11 +19,16 @@ export function localUrls(text: string): string[] {
   return out;
 }
 
-/** What the user typed in the address field, as a URL: adds http:// when no scheme is given */
+/** A host that is this machine: dev servers are plain http */
+const isLocalHost = (host: string) =>
+  /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|.*\.localhost)(:\d+)?$/i.test(host) || /^(10|192\.168)\.\d+\.\d+(\.\d+)?(:\d+)?$/.test(host);
+
+/** What the user typed in the address field, as a URL: adds a scheme when none is given (http for this machine, https for the rest) */
 export function normalizeUrl(input: string): string | null {
   const s = input.trim();
   if (!s) return null;
-  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : `http://${s}`;
+  const host = s.replace(/[/?#].*$/, "");
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : `${isLocalHost(host) ? "http" : "https"}://${s}`;
   try {
     const u = new URL(withScheme);
     return u.protocol === "http:" || u.protocol === "https:" ? u.toString() : null;
