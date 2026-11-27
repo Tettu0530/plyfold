@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ChevronUp, Clock, Coins, Gauge, Info, ListChecks, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { useT, contentLang } from "@/i18n";
 import { money, seconds, tokens } from "@/lib/format";
@@ -189,6 +189,7 @@ function ToBottomButton({ unseen, label, title, onClick }: { unseen: boolean; la
  * Tool calls that follow one another share a summary; any other item (a message, thinking, a plan) ends the run, so each
  * summary sits where those calls happened in the conversation.
  */
+const NO_COMMANDS: SlashCommand[] = [];
 export type ToolGroup = { kind: "tools"; itemIndex: number; tools: { tool: ToolCall; itemIndex: number }[] };
 export function groupTools(items: TranscriptItem[]): ((TranscriptItem & { itemIndex: number }) | ToolGroup)[] {
   const grouped: ((TranscriptItem & { itemIndex: number }) | ToolGroup)[] = [];
@@ -208,6 +209,354 @@ export function groupTools(items: TranscriptItem[]): ((TranscriptItem & { itemIn
   return grouped;
 }
 
+type Block = ReturnType<typeof groupTools>[number];
+
+/** Whether two blocks show the same thing (groupTools builds new objects on every call, so identity is not enough) */
+function sameBlock(a: Block, b: Block): boolean {
+  if (a === b) return true;
+  const x = a as Record<string, unknown>;
+  const y = b as Record<string, unknown>;
+  const keys = Object.keys(x);
+  if (keys.length !== Object.keys(y).length) return false;
+  for (const key of keys) {
+    if (Object.is(x[key], y[key])) continue;
+    const xs = x[key];
+    const ys = y[key];
+    // The calls of a tool group: same tool objects at the same positions
+    if (key === "tools" && Array.isArray(xs) && Array.isArray(ys) && xs.length === ys.length) {
+      if (
+        xs.every((row: { tool: unknown; itemIndex: number }, k) => row.tool === (ys[k] as typeof row).tool && row.itemIndex === (ys[k] as typeof row).itemIndex)
+      )
+        continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Turns far from the view are not rendered: a box of the height they last had stands in for them. A long session has
+ * thousands of blocks, and the browser (WebKit in particular) spends its time on all of them whenever the width changes.
+ */
+interface LazyApi {
+  /** Calls `onNear` when the box comes within reach of the view (and again when it leaves) */
+  watch(el: HTMLElement, onNear: (near: boolean) => void): () => void;
+  /** The height to hold for a turn that is not rendered */
+  height(key: number): number;
+}
+const LazyContext = createContext<LazyApi | null>(null);
+/** How far outside the view (in px, each way) turns are kept rendered: about two screens */
+const NEAR = 1500;
+const DEFAULT_HEIGHT = 400;
+const CAN_LAZY = typeof IntersectionObserver !== "undefined" && typeof ResizeObserver !== "undefined";
+
+function useLazyApi(root: HTMLElement | null): LazyApi | null {
+  return useMemo(() => {
+    if (!root || !CAN_LAZY) return null;
+    const callbacks = new Map<Element, (near: boolean) => void>();
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) callbacks.get(e.target)?.(e.isIntersecting);
+      },
+      { root, rootMargin: `${NEAR}px 0px` },
+    );
+    const heights = new Map<number, number>();
+    const last = new WeakMap<Element, number>();
+    const average = () => {
+      if (heights.size === 0) return DEFAULT_HEIGHT;
+      let sum = 0;
+      for (const h of heights.values()) sum += h;
+      return Math.round(sum / heights.size);
+    };
+    let tuned = DEFAULT_HEIGHT;
+    const ro = new ResizeObserver((entries) => {
+      const top = root.getBoundingClientRect().top;
+      let shift = 0;
+      // Moves what is read when a turn above the view changes height (its old bottom edge was above the view)
+      const settle = (el: Element, h: number, before: number | undefined) => {
+        if (before !== undefined && h !== before && el.getBoundingClientRect().bottom - (h - before) <= top) shift += h - before;
+      };
+      for (const e of entries) {
+        const el = e.target as HTMLElement;
+        const h = e.borderBoxSize?.[0]?.blockSize ?? e.contentRect.height;
+        const before = last.get(el);
+        last.set(el, h);
+        if (el.dataset.shown === "1") heights.set(Number(el.dataset.key), h);
+        settle(el, h, before);
+      }
+      // Turns never seen yet stand in with the average of those that were: the length of the scrollbar settles quickly
+      const avg = average();
+      if (Math.abs(avg - tuned) > tuned * 0.05) {
+        tuned = avg;
+        for (const el of callbacks.keys() as IterableIterator<HTMLElement>) {
+          if (el.dataset.shown !== "0" || heights.has(Number(el.dataset.key))) continue;
+          const before = last.get(el);
+          el.style.height = `${avg}px`;
+          last.set(el, avg);
+          settle(el, avg, before);
+        }
+      }
+      if (shift) root.scrollTop += shift;
+    });
+    return {
+      watch(el, onNear) {
+        callbacks.set(el, onNear);
+        io.observe(el);
+        ro.observe(el);
+        return () => {
+          callbacks.delete(el);
+          io.unobserve(el);
+          ro.unobserve(el);
+        };
+      },
+      height(key) {
+        return heights.get(key) ?? average();
+      },
+    };
+  }, [root]);
+}
+
+interface SegmentProps {
+  /** One turn: a user message and what followed it (or the items before the first message) */
+  blocks: Block[];
+  isLast: boolean;
+  /** Rendered from the start (the turns at the end, where the view opens) */
+  eager: boolean;
+  /** Kept rendered wherever it is (it holds the find match or the message being edited) */
+  pinned: boolean;
+  /** The turn is being worked on (only ever true for the last segment) */
+  live: boolean;
+  streaming: boolean;
+  busy: boolean;
+  lastItem: number;
+  editing: number | null;
+  setEditing: (index: number | null) => void;
+  finding: boolean;
+  query: string;
+  currentItem: number | null;
+  currentOccurrence: number | null;
+  permissionTool?: string;
+  commands: SlashCommand[];
+  base?: string;
+  sessionId?: string;
+  onResend?: (text: string, attachments: Attached[]) => void;
+  onQuote?: { label: string; run: (text: string) => void };
+  onSendBack?: { label: string; run: (text: string) => void };
+}
+
+// A local command (no tokens either way) has nothing to report; a stop or an error still shows
+const showStats = (b: Extract<TranscriptItem, { kind: "stats" }>) =>
+  !!b.error || b.stopReason === "cancelled" || b.stopReason === INTERRUPTED || !usedNoTokens(b.stats);
+
+/**
+ * One turn of the conversation. Memoised, so a turn that did not change is not rendered again while the last one streams
+ * or while the input is typed in; and it is one box for the browser's content-visibility, so the turns that are scrolled
+ * out of view cost no layout (a long session has thousands of blocks).
+ */
+const Segment = memo(
+  function Segment({
+    blocks,
+    isLast,
+    eager,
+    pinned,
+    live,
+    streaming,
+    busy,
+    lastItem,
+    editing,
+    setEditing,
+    finding,
+    query,
+    currentItem,
+    currentOccurrence,
+    permissionTool,
+    commands,
+    base,
+    sessionId,
+    onResend,
+    onQuote,
+    onSendBack,
+  }: SegmentProps) {
+    const tr = useT();
+    const lazy = useContext(LazyContext);
+    const ref = useRef<HTMLDivElement>(null);
+    const key = blocks[0].itemIndex;
+    const [near, setNear] = useState(eager);
+    // Without IntersectionObserver (tests, server rendering) everything is rendered. The observer exists a moment after
+    // the first render; until then only the turns at the end are, so the view does not open on a screenful of the wrong height
+    const shown = !CAN_LAZY || near || pinned || isLast;
+    useEffect(() => {
+      const el = ref.current;
+      if (!lazy || !el) return;
+      return lazy.watch(el, setNear);
+    }, [lazy]);
+    const find = { query };
+    const current = currentItem == null ? undefined : { itemIndex: currentItem, occurrence: currentOccurrence ?? 0 };
+    const occurrenceIn = (itemIndex: number) => (current?.itemIndex === itemIndex ? current.occurrence : null);
+    // Only the last answer of a finished turn gets actions and turn statistics.
+    const statsOf = new Map<number, Extract<TranscriptItem, { kind: "stats" }>>();
+    const attached = new Set<number>();
+    const finalAnswers = new Set<number>();
+    let lastAgent: number | null = null;
+    blocks.forEach((block, index) => {
+      if (block.kind === "user") {
+        if (lastAgent !== null) finalAnswers.add(lastAgent);
+        lastAgent = null;
+      } else if (block.kind === "agent") {
+        lastAgent = index;
+      } else if (block.kind === "stats") {
+        if (lastAgent !== null) finalAnswers.add(lastAgent);
+        if (!block.error && lastAgent !== null) {
+          statsOf.set(lastAgent, block);
+          attached.add(index);
+        }
+        lastAgent = null;
+      }
+    });
+    if (!live && lastAgent !== null) finalAnswers.add(lastAgent);
+    return (
+      <div
+        ref={ref}
+        data-key={key}
+        data-shown={shown ? "1" : "0"}
+        className="flex shrink-0 flex-col gap-3"
+        style={shown ? undefined : { height: lazy?.height(key) ?? DEFAULT_HEIGHT }}
+      >
+        {shown &&
+          blocks.map((b, i) => {
+            switch (b.kind) {
+              case "user":
+                return (
+                  <div
+                    key={b.itemIndex}
+                    data-find-item={b.itemIndex}
+                    className={cn("group flex flex-col items-end gap-1.5 self-end", editing === b.itemIndex ? "w-[78%]" : "max-w-[78%]")}
+                  >
+                    {b.attachments && <SentAttachments items={b.attachments} />}
+                    {editing === b.itemIndex ? (
+                      <EditBox
+                        initial={b.text}
+                        onCancel={() => setEditing(null)}
+                        onSend={(t) => {
+                          setEditing(null);
+                          onResend?.(t, resendable(b.attachments ?? []));
+                        }}
+                      />
+                    ) : (
+                      <>
+                        {b.text && (
+                          <div lang={contentLang(b.text)} className="rounded-[10px] bg-muted px-3 py-1.5 leading-relaxed whitespace-pre-wrap select-text">
+                            {finding ? (
+                              <Marked text={b.text} query={find.query} active={occurrenceIn(b.itemIndex)} />
+                            ) : (
+                              <CommandText text={b.text} commands={commands} />
+                            )}
+                          </div>
+                        )}
+                        {onResend && (
+                          <UserActions
+                            text={b.text}
+                            busy={busy}
+                            onEdit={() => setEditing(b.itemIndex)}
+                            onResend={() => onResend(b.text, resendable(b.attachments ?? []))}
+                          />
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              case "agent": {
+                const actions = (
+                  <ActionRow align="start">
+                    <CopyButton text={b.text} />
+                    {onQuote && <QuoteButton text={b.text} label={onQuote.label} onQuote={onQuote.run} />}
+                    {onSendBack && <SendBackButton text={b.text} label={onSendBack.label} onSend={onSendBack.run} />}
+                  </ActionRow>
+                );
+                const st = statsOf.get(i);
+                return (
+                  <div key={b.itemIndex} data-find-item={b.itemIndex} className="group flex flex-col gap-0.5">
+                    <Markdown
+                      text={b.text}
+                      streaming={streaming && b.itemIndex === lastItem}
+                      base={base}
+                      needle={finding ? find.query : undefined}
+                      activeOccurrence={occurrenceIn(b.itemIndex)}
+                    />
+                    {finalAnswers.has(i) &&
+                      (st && showStats(st) ? (
+                        <TurnStatsRow stats={st.stats} stopReason={st.stopReason} cost={undefined} endedAt={st.endedAt} actions={actions} />
+                      ) : (
+                        actions
+                      ))}
+                  </div>
+                );
+              }
+              case "thought":
+                return <Thought key={b.itemIndex} text={b.text} />;
+              case "tools":
+                return (
+                  <div key={b.itemIndex} className="flex flex-col gap-3">
+                    <ToolCalls
+                      tools={b.tools}
+                      permissionTool={typeof permissionTool === "string" ? permissionTool : undefined}
+                      find={finding ? { query: find.query, activeItem: current?.itemIndex ?? null, activeOccurrence: current?.occurrence ?? null } : undefined}
+                    />
+                  </div>
+                );
+              case "plan":
+                return (
+                  <div key={b.itemIndex} className="rounded-[10px] border bg-card px-3 py-2">
+                    <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
+                      <ListChecks className="size-3.5" aria-hidden />
+                      {tr("transcript.plan")}
+                    </div>
+                    {b.entries.map((e, k) => (
+                      <div key={k} className={cn("text-xs leading-6", e.status === "completed" && "text-muted-foreground line-through")}>
+                        {e.content}
+                      </div>
+                    ))}
+                  </div>
+                );
+              case "stats":
+                return (
+                  <div key={b.itemIndex} className="flex flex-col gap-3">
+                    {/* Shown under the answer when there is one (see statsOf) */}
+                    {!attached.has(i) && showStats(b) && (
+                      <TurnStatsRow stats={b.stats} error={b.error} stopReason={b.stopReason} cost={undefined} endedAt={b.endedAt} />
+                    )}
+                    {!(isLast && i === blocks.length - 1) && <div className="h-px bg-border" />}
+                  </div>
+                );
+              case "shell":
+                return (
+                  <div key={b.itemIndex} data-find-item={b.itemIndex}>
+                    <ShellBlock item={b} sessionId={sessionId} />
+                  </div>
+                );
+              case "notice":
+                return (
+                  <p key={b.itemIndex} className="m-0 flex gap-2 text-xs whitespace-pre-wrap text-muted-foreground">
+                    <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                    {b.text}
+                  </p>
+                );
+            }
+          })}
+      </div>
+    );
+  },
+  (a, b) => {
+    const keys = Object.keys(a) as (keyof SegmentProps)[];
+    for (const key of keys) {
+      if (key === "blocks") {
+        if (a.blocks.length !== b.blocks.length || !a.blocks.every((block, k) => sameBlock(block, b.blocks[k]))) return false;
+      } else if (!Object.is(a[key], b[key])) return false;
+    }
+    return true;
+  },
+);
+
 export function Transcript({
   items,
   info,
@@ -217,7 +566,7 @@ export function Transcript({
   onQuote,
   onSendBack,
   compact = false,
-  commands = [],
+  commands = NO_COMMANDS,
   base,
   sessionId,
 }: {
@@ -246,6 +595,9 @@ export function Transcript({
   const [editing, setEditing] = useState<number | null>(null);
   const end = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
+  const [root, setRoot] = useState<HTMLDivElement | null>(null);
+  useEffect(() => setRoot(scroller.current), []);
+  const lazy = useLazyApi(root);
   // Follow new output only while the view is at the bottom; reading further up is never interrupted
   const atBottom = useRef(true);
   const [awayFromBottom, setAwayFromBottom] = useState(false);
@@ -299,41 +651,53 @@ export function Transcript({
   const jumpToBottom = () => {
     const el = scroller.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: reduced ? "auto" : "smooth" });
+    // Near the end the scroll glides. From far away it jumps: the turns on the way are drawn as they come into reach and
+    // change the height under a glide, which would stop it short. After the jump, follow any change of height until the end
+    const far = el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight * 3;
+    if (!far) {
+      el.scrollTo({ top: el.scrollHeight, behavior: reduced ? "auto" : "smooth" });
+      return;
+    }
+    const until = performance.now() + 2500;
+    let steady = 0;
+    const settle = () => {
+      el.scrollTop = el.scrollHeight;
+      steady = el.scrollHeight - el.scrollTop - el.clientHeight > 1 ? 0 : steady + 1;
+      if (steady < 8 && performance.now() < until) requestAnimationFrame(settle);
+    };
+    settle();
   };
 
   const blocks = useMemo(() => groupTools(items), [items]);
-  // Only the last answer of a finished turn gets actions and turn statistics.
-  const { statsOf, attached, finalAnswers } = useMemo(() => {
-    const statsOf = new Map<number, Extract<TranscriptItem, { kind: "stats" }>>();
-    const attached = new Set<number>();
-    const finalAnswers = new Set<number>();
-    let lastAgent: number | null = null;
-    blocks.forEach((block, index) => {
-      if (block.kind === "user") {
-        if (lastAgent !== null) finalAnswers.add(lastAgent);
-        lastAgent = null;
-      } else if (block.kind === "agent") {
-        lastAgent = index;
-      } else if (block.kind === "stats") {
-        if (lastAgent !== null) finalAnswers.add(lastAgent);
-        if (!block.error && lastAgent !== null) {
-          statsOf.set(lastAgent, block);
-          attached.add(index);
-        }
-        lastAgent = null;
-      }
-    });
-    if (!busy && !streaming && lastAgent !== null) finalAnswers.add(lastAgent);
-    return { statsOf, attached, finalAnswers };
-  }, [blocks, busy, streaming]);
-  // A local command (no tokens either way) has nothing to report; a stop or an error still shows
-  const showStats = (b: Extract<TranscriptItem, { kind: "stats" }>) =>
-    !!b.error || b.stopReason === "cancelled" || b.stopReason === INTERRUPTED || !usedNoTokens(b.stats);
-
+  // Segments are cut at each user message; what stays the same keeps its identity, so Segment can skip it
+  const segments = useMemo(() => {
+    const out: Block[][] = [];
+    for (const block of blocks) {
+      if (block.kind === "user" || out.length === 0) out.push([block]);
+      else out[out.length - 1].push(block);
+    }
+    return out;
+  }, [blocks]);
   const work = streaming ? workingLabel(items) : null;
   const thinking = work === "message.thinking";
-  const occurrenceIn = (itemIndex: number) => (current?.itemIndex === itemIndex ? current.occurrence : null);
+  // The callbacks come from the parent as new closures on every render; the segments see steady ones
+  const handlers = useRef({ onResend, onQuote, onSendBack });
+  handlers.current = { onResend, onQuote, onSendBack };
+  const hasResend = !!onResend;
+  const quoteLabel = onQuote?.label;
+  const sendBackLabel = onSendBack?.label;
+  const resend = useMemo(
+    () => (hasResend ? (text: string, attachments: Attached[]) => handlers.current.onResend?.(text, attachments) : undefined),
+    [hasResend],
+  );
+  const quote = useMemo(
+    () => (quoteLabel !== undefined ? { label: quoteLabel, run: (text: string) => handlers.current.onQuote?.run(text) } : undefined),
+    [quoteLabel],
+  );
+  const sendBack = useMemo(
+    () => (sendBackLabel !== undefined ? { label: sendBackLabel, run: (text: string) => handlers.current.onSendBack?.run(text) } : undefined),
+    [sendBackLabel],
+  );
 
   return (
     <div data-transcript className="relative flex min-h-0 grow flex-col">
@@ -396,132 +760,41 @@ export function Transcript({
         className={cn("flex min-h-0 grow flex-col gap-3 overflow-y-auto pt-4 pb-2", compact ? "px-3" : "px-[max(1.25rem,calc((100%_-_52rem)/2))]")}
       >
         {items.length === 0 && <p className="m-auto text-xs text-muted-foreground">{tr("transcript.empty")}</p>}
-        {blocks.map((b, i) => {
-          switch (b.kind) {
-            case "user":
-              return (
-                <div
-                  key={b.itemIndex}
-                  data-find-item={b.itemIndex}
-                  style={{ contentVisibility: "auto", containIntrinsicSize: "auto 100px" }}
-                  className={cn("group flex flex-col items-end gap-1.5 self-end", editing === b.itemIndex ? "w-[78%]" : "max-w-[78%]")}
-                >
-                  {b.attachments && <SentAttachments items={b.attachments} />}
-                  {editing === b.itemIndex ? (
-                    <EditBox
-                      initial={b.text}
-                      onCancel={() => setEditing(null)}
-                      onSend={(t) => {
-                        setEditing(null);
-                        onResend?.(t, resendable(b.attachments ?? []));
-                      }}
-                    />
-                  ) : (
-                    <>
-                      {b.text && (
-                        <div lang={contentLang(b.text)} className="rounded-[10px] bg-muted px-3 py-1.5 leading-relaxed whitespace-pre-wrap select-text">
-                          {finding ? (
-                            <Marked text={b.text} query={find.query} active={occurrenceIn(b.itemIndex)} />
-                          ) : (
-                            <CommandText text={b.text} commands={commands} />
-                          )}
-                        </div>
-                      )}
-                      {onResend && (
-                        <UserActions
-                          text={b.text}
-                          busy={busy}
-                          onEdit={() => setEditing(b.itemIndex)}
-                          onResend={() => onResend(b.text, resendable(b.attachments ?? []))}
-                        />
-                      )}
-                    </>
-                  )}
-                </div>
-              );
-            case "agent": {
-              const actions = (
-                <ActionRow align="start">
-                  <CopyButton text={b.text} />
-                  {onQuote && <QuoteButton text={b.text} label={onQuote.label} onQuote={onQuote.run} />}
-                  {onSendBack && <SendBackButton text={b.text} label={onSendBack.label} onSend={onSendBack.run} />}
-                </ActionRow>
-              );
-              const st = statsOf.get(i);
-              return (
-                <div
-                  key={b.itemIndex}
-                  data-find-item={b.itemIndex}
-                  style={{ contentVisibility: "auto", containIntrinsicSize: "auto 100px" }}
-                  className="group flex flex-col gap-0.5"
-                >
-                  <Markdown
-                    text={b.text}
-                    streaming={streaming && b.itemIndex === items.length - 1}
-                    base={base}
-                    needle={finding ? find.query : undefined}
-                    activeOccurrence={occurrenceIn(b.itemIndex)}
-                  />
-                  {finalAnswers.has(i) &&
-                    (st && showStats(st) ? (
-                      <TurnStatsRow stats={st.stats} stopReason={st.stopReason} cost={undefined} endedAt={st.endedAt} actions={actions} />
-                    ) : (
-                      actions
-                    ))}
-                </div>
-              );
-            }
-            case "thought":
-              return <Thought key={b.itemIndex} text={b.text} />;
-            case "tools":
-              return (
-                <div key={b.itemIndex} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 100px" }} className="flex flex-col gap-3">
-                  <ToolCalls
-                    tools={b.tools}
-                    permissionTool={typeof permissionTool === "string" ? permissionTool : undefined}
-                    find={finding ? { query: find.query, activeItem: current?.itemIndex ?? null, activeOccurrence: current?.occurrence ?? null } : undefined}
-                  />
-                </div>
-              );
-            case "plan":
-              return (
-                <div key={b.itemIndex} className="rounded-[10px] border bg-card px-3 py-2">
-                  <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
-                    <ListChecks className="size-3.5" aria-hidden />
-                    {tr("transcript.plan")}
-                  </div>
-                  {b.entries.map((e, k) => (
-                    <div key={k} className={cn("text-xs leading-6", e.status === "completed" && "text-muted-foreground line-through")}>
-                      {e.content}
-                    </div>
-                  ))}
-                </div>
-              );
-            case "stats":
-              return (
-                <div key={b.itemIndex} className="flex flex-col gap-3">
-                  {/* Shown under the answer when there is one (see statsOf) */}
-                  {!attached.has(i) && showStats(b) && (
-                    <TurnStatsRow stats={b.stats} error={b.error} stopReason={b.stopReason} cost={undefined} endedAt={b.endedAt} />
-                  )}
-                  {i < blocks.length - 1 && <div className="h-px bg-border" />}
-                </div>
-              );
-            case "shell":
-              return (
-                <div key={b.itemIndex} data-find-item={b.itemIndex}>
-                  <ShellBlock item={b} sessionId={sessionId} />
-                </div>
-              );
-            case "notice":
-              return (
-                <p key={b.itemIndex} className="m-0 flex gap-2 text-xs whitespace-pre-wrap text-muted-foreground">
-                  <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-                  {b.text}
-                </p>
-              );
-          }
-        })}
+        <LazyContext.Provider value={lazy}>
+          {segments.map((segment, s) => {
+            const isLast = s === segments.length - 1;
+            const first = segment[0].itemIndex;
+            const last = segment[segment.length - 1];
+            const lastIndex = last.kind === "tools" ? last.tools[last.tools.length - 1].itemIndex : last.itemIndex;
+            const inside = (index: number | null | undefined) => (index != null && index >= first && index <= lastIndex ? index : null);
+            return (
+              <Segment
+                key={first}
+                blocks={segment}
+                isLast={isLast}
+                eager={s >= segments.length - 3}
+                pinned={inside(editing) != null || inside(current?.itemIndex) != null}
+                live={isLast && (busy || streaming)}
+                streaming={isLast && streaming}
+                busy={busy}
+                lastItem={isLast ? items.length - 1 : -1}
+                editing={inside(editing)}
+                setEditing={setEditing}
+                finding={finding}
+                query={finding ? find.query : ""}
+                currentItem={inside(current?.itemIndex)}
+                currentOccurrence={inside(current?.itemIndex) != null ? current!.occurrence : null}
+                permissionTool={typeof permissionTool === "string" ? permissionTool : undefined}
+                commands={commands}
+                base={base}
+                sessionId={sessionId}
+                onResend={resend}
+                onQuote={quote}
+                onSendBack={sendBack}
+              />
+            );
+          })}
+        </LazyContext.Provider>
         {work && (
           <div className="flex items-center gap-3">
             <Working label={tr(work)} />
