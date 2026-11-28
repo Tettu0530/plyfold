@@ -585,6 +585,22 @@ pub struct ComparisonRun {
     pub files: i64,
     pub added: i64,
     pub removed: i64,
+    /// How the verification commands went in this run's worktree (empty when none were run)
+    pub checks: Vec<CheckRecord>,
+}
+
+/// One verification command's outcome, kept with the comparison. Passing is evidence, not a verdict on quality
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CheckRecord {
+    pub command: String,
+    /// "passed", "failed", "timeout", "interrupted" or "not_run"
+    pub status: String,
+    pub exit_code: Option<i32>,
+    pub duration_ms: i64,
+    /// The end of what it printed (the start is dropped when it was long)
+    pub output: String,
+    pub truncated: bool,
 }
 
 /// A comparison (sessions started together from one prompt) once one of its runs was taken
@@ -687,6 +703,20 @@ mod tests {
 
     fn new(store: &Store, title: &str) -> SessionRecord {
         store.create_session(NewSession { title: title.into(), profile: "p".into(), agent: "mock".into(), ..Default::default() }).unwrap()
+    }
+
+    #[test]
+    fn verification_results_are_kept_and_older_records_still_read() {
+        let store = Store::open_in_memory().unwrap();
+        let check =
+            CheckRecord { command: "npm test".into(), status: "failed".into(), exit_code: Some(1), duration_ms: 1200, output: "boom".into(), truncated: false };
+        let run = ComparisonRun { session_id: "a".into(), checks: vec![check.clone()], ..Default::default() };
+        let rec = ComparisonRecord { run_group: "g".into(), title: "t".into(), runs: vec![run], ..Default::default() };
+        store.save_comparison(&rec).unwrap();
+        assert_eq!(store.list_comparisons(None, 10).unwrap()[0].runs[0].checks, vec![check]);
+        // A run recorded before verification existed has no `checks`
+        let old: ComparisonRun = serde_json::from_str(r#"{"session_id":"b","profile":"p"}"#).unwrap();
+        assert!(old.checks.is_empty());
     }
 
     #[test]
