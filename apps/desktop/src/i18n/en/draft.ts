@@ -48,6 +48,7 @@ export const draft: Record<keyof typeof source, string> = {
   cliSessionsUntitled: "(untitled)",
   chat: "Conversation",
   compare: "Compare",
+  compareChoices: "Model and settings for each profile",
   compareProfiles: "Profiles to compare ({count} / {max})",
   compareWorktree: "Comparing gives each session a worktree of its own",
   queue: "Add to the queue",

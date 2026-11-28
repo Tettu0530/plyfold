@@ -359,3 +359,77 @@ describe("a new session", () => {
     expect(s.panes[s.focusedPane]).toBe(first[0]);
   });
 });
+
+describe("starting a parallel comparison", () => {
+  it("applies each profile's own model and effort to its own session", async () => {
+    const original = useStore.getState();
+    const draftId = "draft:parallel";
+    useStore.setState({
+      panes: [draftId, null],
+      drafts: {
+        [draftId]: {
+          profile: "claude",
+          repo: "/repo",
+          chat: false,
+          worktree: true,
+          choices: {},
+          compare: ["claude", "codex"],
+          compareChoices: { claude: { model: "opus" }, codex: { model: "gpt-x", thought_level: "high" } },
+          busy: false,
+          error: null,
+        },
+      },
+      sessions: {},
+      effort: { profiles: {}, sessions: {} },
+    });
+    vi.spyOn(api, "startSession").mockImplementation(async ({ profile }) => ({
+      ...record,
+      id: `s-${profile}`,
+      profile,
+      agent: profile,
+      status: "idle",
+      worktree_path: `/wt/${profile}`,
+    }));
+    vi.spyOn(api, "setRunGroup").mockImplementation(async (id) => ({ ...record, id, profile: id.slice(2), agent: id.slice(2), status: "idle" }));
+    vi.spyOn(api, "sessionInfo").mockImplementation(async () => ({
+      ...info(0),
+      config: [
+        {
+          id: "model",
+          category: "model",
+          name: "Model",
+          current: "default",
+          choices: [
+            { value: "opus", name: "Opus" },
+            { value: "gpt-x", name: "GPT X" },
+          ],
+        },
+        {
+          id: "effort",
+          category: "thought_level",
+          name: "Effort",
+          current: "low",
+          choices: [
+            { value: "high", name: "High" },
+            { value: "low", name: "Low" },
+          ],
+        },
+      ],
+    }));
+    const change = vi.spyOn(api, "setByCategory").mockResolvedValue();
+    vi.spyOn(api, "prompt").mockResolvedValue();
+    try {
+      await useStore.getState().startCompare(draftId, "do it");
+      const calls = change.mock.calls.map((c) => c.join(":"));
+      expect(calls).toContain("s-claude:model:opus");
+      expect(calls).toContain("s-codex:model:gpt-x");
+      expect(calls).toContain("s-codex:thought_level:high");
+      // The first profile's choice is not copied to the others
+      expect(calls).not.toContain("s-codex:model:opus");
+      expect(calls).not.toContain("s-claude:thought_level:high");
+    } finally {
+      vi.restoreAllMocks();
+      useStore.setState({ panes: original.panes, drafts: original.drafts, sessions: original.sessions, effort: original.effort, layout: original.layout });
+    }
+  });
+});

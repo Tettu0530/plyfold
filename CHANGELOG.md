@@ -4,6 +4,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Fixed
+
+- Starting sessions in parallel lets you choose the model, effort and mode of each profile (one row per profile above the message box). Before, the row showed the first profile's choices only and the model could not be chosen at all
+
 ### Added
 
 - Antigravity works as an agent (add `antigravity-acp` from the ACP Registry). When an agent refuses a session for want of a login and offers the saved Google login (`oauth-personal`), Plyfold signs in with it and asks again, so a login made once in the CLI (`agy`) carries over

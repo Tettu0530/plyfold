@@ -84,6 +84,8 @@ export interface Draft {
   choices: Partial<Record<Category, string>>;
   /** Comparing: the profiles that each get the same prompt in a worktree of their own (null: one session) */
   compare?: string[] | null;
+  /** Comparing: the model / effort / mode chosen for each profile (applied to that profile's session right after start) */
+  compareChoices?: Record<string, Partial<Record<Category, string>>>;
   retryInput?: { text: string; attachments: Attached[] };
   busy: boolean;
   error: string | null;
@@ -879,15 +881,7 @@ export const useStore = create<State>((set, get) => ({
       const started = await Promise.allSettled(picks.map((profile) => api.startSession({ profile, repo: d.repo, title, worktree: true })));
       const recs: SessionRecord[] = [];
       for (const r of started) if (r.status === "fulfilled") recs.push(await api.setRunGroup(r.value.id, group));
-      await Promise.all(
-        recs.map((rec) =>
-          applyStartingChoices(
-            rec,
-            rec.profile === picks[0] && d.choices.thought_level !== undefined ? { thought_level: d.choices.thought_level } : {},
-            get().settings.default_mode,
-          ),
-        ),
-      );
+      await Promise.all(recs.map((rec) => applyStartingChoices(rec, d.compareChoices?.[rec.profile] ?? {}, get().settings.default_mode)));
       const failed = started.find((r): r is PromiseRejectedResult => r.status === "rejected");
       if (recs.length === 0) throw failed?.reason ?? new Error("no session started");
       set((s) => {

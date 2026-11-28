@@ -48,6 +48,7 @@ export const draft: Record<keyof typeof source, string> = {
   cliSessionsUntitled: "（无标题）",
   chat: "对话",
   compare: "并排比较",
+  compareChoices: "各配置的模型与设置",
   compareProfiles: "要比较的配置文件（{count} / {max}）",
   compareWorktree: "比较时每个会话都有自己的 worktree",
   queue: "加入队列",
