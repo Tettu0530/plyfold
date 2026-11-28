@@ -6,14 +6,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useT } from "@/i18n";
 import { api, inTauri } from "@/lib/api";
 import { age, money, seconds, tokens } from "@/lib/format";
-import type { VerifyResult, ComparisonRecord, SessionRecord } from "@/lib/types";
+import type { ComparisonRecord, SessionRecord } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { verdictChoice } from "@/lib/verdict";
 import { compareGroupOf, isListed, useStore, type SessionView } from "@/state/store";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { agentName, ProfileOption, ProviderLogo, Spinner, STATUS, StatusIcon } from "../icons";
 import { startDrag } from "./dnd";
-import { CheckResults, ChecksBar, useCompareChecks } from "./CompareChecks";
 import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
 
 const BUSY = new Set(["starting", "working", "awaiting_permission", "stalled"]);
@@ -90,7 +89,6 @@ export function ComparePane({ index, id }: { index: number; id: string }) {
         : null,
     [answer, members],
   );
-  const checks = useCompareChecks(members[0]?.record.repo_path ?? null, members);
   // After one is merged: which, and where it went
   const [merged, setMerged] = useState<{ id: string; target: string } | null>(null);
   // Bumped when this comparison was recorded, so the list of past comparisons reads again
@@ -115,7 +113,6 @@ export function ComparePane({ index, id }: { index: number; id: string }) {
           files: diff?.files.length ?? 0,
           added: diff?.files.reduce((n, f) => n + f.added, 0) ?? 0,
           removed: diff?.files.reduce((n, f) => n + f.removed, 0) ?? 0,
-          checks: checks.results[m.record.id] ?? [],
         };
       }),
     );
@@ -171,12 +168,9 @@ export function ComparePane({ index, id }: { index: number; id: string }) {
             verdict={verdictView ? { id: verdictView.record.id, pending: verdictPending, choice, answered: answer !== "" } : null}
           />
         )}
-        {members.length >= 2 && <ChecksBar checks={checks} busy={members.some((m) => BUSY.has(m.record.status))} />}
         {members.map((v) => (
           <Row
             key={v.record.id}
-            checks={checks.results[v.record.id] ?? []}
-            checking={checks.current[v.record.id]}
             v={v}
             merged={merged}
             recommended={choice === v.record.id}
@@ -262,18 +256,6 @@ function ComparisonHistory({ repo, current, reload }: { repo: string | null; cur
                 );
               })}
             </ul>
-            {c.runs.some((r) => r.checks.length > 0) && (
-              <div className="flex flex-col gap-1">
-                {c.runs
-                  .filter((r) => r.checks.length > 0)
-                  .map((r) => (
-                    <div key={r.session_id} className="flex flex-col gap-0.5">
-                      <span className="text-muted-foreground">{runName(r)}</span>
-                      <CheckResults results={r.checks} />
-                    </div>
-                  ))}
-              </div>
-            )}
             {c.verdict_run && c.verdict_run !== c.taken_session && (
               <span className="text-muted-foreground">{t("compare.verdictChose", { run: runName(c.runs.find((r) => r.session_id === c.verdict_run)) })}</span>
             )}
@@ -384,16 +366,11 @@ function VerdictBar({
 
 function Row({
   v,
-  checks,
-  checking,
   merged,
   recommended,
   onMerged,
 }: {
   v: SessionView;
-  /** How the verification commands went in this run's worktree, and the one now running */
-  checks: VerifyResult[];
-  checking?: string;
   merged: { id: string; target: string } | null;
   /** The verdict names this run to take */
   recommended: boolean;
@@ -468,7 +445,6 @@ function Row({
           )}
         </Fact>
       </dl>
-      <CheckResults results={checks} current={checking} />
       <div className="flex flex-wrap items-center gap-1">
         <Action icon={<ExternalLink className="size-3.5" aria-hidden />} onClick={() => void openInPane(r.id, undefined, `session:${r.id}`)}>
           {t("compare.open")}

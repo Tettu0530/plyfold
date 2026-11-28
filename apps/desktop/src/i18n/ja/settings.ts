@@ -29,8 +29,6 @@ export const settings = {
     "Git で管理されていないファイル（.env など）を、リポジトリから新しい worktree にコピーします。1 行に 1 パス、リポジトリからの相対パスで指定します",
   repoAllow: "常に許可",
   repoAllowDetail: "選択した種別は確認なしで許可します。エージェントの種類に依存しません",
-  repoChecks: "検証コマンド",
-  repoChecksDetail: "比較で、各実行のワークツリーに同じコマンドを走らせて結果を並べます（テスト、型チェック、ビルドなど）。1 行に 1 つ書きます",
   repoReview: "レビューの観点",
   repoReviewDetail: "このリポジトリの変更をレビューする際にレビュアーが確認する内容です。毎回のレビュー依頼に付加されます",
   repoReviewPlaceholder: "SQL は必ずプレースホルダーを使っているか、テストが足りているか、など",
