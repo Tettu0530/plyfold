@@ -14,6 +14,8 @@ export const draft: Record<keyof typeof source, string> = {
   profiles: "Profiles",
   last30Days: "Last 30 days",
   noProfiles: "No profiles yet. Add one from Profiles in the sidebar.",
+  searchProfiles: "Search profiles",
+  noMatches: "No profiles match.",
   starting: "Starting the agent",
   repo: "Repository",
   workspaceMode: "Workspace",

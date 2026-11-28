@@ -4,6 +4,24 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-28
+
+### Added
+
+- The browser pane shows its page in a native webview laid over the pane, so sites that forbid framing (claude.ai artifacts, for example) open, and sign-ins stay. It has back and forward buttons, a loading spinner and the page's title; `window.open` and links that ask for a new window open in the same pane. An address typed without a scheme gets `https://` (`http://` for this machine). On macOS and Windows; Linux keeps the framed preview for now
+- A terminal button sits in the app header beside the browser's. It opens a terminal in the folder of the focused session, or in the home folder when there is none (a new session, the browser, an everyday conversation)
+- The profile list of a new session has a search field: every word typed must be found in the name, the agent or the sign-in kind. ↑↓ move the choice, ⏎ settles on the first match and goes on to the message, Esc clears it
+
+### Changed
+
+- Effort levels are shown as words with the first letter in capitals (Medium, High, Xhigh) instead of bars, and the model in the chip is bold
+- Closing the focused pane moves the focus to its neighbour in the layout (it used to go to the first pane). Opening a session, switching panes by key and closing a pane put the cursor in that pane's input at once. "New session" brings an open, not yet started one forward instead of opening a second
+- "Open terminal" moved from the background shells menu to the header, since a terminal is not part of one pane's shells
+
+### Fixed
+
+- A long conversation no longer slows the whole window: only the turns near the view are drawn, so resizing, scrolling and typing stay smooth (150 turns took about 90 ms per frame to lay out in WebKit, now 16 ms). "Scroll to bottom" no longer stops short in a long conversation
+
 ## [0.7.1] - 2026-11-26
 
 ### Added
@@ -318,6 +336,7 @@ The first release, for macOS (Apple Silicon) and Windows 10/11 (x64; new, please
 - Settings for display size, reduced motion, notifications, defaults for new sessions and more
 - Spring-based motion modelled on SwiftUI, with a fade-only mode for Reduce motion
 
+[0.8.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.8.0
 [0.7.1]: https://github.com/Tettu0530/plyfold/releases/tag/v0.7.1
 [0.7.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.7.0
 [0.6.4]: https://github.com/Tettu0530/plyfold/releases/tag/v0.6.4

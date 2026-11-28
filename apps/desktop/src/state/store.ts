@@ -120,6 +120,8 @@ export const filesSessionOf = (id: string) => id.slice("files:".length);
 export const filesPaneOf = (sessionId: string) => `files:${sessionId}`;
 
 export const isTerminal = (id: string | null | undefined): id is string => !!id && id.startsWith("terminal:");
+/** The terminal that is in no session's folder: it opens in the home folder (the id after "terminal:") */
+export const HOME_TERMINAL = "~";
 export const terminalPaneOf = (sessionId: string) => `terminal:${sessionId}`;
 export const terminalSessionOf = (id: string) => id.slice("terminal:".length);
 
@@ -315,6 +317,8 @@ interface State {
   movePane: (slot: number, target: number, edge: Edge | "center") => void;
   /** Remove a pane from the layout (its session stays in the sidebar) */
   removePane: (slot: number) => void;
+  /** Put the cursor in the input of the session or draft in this pane (nothing for panes without one) */
+  focusPaneInput: (slot: number) => void;
   sidebarOpen: boolean;
   toggleSidebar: () => void;
   sidebarWidth: number;
@@ -336,7 +340,8 @@ interface State {
   openDiff: (id: string) => void;
   /** The files the session read or edited, as a pane beside it */
   openFiles: (id: string) => void;
-  openTerminal: (id: string) => void;
+  /** Opens the session's terminal beside its pane. `anchor` is the button the pane grows out of (default: the shells button) */
+  openTerminal: (id: string, anchor?: string) => void;
   /** The comparison a session belongs to, as a pane beside it (it grows out of that session's compare button) */
   openCompare: (group: string, from: string) => void;
   /** Start one session per chosen profile, each in a worktree of its own, with the same prompt, side by side */
@@ -749,7 +754,8 @@ export const useStore = create<State>((set, get) => ({
       const layout = edge === "center" ? swapSlots(s.layout, slot, target) : moveSlot(s.layout, slot, target, edge);
       return { layout, paneCount: leaves(layout).length, focusedPane: slot };
     }),
-  removePane: (slot) =>
+  removePane: (slot) => {
+    const wasFocused = get().focusedPane === slot;
     set((s) => {
       const layout = removeSlot(s.layout, slot);
       if (!layout) return s;
@@ -761,8 +767,14 @@ export const useStore = create<State>((set, get) => ({
       const previews = { ...s.previews };
       if (isPreview(gone)) delete previews[gone];
       const shown = leaves(layout);
-      return { layout, panes, drafts, previews, paneCount: shown.length, focusedPane: shown.includes(s.focusedPane) ? s.focusedPane : shown[0] };
-    }),
+      return { layout, panes, drafts, previews, paneCount: shown.length, focusedPane: focusAfterClose(s.layout, layout, slot, s.focusedPane) };
+    });
+    if (wasFocused) get().focusPaneInput(get().focusedPane);
+  },
+  focusPaneInput: (slot) => {
+    const id = get().panes[slot];
+    if (id && (isDraft(id) || get().sessions[id])) get().insertIntoComposer(id, "");
+  },
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setSidebarWidth: (px) => set({ sidebarWidth: clampSidebar(px) }),
 
@@ -792,6 +804,9 @@ export const useStore = create<State>((set, get) => ({
     }
     if (isDraft(id) || isPreview(id) || isGit(id) || isFiles(id) || isTerminal(id) || isCompare(id)) return;
     await loadSession(id);
+    // A session opened (or brought forward) takes the cursor, as it would if the pane were clicked. Not when the user has
+    // moved on to another pane while it loaded
+    if (get().panes[get().focusedPane] === id) get().insertIntoComposer(id, "");
   },
 
   openDiff: (id) => {
@@ -912,7 +927,7 @@ export const useStore = create<State>((set, get) => ({
     void get().openInPane(pane, slot, `${id}:files`);
   },
 
-  openTerminal: (id) => {
+  openTerminal: (id, anchor) => {
     const s = get();
     const pane = terminalPaneOf(id);
     const slots = leaves(s.layout);
@@ -922,7 +937,7 @@ export const useStore = create<State>((set, get) => ({
       return;
     }
     const beside = slots.find((slot) => s.panes[slot] === id) ?? s.focusedPane;
-    get().splitPane(beside, "right", pane, `${id}:shells`);
+    get().splitPane(beside, "right", pane, anchor ?? `${id}:shells`);
   },
 
   openProfiles: () => {
@@ -980,6 +995,7 @@ export const useStore = create<State>((set, get) => ({
 
   closePane: (pane) => {
     const id = get().panes[pane];
+    const wasFocused = get().focusedPane === pane;
     // A side chat lives only beside its pane
     if (id && get().sideChats[id]) void get().closeSideChat(id);
     set((s) => {
@@ -992,8 +1008,9 @@ export const useStore = create<State>((set, get) => ({
       // Closing a pane removes it from the layout; the last pane stays, empty
       const layout = leaves(s.layout).length > 1 ? (removeSlot(s.layout, pane) ?? s.layout) : s.layout;
       const shown = leaves(layout);
-      return { panes, drafts, previews, layout, paneCount: shown.length, focusedPane: shown.includes(s.focusedPane) ? s.focusedPane : shown[0] };
+      return { panes, drafts, previews, layout, paneCount: shown.length, focusedPane: focusAfterClose(s.layout, layout, pane, s.focusedPane) };
     });
+    if (wasFocused) get().focusPaneInput(get().focusedPane);
   },
 
   sideChats: {},
@@ -1165,6 +1182,13 @@ export const useStore = create<State>((set, get) => ({
 
   newDraft: () => {
     const s = get();
+    // A new session that is already open and not started is brought forward rather than opened again
+    const open = leaves(s.layout).find((i) => isDraft(s.panes[i]) && !s.drafts[s.panes[i]!]?.busy);
+    if (open !== undefined) {
+      set({ focusedPane: open });
+      get().insertIntoComposer(s.panes[open]!, "");
+      return;
+    }
     const id = `draft:${Date.now()}`;
     set({
       drafts: {
@@ -1619,6 +1643,18 @@ function readLastProfile(): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Where the focus goes when a pane closes: it stays where it was, unless it was on the closed pane. Then it goes to the
+ * neighbour that is left, the one before it in the layout (which takes its room), else the one after
+ */
+function focusAfterClose(before: LayoutNode, after: LayoutNode, closed: number, focused: number): number {
+  const shown = leaves(after);
+  if (focused !== closed && shown.includes(focused)) return focused;
+  const order = leaves(before);
+  const at = order.indexOf(closed);
+  return [...order.slice(0, Math.max(at, 0)).reverse(), ...order.slice(at + 1)].find((i) => shown.includes(i)) ?? shown[0];
 }
 
 /** The first empty pane in layout order, or the focused one */

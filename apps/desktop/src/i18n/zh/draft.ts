@@ -14,6 +14,8 @@ export const draft: Record<keyof typeof source, string> = {
   profiles: "配置文件",
   last30Days: "最近 30 天",
   noProfiles: "还没有配置文件。请在侧边栏的「配置文件」中添加。",
+  searchProfiles: "搜索配置文件",
+  noMatches: "没有匹配的配置文件。",
   starting: "正在启动智能体",
   repo: "仓库",
   workspaceMode: "工作区",

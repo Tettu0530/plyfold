@@ -16,35 +16,15 @@ const CONTENT = "z-[58] min-w-[11rem] overflow-y-auto rounded-md border bg-popov
 const ITEM =
   "relative flex h-8 w-full cursor-default items-center gap-2 rounded-sm pr-8 pl-2 text-sm outline-hidden select-none data-[highlighted]:bg-accent data-[state=open]:bg-accent";
 
-const DEFAULT_EFFORT = "default";
-
-/** A dash for the agent's default, or rising bars for an explicit effort level. */
-function EffortIndicator({ effort, value = effort.current }: { effort: ConfigOption; value?: string | null }) {
-  if (value === DEFAULT_EFFORT) {
-    return <span aria-hidden className="h-px w-2 shrink-0 rounded-full bg-muted-foreground" />;
-  }
-  const levels = effort.choices.filter((choice) => choice.value !== DEFAULT_EFFORT);
-  const at = levels.findIndex((choice) => choice.value === value);
-  return (
-    <span className="flex h-2.5 items-end gap-0.5" aria-hidden>
-      {levels.map((c, i) => (
-        <span key={c.value} className={cn("block w-[3px] rounded-[1px]", i <= at ? "bg-foreground" : "bg-input")} style={{ height: 2 + i * 2 }} />
-      ))}
-    </span>
-  );
-}
+/** An effort level as the label shows it: the first letter in capitals (Medium, High, Xhigh) */
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 function Choices({ option, onPick }: { option: ConfigOption; onPick: (v: string) => void }) {
   return (
     <DropdownMenu.RadioGroup value={option.current ?? ""} onValueChange={onPick}>
       {option.choices.map((c) => (
         <DropdownMenu.RadioItem key={c.value} value={c.value} className={ITEM}>
-          {option.category === "thought_level" && (
-            <span className="flex min-w-8 shrink-0 items-center">
-              <EffortIndicator effort={option} value={c.value} />
-            </span>
-          )}
-          {c.name}
+          {option.category === "thought_level" ? capitalize(c.name) : c.name}
           <DropdownMenu.ItemIndicator className="absolute right-2 flex size-3.5 items-center justify-center">
             <Check className="size-4" aria-hidden />
           </DropdownMenu.ItemIndicator>
@@ -85,7 +65,7 @@ export function ModelMenu({
   };
   if (!model && !effort) return null;
   const modelName = model ? (model.choices.find((c) => c.value === model.current)?.name ?? model.current) : null;
-  const effortName = effort?.current === DEFAULT_EFFORT ? "Default" : effort?.current;
+  const effortName = effort?.current ? capitalize(effort.current) : effort?.current;
   const label = [model && t("composer.modelLabel"), effort && t("composer.effortLabel")].filter(Boolean).join(" / ");
 
   return (
@@ -100,15 +80,10 @@ export function ModelMenu({
           {model && (
             <span className="flex items-center gap-1">
               <ProviderLogo agent={agent} className="size-3 text-muted-foreground" />
-              <span>{modelName}</span>
+              <span className="font-semibold">{modelName}</span>
             </span>
           )}
-          {effort && (
-            <span className="flex items-center gap-1.5">
-              <EffortIndicator effort={effort} />
-              <span className="text-muted-foreground">{effortName}</span>
-            </span>
-          )}
+          {effort && <span className="text-muted-foreground">{effortName}</span>}
           {/* Wrapped: the chip style hides a trailing svg (meant for Select's own chevron) */}
           <span className="flex">
             <ChevronsUpDown className="size-3 text-muted-foreground" aria-hidden />
@@ -134,7 +109,6 @@ export function ModelMenu({
               <DropdownMenu.Separator className="-mx-1 my-1 h-px bg-border" />
               <DropdownMenu.Sub onOpenChange={onSubOpenChange}>
                 <DropdownMenu.SubTrigger className={cn(ITEM, "pr-2")}>
-                  <EffortIndicator effort={effort} />
                   {t("composer.effortLabel")}
                   <span className="ml-auto text-xs text-muted-foreground">{effortName}</span>
                   {/* The submenu grows out of this chevron at the menu's edge, not out of the whole row */}

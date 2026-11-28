@@ -1,16 +1,18 @@
-// A pane that shows a web page, usually a dev server the agent started (http://localhost:5173 and the like).
-// The page runs in a sandboxed iframe inside the app, so menus and animations keep drawing above it.
-// Pages that forbid framing (X-Frame-Options / CSP frame-ancestors) stay blank: "Open in browser" opens them outside
-import { ExternalLink, Globe, RotateCw, X } from "lucide-react";
-import { useEffect, useState } from "react";
+// A pane that shows a web page: a dev server the agent started (http://localhost:5173 and the like), or any site.
+// In the app the page is a native webview over the pane (BrowserView), so no site is refused for being framed and
+// sign-ins persist. In a browser (development) it is a sandboxed iframe, and pages that forbid framing stay blank.
+import { ArrowLeft, ArrowRight, ExternalLink, Globe, LoaderCircle, RotateCw, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { useT } from "@/i18n";
-import { api, inTauri } from "@/lib/api";
+import { api, browser, inTauri, onBrowserEvent } from "@/lib/api";
+import { nativeBrowser } from "@/lib/platform";
 import { normalizeUrl } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
 import { useFoundUrls, useSessionPorts } from "../BrowserButton";
 import { startDrag } from "./dnd";
+import { BrowserView } from "./BrowserView";
 import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
 
 /** After this long without a load event, suggest opening the page in a browser */
@@ -30,6 +32,43 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
   const [loaded, setLoaded] = useState(false);
   const [slow, setSlow] = useState(false);
   const url = page?.url ?? "";
+  // The native webview of this pane. The address the page is at (set by what the page reports, so that it is not loaded twice)
+  const label = `browser-${id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+  const current = useRef("");
+  const [loading, setLoading] = useState(false);
+  const [title, setTitle] = useState("");
+  const draftFocused = useRef(false);
+
+  useEffect(() => {
+    if (!nativeBrowser) return;
+    let off: (() => void) | undefined;
+    let alive = true;
+    void onBrowserEvent((e) => {
+      if (e.label !== label) return;
+      if (e.kind === "navigated" && e.url) {
+        current.current = e.url;
+        setPreviewUrl(id, e.url);
+        setTitle("");
+        if (!draftFocused.current) setDraft(e.url);
+      } else if (e.kind === "loading") {
+        setLoading(true);
+        setLoaded(false);
+      } else if (e.kind === "loaded") {
+        setLoading(false);
+        setLoaded(true);
+      } else if (e.kind === "title" && e.title) {
+        setTitle(e.title);
+      } else if (e.kind === "new_window" && e.url) {
+        // window.open and target=_blank: shown in this pane
+        setPreviewUrl(id, e.url);
+      }
+    }).then((f) => (alive ? (off = f) : f()));
+    return () => {
+      alive = false;
+      off?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the store actions are stable
+  }, [label, id]);
 
   useEffect(() => setDraft(url), [url]);
   useEffect(() => {
@@ -54,7 +93,11 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
   };
 
   return (
-    <section aria-label={url ? t("pane.previewLabel", { url }) : t("pane.previewNew")} onMouseDown={() => focusPane(index)} className="flex min-w-0 flex-col">
+    <section
+      aria-label={url ? t("pane.previewLabel", { url: title || url }) : t("pane.previewNew")}
+      onMouseDown={() => focusPane(index)}
+      className="flex min-w-0 flex-col"
+    >
       {/* Right-click: split, even out, close */}
       <PaneMenu slot={index}>
         <div
@@ -62,7 +105,35 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
           onPointerDown={(e) => startDrag(e, () => ({ kind: "pane", slot: index, title: url }))}
           className="flex h-9 shrink-0 cursor-grab items-center gap-1.5 border-b pr-1.5 pl-3"
         >
-          <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          {nativeBrowser && (
+            <>
+              <button
+                type="button"
+                disabled={empty}
+                aria-label={t("pane.previewBack")}
+                title={t("pane.previewBack")}
+                onClick={() => void browser.history(label, -1)}
+                className={ICON}
+              >
+                <ArrowLeft className="size-3.5" aria-hidden />
+              </button>
+              <button
+                type="button"
+                disabled={empty}
+                aria-label={t("pane.previewForward")}
+                title={t("pane.previewForward")}
+                onClick={() => void browser.history(label, 1)}
+                className={ICON}
+              >
+                <ArrowRight className="size-3.5" aria-hidden />
+              </button>
+            </>
+          )}
+          {loading ? (
+            <LoaderCircle className="size-3.5 shrink-0 animate-spin text-muted-foreground" aria-hidden />
+          ) : (
+            <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          )}
           <input
             aria-label={t("pane.previewUrl")}
             value={draft}
@@ -78,7 +149,11 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
                 e.currentTarget.blur();
               }
             }}
-            onFocus={(e) => e.currentTarget.select()}
+            onFocus={(e) => {
+              draftFocused.current = true;
+              e.currentTarget.select();
+            }}
+            onBlur={() => (draftFocused.current = false)}
             autoFocus={empty}
             placeholder={port ?? t("pane.previewPlaceholder")}
             className="h-6 min-w-0 grow rounded-md bg-transparent px-1.5 font-mono text-xs outline-none focus:bg-background focus:outline focus:outline-ring"
@@ -110,6 +185,14 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
       </PaneMenu>
       {empty ? (
         <StartPage onOpen={(u) => setPreviewUrl(id, u)} />
+      ) : nativeBrowser ? (
+        <>
+          {/* The page itself is drawn by the native view; what is told about a slow load goes here, above it */}
+          {slow && !loaded && <p className="m-0 shrink-0 border-b bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">{t("pane.previewSlowNative")}</p>}
+          <div className="relative min-h-0 grow">
+            <BrowserView label={label} url={url} nonce={nonce} current={current} />
+          </div>
+        </>
       ) : (
         <div className="relative min-h-0 grow bg-white">
           <iframe

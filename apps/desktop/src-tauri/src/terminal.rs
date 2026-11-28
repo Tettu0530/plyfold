@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use portable_pty::{ChildKiller, CommandBuilder, MasterPty, PtySize, native_pty_system};
-use tauri::{State, WebviewWindow, ipc::Channel};
+use tauri::{State, Webview, ipc::Channel};
 
 use crate::{AppState, CmdResult, err};
 
@@ -31,7 +31,14 @@ fn size(rows: u16, cols: u16) -> PtySize {
     PtySize { rows: rows.max(1), cols: cols.max(1), pixel_width: 0, pixel_height: 0 }
 }
 
-fn require_main(window: &WebviewWindow) -> CmdResult<()> {
+/// The "session" a terminal opened from the app header names when no session's folder applies: the home folder
+const HOME_TERMINAL: &str = "~";
+
+fn home_dir() -> CmdResult<String> {
+    std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).map_err(|_| "The home folder is not known".to_string())
+}
+
+fn require_main(window: &Webview) -> CmdResult<()> {
     if window.label() != "main" {
         return Err("Terminal access requires the main window".into());
     }
@@ -40,7 +47,7 @@ fn require_main(window: &WebviewWindow) -> CmdResult<()> {
 
 #[tauri::command]
 pub async fn start_terminal(
-    window: WebviewWindow,
+    window: Webview,
     state: State<'_, AppState>,
     session: String,
     rows: u16,
@@ -48,8 +55,16 @@ pub async fn start_terminal(
     output: Channel<Option<Vec<u8>>>,
 ) -> CmdResult<u32> {
     require_main(&window)?;
-    let record = state.engine.store().get_session(&session).map_err(err)?;
-    let cwd = record.worktree_path.or(record.repo_path).ok_or_else(|| "Session has no working directory".to_string())?;
+    // A session's worktree, else its folder; with neither (an everyday conversation), the home folder
+    let cwd = if session == HOME_TERMINAL {
+        home_dir()?
+    } else {
+        let record = state.engine.store().get_session(&session).map_err(err)?;
+        match record.worktree_path.or(record.repo_path) {
+            Some(dir) => dir,
+            None => home_dir()?,
+        }
+    };
     let pair = native_pty_system().openpty(size(rows, cols)).map_err(err)?;
     let mut reader = pair.master.try_clone_reader().map_err(err)?;
     let writer = pair.master.take_writer().map_err(err)?;
@@ -88,7 +103,7 @@ pub async fn start_terminal(
 }
 
 #[tauri::command]
-pub async fn write_terminal(window: WebviewWindow, state: State<'_, AppState>, terminal: u32, data: Vec<u8>) -> CmdResult<()> {
+pub async fn write_terminal(window: Webview, state: State<'_, AppState>, terminal: u32, data: Vec<u8>) -> CmdResult<()> {
     require_main(&window)?;
     let writer = state.terminals.sessions.lock().unwrap().get(&terminal).map(|session| Arc::clone(&session.writer));
     if let Some(writer) = writer {
@@ -98,7 +113,7 @@ pub async fn write_terminal(window: WebviewWindow, state: State<'_, AppState>, t
 }
 
 #[tauri::command]
-pub async fn resize_terminal(window: WebviewWindow, state: State<'_, AppState>, terminal: u32, rows: u16, cols: u16) -> CmdResult<()> {
+pub async fn resize_terminal(window: Webview, state: State<'_, AppState>, terminal: u32, rows: u16, cols: u16) -> CmdResult<()> {
     require_main(&window)?;
     if let Some(session) = state.terminals.sessions.lock().unwrap().get(&terminal) {
         session.master.resize(size(rows, cols)).map_err(err)?;
@@ -107,7 +122,7 @@ pub async fn resize_terminal(window: WebviewWindow, state: State<'_, AppState>, 
 }
 
 #[tauri::command]
-pub async fn stop_terminal(window: WebviewWindow, state: State<'_, AppState>, terminal: u32) -> CmdResult<()> {
+pub async fn stop_terminal(window: Webview, state: State<'_, AppState>, terminal: u32) -> CmdResult<()> {
     require_main(&window)?;
     state.terminals.sessions.lock().unwrap().remove(&terminal);
     Ok(())

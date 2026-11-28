@@ -35,7 +35,7 @@ Visual and motion rules follow `.claude/skills/no-ai-slop-ui/SKILL.md`.
 
 ## Input (the best of Claude Code and OpenCode)
 
-- **From Claude Code**: switch model / effort / mode on the spot with chips under the input. ⇧⇥ cycles through modes. Effort levels are shown as bars
+- **From Claude Code**: switch model / effort / mode on the spot with chips under the input. ⇧⇥ cycles through modes. Effort levels are shown as words (Medium, High, Xhigh), the model in bold
   - Differences in naming between agents (`effort` / `reasoning_effort`) are absorbed by the ACP category (the engine's `set_by_category`)
   - Modes are also distinguished by color (bypassPermissions is reddish)
 - **From OpenCode**: to the right of the input, show context usage (bar + used / limit), the previous turn's ↑input ↓output, tok/s and cost, in monospaced numbers

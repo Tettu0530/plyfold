@@ -1,5 +1,5 @@
-import { ArrowDown, ArrowUp, Check, Code2, Coins, FolderOpen, GitBranch, ListPlus, MessageSquare, Plus, Repeat2, Sparkles, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowDown, ArrowUp, Check, Code2, Coins, FolderOpen, GitBranch, ListPlus, MessageSquare, Plus, Repeat2, Search, Sparkles, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { money, repoName, tokens } from "@/lib/format";
@@ -18,7 +18,7 @@ import { withChoices } from "@/state/infoCache";
 import type { Category, ProfileSummary, ProfileUsage } from "@/lib/types";
 import { api } from "@/lib/api";
 import type { CliSession } from "@/lib/types";
-import { isSendKey } from "@/lib/keys";
+import { isImeKey, isSendKey } from "@/lib/keys";
 import { useT, type MessageKey } from "@/i18n";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CHIP_TRIGGER, COMPOSER_PRIMARY_BUTTON } from "./chip";
@@ -131,6 +131,14 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   });
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
   const textRef = useAutoGrow(text);
+  // Narrows the profile list (name, agent and sign-in kind)
+  // A request for the cursor (the pane was brought forward, or the focus moved here by key)
+  const focusRequest = useStore((s) => (s.composerInsert?.scope === id ? s.composerInsert.n : 0));
+  useEffect(() => {
+    if (focusRequest) textRef.current?.focus();
+  }, [focusRequest, textRef]);
+  const [query, setQuery] = useState("");
+  const listRef = useRef<HTMLDivElement>(null);
   // @-mentions search the repository the session will start in
   const mention = useMention({
     root: draft?.repo ?? null,
@@ -199,15 +207,27 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
     updateDraft(id, { compare: next, profile: next[0] ?? null, choices: {} });
   };
   const canStart = !draft.busy && (activePicks ? activePicks.length >= 2 : !!draft.profile) && (!continueMode || current?.agent !== "gemini");
+  // Every word typed must be found in the profile's name, its agent or how it signs in
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = words.length
+    ? ordered.filter((p) => {
+        const hay = `${profileTitle(p)} ${p.name} ${agentName(p.agent)} ${t(authLabel(p))}`.toLowerCase();
+        return words.every((w) => hay.includes(w));
+      })
+    : ordered;
+  const focusRow = (name: string) => requestAnimationFrame(() => listRef.current?.querySelector<HTMLElement>(`[data-profile="${CSS.escape(name)}"]`)?.focus());
+  // Move the choice up or down the list (when comparing, only the focus moves: a click adds or removes)
+  const step = (delta: 1 | -1) => {
+    const i = shown.findIndex((p) => p.name === draft.profile);
+    const next = shown[i < 0 ? (delta === 1 ? 0 : shown.length - 1) : (i + delta + shown.length) % shown.length];
+    if (!next) return;
+    if (!picks) select(next.name);
+    focusRow(next.name);
+  };
   const onListKey = (e: React.KeyboardEvent) => {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
-    const i = ordered.findIndex((p) => p.name === draft.profile);
-    const next = ordered[(i + (e.key === "ArrowDown" ? 1 : ordered.length - 1)) % ordered.length];
-    if (next) {
-      select(next.name);
-      (e.currentTarget.querySelector(`[data-profile="${CSS.escape(next.name)}"]`) as HTMLElement | null)?.focus();
-    }
+    step(e.key === "ArrowDown" ? 1 : -1);
   };
   const send = () => {
     if (!canStart || continueMode) return;
@@ -244,14 +264,44 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
             <span id={`${id}-profiles`}>{picks ? t("draft.compareProfiles", { count: picks.length, max: COMPARE_MAX }) : t("draft.profiles")}</span>
             <span>{t("draft.last30Days")}</span>
           </div>
+          {profiles.length > 0 && (
+            <label className="mb-1 flex h-8 items-center gap-2 rounded-lg border px-2.5 focus-within:outline focus-within:outline-ring">
+              <Search className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              <input
+                value={query}
+                spellCheck={false}
+                aria-label={t("draft.searchProfiles")}
+                placeholder={t("draft.searchProfiles")}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (isImeKey(e)) return;
+                  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                    e.preventDefault();
+                    step(e.key === "ArrowDown" ? 1 : -1);
+                  } else if (e.key === "Enter") {
+                    // Settle on the first match (unless the current choice is among them) and go on to the message
+                    e.preventDefault();
+                    if (!picks && shown.length > 0 && !shown.some((p) => p.name === draft.profile)) select(shown[0].name);
+                    textRef.current?.focus();
+                  } else if (e.key === "Escape" && query) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setQuery("");
+                  }
+                }}
+                className="min-w-0 grow bg-transparent outline-none placeholder:text-muted-foreground"
+              />
+            </label>
+          )}
           {/* Hide tokens when narrow (decided by row width) */}
           <div
+            ref={listRef}
             role={picks ? "group" : "radiogroup"}
             aria-labelledby={`${id}-profiles`}
             onKeyDown={picks ? undefined : onListKey}
             className="@container flex flex-col gap-0.5"
           >
-            {ordered.map((p) => (
+            {shown.map((p) => (
               <ProfileRow
                 key={p.name}
                 p={p}
@@ -262,6 +312,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
               />
             ))}
             {profiles.length === 0 && <p className="px-2.5 py-2 text-xs text-muted-foreground">{t("draft.noProfiles")}</p>}
+            {profiles.length > 0 && shown.length === 0 && <p className="px-2.5 py-2 text-xs text-muted-foreground">{t("draft.noMatches")}</p>}
           </div>
           {(draft.busy || draft.error) && (
             <div className="mt-3 px-2.5 text-xs">

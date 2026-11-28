@@ -122,6 +122,34 @@ export const api = {
   checkProfile: (name: string) => invoke<CheckResult>("check_profile", { name }),
 };
 
+/** What a browser pane's webview reports (see browser.rs) */
+export interface BrowserEvent {
+  label: string;
+  kind: "navigated" | "loading" | "loaded" | "title" | "new_window";
+  url: string | null;
+  title: string | null;
+}
+
+export const browser = {
+  open: (label: string, url: string, r: BrowserRect) => invoke<void>("browser_open", { label, url, rect: r }),
+  bounds: (label: string, r: BrowserRect) => invoke<void>("browser_bounds", { label, rect: r }),
+  show: (label: string, visible: boolean) => invoke<void>("browser_show", { label, visible }),
+  navigate: (label: string, url: string) => invoke<void>("browser_navigate", { label, url }),
+  reload: (label: string) => invoke<void>("browser_reload", { label }),
+  history: (label: string, delta: -1 | 1) => invoke<void>("browser_history", { label, delta }),
+  close: (label: string) => invoke<void>("browser_close", { label }),
+};
+export interface BrowserRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export function onBrowserEvent(handler: (e: BrowserEvent) => void): Promise<UnlistenFn> {
+  return listen<BrowserEvent>("browser", (msg) => handler(msg.payload));
+}
+
 export function onEngineEvent(handler: (e: EngineEvent) => void): Promise<UnlistenFn> {
   return listen<EngineEvent>("engine", (msg) => handler(msg.payload));
 }

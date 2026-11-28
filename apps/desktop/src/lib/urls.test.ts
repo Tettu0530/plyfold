@@ -16,6 +16,10 @@ describe("urls", () => {
   it("normalizes typed addresses", () => {
     expect(normalizeUrl("localhost:5173")).toBe("http://localhost:5173/");
     expect(normalizeUrl("https://example.com/a")).toBe("https://example.com/a");
+    expect(normalizeUrl("claude.ai/new")).toBe("https://claude.ai/new");
+    expect(normalizeUrl("127.0.0.1:8080/x")).toBe("http://127.0.0.1:8080/x");
+    expect(normalizeUrl("192.168.1.5:3000")).toBe("http://192.168.1.5:3000/");
+    expect(normalizeUrl("app.localhost:3000")).toBe("http://app.localhost:3000/");
     expect(normalizeUrl("javascript:alert(1)")).toBeNull();
     expect(normalizeUrl("file:///etc/passwd")).toBeNull();
     expect(normalizeUrl("  ")).toBeNull();

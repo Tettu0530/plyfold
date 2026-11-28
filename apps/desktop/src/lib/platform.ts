@@ -12,6 +12,12 @@ export const primaryKey = (e: { metaKey: boolean; ctrlKey: boolean }) => (isMac 
 export const isWindows = typeof navigator !== "undefined" && /Win/.test(navigator.platform || navigator.userAgent);
 
 /**
+ * Whether the browser pane can show its page in a native webview over the pane (macOS and Windows). On Linux the main
+ * window's webview sits in a box that cannot take a second one, so the pane keeps using a frame there
+ */
+export const nativeBrowser = inTauri && (isMac || isWindows);
+
+/**
  * Whether the window is in full screen (macOS hides the traffic lights there, so the header needs no room for them).
  * Checked again whenever the window is resized, which entering and leaving full screen does
  */

@@ -3175,7 +3175,7 @@ dependencies = [
 
 [[package]]
 name = "plyfold-acp"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "agent-client-protocol-schema",
  "plyfold-i18n",
@@ -3189,7 +3189,7 @@ dependencies = [
 
 [[package]]
 name = "plyfold-cli"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3202,7 +3202,7 @@ dependencies = [
 
 [[package]]
 name = "plyfold-core"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "base64 0.23.1",
  "jiff",
@@ -3220,7 +3220,7 @@ dependencies = [
 
 [[package]]
 name = "plyfold-desktop"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "base64 0.23.1",
  "opener",
@@ -3244,11 +3244,11 @@ dependencies = [
 
 [[package]]
 name = "plyfold-i18n"
-version = "0.7.1"
+version = "0.8.0"
 
 [[package]]
 name = "plyfold-probe"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3260,7 +3260,7 @@ dependencies = [
 
 [[package]]
 name = "plyfold-profile"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "dirs",
  "keyring",
@@ -3276,7 +3276,7 @@ dependencies = [
 
 [[package]]
 name = "plyfold-store"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "plyfold-i18n",
  "rusqlite",
@@ -3287,7 +3287,7 @@ dependencies = [
 
 [[package]]
 name = "plyfold-worktree"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "plyfold-i18n",
  "serde",

@@ -1,5 +1,6 @@
 //! The Plyfold desktop app: exposes the engine as Tauri commands and streams EngineEvents to the UI
 
+mod browser;
 mod dirs;
 mod files;
 mod platform;
@@ -1069,6 +1070,13 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            browser::browser_open,
+            browser::browser_bounds,
+            browser::browser_show,
+            browser::browser_navigate,
+            browser::browser_reload,
+            browser::browser_history,
+            browser::browser_close,
             terminal::start_terminal,
             terminal::write_terminal,
             terminal::resize_terminal,
