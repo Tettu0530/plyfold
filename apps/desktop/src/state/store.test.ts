@@ -305,3 +305,57 @@ describe("modeIds", () => {
     expect(modeIds(null)).toEqual([]);
   });
 });
+
+describe("closing a pane", () => {
+  const view = (id: string): SessionView => ({ ...(reduceEvent({}, { type: "session_created", session: { ...record, id } })[id] as SessionView) });
+  const setup = (focused: number) => {
+    useStore.setState({
+      layout: preset(4),
+      panes: ["a", "b", "c", "d"],
+      focusedPane: focused,
+      paneCount: 4,
+      composerInsert: null,
+      sessions: { a: view("a"), b: view("b"), c: view("c"), d: view("d") },
+      sideChats: {},
+      drafts: {},
+      previews: {},
+    });
+  };
+
+  it("moves the focus to the pane before it, and asks for the cursor there", () => {
+    setup(2);
+    useStore.getState().closePane(2);
+    const s = useStore.getState();
+    expect(s.panes[s.focusedPane]).toBe("b");
+    expect(s.composerInsert).toMatchObject({ scope: "b", text: "" });
+  });
+
+  it("falls to the pane after it when it was the first", () => {
+    setup(0);
+    useStore.getState().removePane(0);
+    const s = useStore.getState();
+    expect(s.panes[s.focusedPane]).toBe("b");
+  });
+
+  it("keeps the focus when another pane closes", () => {
+    setup(3);
+    useStore.getState().closePane(1);
+    const s = useStore.getState();
+    expect(s.panes[s.focusedPane]).toBe("d");
+    expect(s.composerInsert).toBeNull();
+  });
+});
+
+describe("a new session", () => {
+  it("is brought forward, not opened again, when one is already open", () => {
+    useStore.setState({ layout: preset(2), panes: [null, null, null, null], focusedPane: 0, drafts: {}, composerInsert: null, previews: {} });
+    useStore.getState().newDraft();
+    const first = Object.keys(useStore.getState().drafts);
+    expect(first).toHaveLength(1);
+    useStore.setState({ focusedPane: 1 });
+    useStore.getState().newDraft();
+    expect(Object.keys(useStore.getState().drafts)).toEqual(first);
+    const s = useStore.getState();
+    expect(s.panes[s.focusedPane]).toBe(first[0]);
+  });
+});

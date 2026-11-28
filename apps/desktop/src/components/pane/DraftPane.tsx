@@ -132,6 +132,11 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
   const sendKey = useStore((s) => s.settings.send_key ?? "enter");
   const textRef = useAutoGrow(text);
   // Narrows the profile list (name, agent and sign-in kind)
+  // A request for the cursor (the pane was brought forward, or the focus moved here by key)
+  const focusRequest = useStore((s) => (s.composerInsert?.scope === id ? s.composerInsert.n : 0));
+  useEffect(() => {
+    if (focusRequest) textRef.current?.focus();
+  }, [focusRequest, textRef]);
   const [query, setQuery] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
   // @-mentions search the repository the session will start in

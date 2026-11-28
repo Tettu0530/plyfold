@@ -42,6 +42,7 @@ function useShortcuts() {
         if (slot !== undefined) {
           e.preventDefault();
           s.focusPane(slot);
+          s.focusPaneInput(slot);
         }
         return;
       }
@@ -54,7 +55,11 @@ function useShortcuts() {
         const next = nextScale(s.settings.ui_scale ?? 100, d);
         if (next !== s.settings.ui_scale) void s.saveSettings({ ui_scale: next }).catch(() => {});
       };
-      const step = (d: number) => s.focusPane(shown[(shown.indexOf(s.focusedPane) + d + shown.length) % shown.length]);
+      const step = (d: number) => {
+        const slot = shown[(shown.indexOf(s.focusedPane) + d + shown.length) % shown.length];
+        s.focusPane(slot);
+        s.focusPaneInput(slot);
+      };
       const run: Record<Exclude<Action, "attach">, () => void> = {
         search: () => s.setSearchOpen(!s.searchOpen),
         find: () => {
