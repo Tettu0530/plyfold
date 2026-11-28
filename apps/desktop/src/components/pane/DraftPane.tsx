@@ -422,7 +422,9 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
                     const chosen = draft.compareChoices?.[name] ?? {};
                     const effort = chosen.thought_level ?? savedEfforts[name];
                     const hasEffortFor = known?.config.some((o) => o.category === "thought_level" && o.choices.some((c) => c.value === effort));
-                    const shown = known ? withChoices(known, hasEffortFor ? { ...chosen, thought_level: effort } : chosen) : null;
+                    // The mode from Settings shows here too (when this agent has it), as it does for one session
+                    const startMode = chosen.mode === undefined && settingMode && modeIds(known).includes(settingMode) ? { mode: settingMode } : {};
+                    const shown = known ? withChoices(known, { ...startMode, ...(hasEffortFor ? { ...chosen, thought_level: effort } : chosen) }) : null;
                     return (
                       <li key={name} className="flex min-w-0 items-center gap-2 text-xs">
                         <span className="flex w-36 min-w-0 shrink-0 items-center gap-1.5 truncate px-1">

@@ -169,6 +169,10 @@ const MODE_ICONS: Record<string, LucideIcon> = {
   bypassPermissions: ShieldOff,
   "workspace-write": PencilLine,
   "agent-full-access": ShieldOff,
+  // Gemini CLI and Antigravity
+  autoEdit: FilePen,
+  auto_edit: FilePen,
+  yolo: ShieldOff,
 };
 
 export function ModeIcon({ mode, className }: { mode: string | null; className?: string }) {
@@ -191,8 +195,23 @@ const MODE_LABELS: Record<string, MessageKey> = {
   "agent-full-access": "status.modeAgentFullAccess",
   // OpenCode
   build: "status.modeBuild",
+  // Gemini CLI and Antigravity: the same two as Claude Code's accept edits and bypass permissions
+  autoEdit: "status.modeAcceptEdits",
+  auto_edit: "status.modeAcceptEdits",
+  accept_edits: "status.modeAcceptEdits",
+  yolo: "status.modeBypassPermissions",
 };
 
-export const modeLabel = (mode: string | null) => (mode ? (MODE_LABELS[mode] ? t(MODE_LABELS[mode]) : mode) : "");
+/** A mode id nobody named in the dictionary, made readable: `some_mode` and `someMode` read "Some mode" */
+const readable = (id: string) => {
+  const words = id
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
 
-export const isDangerMode = (mode: string | null) => mode === "bypassPermissions" || mode === "agent-full-access";
+export const modeLabel = (mode: string | null) => (mode ? (MODE_LABELS[mode] ? t(MODE_LABELS[mode]) : readable(mode)) : "");
+
+export const isDangerMode = (mode: string | null) => mode === "bypassPermissions" || mode === "agent-full-access" || mode === "yolo";

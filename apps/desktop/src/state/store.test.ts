@@ -427,6 +427,11 @@ describe("starting a parallel comparison", () => {
       // The first profile's choice is not copied to the others
       expect(calls).not.toContain("s-codex:model:opus");
       expect(calls).not.toContain("s-claude:thought_level:high");
+      // Both sessions are open in panes (the draft is gone)
+      const shown = useStore.getState().panes;
+      expect(shown).toContain("s-claude");
+      expect(shown).toContain("s-codex");
+      expect(shown).not.toContain(draftId);
     } finally {
       vi.restoreAllMocks();
       useStore.setState({ panes: original.panes, drafts: original.drafts, sessions: original.sessions, effort: original.effort, layout: original.layout });

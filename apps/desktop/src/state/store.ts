@@ -877,30 +877,44 @@ export const useStore = create<State>((set, get) => ({
       }
       const title = prompt.trim().split("\n")[0].slice(0, 40) || t("store.newSessionTitle");
       const group = crypto.randomUUID();
-      // Started together; each gets its own worktree, port and setup run
-      const started = await Promise.allSettled(picks.map((profile) => api.startSession({ profile, repo: d.repo, title, worktree: true })));
-      const recs: SessionRecord[] = [];
-      for (const r of started) if (r.status === "fulfilled") recs.push(await api.setRunGroup(r.value.id, group));
-      await Promise.all(recs.map((rec) => applyStartingChoices(rec, d.compareChoices?.[rec.profile] ?? {}, get().settings.default_mode)));
-      const failed = started.find((r): r is PromiseRejectedResult => r.status === "rejected");
-      if (recs.length === 0) throw failed?.reason ?? new Error("no session started");
-      set((s) => {
-        const panes = s.panes.map((p) => (p === id ? recs[0].id : p));
-        const drafts = { ...s.drafts };
-        delete drafts[id];
-        const sessions = { ...s.sessions };
-        for (const rec of recs) sessions[rec.id] = sessions[rec.id] ? { ...sessions[rec.id], record: rec } : { ...newView(rec), historyLoaded: true };
-        return { panes, drafts, sessions };
-      });
-      // The others open to its right, one after another
-      let slot = leaves(get().layout).find((i) => get().panes[i] === recs[0].id) ?? get().focusedPane;
-      for (const rec of recs.slice(1)) slot = get().splitPane(slot, "right", rec.id, `session:${rec.id}`);
-      if (prompt.trim() || attachments.length) for (const rec of recs) void get().sendPrompt(rec.id, prompt, attachments);
+      // Started together; each gets its own worktree, port and setup run. Each one's pane opens as soon as that session
+      // exists (the agent is still starting then), not after the slowest has started: the first takes the draft's place and
+      // the others open to its right
+      const placed: string[] = [];
+      const place = (rec: SessionRecord) => {
+        set((s) => {
+          const sessions = { ...s.sessions };
+          sessions[rec.id] = sessions[rec.id] ? { ...sessions[rec.id], record: rec } : { ...newView(rec), historyLoaded: true };
+          if (placed.length > 0) return { sessions };
+          const drafts = { ...s.drafts };
+          delete drafts[id];
+          return { sessions, drafts, panes: s.panes.map((p) => (p === id ? rec.id : p)) };
+        });
+        if (placed.length > 0) {
+          const last = placed[placed.length - 1];
+          const slot = leaves(get().layout).find((i) => get().panes[i] === last) ?? get().focusedPane;
+          get().splitPane(slot, "right", rec.id, `session:${rec.id}`);
+        }
+        placed.push(rec.id);
+      };
+      const runs = await Promise.allSettled(
+        picks.map(async (profile) => {
+          const started = await api.startSession({ profile, repo: d.repo, title, worktree: true });
+          const rec = await api.setRunGroup(started.id, group);
+          place(rec);
+          // The profile's own model, effort and mode go in before the prompt does
+          await applyStartingChoices(rec, d.compareChoices?.[rec.profile] ?? {}, get().settings.default_mode);
+          if (prompt.trim() || attachments.length) void get().sendPrompt(rec.id, prompt, attachments);
+          return rec;
+        }),
+      );
+      const failed = runs.find((r): r is PromiseRejectedResult => r.status === "rejected");
+      if (placed.length === 0) throw failed?.reason ?? new Error("no session started");
       // One that could not start is told in the first one's pane; the others run
       if (failed)
         set((s) => {
-          const v = s.sessions[recs[0].id];
-          return v ? { sessions: { ...s.sessions, [recs[0].id]: { ...v, lastError: t("store.compareStartFailed", { error: String(failed.reason) }) } } } : s;
+          const v = s.sessions[placed[0]];
+          return v ? { sessions: { ...s.sessions, [placed[0]]: { ...v, lastError: t("store.compareStartFailed", { error: String(failed.reason) }) } } } : s;
         });
     } catch (e) {
       get().updateDraft(id, { busy: false, error: String(e) });
