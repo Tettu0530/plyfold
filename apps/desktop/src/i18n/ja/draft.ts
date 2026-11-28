@@ -12,6 +12,8 @@ export const draft = {
   profiles: "プロファイル",
   last30Days: "直近 30 日",
   noProfiles: "プロファイルがありません。サイドバーの「プロファイル」から追加してください。",
+  searchProfiles: "プロファイルを検索",
+  noMatches: "一致するプロファイルがありません。",
   starting: "エージェントを起動中",
   repo: "リポジトリ",
   workspaceMode: "作業場所",
