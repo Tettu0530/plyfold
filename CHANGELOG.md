@@ -4,15 +4,17 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
-### Fixed
-
-- Closing a pane gives its space back to the pane next to it (the one before it, or the one after it for the first), so opening a third pane and closing it again leaves the other two as they were. Before, the space was spread over the rest in proportion, which made the pane that never gave anything up larger
-- The `@` file list and the `/` command list no longer stay closed for good after a click while they were open (in the message box to move the caret, or elsewhere in the app and back). They come back with the next key typed or caret move; Esc still closes them for that input
+## [0.8.2] - 2026-11-28
 
 ### Added
 
 - Antigravity profiles: a Gemini API key, a gateway base URL, and a separate config directory (`GEMINI_HOME`) so profiles sign in with different Google accounts. A profile with a key signs in with the key (`gemini-api-key`) when the agent asks for a login; one without uses the saved Google login. Antigravity agents added before this get the settings too
 - Verification commands in a comparison: list the commands to check a result (tests, a type check, a build) under Settings → Repositories or right in the comparison, pick some and run them in every run's worktree. Each run shows every command's status (passed, failed, timed out, interrupted, not run), duration and output, and the results are kept with the comparison history. A pass is shown as evidence, not as a verdict on quality
+
+### Fixed
+
+- Closing a pane gives its space back to the pane next to it (the one before it, or the one after it for the first), so opening a third pane and closing it again leaves the other two as they were. Before, the space was spread over the rest in proportion, which made the pane that never gave anything up larger
+- The `@` file list and the `/` command list no longer stay closed for good after a click while they were open (in the message box to move the caret, or elsewhere in the app and back). They come back with the next key typed or caret move; Esc still closes them for that input
 
 ## [0.8.1] - 2026-11-28
 
@@ -360,6 +362,7 @@ The first release, for macOS (Apple Silicon) and Windows 10/11 (x64; new, please
 - Settings for display size, reduced motion, notifications, defaults for new sessions and more
 - Spring-based motion modelled on SwiftUI, with a fade-only mode for Reduce motion
 
+[0.8.2]: https://github.com/Tettu0530/plyfold/releases/tag/v0.8.2
 [0.8.1]: https://github.com/Tettu0530/plyfold/releases/tag/v0.8.1
 [0.8.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.8.0
 [0.7.1]: https://github.com/Tettu0530/plyfold/releases/tag/v0.7.1
