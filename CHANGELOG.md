@@ -4,6 +4,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Fixed
+
+- Closing a pane gives its space back to the pane next to it (the one before it, or the one after it for the first), so opening a third pane and closing it again leaves the other two as they were. Before, the space was spread over the rest in proportion, which made the pane that never gave anything up larger
+
 ### Added
 
 - Antigravity profiles: a Gemini API key, a gateway base URL, and a separate config directory (`GEMINI_HOME`) so profiles sign in with different Google accounts. A profile with a key signs in with the key (`gemini-api-key`) when the agent asks for a login; one without uses the saved Google login. Antigravity agents added before this get the settings too
