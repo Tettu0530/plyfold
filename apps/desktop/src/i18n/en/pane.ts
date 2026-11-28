@@ -19,6 +19,7 @@ export const pane: Record<keyof typeof source, string> = {
   planEmpty: "No plan",
   shells: "Background shells",
   openTerminal: "Open terminal",
+  openTerminalNone: "Open terminal (open a session first)",
   terminal: "Terminal",
   terminalTab: "Terminal {n}",
   closeTerminalTab: "Close terminal {n}",

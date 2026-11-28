@@ -19,6 +19,7 @@ export const pane: Record<keyof typeof source, string> = {
   planEmpty: "没有计划",
   shells: "后台 Shell",
   openTerminal: "打开终端",
+  openTerminalNone: "打开终端（请先打开一个会话）",
   terminal: "终端",
   terminalTab: "终端 {n}",
   closeTerminalTab: "关闭终端 {n}",

@@ -17,6 +17,7 @@ export const pane = {
   planEmpty: "計画はありません。",
   shells: "バックグラウンドシェル",
   openTerminal: "ターミナルを開く",
+  openTerminalNone: "ターミナルを開く（セッションを開くと使えます）",
   terminal: "ターミナル",
   terminalTab: "ターミナル {n}",
   closeTerminalTab: "ターミナル {n} を閉じる",

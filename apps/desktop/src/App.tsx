@@ -23,6 +23,7 @@ import { actionFor, type Action } from "./lib/keymap";
 import { currentBindings } from "./state/keys";
 import { nextScale } from "./lib/scale";
 import { BrowserButton } from "./components/BrowserButton";
+import { TerminalButton } from "./components/TerminalButton";
 import { PlyfoldMark } from "./components/Logo";
 import { isMac, primaryKey, useFullscreen } from "./lib/platform";
 import { cn } from "./lib/utils";
@@ -163,6 +164,7 @@ export default function App() {
               <span className="truncate">{focusedRepo ? repoName(focusedRepo) : "Plyfold"}</span>
             </span>
             <span data-tauri-drag-region className="grow" />
+            <TerminalButton />
             <BrowserButton />
             <Notifications />
           </header>

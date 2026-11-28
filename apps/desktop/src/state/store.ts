@@ -336,7 +336,8 @@ interface State {
   openDiff: (id: string) => void;
   /** The files the session read or edited, as a pane beside it */
   openFiles: (id: string) => void;
-  openTerminal: (id: string) => void;
+  /** Opens the session's terminal beside its pane. `anchor` is the button the pane grows out of (default: the shells button) */
+  openTerminal: (id: string, anchor?: string) => void;
   /** The comparison a session belongs to, as a pane beside it (it grows out of that session's compare button) */
   openCompare: (group: string, from: string) => void;
   /** Start one session per chosen profile, each in a worktree of its own, with the same prompt, side by side */
@@ -912,7 +913,7 @@ export const useStore = create<State>((set, get) => ({
     void get().openInPane(pane, slot, `${id}:files`);
   },
 
-  openTerminal: (id) => {
+  openTerminal: (id, anchor) => {
     const s = get();
     const pane = terminalPaneOf(id);
     const slots = leaves(s.layout);
@@ -922,7 +923,7 @@ export const useStore = create<State>((set, get) => ({
       return;
     }
     const beside = slots.find((slot) => s.panes[slot] === id) ?? s.focusedPane;
-    get().splitPane(beside, "right", pane, `${id}:shells`);
+    get().splitPane(beside, "right", pane, anchor ?? `${id}:shells`);
   },
 
   openProfiles: () => {
