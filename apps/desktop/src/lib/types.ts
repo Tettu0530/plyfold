@@ -374,6 +374,8 @@ export interface RepoSettings {
   review: string;
   /** The profile that reviews each new session here from the start ("" = none) */
   reviewer: string;
+  /** Shell commands that check a result; a comparison can run them in each candidate's worktree */
+  checks: string[];
 }
 
 export interface RepoEntry {
@@ -417,6 +419,19 @@ export interface ComparisonRun {
   files: number;
   added: number;
   removed: number;
+  /** How the verification commands went in this run's worktree (empty when none were run) */
+  checks: VerifyResult[];
+}
+
+/** One verification command's outcome. Passing is evidence, not a verdict on quality */
+export interface VerifyResult {
+  command: string;
+  status: "passed" | "failed" | "timeout" | "interrupted" | "not_run";
+  exit_code: number | null;
+  duration_ms: number;
+  /** The end of what it printed */
+  output: string;
+  truncated: boolean;
 }
 
 /** A comparison once one of its runs was taken (kept in the database, apart from the sessions) */

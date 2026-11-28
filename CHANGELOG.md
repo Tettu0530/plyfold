@@ -9,6 +9,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 ### Added
 
 - Antigravity works as an agent (add `antigravity-acp` from the ACP Registry). When an agent refuses a session for want of a login and offers the saved Google login (`oauth-personal`), Plyfold signs in with it and asks again, so a login made once in the CLI (`agy`) carries over
+- Verification commands in a comparison: list the commands to check a result (tests, a type check, a build) under Settings → Repositories or right in the comparison, pick some and run them in every run's worktree. Each run shows every command's status (passed, failed, timed out, interrupted, not run), duration and output, and the results are kept with the comparison history. A pass is shown as evidence, not as a verdict on quality
 
 ### Fixed
 
