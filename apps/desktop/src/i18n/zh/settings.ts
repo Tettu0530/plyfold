@@ -30,6 +30,8 @@ export const settings: Record<keyof typeof source, string> = {
   repoCopyDetail: "将 git 未跟踪的文件（如 .env）从仓库复制到新的 worktree。每行一个，相对于仓库的路径",
   repoAllow: "始终允许",
   repoAllowDetail: "选中的类型无需确认即可允许，对所有智能体都一样",
+  repoChecks: "验证命令",
+  repoChecksDetail: "比较时可在每个运行的工作树中执行这些命令，并并排显示结果（测试、类型检查、构建等）。每行一个",
   repoReview: "审查规则",
   repoReviewDetail: "审查者在此仓库中要检查的内容，会附在每次审查请求中",
   repoReviewPlaceholder: "SQL 是否都使用参数化、测试是否充分，等等",

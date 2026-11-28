@@ -24,6 +24,9 @@ pub struct RepoSettings {
     pub review: String,
     /// The profile that reviews each new session here from the start ("" = no reviewer until one is picked)
     pub reviewer: String,
+    /// Shell commands that check a result (tests, a type check, a build). A comparison can run them in every
+    /// candidate's worktree and show how each one went
+    pub checks: Vec<String>,
 }
 
 impl RepoSettings {
@@ -34,6 +37,7 @@ impl RepoSettings {
             && self.allow.is_empty()
             && self.review.trim().is_empty()
             && self.reviewer.trim().is_empty()
+            && self.checks.is_empty()
     }
 
     /// Whether a permission request for this tool kind is allowed without asking
