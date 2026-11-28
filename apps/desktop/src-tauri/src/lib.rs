@@ -632,7 +632,8 @@ struct RepoEntry {
 /// Whether a folder is inside a git repository (a folder that is not one has no worktree, Git view, review or comparison)
 #[tauri::command]
 async fn folder_is_git(path: String) -> bool {
-    let path = std::path::PathBuf::from(path);
+    // `~/…` as the folder picker lists it
+    let path = std::path::PathBuf::from(expand_home(&path));
     tauri::async_runtime::spawn_blocking(move || plyfold_worktree::repo_root(&path).is_ok()).await.unwrap_or(false)
 }
 

@@ -46,6 +46,7 @@ export const draft = {
   cliSessionsUntitled: "（無題）",
   chat: "会話",
   compare: "並列比較",
+  compareChoices: "各プロファイルのモデルと設定",
   compareProfiles: "比較するプロファイル（{count} / {max}）",
   compareWorktree: "比較時はセッションごとに worktree を作成します",
   queue: "キューに追加",
