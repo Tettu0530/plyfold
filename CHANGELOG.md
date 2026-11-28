@@ -4,12 +4,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
-### Fixed
-
-- Starting sessions in parallel lets you choose the model, effort and mode of each profile (one row per profile above the message box). Before, the row showed the first profile's choices only and the model could not be chosen at all
-- Starting sessions in parallel opens each session's pane as soon as that session exists, not after the slowest has started
-- Gemini CLI's and Antigravity's permission modes read "Accept edits" and "Bypass permissions" (like Claude Code's) instead of `auto_edit` and `yolo`, and any other unnamed mode id is shown as words
-- A folder given as `~/…` (as the folder picker lists it) is recognised as a git repository, so parallel sessions are available for it
+## [0.8.1] - 2026-11-28
 
 ### Added
 
@@ -17,6 +12,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ### Fixed
 
+- Starting sessions in parallel lets you choose the model, effort and mode of each profile (one row per profile above the message box). Before, the row showed the first profile's choices only and the model could not be chosen at all
+- Starting sessions in parallel opens each session's pane as soon as that session exists, not after the slowest has started
+- A folder given as `~/…` (as the folder picker lists it) is recognised as a git repository, so parallel sessions are available for it
+- Gemini CLI's and Antigravity's permission modes read "Accept edits" and "Bypass permissions" (like Claude Code's) instead of `auto_edit` and `yolo`, and any other unnamed mode id is shown as words
 - Sending a message in a long conversation no longer throws the view far up, and the button that goes to the bottom no longer stops partway. Both came from how the view was kept in place while turns out of sight changed height: the position was corrected twice. The turn at the top of the view is now the fixed point, and the button follows the end as it moves
 
 ## [0.8.0] - 2026-11-28
@@ -351,6 +350,7 @@ The first release, for macOS (Apple Silicon) and Windows 10/11 (x64; new, please
 - Settings for display size, reduced motion, notifications, defaults for new sessions and more
 - Spring-based motion modelled on SwiftUI, with a fade-only mode for Reduce motion
 
+[0.8.1]: https://github.com/Tettu0530/plyfold/releases/tag/v0.8.1
 [0.8.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.8.0
 [0.7.1]: https://github.com/Tettu0530/plyfold/releases/tag/v0.7.1
 [0.7.0]: https://github.com/Tettu0530/plyfold/releases/tag/v0.7.0
