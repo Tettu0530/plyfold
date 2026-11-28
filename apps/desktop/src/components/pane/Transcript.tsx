@@ -248,6 +248,8 @@ const LazyContext = createContext<LazyApi | null>(null);
 /** How far outside the view (in px, each way) turns are kept rendered: about two screens */
 const NEAR = 1500;
 const DEFAULT_HEIGHT = 400;
+/** Within this many px of the end counts as being at the end (the same rule that makes the view follow new output) */
+const NEAR_END = 48;
 const CAN_LAZY = typeof IntersectionObserver !== "undefined" && typeof ResizeObserver !== "undefined";
 
 function useLazyApi(root: HTMLElement | null): LazyApi | null {
@@ -261,7 +263,6 @@ function useLazyApi(root: HTMLElement | null): LazyApi | null {
       { root, rootMargin: `${NEAR}px 0px` },
     );
     const heights = new Map<number, number>();
-    const last = new WeakMap<Element, number>();
     const average = () => {
       if (heights.size === 0) return DEFAULT_HEIGHT;
       let sum = 0;
@@ -269,20 +270,32 @@ function useLazyApi(root: HTMLElement | null): LazyApi | null {
       return Math.round(sum / heights.size);
     };
     let tuned = DEFAULT_HEIGHT;
+    // The turn at the top of the view is the anchor: whatever changes height around it, after layout it is put back
+    // where it was. (Adding up the changes is not enough: the browser also moves scrollTop itself when the content
+    // shrinks below the view, and the two would be counted twice.) At the very end the view stays at the end instead
+    let anchor: HTMLElement | null = null;
+    let offset = 0;
+    let pinned = root.scrollHeight - root.clientHeight - root.scrollTop < NEAR_END;
+    const turnAt = (y: number) => {
+      const box = root.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + y)?.closest<HTMLElement>("[data-key]");
+      return hit && callbacks.has(hit) ? hit : null;
+    };
+    const mark = () => {
+      const box = root.getBoundingClientRect();
+      pinned = root.scrollHeight - root.clientHeight - root.scrollTop < NEAR_END;
+      const line = box.top + 8;
+      const r = anchor?.isConnected ? anchor.getBoundingClientRect() : null;
+      if (!r || r.top > line || r.bottom <= line) anchor = turnAt(8) ?? turnAt(40) ?? turnAt(90) ?? anchor;
+      if (anchor?.isConnected) offset = anchor.getBoundingClientRect().top - box.top;
+    };
+    root.addEventListener("scroll", mark, { passive: true });
+    mark();
     const ro = new ResizeObserver((entries) => {
-      const top = root.getBoundingClientRect().top;
-      let shift = 0;
-      // Moves what is read when a turn above the view changes height (its old bottom edge was above the view)
-      const settle = (el: Element, h: number, before: number | undefined) => {
-        if (before !== undefined && h !== before && el.getBoundingClientRect().bottom - (h - before) <= top) shift += h - before;
-      };
       for (const e of entries) {
         const el = e.target as HTMLElement;
         const h = e.borderBoxSize?.[0]?.blockSize ?? e.contentRect.height;
-        const before = last.get(el);
-        last.set(el, h);
         if (el.dataset.shown === "1") heights.set(Number(el.dataset.key), h);
-        settle(el, h, before);
       }
       // Turns never seen yet stand in with the average of those that were: the length of the scrollbar settles quickly
       const avg = average();
@@ -290,13 +303,15 @@ function useLazyApi(root: HTMLElement | null): LazyApi | null {
         tuned = avg;
         for (const el of callbacks.keys() as IterableIterator<HTMLElement>) {
           if (el.dataset.shown !== "0" || heights.has(Number(el.dataset.key))) continue;
-          const before = last.get(el);
           el.style.height = `${avg}px`;
-          last.set(el, avg);
-          settle(el, avg, before);
         }
       }
-      if (shift) root.scrollTop += shift;
+      if (pinned) root.scrollTop = root.scrollHeight;
+      else if (anchor?.isConnected) {
+        const moved = anchor.getBoundingClientRect().top - root.getBoundingClientRect().top - offset;
+        if (Math.abs(moved) > 0.5) root.scrollTop += moved;
+      }
+      mark();
     });
     return {
       watch(el, onNear) {
@@ -608,7 +623,7 @@ export function Transcript({
   const onScroll = () => {
     const el = scroller.current;
     if (!el) return;
-    const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+    const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_END;
     atBottom.current = bottom;
     setAwayFromBottom(!bottom);
     if (bottom) setUnseen(false);
@@ -647,25 +662,37 @@ export function Transcript({
     if (finding) return;
     if (atBottom.current) end.current?.scrollIntoView({ block: "end" });
     else setUnseen(true);
-  }, [items.length, last, finding]);
+  }, [items.length, last, finding, busy, streaming]);
+  // The run of the button now going to the end; started again, or stopped by the reader scrolling
+  const jumping = useRef<(() => void) | null>(null);
+  useEffect(() => () => jumping.current?.(), []);
   const jumpToBottom = () => {
     const el = scroller.current;
     if (!el) return;
-    // Near the end the scroll glides. From far away it jumps: the turns on the way are drawn as they come into reach and
-    // change the height under a glide, which would stop it short. After the jump, follow any change of height until the end
-    const far = el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight * 3;
-    if (!far) {
-      el.scrollTo({ top: el.scrollHeight, behavior: reduced ? "auto" : "smooth" });
-      return;
-    }
-    const until = performance.now() + 2500;
+    jumping.current?.();
+    // The end moves while turns on the way are drawn (a placeholder becomes the real turn), so a scroll aimed at one
+    // fixed place stops short. This reads where the end is on every frame and closes in on it, and keeps following for a
+    // moment after arriving, until the height is steady
+    const until = performance.now() + 4000;
     let steady = 0;
-    const settle = () => {
-      el.scrollTop = el.scrollHeight;
-      steady = el.scrollHeight - el.scrollTop - el.clientHeight > 1 ? 0 : steady + 1;
-      if (steady < 8 && performance.now() < until) requestAnimationFrame(settle);
+    let frame = 0;
+    const stop = () => {
+      cancelAnimationFrame(frame);
+      for (const type of ["wheel", "touchstart", "pointerdown", "keydown"]) el.removeEventListener(type, stop);
+      jumping.current = null;
     };
-    settle();
+    for (const type of ["wheel", "touchstart", "pointerdown", "keydown"]) el.addEventListener(type, stop, { once: true, passive: true });
+    jumping.current = stop;
+    const step = () => {
+      const left = el.scrollHeight - el.clientHeight - el.scrollTop;
+      if (left > 1) {
+        steady = 0;
+        el.scrollTop += reduced || performance.now() > until - 500 ? left : Math.min(left, Math.max(left * 0.2, 16));
+      } else steady += 1;
+      if (steady < 8 && performance.now() < until) frame = requestAnimationFrame(step);
+      else stop();
+    };
+    frame = requestAnimationFrame(step);
   };
 
   const blocks = useMemo(() => groupTools(items), [items]);
