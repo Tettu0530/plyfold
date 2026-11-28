@@ -43,7 +43,6 @@ struct BrowserEvent<'a> {
 }
 
 fn report(app: &AppHandle, label: &str, kind: &'static str, url: Option<String>, title: Option<String>) {
-    eprintln!("[browser-debug] {label} {kind} {url:?} {title:?}"); // TEMP-DEBUG
     let _ = app.emit_to("main", "browser", BrowserEvent { label, kind, url, title });
 }
 
@@ -76,16 +75,13 @@ fn web_url(url: &str) -> CmdResult<Url> {
 
 fn find(app: &AppHandle, label: &str) -> CmdResult<tauri::Webview> {
     checked_label(label)?;
-    let found = app.get_webview(label);
-    eprintln!("[browser-debug] find {label} -> {}", found.is_some()); // TEMP-DEBUG
-    found.ok_or_else(|| "The browser is not open".to_string())
+    app.get_webview(label).ok_or_else(|| "The browser is not open".to_string())
 }
 
 /// Open the page in a child webview of the main window at the given rectangle (logical pixels, window coordinates).
 /// If it is already open, only the rectangle is updated and the page shown
 #[tauri::command]
 pub async fn browser_open(app: AppHandle, window: Webview, label: String, url: String, rect: Rect) -> CmdResult<()> {
-    eprintln!("[browser-debug] cmd browser_open {label}"); // TEMP-DEBUG
     require_main(&window)?;
     checked_label(&label)?;
     let target = web_url(&url)?;
@@ -130,16 +126,13 @@ pub async fn browser_open(app: AppHandle, window: Webview, label: String, url: S
             }
             NewWindowResponse::Deny
         });
-    let created = main.add_child(builder, rect.position(), rect.size()).map_err(err);
-    eprintln!("[browser-debug] open done {:?}", created.as_ref().map(|_| ())); // TEMP-DEBUG
-    created?;
+    main.add_child(builder, rect.position(), rect.size()).map_err(err)?;
     Ok(())
 }
 
 /// Move and resize the page to the pane's rectangle
 #[tauri::command]
 pub fn browser_bounds(app: AppHandle, window: Webview, label: String, rect: Rect) -> CmdResult<()> {
-    eprintln!("[browser-debug] cmd browser_bounds {label}"); // TEMP-DEBUG
     require_main(&window)?;
     let view = find(&app, &label)?;
     view.set_position(rect.position()).map_err(err)?;
@@ -150,7 +143,6 @@ pub fn browser_bounds(app: AppHandle, window: Webview, label: String, rect: Rect
 /// Hide the page while something of the app is drawn over it (a menu, a dialog), and show it again after
 #[tauri::command]
 pub fn browser_show(app: AppHandle, window: Webview, label: String, visible: bool) -> CmdResult<()> {
-    eprintln!("[browser-debug] cmd browser_show {label}"); // TEMP-DEBUG
     require_main(&window)?;
     let view = find(&app, &label)?;
     if visible { view.show() } else { view.hide() }.map_err(err)
@@ -158,14 +150,12 @@ pub fn browser_show(app: AppHandle, window: Webview, label: String, visible: boo
 
 #[tauri::command]
 pub fn browser_navigate(app: AppHandle, window: Webview, label: String, url: String) -> CmdResult<()> {
-    eprintln!("[browser-debug] cmd browser_navigate {label}"); // TEMP-DEBUG
     require_main(&window)?;
     find(&app, &label)?.navigate(web_url(&url)?).map_err(err)
 }
 
 #[tauri::command]
 pub fn browser_reload(app: AppHandle, window: Webview, label: String) -> CmdResult<()> {
-    eprintln!("[browser-debug] cmd browser_reload {label}"); // TEMP-DEBUG
     require_main(&window)?;
     find(&app, &label)?.reload().map_err(err)
 }
@@ -173,7 +163,6 @@ pub fn browser_reload(app: AppHandle, window: Webview, label: String) -> CmdResu
 /// Back (-1) or forward (1) in the page's history
 #[tauri::command]
 pub fn browser_history(app: AppHandle, window: Webview, label: String, delta: i32) -> CmdResult<()> {
-    eprintln!("[browser-debug] cmd browser_history {label}"); // TEMP-DEBUG
     require_main(&window)?;
     let delta = delta.clamp(-1, 1);
     find(&app, &label)?.eval(format!("history.go({delta})")).map_err(err)
@@ -181,7 +170,6 @@ pub fn browser_history(app: AppHandle, window: Webview, label: String, delta: i3
 
 #[tauri::command]
 pub fn browser_close(app: AppHandle, window: Webview, label: String) -> CmdResult<()> {
-    eprintln!("[browser-debug] cmd browser_close {label}"); // TEMP-DEBUG
     require_main(&window)?;
     checked_label(&label)?;
     if let Some(view) = app.get_webview(&label) {
@@ -212,10 +200,4 @@ mod tests {
         assert!(web_url("tauri://localhost").is_err());
         assert!(web_url("https://a.com/\u{7}").is_err());
     }
-}
-
-// TEMP-DEBUG
-#[tauri::command]
-pub fn browser_debug(message: String) {
-    eprintln!("[browser-debug] js: {message}");
 }

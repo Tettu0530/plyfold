@@ -11,17 +11,8 @@ const OVERLAYS = '[role="dialog"],[role="alertdialog"],[role="menu"],[role="list
 
 /** Calls to one browser run in the order they were made (commands may otherwise overtake each other) */
 const chains = new Map<string, Promise<unknown>>();
-const dbg = (m: string) => void import("@tauri-apps/api/core").then((c) => c.invoke("browser_debug", { message: m })); // TEMP-DEBUG
 function serial(label: string, call: () => Promise<unknown>) {
-  const name = call.toString().replace(/\s+/g, " ").slice(0, 60); // TEMP-DEBUG
-  const run = () => {
-    dbg(`start ${name}`); // TEMP-DEBUG
-    return call().then(
-      (v) => (dbg(`ok ${name}`), v), // TEMP-DEBUG
-      (e) => (dbg(`FAIL ${name} ${String(e)}`), undefined), // TEMP-DEBUG
-    );
-  };
-  const next = (chains.get(label) ?? Promise.resolve()).then(run, run).catch(() => {});
+  const next = (chains.get(label) ?? Promise.resolve()).then(call, call).catch(() => {});
   chains.set(label, next);
   return next;
 }

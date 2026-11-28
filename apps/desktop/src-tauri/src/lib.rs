@@ -1077,7 +1077,6 @@ pub fn run() {
             browser::browser_reload,
             browser::browser_history,
             browser::browser_close,
-            browser::browser_debug, // TEMP-DEBUG
             terminal::start_terminal,
             terminal::write_terminal,
             terminal::resize_terminal,
