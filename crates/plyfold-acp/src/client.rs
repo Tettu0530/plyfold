@@ -18,6 +18,10 @@ use crate::transport::{AcpError, Connection, FrameSink, Incoming, SpawnSpec};
 
 pub const INIT_TIMEOUT: Duration = Duration::from_secs(180); // allow for npx's first-run download
 pub const SESSION_TIMEOUT: Duration = Duration::from_secs(120);
+/// Signing in may wait for the person to finish in a browser
+pub const AUTH_TIMEOUT: Duration = Duration::from_secs(300);
+/// The auth method that reuses the login a CLI already has
+const SAVED_LOGIN: &str = "oauth-personal";
 
 /// Notifications and requests from the agent, in a form that is easy to handle
 #[derive(Debug, Clone)]
@@ -107,7 +111,19 @@ impl AcpClient {
     }
 
     pub async fn authenticate(&self, method_id: &str) -> Result<(), AcpError> {
-        self.conn.request_raw("authenticate", serde_json::json!({ "methodId": method_id }), Some(SESSION_TIMEOUT)).await.map(|_| ())
+        self.conn.request_raw("authenticate", serde_json::json!({ "methodId": method_id }), Some(AUTH_TIMEOUT)).await.map(|_| ())
+    }
+
+    /// When a request was refused for want of authentication, sign in the way the agent's saved login allows and say
+    /// the request may be sent again. Only `oauth-personal` (Gemini CLI, Antigravity) is tried: it reuses a login the
+    /// person already made in the CLI, and opens a browser only when there is none. Other methods need a key or a
+    /// choice, so for those the original error stands
+    async fn recover_auth(&self, error: AcpError) -> Result<(), AcpError> {
+        let listed = self.init.auth_methods.iter().any(|m| m.id().0.as_ref() == SAVED_LOGIN);
+        if error.rpc_code() != Some(AcpError::AUTH_REQUIRED) || !listed {
+            return Err(error);
+        }
+        self.authenticate(SAVED_LOGIN).await.map_err(|_| error)
     }
 
     pub async fn new_session(&self, cwd: &Path, mcp_servers: Vec<McpServer>) -> Result<NewSessionResponse, AcpError> {
@@ -115,7 +131,13 @@ impl AcpClient {
         if !mcp_servers.is_empty() {
             req = req.mcp_servers(mcp_servers);
         }
-        self.conn.request("session/new", &req, Some(SESSION_TIMEOUT)).await
+        match self.conn.request("session/new", &req, Some(SESSION_TIMEOUT)).await {
+            Err(e) => {
+                self.recover_auth(e).await?;
+                self.conn.request("session/new", &req, Some(SESSION_TIMEOUT)).await
+            }
+            ok => ok,
+        }
     }
 
     /// Forks an existing session into a new one with the same conversation context.
@@ -159,7 +181,14 @@ impl AcpClient {
         if !mcp_servers.is_empty() {
             req = req.mcp_servers(mcp_servers);
         }
-        self.conn.request_with_barrier("session/load", serde_json::to_value(req).expect("serialize"), Some(SESSION_TIMEOUT)).await
+        let req = serde_json::to_value(req).expect("serialize");
+        match self.conn.request_with_barrier("session/load", req.clone(), Some(SESSION_TIMEOUT)).await {
+            Err(e) => {
+                self.recover_auth(e).await?;
+                self.conn.request_with_barrier("session/load", req, Some(SESSION_TIMEOUT)).await
+            }
+            ok => ok,
+        }
     }
 
     /// Changes a config option (model, effort, mode, ...). Returns the updated configOptions as raw JSON
