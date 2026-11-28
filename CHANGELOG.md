@@ -7,6 +7,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 ### Fixed
 
 - Closing a pane gives its space back to the pane next to it (the one before it, or the one after it for the first), so opening a third pane and closing it again leaves the other two as they were. Before, the space was spread over the rest in proportion, which made the pane that never gave anything up larger
+- The `@` file list and the `/` command list no longer stay closed for good after a click while they were open (in the message box to move the caret, or elsewhere in the app and back). They come back with the next key typed or caret move; Esc still closes them for that input
 
 ### Added
 

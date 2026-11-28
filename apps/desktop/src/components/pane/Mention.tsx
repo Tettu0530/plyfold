@@ -77,9 +77,13 @@ export function useMention({ root, text, setText, textRef, boxRef, scope, onPick
   const [active, setActive] = useState(0);
   // A token the user dismissed with esc stays closed until they start a different one
   const [dismissed, setDismissed] = useState<number | null>(null);
+  // Closed by a click outside the list (in the box itself, or elsewhere in the app). Unlike esc this lasts only until the
+  // text or the caret changes: a click that moved the caret, or the next key typed, brings the list back
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => setHidden(false), [text, caret]);
   const token = useMemo(() => mentionAt(text, caret), [text, caret]);
   const query = token?.query ?? "";
-  const open = !!token && (!!root || explicitPath(query)) && token.start !== dismissed;
+  const open = !!token && (!!root || explicitPath(query)) && token.start !== dismissed && !hidden;
   const current = result?.query === query && result.root === root ? result : null;
   const hits = current?.hits ?? [];
   const loaded = !inTauri || current !== null;
@@ -172,7 +176,20 @@ export function useMention({ root, text, setText, textRef, boxRef, scope, onPick
   /** Keep track of the caret (typing, clicking and arrow keys all move it) */
   const syncCaret = () => setCaret(textRef.current?.selectionStart ?? 0);
 
-  return { open, hits, loaded, active, setActive, pick, onKeyDown, syncCaret, menu, dismiss: () => token && setDismissed(token.start) };
+  return {
+    open,
+    hits,
+    loaded,
+    active,
+    setActive,
+    pick,
+    onKeyDown,
+    syncCaret,
+    menu,
+    dismiss: () => setHidden(true),
+    /** Esc: closed for this token until a different one is started */
+    escape: () => token && setDismissed(token.start),
+  };
 }
 
 export type MentionState = ReturnType<typeof useMention>;
@@ -197,6 +214,7 @@ export function MentionMenu({ m, boxRef }: { m: MentionState; boxRef: React.RefO
         side="top"
         align="start"
         sideOffset={6}
+        onEscapeKeyDown={() => m.escape()}
         // Keep typing in the composer while the list is open
         onOpenAutoFocus={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => e.preventDefault()}

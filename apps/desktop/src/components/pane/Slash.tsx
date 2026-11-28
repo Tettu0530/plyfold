@@ -140,6 +140,9 @@ export function useSlash({ commands, models = [], text, setText, textRef, boxRef
   const [active, setActive] = useState(0);
   // A list closed with esc stays closed until the text no longer starts a command
   const [dismissed, setDismissed] = useState(false);
+  // Closed by a click outside the list: unlike esc, only until the text or the caret changes
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => setHidden(false), [text, caret]);
   const token = useMemo(() => slashAt(text, caret), [text, caret]);
   const hits = useMemo(() => (token ? matchCommands(commands, token.query) : []), [commands, token]);
   // After a whole command: the values its argument can take, filtered by what has been typed of it
@@ -149,7 +152,7 @@ export function useSlash({ commands, models = [], text, setText, textRef, boxRef
     const q = arg.query.toLowerCase();
     return argChoices(arg.command, arg.index, models).filter((v) => v.toLowerCase().startsWith(q) && v !== arg.query);
   }, [arg, models]);
-  const open = !dismissed && ((!!token && commands.length > 0) || values.length > 0);
+  const open = !dismissed && !hidden && ((!!token && commands.length > 0) || values.length > 0);
 
   const anchor = `${scope}:slash`;
   const menu = useLiquidMenu(`menu:${anchor}`, anchor);
@@ -230,7 +233,9 @@ export function useSlash({ commands, models = [], text, setText, textRef, boxRef
     syncCaret,
     caret,
     menu,
-    dismiss: () => setDismissed(true),
+    dismiss: () => setHidden(true),
+    /** Esc: closed until the text no longer starts a command */
+    escape: () => setDismissed(true),
   };
 }
 
@@ -252,6 +257,7 @@ export function SlashMenu({ m, boxRef }: { m: SlashState; boxRef: React.RefObjec
         side="top"
         align="start"
         sideOffset={6}
+        onEscapeKeyDown={() => m.escape()}
         // Keep typing in the composer while the list is open
         onOpenAutoFocus={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => e.preventDefault()}
