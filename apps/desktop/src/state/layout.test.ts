@@ -45,12 +45,27 @@ describe("layout tree", () => {
     const three = splitAt(preset(2), 0, "right", 2);
     const two = removeSlot(three, 2)!;
     expect(leaves(two)).toEqual([0, 1]);
-    expect(sizesOf(two)).toEqual([0.33, 0.67]);
+    // The closed pane's space goes back to the one before it: 0 and 1 are as they were before 2 was opened
+    expect(sizesOf(two)).toEqual([0.5, 0.5]);
     expect(removeSlot(leaf(0), 0)).toBeNull();
     // Removing one of a nested column leaves a flat row
     const nested = splitAt(preset(2), 1, "bottom", 2);
     const flat = removeSlot(nested, 2)!;
     expect(flat.kind === "split" && flat.children.every((c) => c.kind === "leaf")).toBe(true);
+  });
+
+  it("returns the space to the neighbour it came from, not to everyone", () => {
+    // Two panes, a third opened at the right end and closed again: the first keeps its size (it was not asked to give any)
+    const two = setSizes(preset(2), [], [0.6, 0.4]);
+    const three = splitAt(two, 1, "right", 2);
+    expect(sizesOf(three)).toEqual([0.6, 0.2, 0.2]);
+    expect(sizesOf(removeSlot(three, 2)!)).toEqual([0.6, 0.4]);
+    // Opened at the left end, the first one's space goes to the one after it
+    const left = splitAt(two, 0, "left", 2);
+    expect(sizesOf(left)).toEqual([0.3, 0.3, 0.4]);
+    expect(sizesOf(removeSlot(left, 2)!)).toEqual([0.6, 0.4]);
+    // In the middle it goes to the one before
+    expect(sizesOf(removeSlot(splitAt(preset(2), 0, "right", 2), 2)!)).toEqual([0.5, 0.5]);
   });
 
   it("merges a same-axis split into its parent after a removal", () => {

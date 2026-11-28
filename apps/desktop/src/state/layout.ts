@@ -90,14 +90,23 @@ export function splitAt(node: LayoutNode, target: number, edge: Edge, newSlot: n
   return go(node);
 }
 
-/** Take a slot out of the tree. Its space goes to its neighbours; a split left with one child is replaced by it */
+/** Take a slot out of the tree. Its space goes back to the neighbour before it (or after it, for the first), so
+ * opening a pane and closing it again leaves the others at the sizes they had: spreading it over all of them would grow
+ * the ones that never gave anything up. A split left with one child is replaced by it */
 export function removeSlot(node: LayoutNode, slot: number): LayoutNode | null {
   if (node.kind === "leaf") return node.slot === slot ? null : node;
   const kept: LayoutNode[] = [];
   const sizes: number[] = [];
+  // Space of removed children before the first one kept: it goes to that one
+  let carry = 0;
   node.children.forEach((c, i) => {
     const r = removeSlot(c, slot);
-    if (!r) return;
+    if (!r) {
+      if (sizes.length > 0) sizes[sizes.length - 1] += node.sizes[i];
+      else carry += node.sizes[i];
+      return;
+    }
+    const start = sizes.length;
     // Merge a child split on the same axis into this one (keeps the tree flat)
     if (r.kind === "split" && r.axis === node.axis) {
       r.children.forEach((cc, j) => {
@@ -108,6 +117,8 @@ export function removeSlot(node: LayoutNode, slot: number): LayoutNode | null {
       kept.push(r);
       sizes.push(node.sizes[i]);
     }
+    sizes[start] += carry;
+    carry = 0;
   });
   if (kept.length === 0) return null;
   if (kept.length === 1) return kept[0];
