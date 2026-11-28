@@ -50,15 +50,23 @@ Plyfold stays a desktop app for your own machine. Reaching it from a phone or th
 - Sending a review finding back to the session as an instruction with one click
 - Review rules per repository (what the reviewer should look for, and which profile reviews by default)
 
-## 0.8 — Keys and providers
+## 0.8 — Browser and everyday use (shipped)
 
+- A browser pane that is a real browser (any site, Artifacts included, sign-ins kept) on macOS and Windows
+- A terminal button beside the browser button, opening in the session's folder or in `~`
+- A search field for profiles on the new session screen
+- Long conversations stay responsive, and panes keep the keyboard focus where you expect it
+
+## 0.9 — Verify and keys
+
+- Verification commands per comparison, run in each candidate's worktree after the run, with status, duration and output shown as evidence next to the usual metrics
 - Usage and cost per profile over time (today, this week, this month) on the profiles screen
 - Spending limits per profile (cost or tokens per day): a session stops starting turns on a profile past its limit, and moves on to its fallback if it has one
 - Spreading queued tasks over several API key or provider profiles of the same agent
 - The remaining rate limit or credit of a key, where the provider tells it, shown before it runs out
 - Fallback chains that are easy to see and edit (A → B → C) on the profiles screen
 
-## 0.9 — Settling
+## 0.10 — Settling
 
 - The data formats fixed for 1.0, with migrations
 - Accessibility, performance and documentation passes
@@ -72,6 +80,8 @@ Not needed for 1.0:
 - A breakdown of what fills the context window
 - Checkpoints: going back to before a turn
 - Staging and committing from inside the app
+- Prompting from the browser pane (sending a page or selection to a session)
+- A browser pane on Linux (it still shows pages in a frame, so some sites refuse to load)
 - Searching every session at once
 - Starting a session from a GitHub issue
 - Lighter everyday conversations that call a provider's API directly with an API key profile
@@ -80,4 +90,3 @@ Not needed for 1.0:
 ## Not planned
 
 - Remote access, a web client or phone apps
-- A browser pane for any site, and prompting from it
