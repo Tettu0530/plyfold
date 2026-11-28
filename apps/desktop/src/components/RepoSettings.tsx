@@ -10,7 +10,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { useStore } from "@/state/store";
 import { useT, type MessageKey } from "@/i18n";
 import { api, inTauri } from "@/lib/api";
-import { parseCommands } from "@/lib/checks";
 import type { RepoEntry, RepoSettings as Settings } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ProfileOption } from "./icons";
@@ -83,7 +82,6 @@ function RepoForm({ settings, onSave }: { settings: Settings; onSave: (s: Settin
   const [setup, setSetup] = useState(settings.setup);
   const [copy, setCopy] = useState(settings.copy.join("\n"));
   const [review, setReview] = useState(settings.review ?? "");
-  const [checks, setChecks] = useState((settings.checks ?? []).join("\n"));
   const profiles = useStore((s) => s.profiles);
   const lines = (v: string) =>
     v
@@ -122,20 +120,6 @@ function RepoForm({ settings, onSave }: { settings: Settings; onSave: (s: Settin
           onBlur={() => {
             const next = lines(copy);
             if (next.join("\n") !== settings.copy.join("\n")) onSave({ ...settings, copy: next });
-          }}
-          className="min-h-16 font-mono text-xs"
-        />
-      </Field>
-      <Field id="repo-checks" label={t("settings.repoChecks")} detail={t("settings.repoChecksDetail")}>
-        <Textarea
-          id="repo-checks"
-          value={checks}
-          spellCheck={false}
-          placeholder={"npm test\nnpm run build"}
-          onChange={(e) => setChecks(e.target.value)}
-          onBlur={() => {
-            const next = parseCommands(checks);
-            if (next.join("\n") !== (settings.checks ?? []).join("\n")) onSave({ ...settings, checks: next });
           }}
           className="min-h-16 font-mono text-xs"
         />

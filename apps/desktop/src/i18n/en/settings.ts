@@ -31,8 +31,6 @@ export const settings: Record<keyof typeof source, string> = {
     "Files git does not track (.env, for example) are copied from the repository into every new worktree. One path per line, relative to the repository",
   repoAllow: "Always allow",
   repoAllowDetail: "Kinds turned on here are allowed without asking, whichever agent asks",
-  repoChecks: "Verification commands",
-  repoChecksDetail: "Commands a comparison can run in every run's worktree to show how each one did (tests, type check, build). One per line",
   repoReview: "Review rules",
   repoReviewDetail: "What a reviewer checks in this repository. It goes along with every review request",
   repoReviewPlaceholder: "Is SQL always parameterized, are there enough tests, and so on",

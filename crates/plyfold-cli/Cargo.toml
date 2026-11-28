@@ -1,6 +1,6 @@
 [package]
 name = "plyfold-cli"
-version = "0.8.1"
+version = "0.8.2"
 edition = "2024"
 license.workspace = true
 repository.workspace = true
@@ -9,9 +9,9 @@ publish = false
 [dependencies]
 anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive"] }
-plyfold-core = { version = "0.8.1", path = "../plyfold-core" }
-plyfold-profile = { version = "0.8.1", path = "../plyfold-profile" }
-plyfold-store = { version = "0.8.1", path = "../plyfold-store" }
+plyfold-core = { version = "0.8.2", path = "../plyfold-core" }
+plyfold-profile = { version = "0.8.2", path = "../plyfold-profile" }
+plyfold-store = { version = "0.8.2", path = "../plyfold-store" }
 serde_json = "1.0.154"
 tokio = { version = "1.54.1", features = ["full"] }
 
