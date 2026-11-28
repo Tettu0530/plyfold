@@ -4,6 +4,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Added
+
+- Antigravity works as an agent (add `antigravity-acp` from the ACP Registry). When an agent refuses a session for want of a login and offers the saved Google login (`oauth-personal`), Plyfold signs in with it and asks again, so a login made once in the CLI (`agy`) carries over
+
 ## [0.8.0] - 2026-11-28
 
 ### Added

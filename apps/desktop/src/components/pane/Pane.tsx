@@ -1,4 +1,5 @@
 import { ArrowUp, Columns3, GitBranch, Square, TriangleAlert, X } from "lucide-react";
+import { canFork } from "@/lib/agents";
 import { AnimatePresence } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
@@ -236,8 +237,8 @@ function SessionPane({ index }: { index: number }) {
           )}
           {/* Started with others from one prompt: compare them */}
           {r.run_group && <CompareButton group={r.run_group} from={id} />}
-          {/* Side chat: a read-only fork for questions that stay out of this conversation (Gemini CLI cannot fork) */}
-          {r.acp_session_id && r.agent !== "gemini" && <SideChatButton mainId={id} />}
+          {/* Side chat: a read-only fork for questions that stay out of this conversation (Gemini CLI and Antigravity cannot fork) */}
+          {r.acp_session_id && canFork(r.agent) && <SideChatButton mainId={id} />}
           {/* Review: another agent reads the diff after each turn (not for conversations, which have no diff) */}
           {!r.chat && r.repo_path && inGit && <ReviewButton mainId={id} />}
           {working && (

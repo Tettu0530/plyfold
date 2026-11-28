@@ -1,4 +1,5 @@
 import { PanelLeft } from "lucide-react";
+import { canFork } from "@/lib/agents";
 import { motion, MotionConfig } from "motion/react";
 import { Suspense, lazy, useEffect } from "react";
 
@@ -94,7 +95,7 @@ function useShortcuts() {
         sideChat: () => {
           const id = s.panes[s.focusedPane];
           const v = id ? s.sessions[id] : undefined;
-          if (!id || !v || !v.record.acp_session_id || v.record.agent === "gemini") return;
+          if (!id || !v || !v.record.acp_session_id || !canFork(v.record.agent)) return;
           const side = s.sideChats[id];
           if (!side) void s.openSideChat(id);
           else if (side.id) s.insertIntoComposer(side.id, "");

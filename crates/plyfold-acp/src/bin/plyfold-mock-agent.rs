@@ -33,6 +33,8 @@ struct State {
     /// sessionId → (configId → value)
     config: Mutex<HashMap<String, HashMap<String, String>>>,
     used: AtomicU64,
+    /// MOCK_AUTH=1: session/new and session/load refuse until `authenticate` has been called
+    authed: std::sync::atomic::AtomicBool,
 }
 
 const CONFIG: &[(&str, &str, &[&str])] = &[
@@ -271,15 +273,26 @@ async fn permission_flow(st: &State, sid: &str, kind: &str, text: &str) -> &'sta
     "end_turn"
 }
 
+fn needs_auth() -> bool {
+    std::env::var("MOCK_AUTH").as_deref() == Ok("1")
+}
+
 fn handle_request(st: &Arc<State>, id: Value, method: &str, params: Value) {
     let reply = |result: Value| st.send(json!({"jsonrpc": "2.0", "id": id, "result": result}));
     match method {
         "initialize" => reply(json!({
             "protocolVersion": 1,
             "agentCapabilities": {"loadSession": true, "promptCapabilities": {}, "mcpCapabilities": {"http": true}, "sessionCapabilities": {"fork": {}, "list": {}}},
-            "authMethods": [],
+            "authMethods": if needs_auth() { json!([{"id": "oauth-personal", "name": "Log in with Google"}]) } else { json!([]) },
             "agentInfo": {"name": "plyfold-mock-agent", "version": env!("CARGO_PKG_VERSION")}
         })),
+        "authenticate" => {
+            st.authed.store(true, Ordering::SeqCst);
+            reply(json!({}));
+        }
+        "session/new" | "session/load" if needs_auth() && !st.authed.load(Ordering::SeqCst) => {
+            st.send(json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32000, "message": "Authentication required"}}));
+        }
         "session/new" => {
             let n = st.seq.fetch_add(1, Ordering::SeqCst);
             let sid = format!("mock-{}-{n}", std::process::id());

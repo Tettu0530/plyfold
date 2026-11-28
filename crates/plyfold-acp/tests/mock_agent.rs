@@ -185,3 +185,21 @@ async fn sink_receives_redacted_frames() {
     assert!(all.contains("***"));
     assert!(!all.contains("supersecret-value"));
 }
+
+/// An agent that refuses a session until the saved login is used (Antigravity, Gemini CLI): the client signs in and
+/// asks again, and a client of an agent without that method keeps the original error
+#[tokio::test]
+async fn a_session_refused_for_want_of_login_is_retried_after_signing_in() {
+    let dir = tempdir("auth");
+    let mut with = spec(&dir);
+    with.env_set.push(("MOCK_AUTH".into(), "1".into()));
+    let (client, _rx) = AcpClient::connect(&with, None).await.unwrap();
+    assert!(client.new_session(&dir, vec![]).await.is_ok());
+
+    let mut other = spec(&dir);
+    other.env_set.push(("MOCK_AUTH".into(), "1".into()));
+    let (client, _rx) = AcpClient::connect(&other, None).await.unwrap();
+    // load goes the same way
+    let err = client.load_session("nope", &dir, vec![]).await.unwrap_err();
+    assert_eq!(err.rpc_code(), Some(-32002), "after signing in the request itself was answered: {err}");
+}

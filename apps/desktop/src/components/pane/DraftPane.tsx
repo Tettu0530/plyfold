@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowUp, Check, Code2, Coins, FolderOpen, GitBranch, ListPlus, MessageSquare, Plus, Repeat2, Search, Sparkles, X } from "lucide-react";
+import { canList } from "@/lib/agents";
 import { useEffect, useRef, useState } from "react";
 
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -206,7 +207,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
     const next = activePicks.includes(name) ? activePicks.filter((n) => n !== name) : activePicks.length < COMPARE_MAX ? [...activePicks, name] : activePicks;
     updateDraft(id, { compare: next, profile: next[0] ?? null, choices: {} });
   };
-  const canStart = !draft.busy && (activePicks ? activePicks.length >= 2 : !!draft.profile) && (!continueMode || current?.agent !== "gemini");
+  const canStart = !draft.busy && (activePicks ? activePicks.length >= 2 : !!draft.profile) && (!continueMode || canList(current?.agent));
   // Every word typed must be found in the profile's name, its agent or how it signs in
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = words.length
@@ -386,7 +387,7 @@ export function DraftPane({ index, id }: { index: number; id: string }) {
                   </PopoverTrigger>
                 )}
                 {startKind === "conversation" && <span className="px-2 text-muted-foreground">{t("draft.chat")}</span>}
-                {continueMode && current?.agent !== "gemini" && draft.profile && (
+                {continueMode && canList(current?.agent) && draft.profile && (
                   <CliSessions
                     key={`${draft.profile}:${draft.repo}`}
                     draftId={id}

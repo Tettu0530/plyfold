@@ -61,6 +61,8 @@ These are built in. Plyfold starts each one as an ACP server over stdio.
 
 The adapter versions are pinned. OpenCode must already be installed and on your `PATH`. The others are fetched by `npx` on first use. Gemini CLI has no config directory variable, so its profiles cannot use a separate config directory.
 
+Google is moving Gemini CLI users to Antigravity CLI, and since 2026-06-18 Gemini CLI no longer serves free, Google AI Pro and Ultra sign-ins (API keys and Gemini Code Assist Standard/Enterprise are unaffected). Antigravity is in the ACP Registry as `antigravity-acp`: add it from the agent list. Sign in once in a terminal with `agy` (Plyfold then reuses that login; it signs in with `oauth-personal` when the agent asks). It has no fork, so no side chat, and profiles with keys or a separate config directory are not supported for it yet.
+
 A default profile (just the agent name) passes your environment through unchanged and uses whatever login the CLI already has. A profile that sets keys or a separate config directory drops the variables in the last column from the inherited environment, so keys from your shell never leak into it.
 
 You can override these definitions or add other ACP agents in `config.toml` under `[agents.<name>]`. There is also a `mock` agent (`plyfold-mock-agent`) for development, which uses no tokens.
