@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useT } from "@/i18n";
 import { api, browser, inTauri, onBrowserEvent } from "@/lib/api";
+import { nativeBrowser } from "@/lib/platform";
 import { normalizeUrl } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/state/store";
@@ -39,7 +40,7 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
   const draftFocused = useRef(false);
 
   useEffect(() => {
-    if (!inTauri) return;
+    if (!nativeBrowser) return;
     let off: (() => void) | undefined;
     let alive = true;
     void onBrowserEvent((e) => {
@@ -104,7 +105,7 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
           onPointerDown={(e) => startDrag(e, () => ({ kind: "pane", slot: index, title: url }))}
           className="flex h-9 shrink-0 cursor-grab items-center gap-1.5 border-b pr-1.5 pl-3"
         >
-          {inTauri && (
+          {nativeBrowser && (
             <>
               <button
                 type="button"
@@ -184,7 +185,7 @@ export function PreviewPane({ index, id }: { index: number; id: string }) {
       </PaneMenu>
       {empty ? (
         <StartPage onOpen={(u) => setPreviewUrl(id, u)} />
-      ) : inTauri ? (
+      ) : nativeBrowser ? (
         <>
           {/* The page itself is drawn by the native view; what is told about a slow load goes here, above it */}
           {slow && !loaded && <p className="m-0 shrink-0 border-b bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">{t("pane.previewSlowNative")}</p>}
