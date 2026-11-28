@@ -203,3 +203,20 @@ async fn a_session_refused_for_want_of_login_is_retried_after_signing_in() {
     let err = client.load_session("nope", &dir, vec![]).await.unwrap_err();
     assert_eq!(err.rpc_code(), Some(-32002), "after signing in the request itself was answered: {err}");
 }
+
+/// A profile with a Gemini key signs in with the key; one without uses the saved login
+#[tokio::test]
+async fn the_method_follows_whether_the_profile_has_a_key() {
+    let dir = tempdir("auth-key");
+    let mut keyed = spec(&dir);
+    keyed.env_set.extend([("MOCK_AUTH".into(), "1".into()), ("MOCK_AUTH_METHOD".into(), "gemini-api-key".into()), ("GEMINI_API_KEY".into(), "k".into())]);
+    let (client, _rx) = AcpClient::connect(&keyed, None).await.unwrap();
+    assert!(client.new_session(&dir, vec![]).await.is_ok(), "the key's method signs in");
+
+    // Without a key the saved login is tried, which this agent refuses: the original error stands
+    let mut plain = spec(&dir);
+    plain.env_set.extend([("MOCK_AUTH".into(), "1".into()), ("MOCK_AUTH_METHOD".into(), "gemini-api-key".into())]);
+    let (client, _rx) = AcpClient::connect(&plain, None).await.unwrap();
+    let err = client.new_session(&dir, vec![]).await.unwrap_err();
+    assert_eq!(err.rpc_code(), Some(-32000));
+}

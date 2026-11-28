@@ -283,12 +283,18 @@ fn handle_request(st: &Arc<State>, id: Value, method: &str, params: Value) {
         "initialize" => reply(json!({
             "protocolVersion": 1,
             "agentCapabilities": {"loadSession": true, "promptCapabilities": {}, "mcpCapabilities": {"http": true}, "sessionCapabilities": {"fork": {}, "list": {}}},
-            "authMethods": if needs_auth() { json!([{"id": "oauth-personal", "name": "Log in with Google"}]) } else { json!([]) },
+            "authMethods": if needs_auth() { json!([{"id": "oauth-personal", "name": "Log in with Google"}, {"id": "gemini-api-key", "name": "Gemini API key"}]) } else { json!([]) },
             "agentInfo": {"name": "plyfold-mock-agent", "version": env!("CARGO_PKG_VERSION")}
         })),
         "authenticate" => {
-            st.authed.store(true, Ordering::SeqCst);
-            reply(json!({}));
+            // MOCK_AUTH_METHOD: the one method that signs in (default: the saved login)
+            let want = std::env::var("MOCK_AUTH_METHOD").unwrap_or_else(|_| "oauth-personal".into());
+            if params["methodId"].as_str() == Some(want.as_str()) {
+                st.authed.store(true, Ordering::SeqCst);
+                reply(json!({}));
+            } else {
+                st.send(json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32602, "message": "unsupported method"}}));
+            }
         }
         "session/new" | "session/load" if needs_auth() && !st.authed.load(Ordering::SeqCst) => {
             st.send(json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32000, "message": "Authentication required"}}));

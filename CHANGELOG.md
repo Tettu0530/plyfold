@@ -6,6 +6,7 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ### Added
 
+- Antigravity profiles: a Gemini API key, a gateway base URL, and a separate config directory (`GEMINI_HOME`) so profiles sign in with different Google accounts. A profile with a key signs in with the key (`gemini-api-key`) when the agent asks for a login; one without uses the saved Google login. Antigravity agents added before this get the settings too
 - Verification commands in a comparison: list the commands to check a result (tests, a type check, a build) under Settings → Repositories or right in the comparison, pick some and run them in every run's worktree. Each run shows every command's status (passed, failed, timed out, interrupted, not run), duration and output, and the results are kept with the comparison history. A pass is shown as evidence, not as a verdict on quality
 
 ## [0.8.1] - 2026-11-28
