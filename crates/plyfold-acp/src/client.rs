@@ -22,6 +22,9 @@ pub const SESSION_TIMEOUT: Duration = Duration::from_secs(120);
 pub const AUTH_TIMEOUT: Duration = Duration::from_secs(300);
 /// The auth method that reuses the login a CLI already has
 const SAVED_LOGIN: &str = "oauth-personal";
+/// The auth method that uses `GEMINI_API_KEY` from the agent's environment, and that variable
+const KEY_LOGIN: &str = "gemini-api-key";
+const GEMINI_KEY: &str = "GEMINI_API_KEY";
 
 /// Notifications and requests from the agent, in a form that is easy to handle
 #[derive(Debug, Clone)]
@@ -50,6 +53,8 @@ pub struct TurnResult {
 pub struct AcpClient {
     conn: Arc<Connection>,
     pub init: InitializeResponse,
+    /// The agent was started with a Gemini API key in its environment (a profile that uses a key)
+    has_gemini_key: bool,
 }
 
 impl AcpClient {
@@ -74,7 +79,8 @@ impl AcpClient {
                 return Err(e);
             }
         };
-        Ok((Self { conn, init }, rx))
+        let has_gemini_key = spec.env_set.iter().any(|(k, v)| k == GEMINI_KEY && !v.is_empty());
+        Ok((Self { conn, init, has_gemini_key }, rx))
     }
 
     pub fn connection(&self) -> &Arc<Connection> {
@@ -114,16 +120,23 @@ impl AcpClient {
         self.conn.request_raw("authenticate", serde_json::json!({ "methodId": method_id }), Some(AUTH_TIMEOUT)).await.map(|_| ())
     }
 
-    /// When a request was refused for want of authentication, sign in the way the agent's saved login allows and say
-    /// the request may be sent again. Only `oauth-personal` (Gemini CLI, Antigravity) is tried: it reuses a login the
-    /// person already made in the CLI, and opens a browser only when there is none. Other methods need a key or a
-    /// choice, so for those the original error stands
+    /// When a request was refused for want of authentication, sign in the way the agent's setup allows and say the
+    /// request may be sent again: with the key when the profile has one (`gemini-api-key`), otherwise with the saved
+    /// Google login (`oauth-personal`: Gemini CLI, Antigravity), which opens a browser only when there is none. Other
+    /// methods need a choice, so for those the original error stands
     async fn recover_auth(&self, error: AcpError) -> Result<(), AcpError> {
-        let listed = self.init.auth_methods.iter().any(|m| m.id().0.as_ref() == SAVED_LOGIN);
-        if error.rpc_code() != Some(AcpError::AUTH_REQUIRED) || !listed {
+        let listed = |id: &str| self.init.auth_methods.iter().any(|m| m.id().0.as_ref() == id);
+        let method = if self.has_gemini_key && listed(KEY_LOGIN) {
+            KEY_LOGIN
+        } else if listed(SAVED_LOGIN) {
+            SAVED_LOGIN
+        } else {
+            return Err(error);
+        };
+        if error.rpc_code() != Some(AcpError::AUTH_REQUIRED) {
             return Err(error);
         }
-        self.authenticate(SAVED_LOGIN).await.map_err(|_| error)
+        self.authenticate(method).await.map_err(|_| error)
     }
 
     pub async fn new_session(&self, cwd: &Path, mcp_servers: Vec<McpServer>) -> Result<NewSessionResponse, AcpError> {

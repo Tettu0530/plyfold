@@ -87,6 +87,10 @@ fn spec(agent: &str) -> Option<AuthSpec> {
             Some(AuthSpec { api_key: "GEMINI_API_KEY", custom_key: "GEMINI_API_KEY", custom_base: Some("GOOGLE_GEMINI_BASE_URL"), writes_config: false })
         }
         "opencode" => Some(AuthSpec { api_key: "OPENAI_API_KEY", custom_key: OPENCODE_PROVIDER_KEY, custom_base: None, writes_config: true }),
+        // Antigravity (from the ACP Registry): a Gemini API key, and a gateway through the same base URL variable
+        "antigravity-acp" => {
+            Some(AuthSpec { api_key: "GEMINI_API_KEY", custom_key: "GEMINI_API_KEY", custom_base: Some("GOOGLE_GEMINI_BASE_URL"), writes_config: false })
+        }
         _ => None,
     }
 }
@@ -600,7 +604,7 @@ mod tests {
 
     #[test]
     fn round_trips_each_auth() {
-        for agent in ["claude", "codex", "gemini", "opencode"] {
+        for agent in ["claude", "codex", "gemini", "opencode", "antigravity-acp"] {
             for (auth, url) in [(AuthKind::Login, None), (AuthKind::Api, None), (AuthKind::Custom, Some("https://gw.example.com/v1"))] {
                 let f = form(agent, auth, url);
                 let def = to_def(&f, None).unwrap();

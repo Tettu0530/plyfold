@@ -170,6 +170,20 @@ pub fn builtin_agents() -> BTreeMap<String, AgentDef> {
     ])
 }
 
+/// What Plyfold knows about an agent added from the ACP Registry, which the registry itself does not say: where its
+/// config directory is set and which variables carry its keys. Filled in when the definition has neither, so agents added
+/// before this was known get it too (a definition that sets either is left as written)
+fn known_settings(id: &str, agent: &mut AgentDef) {
+    if agent.config_dir_env.is_some() || !agent.key_envs.is_empty() {
+        return;
+    }
+    // Antigravity: GEMINI_HOME holds its settings and sign-in (`$GEMINI_HOME/antigravity-acp/`)
+    if id == "antigravity-acp" {
+        agent.config_dir_env = Some("GEMINI_HOME".into());
+        agent.key_envs = vec!["GEMINI_API_KEY".into()];
+    }
+}
+
 /// Variables that carry a subscription's sign-in rather than a key billed by use
 const SUBSCRIPTION_VARS: [&str; 1] = ["CLAUDE_CODE_OAUTH_TOKEN"];
 
@@ -206,6 +220,9 @@ impl Config {
         let file: Config = toml::from_str(text)?;
         let mut cfg = Config { agents: builtin_agents(), profiles: BTreeMap::new(), mcp: file.mcp };
         cfg.agents.extend(file.agents);
+        for (id, agent) in cfg.agents.iter_mut() {
+            known_settings(id, agent);
+        }
         cfg.profiles.extend(file.profiles);
         Ok(cfg)
     }
@@ -482,6 +499,18 @@ pub fn default_state_dir() -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn antigravity_added_from_the_registry_gets_its_config_directory_and_key() {
+        let cfg = Config::from_toml("[agents.antigravity-acp]\ncommand = \"/x/agy_acp_server.par\"\n").unwrap();
+        let a = &cfg.agents["antigravity-acp"];
+        assert_eq!(a.config_dir_env.as_deref(), Some("GEMINI_HOME"));
+        assert_eq!(a.key_envs, ["GEMINI_API_KEY"]);
+        // A definition written by hand with its own settings is left alone
+        let own = Config::from_toml("[agents.antigravity-acp]\ncommand = \"x\"\nconfig_dir_env = \"MINE\"\n").unwrap();
+        assert_eq!(own.agents["antigravity-acp"].config_dir_env.as_deref(), Some("MINE"));
+        assert!(own.agents["antigravity-acp"].key_envs.is_empty());
+    }
+
     use super::*;
 
     fn tmp(name: &str) -> PathBuf {
