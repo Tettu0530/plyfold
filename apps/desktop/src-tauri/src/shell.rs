@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{State, WebviewWindow, ipc::Channel};
+use tauri::{State, Webview, ipc::Channel};
 
 use crate::{AppState, CmdResult, err};
 
@@ -35,7 +35,7 @@ pub enum ShellEvent {
     Exit { code: Option<i32>, truncated: bool },
 }
 
-fn require_main(window: &WebviewWindow) -> CmdResult<()> {
+fn require_main(window: &Webview) -> CmdResult<()> {
     if window.label() != "main" {
         return Err("Shell commands require the main window".into());
     }
@@ -71,7 +71,7 @@ fn kill_tree(child: &mut Child) {
 }
 
 #[tauri::command]
-pub async fn start_shell(window: WebviewWindow, state: State<'_, AppState>, session: String, command: String, output: Channel<ShellEvent>) -> CmdResult<u32> {
+pub async fn start_shell(window: Webview, state: State<'_, AppState>, session: String, command: String, output: Channel<ShellEvent>) -> CmdResult<u32> {
     require_main(&window)?;
     let record = state.engine.store().get_session(&session).map_err(err)?;
     let cwd = record.worktree_path.or(record.repo_path).ok_or_else(|| "Session has no working directory".to_string())?;
@@ -138,7 +138,7 @@ pub async fn start_shell(window: WebviewWindow, state: State<'_, AppState>, sess
 }
 
 #[tauri::command]
-pub async fn stop_shell(window: WebviewWindow, state: State<'_, AppState>, run: u32) -> CmdResult<()> {
+pub async fn stop_shell(window: Webview, state: State<'_, AppState>, run: u32) -> CmdResult<()> {
     require_main(&window)?;
     let child = state.shells.running.lock().unwrap().get(&run).cloned();
     if let Some(child) = child {

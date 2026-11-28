@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 use tauri::webview::{NewWindowResponse, PageLoadEvent, WebviewBuilder};
-use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Url, WebviewUrl, WebviewWindow};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Url, Webview, WebviewUrl};
 
 use crate::{CmdResult, err};
 
@@ -47,7 +47,7 @@ fn report(app: &AppHandle, label: &str, kind: &'static str, url: Option<String>,
     let _ = app.emit_to("main", "browser", BrowserEvent { label, kind, url, title });
 }
 
-fn require_main(window: &WebviewWindow) -> CmdResult<()> {
+fn require_main(window: &Webview) -> CmdResult<()> {
     if window.label() != "main" {
         return Err("The browser can only be driven from the main window".into());
     }
@@ -84,7 +84,7 @@ fn find(app: &AppHandle, label: &str) -> CmdResult<tauri::Webview> {
 /// Open the page in a child webview of the main window at the given rectangle (logical pixels, window coordinates).
 /// If it is already open, only the rectangle is updated and the page shown
 #[tauri::command]
-pub async fn browser_open(app: AppHandle, window: WebviewWindow, label: String, url: String, rect: Rect) -> CmdResult<()> {
+pub async fn browser_open(app: AppHandle, window: Webview, label: String, url: String, rect: Rect) -> CmdResult<()> {
     eprintln!("[browser-debug] cmd browser_open {label}"); // TEMP-DEBUG
     require_main(&window)?;
     checked_label(&label)?;
@@ -138,7 +138,7 @@ pub async fn browser_open(app: AppHandle, window: WebviewWindow, label: String, 
 
 /// Move and resize the page to the pane's rectangle
 #[tauri::command]
-pub fn browser_bounds(app: AppHandle, window: WebviewWindow, label: String, rect: Rect) -> CmdResult<()> {
+pub fn browser_bounds(app: AppHandle, window: Webview, label: String, rect: Rect) -> CmdResult<()> {
     eprintln!("[browser-debug] cmd browser_bounds {label}"); // TEMP-DEBUG
     require_main(&window)?;
     let view = find(&app, &label)?;
@@ -149,7 +149,7 @@ pub fn browser_bounds(app: AppHandle, window: WebviewWindow, label: String, rect
 
 /// Hide the page while something of the app is drawn over it (a menu, a dialog), and show it again after
 #[tauri::command]
-pub fn browser_show(app: AppHandle, window: WebviewWindow, label: String, visible: bool) -> CmdResult<()> {
+pub fn browser_show(app: AppHandle, window: Webview, label: String, visible: bool) -> CmdResult<()> {
     eprintln!("[browser-debug] cmd browser_show {label}"); // TEMP-DEBUG
     require_main(&window)?;
     let view = find(&app, &label)?;
@@ -157,14 +157,14 @@ pub fn browser_show(app: AppHandle, window: WebviewWindow, label: String, visibl
 }
 
 #[tauri::command]
-pub fn browser_navigate(app: AppHandle, window: WebviewWindow, label: String, url: String) -> CmdResult<()> {
+pub fn browser_navigate(app: AppHandle, window: Webview, label: String, url: String) -> CmdResult<()> {
     eprintln!("[browser-debug] cmd browser_navigate {label}"); // TEMP-DEBUG
     require_main(&window)?;
     find(&app, &label)?.navigate(web_url(&url)?).map_err(err)
 }
 
 #[tauri::command]
-pub fn browser_reload(app: AppHandle, window: WebviewWindow, label: String) -> CmdResult<()> {
+pub fn browser_reload(app: AppHandle, window: Webview, label: String) -> CmdResult<()> {
     eprintln!("[browser-debug] cmd browser_reload {label}"); // TEMP-DEBUG
     require_main(&window)?;
     find(&app, &label)?.reload().map_err(err)
@@ -172,7 +172,7 @@ pub fn browser_reload(app: AppHandle, window: WebviewWindow, label: String) -> C
 
 /// Back (-1) or forward (1) in the page's history
 #[tauri::command]
-pub fn browser_history(app: AppHandle, window: WebviewWindow, label: String, delta: i32) -> CmdResult<()> {
+pub fn browser_history(app: AppHandle, window: Webview, label: String, delta: i32) -> CmdResult<()> {
     eprintln!("[browser-debug] cmd browser_history {label}"); // TEMP-DEBUG
     require_main(&window)?;
     let delta = delta.clamp(-1, 1);
@@ -180,7 +180,7 @@ pub fn browser_history(app: AppHandle, window: WebviewWindow, label: String, del
 }
 
 #[tauri::command]
-pub fn browser_close(app: AppHandle, window: WebviewWindow, label: String) -> CmdResult<()> {
+pub fn browser_close(app: AppHandle, window: Webview, label: String) -> CmdResult<()> {
     eprintln!("[browser-debug] cmd browser_close {label}"); // TEMP-DEBUG
     require_main(&window)?;
     checked_label(&label)?;

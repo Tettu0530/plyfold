@@ -3,7 +3,7 @@ import { useId, useRef, useState } from "react";
 
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
-import { terminalSessionOf, useStore } from "@/state/store";
+import { HOME_TERMINAL, terminalSessionOf, useStore } from "@/state/store";
 import { startDrag } from "./dnd";
 import { PaneMenu, paneHeadAnchor } from "./PaneMenu";
 import { SessionTerminal } from "./SessionTerminal";
@@ -14,7 +14,8 @@ export default function TerminalPane({ index, id }: { index: number; id: string 
   const t = useT();
   const label = t("pane.terminal");
   const session = terminalSessionOf(id);
-  const title = useStore((s) => s.sessions[session]?.record.title);
+  const sessionTitle = useStore((s) => s.sessions[session]?.record.title);
+  const title = session === HOME_TERMINAL ? "~" : sessionTitle;
   const { focusPane, closePane } = useStore.getState();
   const [tabs, setTabs] = useState([1]);
   const [active, setActive] = useState(1);

@@ -120,6 +120,8 @@ export const filesSessionOf = (id: string) => id.slice("files:".length);
 export const filesPaneOf = (sessionId: string) => `files:${sessionId}`;
 
 export const isTerminal = (id: string | null | undefined): id is string => !!id && id.startsWith("terminal:");
+/** The terminal that is in no session's folder: it opens in the home folder (the id after "terminal:") */
+export const HOME_TERMINAL = "~";
 export const terminalPaneOf = (sessionId: string) => `terminal:${sessionId}`;
 export const terminalSessionOf = (id: string) => id.slice("terminal:".length);
 
