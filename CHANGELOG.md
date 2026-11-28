@@ -4,6 +4,10 @@ All notable changes to Plyfold are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Added
+
+- Verification commands in a comparison: list the commands to check a result (tests, a type check, a build) under Settings → Repositories or right in the comparison, pick some and run them in every run's worktree. Each run shows every command's status (passed, failed, timed out, interrupted, not run), duration and output, and the results are kept with the comparison history. A pass is shown as evidence, not as a verdict on quality
+
 ## [0.8.2] - 2026-11-28
 
 ### Added
