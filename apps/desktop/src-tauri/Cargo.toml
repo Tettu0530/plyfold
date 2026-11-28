@@ -25,7 +25,7 @@ plyfold-worktree = { version = "0.8.0", path = "../../../crates/plyfold-worktree
 portable-pty = "0.9"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-sha2 = "0.10"
+sha2 = "0.11"
 # unstable: a webview inside the main window (the browser pane)
 tauri = { version = "2", features = ["unstable"] }
 tauri-plugin-dialog = "2"
